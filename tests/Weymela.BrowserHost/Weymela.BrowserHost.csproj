@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Weymela.Api/Weymela.Api.csproj" /><PackageReference Include="Testcontainers.PostgreSql" Version="4.8.1" /><PackageReference Include="SSH.NET" Version="2026.0.0" /></ItemGroup>
+</Project>

@@ -1,0 +1,162 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { RoleGate, roleHome, useSession } from "./Session";
+import { Shell } from "./Shell";
+import { SignIn } from "./SignIn";
+import { ActionLink, Empty, Section } from "../ui/components";
+import {
+  BusinessCampaigns,
+  BusinessDashboard,
+  BusinessPricingPage,
+  BusinessRequests,
+  BusinessWallet,
+} from "../features/business/BusinessPages";
+import { CreateCampaign } from "../features/business/CreateCampaign";
+import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
+import {
+  CreatorDashboard,
+  CreatorDiscovery,
+  CreatorEarnings,
+  CreatorHowYouEarn,
+  CreatorOpportunity,
+  CreatorRequests,
+} from "../features/creator/CreatorPages";
+import {
+  CreatorActiveCampaigns,
+  CreatorActiveDetail,
+} from "../features/creator/ActiveCampaigns";
+import {
+  AdminActivity,
+  AdminBusinesses,
+  AdminCampaignDetail,
+  AdminCampaigns,
+  AdminCreators,
+  AdminDashboard,
+} from "../features/admin/AdminPages";
+import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
+import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
+import {
+  CustomerHistory,
+  CustomerOfferQr,
+  CustomerOffers,
+} from "../features/commerce/CustomerPages";
+import { Checkout } from "../features/commerce/Checkout";
+import { Inbox } from "../features/notifications/Inbox";
+
+function Home() {
+  const { user, loading } = useSession();
+  return loading ? (
+    <div role="status">Opening Weymela…</div>
+  ) : (
+    <Navigate to={user ? roleHome[user.role] : "/sign-in"} replace />
+  );
+}
+export function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/sign-in" element={<SignIn />} />
+      <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin"]}><Shell /></RoleGate>}>
+        <Route path="/notifications" element={<Inbox />} />
+      </Route>
+      <Route
+        path="/unauthorized"
+        element={
+          <div className="offer-page section-kicker-space">
+            <Section title="Workspace unavailable">
+              <Empty
+                icon="lock"
+                title="This workspace isn’t available to your role"
+                message="Return to your own workspace to continue."
+                action={<ActionLink to="/">Your workspace</ActionLink>}
+              />
+            </Section>
+          </div>
+        }
+      />
+      <Route
+        element={
+          <RoleGate roles={["Business"]}>
+            <Shell />
+          </RoleGate>
+        }
+      >
+        <Route path="/business" element={<BusinessDashboard />} />
+        <Route path="/business/wallet" element={<BusinessWallet />} />
+        <Route path="/business/campaigns" element={<BusinessCampaigns />} />
+        <Route path="/business/campaigns/new" element={<CreateCampaign />} />
+        <Route
+          path="/business/campaigns/:id"
+          element={<BusinessCampaignDetail />}
+        />
+        <Route path="/business/requests" element={<BusinessRequests />} />
+        <Route path="/business/pricing" element={<BusinessPricingPage />} />
+      </Route>
+      <Route
+        element={
+          <RoleGate roles={["Creator"]}>
+            <Shell />
+          </RoleGate>
+        }
+      >
+        <Route path="/creator" element={<CreatorDashboard />} />
+        <Route path="/creator/discover" element={<CreatorDiscovery />} />
+        <Route path="/creator/discover/:id" element={<CreatorOpportunity />} />
+        <Route path="/creator/campaigns" element={<CreatorActiveCampaigns />} />
+        <Route
+          path="/creator/campaigns/:id"
+          element={<CreatorActiveDetail />}
+        />
+        <Route path="/creator/requests" element={<CreatorRequests />} />
+        <Route path="/creator/pricing" element={<CreatorHowYouEarn />} />
+        <Route path="/creator/earnings" element={<CreatorEarnings />} />
+        <Route path="/creator/payouts" element={<CreatorEarnings payout />} />
+      </Route>
+      <Route
+        element={
+          <RoleGate roles={["PlatformAdmin"]}>
+            <Shell />
+          </RoleGate>
+        }
+      >
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/campaigns" element={<AdminCampaigns />} />
+        <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
+        <Route path="/admin/businesses" element={<AdminBusinesses />} />
+        <Route path="/admin/creators" element={<AdminCreators />} />
+        <Route path="/admin/settings" element={<AdminFinancialSettings />} />
+        <Route
+          path="/admin/financial-settings"
+          element={<Navigate to="/admin/settings" replace />}
+        />
+        <Route path="/admin/payouts" element={<AdminPayouts />} />
+        <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
+        <Route
+          path="/admin/notifications"
+          element={<AdminActivity notifications />}
+        />
+        <Route path="/admin/audit" element={<AdminActivity />} />
+      </Route>
+      <Route
+        element={
+          <RoleGate roles={["Customer"]}>
+            <Shell />
+          </RoleGate>
+        }
+      >
+        <Route path="/customer/offers" element={<CustomerOffers />} />
+        <Route path="/customer/offers/:id" element={<CustomerOfferQr />} />
+        <Route path="/customer/history" element={<CustomerHistory />} />
+      </Route>
+      <Route
+        element={
+          <RoleGate roles={["Cashier", "Business"]}>
+            <Shell />
+          </RoleGate>
+        }
+      >
+        <Route path="/checkout" element={<Checkout />} />
+      </Route>
+      <Route path="*" element={<Home />} />
+    </Routes>
+  );
+}

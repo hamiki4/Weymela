@@ -1,0 +1,128 @@
+# PREPARATION ONLY: image-only, separate project/network/volumes. Never use V2 env files.
+name: weymela-v3-pilot
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+x-app: &app
+  restart: "no"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:size=32m,mode=1777"]
+  pids_limit: 128
+  logging: *logging
+  stop_grace_period: 30s
+services:
+  weymela-v3-pilot-postgres:
+    image: ${V3_POSTGRES_IMAGE:?Use postgres:17-alpine@sha256 digest from approved manifest}
+    platform: linux/amd64
+    restart: "no"
+    environment:
+      POSTGRES_DB: weymela_v3_pilot
+      POSTGRES_USER: weymela_v3_bootstrap
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-bootstrap-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets: [postgres-bootstrap-password]
+    command: [postgres, -c, max_connections=40, -c, shared_buffers=128MB, -c, work_mem=4MB, -c, maintenance_work_mem=64MB, -c, max_wal_size=512MB, -c, log_statement=none, -c, log_min_error_statement=panic, -c, log_error_verbosity=terse]
+    volumes:
+      - type: volume
+        source: postgres-data
+        target: /var/lib/postgresql/data
+    networks: [data]
+    mem_limit: 768m
+    cpus: 0.50
+    pids_limit: 128
+    shm_size: 128m
+    logging: *logging
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -q -U weymela_v3_bootstrap -d weymela_v3_pilot]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  weymela-v3-pilot-api:
+    <<: *app
+    image: ${V3_API_IMAGE:?Use approved ghcr V3 API sha256 digest}
+    platform: linux/amd64
+    env_file: ["${V3_API_ENV_FILE:?External protected V3 API environment file required}"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Pilot
+      DOTNET_ENVIRONMENT: Pilot
+      ASPNETCORE_HTTP_PORTS: "8080"
+      V3__EnableDevelopmentIdentity: "false"
+      V3__FinancialWritesEnabled: "false"
+      V3__Auth__CookieKeyDirectory: /run/weymela-v3/keys
+      V3__Auth__CookieCertificatePath: /run/secrets/v3-cookie-protection.pfx
+      V3__Security__TrustedProxies__0: "${V3_WEB_PROXY_IP:?Approved isolated proxy IP required}"
+    secrets: [v3-cookie-protection.pfx]
+    volumes:
+      - type: bind
+        source: ${V3_COOKIE_KEYS_DIRECTORY:?Pre-provision protected V3-only key directory}
+        target: /run/weymela-v3/keys
+        bind: { create_host_path: false }
+    networks: [data, edge]
+    depends_on:
+      weymela-v3-pilot-postgres: { condition: service_healthy }
+    mem_limit: 512m
+    cpus: 0.75
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "4", http://127.0.0.1:8080/health/ready]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+  weymela-v3-pilot-worker:
+    <<: *app
+    image: ${V3_WORKER_IMAGE:?Use approved ghcr V3 Worker sha256 digest}
+    platform: linux/amd64
+    env_file: ["${V3_WORKER_ENV_FILE:?External protected V3 Worker environment file required}"]
+    environment:
+      DOTNET_ENVIRONMENT: Pilot
+      ASPNETCORE_ENVIRONMENT: Pilot
+      V3__EnableDevelopmentIdentity: "false"
+      V3__FinancialWritesEnabled: "false"
+    networks: [data]
+    depends_on:
+      weymela-v3-pilot-postgres: { condition: service_healthy }
+    mem_limit: 256m
+    cpus: 0.25
+    healthcheck:
+      test: [CMD, dotnet, Weymela.Worker.dll, --check-health]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 90s
+  weymela-v3-pilot-web:
+    <<: *app
+    image: ${V3_WEB_IMAGE:?Use approved ghcr V3 Web sha256 digest}
+    platform: linux/amd64
+    networks:
+      edge:
+        ipv4_address: ${V3_WEB_PROXY_IP:?Approved isolated proxy IP required}
+    ports: ["127.0.0.1:18080:8080"]
+    mem_limit: 96m
+    cpus: 0.10
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/health/live]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+networks:
+  data:
+    name: weymela-v3-pilot-data
+    internal: true
+  edge:
+    name: weymela-v3-pilot-edge
+    ipam:
+      config:
+        - subnet: ${V3_EDGE_SUBNET:?Owner must approve unused private subnet}
+volumes:
+  postgres-data:
+    external: true
+    name: weymela-v3-pilot-postgres-data
+secrets:
+  postgres-bootstrap-password:
+    file: ${V3_POSTGRES_PASSWORD_FILE:?External V3-only bootstrap password file}
+  v3-cookie-protection.pfx:
+    file: ${V3_COOKIE_CERTIFICATE_FILE:?External V3-only certificate file}

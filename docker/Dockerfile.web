@@ -1,0 +1,17 @@
+ARG NODE_IMAGE
+ARG WEB_IMAGE
+FROM ${NODE_IMAGE} AS build
+WORKDIR /source
+COPY src/Weymela.Web/package.json src/Weymela.Web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY src/Weymela.Web/ ./
+RUN npm run build
+
+FROM ${WEB_IMAGE} AS runtime
+COPY docker/web/nginx.conf /etc/nginx/nginx.conf
+COPY docker/web/security-headers.conf /etc/nginx/v3-security-headers.conf
+COPY --from=build --chown=101:101 /source/dist/ /usr/share/nginx/html/
+USER 101:101
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:8080/health/live || exit 1
+ENTRYPOINT ["nginx", "-g", "daemon off;"]

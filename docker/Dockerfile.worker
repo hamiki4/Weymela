@@ -1,0 +1,18 @@
+ARG SDK_IMAGE
+ARG RUNTIME_IMAGE
+FROM ${SDK_IMAGE} AS build
+WORKDIR /source
+COPY src/Weymela.Domain/ src/Weymela.Domain/
+COPY src/Weymela.Application/ src/Weymela.Application/
+COPY src/Weymela.Infrastructure/ src/Weymela.Infrastructure/
+COPY src/Weymela.Worker/ src/Weymela.Worker/
+RUN dotnet publish src/Weymela.Worker/Weymela.Worker.csproj -c Release -o /out --nologo -p:UseAppHost=false
+
+# Worker currently references Microsoft.AspNetCore.App; runtime-only is insufficient.
+FROM ${RUNTIME_IMAGE} AS runtime
+WORKDIR /app
+COPY --from=build --chown=1654:1654 /out/ ./
+ENV DOTNET_EnableDiagnostics=0
+USER 1654:1654
+HEALTHCHECK --interval=30s --timeout=8s --start-period=60s --retries=3 CMD ["dotnet", "Weymela.Worker.dll", "--check-health"]
+ENTRYPOINT ["dotnet", "Weymela.Worker.dll"]

@@ -1,0 +1,131 @@
+name: V3 immutable registry release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v3-registry-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+    permissions: { contents: read }
+  images:
+    if: github.ref == 'refs/heads/main' && vars.V3_REGISTRY_PUBLISH_ENABLED == 'true'
+    needs: validate
+    environment: v3-registry
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: { component: [api, worker, web] }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build digest-pinned linux/amd64 runtime image in CI
+        id: build
+        env: { COMPONENT: '${{ matrix.component }}' }
+        run: bash tools/ci/build-image.sh "$COMPONENT"
+      - name: Scan before publishing; high/critical findings block release
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          version: v0.74.0
+          image-ref: ${{ steps.build.outputs.image }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: json
+          output: .artifacts/release/${{ matrix.component }}-security.json
+      - name: Publish scanned image and record immutable digest and size
+        id: publish
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          docker push "$IMAGE"
+          docker image inspect "$IMAGE" --format '{{json .}}' | python3 -c '
+          import json,os,sys,pathlib
+          d=json.load(sys.stdin); name=os.environ["IMAGE"].split(":")[0]
+          digest=next(x for x in d["RepoDigests"] if x.startswith(name+"@"))
+          p=pathlib.Path(".artifacts/release")/(os.environ["COMPONENT"]+"-image.json")
+          p.write_text(json.dumps({"component":os.environ["COMPONENT"],"image":os.environ["IMAGE"],"digest":digest,"imageId":d["Id"],"unpackedBytes":d["Size"],"commit":os.environ["GITHUB_SHA"]},indent=2)+"\n")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write("name="+name+"\ndigest="+digest.split("@")[1]+"\n")'
+      - name: Record SBOM
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          version: v0.74.0
+          image-ref: ${{ steps.build.outputs.image }}
+          format: cyclonedx
+          output: .artifacts/release/${{ matrix.component }}-sbom.json
+          exit-code: '0'
+      - name: Attest image digest using GitHub OIDC (no signing secret)
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-name: ${{ steps.publish.outputs.name }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-image-${{ matrix.component }}
+          path: .artifacts/release/
+          include-hidden-files: true
+          retention-days: 30
+  migrations:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - name: Build offline migration bundle, SQL and checksums only
+        run: bash tools/ci/migration-artifacts.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-migrations
+          path: .artifacts/migrations/
+          include-hidden-files: true
+          retention-days: 30
+  manifest:
+    needs: [images, migrations]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { pattern: 'v3-image-*', path: release/images, merge-multiple: true }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { name: v3-migrations, path: release/migrations }
+      - name: Assemble complete release record (never a deployment)
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path('release')
+          images=[json.loads(p.read_text()) for p in sorted((root/'images').glob('*-image.json'))]
+          assert {i['component'] for i in images}=={'api','worker','web'}
+          assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)
+          manifest={'releaseId':f"v3-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':json.loads((root/'migrations/migration-manifest.json').read_text()),'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
+          assert manifest['migrations']['commit']==manifest['commit']
+          (root/'release-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+          (cd release && sha256sum release-manifest.json > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-release-package
+          path: release/
+          retention-days: 30

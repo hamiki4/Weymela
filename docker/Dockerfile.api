@@ -1,0 +1,21 @@
+# Build ONLY on GitHub-hosted/external builders. CI supplies digest-pinned bases.
+ARG SDK_IMAGE
+ARG RUNTIME_IMAGE
+FROM ${SDK_IMAGE} AS build
+WORKDIR /source
+COPY src/Weymela.Domain/ src/Weymela.Domain/
+COPY src/Weymela.Application/ src/Weymela.Application/
+COPY src/Weymela.Infrastructure/ src/Weymela.Infrastructure/
+COPY src/Weymela.Api/ src/Weymela.Api/
+RUN dotnet publish src/Weymela.Api/Weymela.Api.csproj -c Release -o /out --nologo -p:UseAppHost=false
+
+FROM ${RUNTIME_IMAGE} AS runtime
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl && apt-get clean && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build --chown=1654:1654 /out/ ./
+ENV ASPNETCORE_HTTP_PORTS=8080 DOTNET_EnableDiagnostics=0
+USER 1654:1654
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD curl --fail --silent --max-time 4 http://127.0.0.1:8080/health/ready > /dev/null || exit 1
+ENTRYPOINT ["dotnet", "Weymela.Api.dll"]

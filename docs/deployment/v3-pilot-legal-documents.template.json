@@ -1,0 +1,13 @@
+{
+  "purpose": "Publication planning only. Not seed data; no acceptance or approved legal text.",
+  "environment": "Pilot",
+  "approved": false,
+  "internalTestDocumentsRequireOwnerPermission": true,
+  "documents": [
+    { "type": "TERMS_OF_SERVICE", "roles": ["BUSINESS", "CREATOR", "CUSTOMER", "CASHIER"], "versionId": null, "effectiveFromUtc": null, "contentSha256": null, "approvedContentReference": null },
+    { "type": "PRIVACY_POLICY", "roles": ["BUSINESS", "CREATOR", "CUSTOMER", "CASHIER"], "versionId": null, "effectiveFromUtc": null, "contentSha256": null, "approvedContentReference": null },
+    { "type": "BUSINESS_AGREEMENT", "roles": ["BUSINESS"], "versionId": null, "effectiveFromUtc": null, "contentSha256": null, "approvedContentReference": null },
+    { "type": "CREATOR_AGREEMENT", "roles": ["CREATOR"], "versionId": null, "effectiveFromUtc": null, "contentSha256": null, "approvedContentReference": null },
+    { "type": "ANTI_CIRCUMVENTION_AGREEMENT", "roles": ["BUSINESS", "CREATOR"], "versionId": null, "effectiveFromUtc": null, "contentSha256": null, "approvedContentReference": null }
+  ]
+}

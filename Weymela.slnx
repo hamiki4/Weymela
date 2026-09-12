@@ -1,0 +1,12 @@
+<Solution>
+  <Project Path="src/Weymela.Domain/Weymela.Domain.csproj" />
+  <Project Path="src/Weymela.Application/Weymela.Application.csproj" />
+  <Project Path="src/Weymela.Infrastructure/Weymela.Infrastructure.csproj" />
+  <Project Path="src/Weymela.Api/Weymela.Api.csproj" />
+  <Project Path="src/Weymela.Worker/Weymela.Worker.csproj" />
+  <Project Path="tests/Weymela.Domain.Tests/Weymela.Domain.Tests.csproj" />
+  <Project Path="tests/Weymela.Application.Tests/Weymela.Application.Tests.csproj" />
+  <Project Path="tests/Weymela.Infrastructure.Tests/Weymela.Infrastructure.Tests.csproj" />
+  <Project Path="tests/Weymela.Api.IntegrationTests/Weymela.Api.IntegrationTests.csproj" />
+  <Project Path="tests/Weymela.BrowserHost/Weymela.BrowserHost.csproj" />
+</Solution>

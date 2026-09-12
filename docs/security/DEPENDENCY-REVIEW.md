@@ -1,0 +1,9 @@
+# Phase 6 dependency review
+
+Acceptance used the existing .NET10 and Node24 dependency graph. The only new direct library dependencies are `Microsoft.IdentityModel.JsonWebTokens`8.22.0 (signature validation) and `Microsoft.Extensions.Configuration.Binder`10.0.0 (validated configuration binding). No broad upgrade was performed. Existing explicit security overrides remain.
+
+The .NET transitive vulnerability audit and npm audit reported zero known vulnerabilities at the Phase 6 check. These are point-in-time advisory checks, not proof of vulnerability absence; repeat in the external release builder. Raw results and package inventory are retained under `.artifacts/phase6-*audit.json` and `phase6-dependency-inventory.json`, not shipped as runtime inputs.
+
+License metadata inventory covers270 NuGet/npm package records (including optional platform packages). Declared metadata: MIT200, MIT-0 2, Apache-2.0 36, Unlicense-or-Apache1, ISC10, BSD-2-Clause2, MPL-2.0 12, BlueOak1, CC0 1, BSD-3-Clause2, PostgreSQL2, and one xUnit license URL. MPL entries are Lightning CSS development/build tooling and platform variants, not application runtime code. The xUnit URL is test tooling. Preserve required licenses/notices and generate a release SBOM in the external builder; do not infer that a package count or permissive license removes notice obligations. This is an engineering inventory, not a legal clearance.
+
+No live provider SDK or credential-bearing integration was installed. Public Firebase signing certificates are an on-demand verifier boundary; tests use local RSA keys. Docker SDK/browser/PostgreSQL images were existing disposable test tools, not newly built release images. Final runtime/base-image digest scanning, SBOM signing, provenance and registry publication remain separately authorized release preparation.

@@ -1,0 +1,23 @@
+using System;
+using Weymela.Domain;
+using Xunit;
+namespace Weymela.Domain.Tests;
+public sealed class PromotionLifecycleInvariantTests
+{
+ private static readonly DateTime Now=new(2026,1,1,0,0,0,DateTimeKind.Utc);
+ private static PricingSnapshot Pricing(PromotionType t)=>new(t,1000,new Money(300),new Money(200),new Money(100),4.5m,2m,3.5m,Now,Guid.NewGuid());
+ private static Promotion New(PromotionType t=PromotionType.ViewOnly,decimal budget=6000)=>new(Guid.NewGuid(),"Campaign","Brief",t,new Money(budget),new(null,null,"ET","Requirements"),Now,Now.AddDays(30),Pricing(t),Now);
+ private static Promotion Funded(PromotionType t=PromotionType.ViewOnly){var p=New(t);var w=new BusinessWallet(p.BusinessId);w.CreditDeposit(p.TotalBudget,Now,Guid.NewGuid());p.Fund(w,Now,Guid.NewGuid());return p;}
+ [Fact] public void Positive_campaign_budget_is_required(){Assert.Throws<ArgumentOutOfRangeException>(()=>New(budget:0));}
+ [Fact] public void Effective_type_minimum_is_enforced(){var pricing=Pricing(PromotionType.ViewOnly) with {MinimumPromotionBudget=new Money(1000)};Assert.Throws<InvalidOperationException>(()=>new Promotion(Guid.NewGuid(),"x","",PromotionType.ViewOnly,new Money(999),new(null,null,null,null),Now,Now.AddDays(1),pricing,Now));}
+ [Fact] public void Draft_cannot_publish(){Assert.Throws<InvalidOperationException>(()=>New().Publish(Now,Guid.NewGuid()));}
+ [Fact] public void Funded_can_publish(){var p=Funded();p.Publish(Now,Guid.NewGuid());Assert.Equal(PromotionStatus.Published,p.Status);}
+ [Fact] public void Published_can_activate(){var p=Funded();p.Publish(Now,Guid.NewGuid());p.Activate(Now,Guid.NewGuid());Assert.Equal(PromotionStatus.Active,p.Status);}
+ [Fact] public void Active_can_complete_and_completed_cannot_reactivate(){var p=New();var w=new BusinessWallet(p.BusinessId);w.CreditDeposit(p.TotalBudget,Now,Guid.NewGuid());p.Fund(w,Now,Guid.NewGuid());p.Publish(Now,Guid.NewGuid());p.Activate(Now,Guid.NewGuid());p.Complete(w,Now,Guid.NewGuid());Assert.Equal(PromotionStatus.Completed,p.Status);Assert.Equal(6000,w.ReservedBalance.Amount);Assert.Equal(0,w.AvailableBalance.Amount);Assert.Throws<InvalidOperationException>(()=>p.Activate(Now,Guid.NewGuid()));}
+ [Fact] public void Active_becomes_budget_exhausted_when_used_budget_is_consumed(){var p=Funded();p.Publish(Now,Guid.NewGuid());p.Activate(Now,Guid.NewGuid());var a=p.Allocate(Guid.NewGuid(),new Money(6000),Now,Guid.NewGuid());p.Consume(a.Id,new Money(6000),Now,Guid.NewGuid());Assert.Equal(PromotionStatus.BudgetExhausted,p.Status);}
+ [Fact] public void Invalid_transition_is_rejected(){var p=New();Assert.Throws<InvalidOperationException>(()=>p.Activate(Now,Guid.NewGuid()));}
+ [Fact] public void Funding_reserves_exact_budget_and_preserves_snapshot(){var p=New();var w=new BusinessWallet(p.BusinessId);w.CreditDeposit(new Money(7000),Now,Guid.NewGuid());var snapshot=p.PricingSnapshot;p.Fund(w,Now,Guid.NewGuid());Assert.Equal(p.TotalBudget,p.ReservedBudget);Assert.Equal(1000,w.AvailableBalance.Amount);Assert.Equal(snapshot,p.PricingSnapshot);}
+ [Fact] public void Funding_twice_is_rejected(){var p=Funded();var w=new BusinessWallet(p.BusinessId);Assert.Throws<InvalidOperationException>(()=>p.Fund(w,Now,Guid.NewGuid()));}
+ [Fact] public void Two_campaigns_cannot_reserve_same_available_funds(){var businessId=Guid.NewGuid();var w= new BusinessWallet(businessId);w.CreditDeposit(new Money(1000),Now,Guid.NewGuid());var a=new Promotion(businessId,"A","",PromotionType.ViewOnly,new Money(700),new(null,null,null,null),Now,Now.AddDays(1),Pricing(PromotionType.ViewOnly),Now);var b=new Promotion(businessId,"B","",PromotionType.ViewOnly,new Money(700),new(null,null,null,null),Now,Now.AddDays(1),Pricing(PromotionType.ViewOnly),Now);a.Fund(w,Now,Guid.NewGuid());Assert.Throws<InvalidOperationException>(()=>b.Fund(w,Now,Guid.NewGuid()));}
+ [Fact] public void Pricing_snapshot_is_value_preserved_after_new_admin_snapshot(){var p=Funded();var original=p.PricingSnapshot;var later=original with {CreatorEarning=new Money(999)};Assert.NotEqual(original.CreatorEarning,later.CreatorEarning);Assert.Equal(200,p.PricingSnapshot.CreatorEarning.Amount);}
+}

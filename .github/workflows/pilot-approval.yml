@@ -1,0 +1,39 @@
+name: V3 Pilot review gate - NO DEPLOY
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful main release workflow run ID
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  review:
+    if: github.ref == 'refs/heads/main' && vars.V3_PILOT_REVIEW_ENABLED == 'true'
+    environment: v3-pilot
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - name: Verify successful trusted release run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_RUN: ${{ inputs.release_run_id }}
+        run: |
+          [[ "$RELEASE_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$REPOSITORY/actions/runs/$RELEASE_RUN" > run.json
+          python3 - <<'PY'
+          import json,os
+          r=json.load(open('run.json'))
+          assert r['conclusion']=='success' and r['head_branch']=='main'
+          assert r['path']=='.github/workflows/release.yml'
+          assert r['head_repository']['full_name']==os.environ['REPOSITORY']
+          PY
+          gh run download "$RELEASE_RUN" --repo "$REPOSITORY" --name v3-release-package --dir release
+          (cd release && sha256sum --check SHA256SUMS)
+          python3 tools/ci/verify-release.py release
+          python3 -c 'import json; assert json.load(open("run.json"))["head_sha"] == json.load(open("release/release-manifest.json"))["commit"]'
+          printf '%s\n' 'Release reviewed only. No SSH, database operation, image pull, cutover or unfreeze was performed.' >> "$GITHUB_STEP_SUMMARY"

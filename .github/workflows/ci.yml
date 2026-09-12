@@ -1,0 +1,42 @@
+name: V3 validation
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with: { node-version: '24' }
+      - name: Pinned workflow and secret scanners
+        shell: bash
+        run: |
+          bash tools/ci/install-security-tools.sh "$RUNNER_TEMP/v3-security"
+          "$RUNNER_TEMP/v3-security/actionlint" -shellcheck=''
+          "$RUNNER_TEMP/v3-security/gitleaks" git --redact --no-banner --exit-code 1
+          "$RUNNER_TEMP/v3-security/gitleaks" dir . --redact --no-banner --exit-code 1
+      - name: Preparation guard tests
+        run: python3 -m unittest discover -s tests/preparation -v
+      - name: Full isolated acceptance and dependency gates
+        run: bash tools/ci/validate.sh
+      - name: Publish safe test evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-acceptance
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .artifacts/ci/*.trx
+            .artifacts/ci/nuget-audit.json
+            .artifacts/ci/source-inventory.json
+            .artifacts/phase6-e2e-results.json
+          # Never upload browser-host.json (contains a disposable authentication key).

@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Used only by the explicitly enabled, supported attestation path below.
       id-token: write
       attestations: write
     strategy:
@@ -30,6 +31,13 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: { persist-credentials: false }
+      - name: Select supported attestation mode (private user repositories stay private)
+        id: attestation-policy
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+          REPOSITORY_OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          ATTESTATION_ENABLED: ${{ vars.V3_GITHUB_ATTESTATION_ENABLED }}
+        run: python3 tools/ci/release-evidence.py policy
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -41,6 +49,7 @@ jobs:
         env: { COMPONENT: '${{ matrix.component }}' }
         run: bash tools/ci/build-image.sh "$COMPONENT"
       - name: Scan before publishing; high/critical findings block release
+        id: scan
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
         with:
           version: v0.74.0
@@ -66,6 +75,7 @@ jobs:
           p.write_text(json.dumps({"component":os.environ["COMPONENT"],"image":os.environ["IMAGE"],"digest":digest,"imageId":d["Id"],"unpackedBytes":d["Size"],"commit":os.environ["GITHUB_SHA"]},indent=2)+"\n")
           with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write("name="+name+"\ndigest="+digest.split("@")[1]+"\n")'
       - name: Record SBOM
+        id: sbom
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
         with:
           version: v0.74.0
@@ -74,17 +84,51 @@ jobs:
           output: .artifacts/release/${{ matrix.component }}-sbom.json
           exit-code: '0'
       - name: Attest image digest using GitHub OIDC (no signing secret)
+        id: attest
+        if: steps.attestation-policy.outputs.mode == 'enabled'
         uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
           subject-name: ${{ steps.publish.outputs.name }}
           subject-digest: ${{ steps.publish.outputs.digest }}
           push-to-registry: true
+      - name: Record actual scan, SBOM and attestation evidence
+        env:
+          COMPONENT: ${{ matrix.component }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
+          ATTESTATION_MODE: ${{ steps.attestation-policy.outputs.mode }}
+          ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
+          ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        run: python3 tools/ci/release-evidence.py complete
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: v3-image-${{ matrix.component }}
           path: .artifacts/release/
           include-hidden-files: true
           retention-days: 30
+      - name: Preserve failed-image diagnostics without secret match content
+        # Separate failure step: Trivy's nonzero exit must not bypass evidence
+        # retention or be turned into success. Never print/upload the raw report.
+        if: failure()
+        env:
+          COMPONENT: ${{ matrix.component }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
+        run: python3 tools/ci/release-evidence.py diagnostics
+      - name: Upload failure diagnostics only (not a release artifact)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-diagnostics-${{ matrix.component }}
+          path: .artifacts/diagnostics/${{ matrix.component }}-diagnostics.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
   migrations:
     if: github.ref == 'refs/heads/main' && needs.validate.outputs.passed == 'true'
     needs: validate
@@ -118,8 +162,19 @@ jobs:
           import hashlib,json,os,pathlib
           root=pathlib.Path('release')
           images=[json.loads(p.read_text()) for p in sorted((root/'images').glob('*-image.json'))]
+          assert len(images)==3
           assert {i['component'] for i in images}=={'api','worker','web'}
           assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)
+          for i in images:
+              assert i['buildStatus']=='passed' and i['publishStatus']=='passed'
+              assert i['scan']['status']=='passed'
+              assert i['attestation']['status'] in ('unavailable','not-enabled','attested')
+              if i['attestation']['status']=='attested':
+                  assert i['attestation']['id'] and i['attestation']['url']
+              for key,suffix in (('scan','security'),('sbom','sbom')):
+                  evidence=i[key]
+                  assert evidence['path']==f"images/{i['component']}-{suffix}.json"
+                  assert hashlib.sha256((root/evidence['path']).read_bytes()).hexdigest()==evidence['sha256']
           manifest={'releaseId':f"v3-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':json.loads((root/'migrations/migration-manifest.json').read_text()),'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
           assert manifest['migrations']['commit']==manifest['commit']
           (root/'release-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

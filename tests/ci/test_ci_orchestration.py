@@ -72,6 +72,34 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn('needs: [validate, images, migrations]', jobs['manifest'])
         self.assertNotIn('continue-on-error:', CI + RELEASE)
 
+    def test_main_image_publication_requires_validation_but_no_opt_in_variable(self):
+        jobs = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', RELEASE.split('jobs:\n', 1)[1], re.M | re.S))
+        expected = "github.ref == 'refs/heads/main' && needs.validate.outputs.passed == 'true'"
+        image_condition = re.search(r'^    if: (.+)$', jobs['images'], re.M)[1]
+        self.assertEqual(image_condition, expected)
+        self.assertEqual(image_condition, re.search(r'^    if: (.+)$', jobs['migrations'], re.M)[1])
+
+    def test_image_publication_keeps_environment_and_scoped_github_token_permissions(self):
+        images = RELEASE.split('  images:\n', 1)[1].split('\n  migrations:', 1)[0]
+        self.assertIn('    environment: v3-registry\n', images)
+        permissions = images.split('    permissions:\n', 1)[1].split('    strategy:', 1)[0]
+        self.assertEqual(dict(re.findall(r'^      ([a-z-]+): (read|write)$', permissions, re.M)), {
+            'contents': 'read', 'packages': 'write', 'id-token': 'write', 'attestations': 'write',
+        })
+        self.assertIn('          registry: ghcr.io\n', images)
+        self.assertIn('          password: ${{ secrets.GITHUB_TOKEN }}\n', images)
+        self.assertIn('matrix: { component: [api, worker, web] }', images)
+
+    def test_manifest_keeps_success_dependency_on_all_images_and_migrations(self):
+        manifest = RELEASE.split('  manifest:\n', 1)[1]
+        self.assertIn('    needs: [validate, images, migrations]\n', manifest)
+        # No always() or other status override: GitHub's implicit success() must
+        # continue blocking the manifest when any prerequisite fails or is skipped.
+        self.assertEqual(re.search(r'^    if: (.+)$', manifest, re.M)[1], "needs.validate.outputs.passed == 'true'")
+        self.assertIn("assert {i['component'] for i in images}=={'api','worker','web'}", manifest)
+        self.assertIn("assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)", manifest)
+        self.assertIn("assert manifest['migrations']['commit']==manifest['commit']", manifest)
+
     def test_browser_installer_has_own_deadline_and_raw_control_is_not_uploaded(self):
         self.assertIn('timeout-minutes: 10\n        working-directory: src/Weymela.Web\n        run: npx playwright install --with-deps chromium', CI)
         self.assertNotRegex(CI, r'(?m)^\s+\.artifacts/browser-host\.(json|log)$')

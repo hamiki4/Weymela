@@ -20,7 +20,9 @@ resolve_base() {
 }
 if test "$component" = web; then
   node_image="$(resolve_base node:24-bookworm-slim)"
-  web_image="$(resolve_base nginx:stable-alpine)"
+  # Current upstream still contains vulnerable libuuid. Keep the Alpine base
+  # fixed while Dockerfile.web applies the checksum-pinned, package-only fix.
+  web_image="nginx:stable-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c"
   build_args=(--build-arg "NODE_IMAGE=$node_image" --build-arg "WEB_IMAGE=$web_image")
   printf '%s\n%s\n' "$node_image" "$web_image" > ".artifacts/release/$component-bases.txt"
 else
@@ -34,4 +36,11 @@ docker buildx build --platform linux/amd64 --load --provenance=false \
   --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
   --label "org.opencontainers.image.revision=$GITHUB_SHA" \
   --label "org.opencontainers.image.version=$release" "${build_args[@]}" .
+if test "$component" = web; then
+  # Check the actual built runtime on the hosted builder, before Trivy/publish.
+  docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --entrypoint /sbin/apk "$image" info -v \
+    > .artifacts/release/web-runtime-packages.txt
+  grep -Fx 'libuuid-2.42.3-r1' .artifacts/release/web-runtime-packages.txt
+fi
 printf 'image=%s\nrelease=%s\n' "$image" "$release" >> "$GITHUB_OUTPUT"

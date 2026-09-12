@@ -13,7 +13,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions: { contents: read }
   images:
-    if: github.ref == 'refs/heads/main' && vars.V3_REGISTRY_PUBLISH_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.V3_REGISTRY_PUBLISH_ENABLED == 'true' && needs.validate.outputs.passed == 'true'
     needs: validate
     environment: v3-registry
     runs-on: ubuntu-24.04
@@ -86,7 +86,7 @@ jobs:
           include-hidden-files: true
           retention-days: 30
   migrations:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.validate.outputs.passed == 'true'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -104,7 +104,8 @@ jobs:
           include-hidden-files: true
           retention-days: 30
   manifest:
-    needs: [images, migrations]
+    needs: [validate, images, migrations]
+    if: needs.validate.outputs.passed == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

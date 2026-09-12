@@ -2,20 +2,20 @@ name: V3 validation
 on:
   pull_request:
   workflow_call:
+    outputs:
+      passed:
+        description: True only after every required validation job succeeds
+        value: ${{ jobs.acceptance.outputs.passed }}
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  acceptance:
+  source-security:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: { persist-credentials: false, fetch-depth: 0 }
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
-        with: { dotnet-version: '10.0.x' }
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with: { node-version: '24' }
       - name: Pinned workflow and secret scanners
         shell: bash
         run: |
@@ -25,18 +25,189 @@ jobs:
           "$RUNNER_TEMP/v3-security/gitleaks" dir . --redact --no-banner --exit-code 1
       - name: Preparation guard tests
         run: python3 -m unittest discover -s tests/preparation -v
-      - name: Full isolated acceptance and dependency gates
-        run: bash tools/ci/validate.sh
-      - name: Publish safe test evidence only
+      - name: CI orchestration regression tests (no product suites)
+        run: python3 -m unittest discover -s tests/ci -v
+      - name: Repository safety and whitespace
+        run: |
+          python3 tools/ci/repository-safety.py . --report .artifacts/ci/source-inventory.json
+          git diff --check
+      - name: Safe source evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: v3-acceptance
+          name: v3-source-security
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .artifacts/ci/source-inventory.json
+
+  dotnet-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - name: All Domain and Application tests
+        run: bash tools/ci/validate.sh unit
+      - name: Unit test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-dotnet-unit
           retention-days: 14
           include-hidden-files: true
           path: |
             .artifacts/ci/*.trx
+            .artifacts/ci/stage-timings.tsv
+
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - name: All PostgreSQL integration tests (own Testcontainers database)
+        run: bash tools/ci/validate.sh postgres
+      - name: PostgreSQL test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-postgres
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .artifacts/ci/*.trx
+            .artifacts/ci/stage-timings.tsv
+
+  http-api:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - name: All HTTP API integration tests (own Testcontainers database)
+        run: bash tools/ci/validate.sh http
+      - name: HTTP test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-http-api
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .artifacts/ci/*.trx
+            .artifacts/ci/stage-timings.tsv
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Weymela.Web/package-lock.json
+      - name: All Vitest tests, npm audit and production frontend build
+        run: bash tools/ci/validate.sh frontend
+      - name: Frontend timing evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-frontend
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .artifacts/ci/stage-timings.tsv
+
+  dotnet-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with: { node-version: '24' }
+      - name: Full Release build, EF consistency, NuGet audit and license inventory
+        run: bash tools/ci/validate.sh dotnet-checks
+      - name: Build/security evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-dotnet-checks
+          retention-days: 14
+          include-hidden-files: true
+          path: |
             .artifacts/ci/nuget-audit.json
-            .artifacts/ci/source-inventory.json
+            .artifacts/ci/stage-timings.tsv
+            .artifacts/phase6-dependency-inventory.json
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with: { dotnet-version: '10.0.x' }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Weymela.Web/package-lock.json
+      - name: Build isolated BrowserHost and production frontend
+        timeout-minutes: 15
+        run: bash tools/ci/validate.sh browser-build
+      - name: Install matching Chromium and system dependencies
+        timeout-minutes: 10
+        working-directory: src/Weymela.Web
+        run: npx playwright install --with-deps chromium
+      - name: All rendered E2E and responsive/security flows
+        timeout-minutes: 60
+        run: bash tools/ci/browser-tests.sh
+      - name: Safe browser evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v3-browser
+          retention-days: 14
+          include-hidden-files: true
+          path: |
             .artifacts/phase6-e2e-results.json
-          # Never upload browser-host.json (contains a disposable authentication key).
+            .artifacts/ci/stage-timings.tsv
+          # Never upload browser-host.json, its log, tokens, or a broad .artifacts glob.
+
+  acceptance:
+    # Preserve the required acceptance check name, but never let a skipped/failed
+    # child become a successful reusable-workflow result.
+    needs: [source-security, dotnet-unit, postgres, http-api, frontend, dotnet-checks, browser]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      passed: ${{ steps.gate.outputs.passed }}
+    steps:
+      - name: Require every validation job to succeed
+        id: gate
+        env:
+          VALIDATION_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          expected={'source-security','dotnet-unit','postgres','http-api','frontend','dotnet-checks','browser'}
+          results=json.loads(os.environ['VALIDATION_RESULTS'])
+          assert set(results)==expected, 'Required suite missing from acceptance gate'
+          failed={name:item['result'] for name,item in results.items() if item['result']!='success'}
+          assert not failed, f'Acceptance failed: {failed}'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write('passed=true\n')
+          print('Every required validation job succeeded. No deployment authorized.')
+          PY

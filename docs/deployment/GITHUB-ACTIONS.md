@@ -4,6 +4,8 @@ Implemented as source in Phase7. No GitHub repository/remote, commit, push, secr
 
 ## Workflows
 
+After the first hosted45minute timeout,validation is split into seven independent jobs plus an explicit fail-closed acceptance gate. See [CI timeout correction](CI-TIMEOUT-CORRECTION.md) for evidence limits,job/step timeouts,bounded BrowserHost cleanup,targeted tests and exact review-branch commit/push commands. Existing Phase7 preparation evidence below is historical;remote execution of the corrected graph remains pending.
+
 | Workflow | Trigger / permissions | Result |
 |---|---|---|
 | `ci.yml` | PR,manual,or reusable workflow call; `contents:read`,no deployment secrets | Secret + workflow scan,repository safety/format gate,.NET restore/Release build,Domain/Application/PostgreSQL Testcontainers/HTTP API tests,EF pending-model,NuGet/npm audits,frontend tests/production build,real BrowserHost/Playwright suite |

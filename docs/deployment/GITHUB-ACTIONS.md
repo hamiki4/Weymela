@@ -1,10 +1,10 @@
 # V3 GitHub Actions / registry preparation
 
-Implemented as source in Phase7. No GitHub repository/remote, commit, push, secret, workflow run or registry package was created. Workflows are validated locally for syntax and safety, not claimed remotely green.
+Initially prepared as source in Phase7. The owner now reports a successful hosted validation/migration run at main merge `3e3378a`, but images and the manifest were skipped. The publication-gate correction below is validated locally; its first hosted image publication remains pending.
 
 ## Workflows
 
-After the first hosted45minute timeout,validation is split into seven independent jobs plus an explicit fail-closed acceptance gate. See [CI timeout correction](CI-TIMEOUT-CORRECTION.md) for evidence limits,job/step timeouts,bounded BrowserHost cleanup,targeted tests and exact review-branch commit/push commands. Existing Phase7 preparation evidence below is historical;remote execution of the corrected graph remains pending.
+After the first hosted45minute timeout,validation is split into seven independent jobs plus an explicit fail-closed acceptance gate. See [CI timeout correction](CI-TIMEOUT-CORRECTION.md) for evidence limits,job/step timeouts,bounded BrowserHost cleanup,targeted tests and exact review-branch commit/push commands. The owner reports all seven validation jobs passed after that correction; initial Phase7 preparation evidence is historical.
 
 | Workflow | Trigger / permissions | Result |
 |---|---|---|
@@ -23,11 +23,33 @@ Browser tests own a disposable randomly named PostgreSQL container and loopback 
 1. Select private repository owner/name and approve initial commit/push after [source safety](V3-REPOSITORY-INVENTORY.md). No existing V2 repository changes.
 2. Protect main: PR review,required `V3 validation / acceptance` (confirm actual check name on first run),no force push/deletion,restrict admin bypass as policy permits. Require review of workflows,finance,auth and migrations. No `CODEOWNERS` placeholder account that cannot approve; owner configures real team/user.
 3. Create GitHub environments `v3-registry` and `v3-pilot`,required reviewers,prevent self-review,restrict to protected main. Verify the account/plan supports environment review and private-repository attestations. An environment name in YAML **does not itself establish a protection rule**. If unsupported, stop and approve an equivalent protected attestation/release process; do not silently drop the gate.
-4. After protections are verified set repository variable `V3_REGISTRY_PUBLISH_ENABLED=true`; default missing value prevents all image build/publish jobs. Set `V3_PILOT_REVIEW_ENABLED=true` only after the manual review process exists. Neither variable deploys anything.
+4. Image publication now follows successful main validation without a registry opt-in variable, tag, custom secret or dispatch input. Preserve `v3-registry` protections: if required reviewers are configured, image jobs wait for their approval. Set `V3_PILOT_REVIEW_ENABLED=true` only after the separate manual Pilot review process exists; it does not control image publication or deploy anything.
 5. Allow GHCR package creation for this repository; link packages to source via OCI source label. Build job alone gets `packages:write`, `id-token:write`, `attestations:write` and `contents:read`. It authenticates with ephemeral `GITHUB_TOKEN`; no registry password/PAT in source or build args. Test and migration jobs need no package write or live secrets.
 6. A later server pull account gets **read:packages only** for the three private V3 packages (with organization SSO authorization where required), stored in protected Docker credential storage,never Compose/source. No SSH deploy key is required by these workflows.
 
 GHCR fits GitHub-owned source/workflow permission boundaries. Refer to official [GHCR authentication/package linkage](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) and [GitHub image publication/provenance](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images). Configure [environment protection rules](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) explicitly; no automatic Production deployment exists.
+
+## Image-job skip correction
+
+The inspected workflow had one extra image-only predicate: `vars.V3_REGISTRY_PUBLISH_ENABLED == 'true'`. This Phase7 preparation opt-in deliberately disabled image publication by default. The complete old condition was:
+
+```yaml
+if: github.ref == 'refs/heads/main' && vars.V3_REGISTRY_PUBLISH_ENABLED == 'true' && needs.validate.outputs.passed == 'true'
+```
+
+Migrations required only main and the validation success output. Their reported success therefore establishes those shared predicates passed; the extra variable comparison explains skipped images in this workflow. An unset variable evaluates to an empty string, and environment-level variables are only available after the runner declares the environment, not as a reliable job-scheduling opt-in. A secret or server environment variable with the same name does not set the `vars` context. See GitHub's [variables](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-variables) and [contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) references.
+
+The local checkout was `9cb982c`; merge `3e3378a` was not available locally and authenticated remote access was unavailable during diagnosis. The exact remote variable value/scope and merge contents were not independently retrieved. The explanation above matches the inspected workflow and the owner's reported run, not an assertion of having read private repository settings.
+
+The correction removes only the variable predicate, making image and migration eligibility identical:
+
+```yaml
+if: github.ref == 'refs/heads/main' && needs.validate.outputs.passed == 'true'
+```
+
+All seven validation suites and their aggregate success gate remain required. `environment: v3-registry`, scoped token permissions, scans, provenance and main-only builds are unchanged. No custom publication variable, PAT or tag is needed. Repository/organization policy must allow GHCR package creation and these Actions permissions; configured environment approval still applies. No repository settings were changed locally.
+
+The manifest continues to need `[validate, images, migrations]` with GitHub's implicit `success()` condition. A skipped/failed image dependency blocks it; skipped jobs can still leave the overall workflow successful. The complete release artifact, not the green workflow badge alone, proves all components were assembled. See [job dependency behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax). Regression tests check normal-main eligibility without the opt-in, retained environment/token protections, and the complete manifest dependency/commit checks.
 
 ## Build/release identities
 

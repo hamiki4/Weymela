@@ -36,6 +36,30 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Customer_activation_is_resolved_from_persisted_profile_on_session_refresh()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        db.IdentityBindings.Add(new IdentityBinding
+        {
+            Provider = "Firebase", ProjectId = "isolated-v3-test", ExternalSubject = "uid", UserId = user,
+            IsActive = true, ValidAfterUtc = DateTime.UtcNow.AddMinutes(-1), Version = 1
+        });
+        await db.SaveChangesAsync();
+
+        var enrollment = new RoleEnrollmentService(db, TimeProvider.System);
+        await enrollment.SubmitAsync(new Actor(user, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-REFRESH", null, null, null), "customer-refresh", default);
+
+        var result = await new TrustedIdentityService(db, new Verifier(), new PersistentWorkspaceDirectory(db)).SignInAsync("token", default);
+        Assert.Equal(ActorRole.Customer, result.Actor.Role);
+        Assert.NotEqual(Guid.Empty, result.Actor.CustomerId);
+        Assert.Single(result.Profiles);
+        Assert.Equal("CU-REFRESH", result.PublicId);
+    }
+
+    [Fact]
     public async Task Existing_customer_can_request_creator_without_losing_customer_access()
     {
         var database = await fixture.CreateAsync();
@@ -105,5 +129,11 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var service = new RoleEnrollmentService(db, TimeProvider.System);
         foreach (var role in new[] { ActorRole.Cashier, ActorRole.PlatformAdmin })
             await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(Guid.NewGuid(), ActorRole.Customer), new RoleEnrollmentRequest(role, "No", "NO", null, null, null), Guid.NewGuid().ToString("N"), default));
+    }
+
+    private sealed class Verifier : IIdentityTokenVerifier
+    {
+        public Task<VerifiedIdentity> VerifyAsync(string _, CancellationToken __)
+            => Task.FromResult(new VerifiedIdentity("Firebase", "isolated-v3-test", "uid", DateTime.UtcNow, DateTime.UtcNow.AddHours(1)));
     }
 }

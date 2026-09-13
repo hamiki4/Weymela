@@ -6,6 +6,7 @@ using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Application.Web;
 
 namespace Weymela.BrowserHost;
 
@@ -60,5 +61,33 @@ public sealed class BrowserIdentityTokenVerifier(TimeProvider clock) : IIdentity
             throw new ApplicationFailure(FailureKind.Forbidden, "Test identity could not be verified.");
         var now = clock.GetUtcNow().UtcDateTime;
         return Task.FromResult(new VerifiedIdentity("Firebase", "isolated-v3-test", userId.ToString("N"), now, now.AddHours(1)));
+    }
+}
+
+// BrowserHost must resolve profiles created during the test flow from the
+// disposable database, while retaining static fixture personas for existing
+// development-only scenarios. This adapter is never registered by Pilot or
+// Production.
+public sealed class BrowserWorkspaceDirectory(PersistentWorkspaceDirectory persisted, DevelopmentDirectory fixtures) : IWorkspaceDirectory
+{
+    public Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct)
+        => Prefer(() => persisted.BusinessCardAsync(id, ct), () => fixtures.BusinessCardAsync(id, ct));
+
+    public Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct)
+        => Prefer(() => persisted.CreatorCardAsync(id, ct), () => fixtures.CreatorCardAsync(id, ct));
+
+    public Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken ct)
+        => Prefer(() => persisted.CustomerCardAsync(id, ct), () => fixtures.CustomerCardAsync(id, ct));
+
+    public Task<PublicBusiness> BusinessAsync(Guid id, CancellationToken ct)
+        => Prefer(() => persisted.BusinessAsync(id, ct), () => fixtures.BusinessAsync(id, ct));
+
+    public Task<PublicCreator> CreatorAsync(Guid id, CancellationToken ct)
+        => Prefer(() => persisted.CreatorAsync(id, ct), () => fixtures.CreatorAsync(id, ct));
+
+    private static async Task<T> Prefer<T>(Func<Task<T>> persisted, Func<Task<T>> fixture)
+    {
+        try { return await persisted(); }
+        catch (ApplicationFailure e) when (e.Kind == FailureKind.NotFound) { return await fixture(); }
     }
 }

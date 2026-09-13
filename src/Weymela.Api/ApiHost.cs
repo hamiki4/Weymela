@@ -42,7 +42,7 @@ public static class ApiHost
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());
         if(development)
         {
-            builder.Services.AddSingleton<DevelopmentDirectory>();builder.Services.AddSingleton<IWorkspaceDirectory>(sp=>sp.GetRequiredService<DevelopmentDirectory>());
+            builder.Services.AddSingleton<DevelopmentDirectory>();builder.Services.TryAddSingleton<IWorkspaceDirectory>(sp=>sp.GetRequiredService<DevelopmentDirectory>());
             builder.Services.AddSingleton<DevelopmentViewProvider>();builder.Services.AddSingleton<IVerifiedViewProvider>(sp=>sp.GetRequiredService<DevelopmentViewProvider>());
         }
         else

@@ -32,6 +32,8 @@ await using var app=ApiHost.Build(["--environment","Development"],builder=>
     builder.Services.AddSingleton<IEmailCodeDelivery, BrowserEmailCodeDelivery>();
     builder.Services.AddScoped<IFirebaseCustomTokenIssuer, BrowserFirebaseCustomTokenIssuer>();
     builder.Services.AddScoped<IIdentityTokenVerifier, BrowserIdentityTokenVerifier>();
+    builder.Services.AddScoped<PersistentWorkspaceDirectory>();
+    builder.Services.AddScoped<IWorkspaceDirectory, BrowserWorkspaceDirectory>();
 });
 await using(var scope=app.Services.CreateAsyncScope())
 {

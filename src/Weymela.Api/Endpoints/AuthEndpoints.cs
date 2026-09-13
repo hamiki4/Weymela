@@ -32,7 +32,11 @@ internal static class AuthEndpoints
             var checkout=onboarding ? false : await db.CommercePermissions.AnyAsync(x=>x.UserId==a.UserId&&x.Role==a.Role&&x.IsActive&&x.CanCheckout,ct);
             var profiles = onboarding
                 ? new List<SessionProfile>()
-                : development
+                // Development fixture sessions have no Firebase verification claim and
+                // retain their synthetic persona projection. BrowserHost Firebase
+                // identities are verified and must resolve persisted memberships even
+                // while the host runs in Development.
+                : development && c.User.FindFirst("auth-strength")?.Value != "firebase-verified"
                     ? new List<SessionProfile> { new(a.Role.ToString(), SubjectId(a), a.BusinessId, c.User.Identity!.Name!, c.User.FindFirst("publicId")?.Value??"", checkout) }
                     : (await c.RequestServices.GetRequiredService<TrustedIdentityService>().ProfilesForUserAsync(a.UserId, ct)).Select(ToSessionProfile).ToList();
             var role = onboarding ? "Onboarding" : a.Role.ToString();

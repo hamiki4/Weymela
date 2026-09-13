@@ -422,7 +422,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await runStep(steps, "creator-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
   await expect(page.getByText(/Under review/)).toBeVisible();
   await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator", `CR-${suffix}`), 15000);
-  await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
+  await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Customer"), 12000);
   await runStep(steps, "creator-profile-switch", () => open(page, "/customer/offers"), 15000);
   await expect(page.getByLabel("Switch profile", { exact: true })).toBeVisible();
   const creatorProfile = await page.getByLabel("Switch profile", { exact: true }).locator("option").filter({ hasText: "Creator" }).first().getAttribute("value");

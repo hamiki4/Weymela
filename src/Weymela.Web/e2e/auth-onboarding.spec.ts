@@ -81,7 +81,7 @@ async function captureCustomerFormFailure(page: import("@playwright/test").Page,
     const body = await page.locator("body").innerText({ timeout: 1000 }).catch(() => unavailable);
     const main = await page.locator("main").innerHTML({ timeout: 1000 }).catch(() => unavailable);
     const selectors = {
-      useAsCustomer: page.getByRole("button", { name: "Use as Customer", exact: true }),
+      useAsCustomer: page.getByRole("button", { name: /^Use as Customer/ }),
       displayName: page.getByLabel("Display name", { exact: true }),
       publicId: page.getByLabel("Public ID", { exact: true }),
       continue: page.getByRole("button", { name: "Continue", exact: true }),
@@ -175,7 +175,7 @@ test("one email-verified account can sign in by phone and complete independent p
 
   try {
     await runStep(steps, "onboarding-open", () => open(page, "/onboarding"), 15000);
-    await runStep(steps, "customer-choice", () => page.getByRole("button", { name: "Use as Customer", exact: true }).click({ timeout: 7000 }), 8000);
+    await runStep(steps, "customer-choice", () => page.getByRole("button", { name: /^Use as Customer/ }).click({ timeout: 7000 }), 8000);
     await runStep(steps, "customer-form-visible", async () => {
       await expect(page.getByLabel("Display name", { exact: true })).toBeVisible({ timeout: 7000 });
       await expect(page.getByLabel("Public ID", { exact: true })).toBeVisible({ timeout: 7000 });
@@ -195,7 +195,7 @@ test("one email-verified account can sign in by phone and complete independent p
   expect(phoneToken).toBe(token);
   await runStep(steps, "firebase-phone-session", () => establishFirebaseSession(context, phoneToken), 12000);
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);
-  await runStep(steps, "creator-choice", () => page.getByRole("button", { name: "Become a Creator", exact: true }).click({ timeout: 7000 }), 8000);
+  await runStep(steps, "creator-choice", () => page.getByRole("button", { name: /^Become a Creator/ }).click({ timeout: 7000 }), 8000);
   await page.getByLabel("Display name", { exact: true }).fill(`Creator ${suffix}`);
   await page.getByLabel("Public ID", { exact: true }).fill(`CR-${suffix}`);
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
@@ -211,7 +211,7 @@ test("one email-verified account can sign in by phone and complete independent p
   await expect(page).toHaveURL(/\/creator/);
 
   await runStep(steps, "business-onboarding-open", () => open(page, "/onboarding"), 15000);
-  await page.getByRole("button", { name: "Add a Business", exact: true }).click();
+  await page.getByRole("button", { name: /^Add a Business/ }).click();
   await page.getByLabel("Display name", { exact: true }).fill(`Business ${suffix}`);
   await page.getByLabel("Public ID", { exact: true }).fill(`BUS-${suffix}`);
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");

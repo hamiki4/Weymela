@@ -4,6 +4,7 @@
   <Project Path="src/Weymela.Infrastructure/Weymela.Infrastructure.csproj" />
   <Project Path="src/Weymela.Api/Weymela.Api.csproj" />
   <Project Path="src/Weymela.Worker/Weymela.Worker.csproj" />
+  <Project Path="src/Weymela.Bootstrap/Weymela.Bootstrap.csproj" />
   <Project Path="tests/Weymela.Domain.Tests/Weymela.Domain.Tests.csproj" />
   <Project Path="tests/Weymela.Application.Tests/Weymela.Application.Tests.csproj" />
   <Project Path="tests/Weymela.Infrastructure.Tests/Weymela.Infrastructure.Tests.csproj" />

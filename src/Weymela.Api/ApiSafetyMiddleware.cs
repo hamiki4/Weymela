@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 using Weymela.Application;
 using Weymela.Api.Security;
 using Weymela.Infrastructure.Operations;
+using Weymela.Infrastructure.Identity;
+using Weymela.Api.Auth;
 
 namespace Weymela.Api;
 
@@ -28,6 +30,12 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 var allowed=origin.Length>0&&(options.Development&&origin==ownOrigin||options.AllowedOrigins.Contains(origin,StringComparer.Ordinal));
                 if(context.Request.Headers["X-Weymela-Request"]!="1"||(origin.Length>0&&!allowed)||(context.Request.Headers["Sec-Fetch-Site"]=="cross-site"&&!allowed))
                 {await Error(context,403,"Forbidden","Use the Weymela workspace to submit this action.");return;}
+                // Browser tabs retain their own profile context. If a tab submits after another tab switched
+                // profiles, reject the stale context instead of interpreting the mutation for the new workspace.
+                var suppliedProfile = context.Request.Headers["X-Weymela-Profile"].ToString();
+                var activeProfile = context.User.FindFirst("profile-key")?.Value;
+                if (suppliedProfile.Length > 0 && (activeProfile is null || !WorkspaceAuthentication.MatchesKey(activeProfile, suppliedProfile)))
+                {await Error(context,409,"ProfileContextChanged","This workspace changed in another tab. Refresh before submitting again.");return;}
                 if(!options.Development&&!context.Request.IsHttps){await Error(context,403,"SecureTransportRequired","A secure connection is required.");return;}
                 if(context.Request.ContentLength>RuntimeOptions.RequestBytes){await Error(context,413,"RequestTooLarge","This request is too large.");return;}
                 // Bound unknown-length/chunked bodies too, including non-Kestrel test hosts. This remains in memory, never on disk.
@@ -56,6 +64,8 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
             var status=e.Kind switch{FailureKind.Forbidden=>403,FailureKind.NotFound=>404,FailureKind.ConcurrencyConflict or FailureKind.IdempotencyConflict=>409,_=>400};
             await Error(context,status,e.Kind.ToString(),UserLanguage(e.Message));
         }
+        catch(AuthChallengeInvalidException){await Error(context,400,"InvalidCode","The code is invalid or expired.");}
+        catch(AuthChallengeUnavailableException){await Error(context,503,"AuthUnavailable","Email authentication is temporarily unavailable.");}
         catch(ArgumentException){await Error(context,400,"Validation","Check the entered amounts, pricing split and required fields.");}
         catch(InvalidOperationException){await Error(context,400,"Validation","That action is not available. Refresh the workspace and check the saved values.");}
         catch(BadHttpRequestException e){await Error(context,e.StatusCode==413?413:400,"Validation","Check the required fields and request size.");}

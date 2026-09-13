@@ -1,6 +1,11 @@
 # Weymela V3 Product Specification (authoritative)
 
 The permanent rendered-interface requirements are defined in [UX-STANDARDS.md](UX-STANDARDS.md). That document is normative for all future Web/PWA implementation and visual acceptance.
+Authentication and recovery are governed by [AUTHENTICATION-AND-RECOVERY.md](AUTHENTICATION-AND-RECOVERY.md).
+
+One verified account may hold multiple independently approved profiles. The active profile is selected in the protected session and is revalidated against `CommercePermission` on every request; profile switching never grants permissions or combines financial accounts.
+
+Additional profiles are requested from the restricted onboarding workspace (`Become a Creator`, `Add a Business`, or `Use as Customer`) and reviewed independently by Platform Admin. Requests are historical `RoleEnrollment` records; only approved active `CommercePermission` memberships grant access. Pending or rejected onboarding never disables an existing profile, and new Business identities are generated server-side rather than claimed from client input.
 
 ## Ownership and lifecycle
 
@@ -42,4 +47,4 @@ The [Phase 6 readiness specification](../deployment/PHASE-6-READINESS.md) and [s
 
 Production-compatible authentication verifies Firebase identity but resolves roles only from trusted V3 data; Development identities/funding cannot be enabled in Pilot/Production. Manual deposit submission, when explicitly configured, remains pending until an active Admin confirms external receipt and the existing wallet/journal transaction commits. Any positive amount is supported. No new financial engine, Business-type threshold or automatic committed-funds refund exists. Financial writes default paused outside Development.
 
-Live Firebase client wiring/provisioning, social/payment/push credentials, legal content publication, physical devices and actual environment/backup/rollback acceptance remain explicitly gated. The PWA never queues offline financial writes or caches private account/QR data. The Worker delivers operational events and marks QR expiry; it does not silently post payouts, settlements, refunds or lifecycle money movements.
+Firebase Web client wiring uses server-issued custom tokens after email-code verification; phone is the preferred unverified login identifier and email is also accepted. Both aliases resolve to one account and challenges for phone sign-in go only to the stored verified email. Protected public configuration, email delivery, custom-token signing, and trusted UID provisioning remain explicitly gated. SMS, Firebase Phone OTP, required Google sign-in and a second account password are not part of V3. Social/payment/push credentials, legal content publication, physical devices and actual environment/backup/rollback acceptance also remain gated. The PWA never queues offline financial writes or caches private account/QR data. The Worker delivers operational events and marks QR expiry; it does not silently post payouts, settlements, refunds or lifecycle money movements.

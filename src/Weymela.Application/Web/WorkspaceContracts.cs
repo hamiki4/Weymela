@@ -15,7 +15,11 @@ public interface IWorkspaceDirectory : IPublicIdentityDirectory
     Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct);
     Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken ct);
 }
-public sealed record SessionUser(string Role, string DisplayName, string PublicId, bool DevelopmentMode, bool CanCheckout);
+// A session has one active profile, while the account may have several approved memberships.
+// The profile list is deliberately limited to public/workspace-safe identity data.
+public sealed record SessionProfile(string Role, Guid SubjectId, Guid? BusinessId, string DisplayName, string PublicId, bool CanCheckout);
+public sealed record SessionUser(string Role, string DisplayName, string PublicId, bool DevelopmentMode, bool CanCheckout,
+    IReadOnlyList<SessionProfile>? Profiles = null, string? ActiveProfileKey = null);
 public sealed record ActivityItem(Guid Id, string Title, DateTime AtUtc, string Reference);
 public sealed record WalletMovement(Guid Id, string Label, decimal Amount, DateTime AtUtc, string Reference);
 public sealed record WalletWorkspace(decimal TotalBalance, decimal Available, decimal Reserved, long Version, IReadOnlyList<WalletMovement> History);

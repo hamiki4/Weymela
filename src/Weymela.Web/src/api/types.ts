@@ -3,13 +3,24 @@ export type Role =
   | "Business"
   | "Creator"
   | "Customer"
-  | "Cashier";
+  | "Cashier"
+  | "Onboarding";
 export type CampaignType = "ViewOnly" | "ViewPlusCommission";
 export interface SessionUser {
   role: Role;
   displayName: string;
   publicId: string;
   developmentMode: boolean;
+  canCheckout: boolean;
+  profiles?: SessionProfile[];
+  activeProfileKey?: string | null;
+}
+export interface SessionProfile {
+  role: Role;
+  subjectId: string;
+  businessId: string | null;
+  displayName: string;
+  publicId: string;
   canCheckout: boolean;
 }
 export interface BusinessCard {

@@ -7,7 +7,8 @@ import {
 } from "react";
 import { Navigate } from "react-router-dom";
 import { post, request } from "../api/client";
-import type { Role, SessionUser } from "../api/types";
+import type { Role, SessionProfile, SessionUser } from "../api/types";
+import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
 export const roleHome: Record<Role, string> = {
   Business: "/business",
@@ -15,12 +16,14 @@ export const roleHome: Record<Role, string> = {
   PlatformAdmin: "/admin",
   Customer: "/customer/offers",
   Cashier: "/checkout",
+  Onboarding: "/onboarding",
 };
 interface SessionContextValue {
   user: SessionUser | null;
   loading: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
+  switchProfile: (profile: SessionProfile) => Promise<SessionUser>;
 }
 const Context = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -28,9 +31,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
     try {
-      setUser(await request<SessionUser>("/session"));
+      const next = await request<SessionUser>("/session");
+      setUser(next);
+      if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
     } catch {
       setUser(null);
+      window.sessionStorage.removeItem("weymela.profile-key");
     } finally {
       setLoading(false);
     }
@@ -39,11 +45,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, []);
   const signOut = async () => {
-    await post("/session/sign-out");
-    setUser(null);
+    try {
+      await createFirebaseWebAuthAdapter().signOut();
+    } catch (error) {
+      if (error instanceof FirebaseConfigurationError) await post("/session/sign-out");
+      else throw error;
+    } finally {
+      setUser(null);
+      window.sessionStorage.removeItem("weymela.profile-key");
+    }
+  };
+  const switchProfile = async (profile: SessionProfile) => {
+    const next = await post<SessionUser>("/session/switch-profile", {
+      role: profile.role,
+      subjectId: profile.subjectId,
+      businessId: profile.businessId,
+    });
+    setUser(next);
+    if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
+    window.dispatchEvent(new Event("weymela-profile-switched"));
+    return next;
   };
   return (
-    <Context.Provider value={{ user, loading, refresh, signOut }}>
+    <Context.Provider value={{ user, loading, refresh, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

@@ -19,6 +19,9 @@ export async function request<T>(
     headers: {
       "Content-Type": "application/json",
       "X-Weymela-Request": "1",
+      ...(typeof window !== "undefined" && window.sessionStorage.getItem("weymela.profile-key")
+        ? { "X-Weymela-Profile": window.sessionStorage.getItem("weymela.profile-key")! }
+        : {}),
       ...options.headers,
     },
   });
@@ -27,7 +30,9 @@ export async function request<T>(
     throw new ApiError(
       response.status,
       error.message ??
-        (response.status === 401
+        (error.code === "ProfileContextChanged"
+          ? "This workspace changed in another tab. Refresh before submitting again."
+          : response.status === 401
           ? "Sign in to continue."
           : response.status === 403
             ? "You do not have access to this workspace."
@@ -71,6 +76,11 @@ export function useResource<T>(path: string) {
       });
     return () => abort.abort();
   }, [path, revision]);
+  useEffect(() => {
+    const refreshForProfile = () => setRevision((x) => x + 1);
+    window.addEventListener("weymela-profile-switched", refreshForProfile);
+    return () => window.removeEventListener("weymela-profile-switched", refreshForProfile);
+  }, []);
   const data = saved?.path === path ? saved.value : null;
   return { data, error, loading: loading || (data === null && !error), reload };
 }

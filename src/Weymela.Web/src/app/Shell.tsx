@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -6,7 +6,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import type { Role } from "../api/types";
+import type { Role, SessionProfile } from "../api/types";
 import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { roleHome, useSession } from "./Session";
@@ -33,6 +33,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin", "Dashboard", "home"],
     ["/admin/businesses", "Businesses", "wallet"],
     ["/admin/creators", "Creators", "people"],
+    ["/admin/role-enrollments", "Profile Requests", "people"],
     ["/admin/campaigns", "Campaigns", "campaign"],
     ["/admin/settings", "Financial Settings", "settings"],
     ["/admin/payouts", "Payouts", "money"],
@@ -45,6 +46,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/customer/history", "Your Cashback", "wallet"],
   ],
   Cashier: [["/checkout", "Checkout", "qr"]],
+  Onboarding: [],
 };
 const roles: Record<Role, string> = {
   Business: "Business",
@@ -52,6 +54,7 @@ const roles: Record<Role, string> = {
   PlatformAdmin: "Platform Admin",
   Customer: "Customer",
   Cashier: "Cashier",
+  Onboarding: "Account setup",
 };
 export function Brand() {
   return (
@@ -64,7 +67,7 @@ export function Brand() {
   );
 }
 export function Shell() {
-  const { user, signOut } = useSession();
+  const { user, signOut, switchProfile } = useSession();
   const menu = useRef<HTMLDialogElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -85,6 +88,9 @@ export function Shell() {
         <Brand />
       </Link>
       <p className="nav-eyebrow">{roles[user.role]} workspace</p>
+      {user.profiles && user.profiles.length > 1 && (
+        <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={switchProfile} navigate={navigate} />
+      )}
       <nav aria-label="Main navigation">
         {items.map(([to, label, icon]) => (
           <NavLink
@@ -170,6 +176,48 @@ export function Shell() {
           <span>Secure, role-specific workspace</span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+export function ProfileSwitcher({
+  profiles,
+  activeKey,
+  onSwitch,
+  navigate,
+}: {
+  profiles: SessionProfile[];
+  activeKey?: string | null;
+  onSwitch: (profile: SessionProfile) => Promise<unknown>;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="profile-switcher">
+      <label htmlFor="profile-switch">Switch profile</label>
+      <select
+        id="profile-switch"
+        value={activeKey ?? ""}
+        disabled={busy}
+        onChange={async (event) => {
+          const profile = profiles.find((item) => `${item.role}:${item.subjectId}:${item.businessId ?? "-"}` === event.target.value);
+          if (!profile) return;
+          setBusy(true); setError(null);
+          try {
+            const next = await onSwitch(profile) as { role: Role };
+            navigate(roleHome[next.role], { replace: true });
+          } catch {
+            setError("That profile is no longer available. Refresh and try again.");
+          } finally { setBusy(false); }
+        }}
+      >
+        {profiles.map((profile) => {
+          const key = `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}`;
+          return <option key={key} value={key}>{profile.displayName} — {roles[profile.role]}</option>;
+        })}
+      </select>
+      {error && <small role="alert">{error}</small>}
     </div>
   );
 }

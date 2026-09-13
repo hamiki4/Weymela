@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useResource } from "../../api/client";
+import { post, useAction, useResource } from "../../api/client";
 import type {
   Activity,
   AdminCampaign,
@@ -13,12 +13,14 @@ import {
   ActionLink,
   ActivityList,
   Badge,
+  Button,
   Currency,
   DataTable,
   Empty,
   Field,
   FundsGrid,
   Metric,
+  Notice,
   PageHeader,
   Person,
   Resource,
@@ -26,6 +28,15 @@ import {
 } from "../../ui/components";
 import { amount, campaignType, count, date } from "../../ui/format";
 import { CampaignTable } from "../business/BusinessPages";
+
+export function AdminRoleEnrollments() {
+  const resource = useResource<EnrollmentRow[]>("/admin/role-enrollments");
+  const action = useAction();
+  return <><PageHeader eyebrow="People and access" title="Profile requests" description="Approve additional profiles without replacing an existing role." />
+    <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map((row) => <article className="amount-row" key={row.id}><div><strong>{row.role} · {row.displayName}</strong><small>{row.publicId}</small></div><div className="actions"><Button disabled={action.busy} onClick={() => void action.run(async key => { await post(`/admin/role-enrollments/${row.id}/review`, { approve: true, expectedVersion: row.version }, key); resource.reload(); })}>Approve</Button><Button variant="secondary" disabled={action.busy} onClick={() => void action.run(async key => { await post(`/admin/role-enrollments/${row.id}/review`, { approve: false, expectedVersion: row.version }, key); resource.reload(); })}>Reject</Button></div></article>)}</div>{action.error && <Notice error>{action.error}</Notice>}</Section>}</Resource></>;
+}
+
+type EnrollmentRow = { id: string; role: string; status: string; displayName: string; publicId: string; version: number };
 
 export function AdminDashboard() {
   const resource = useResource<AdminHome>("/admin/home");

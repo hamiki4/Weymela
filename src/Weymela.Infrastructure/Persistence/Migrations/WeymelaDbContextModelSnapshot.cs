@@ -1120,6 +1120,102 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditEvents", "v3");
                 });
 
+            modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.AuthIdentifierRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeliveryAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("IdentifierHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("Kind", "IdentifierHash")
+                        .IsUnique();
+
+                    b.ToTable("AuthIdentifiers", "v3");
+                });
+
+            modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.AuthorizedDeviceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CredentialIdHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("CredentialKind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("EnrolledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CredentialIdHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "RevokedAtUtc");
+
+                    b.ToTable("AuthorizedDevices", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_AuthorizedDevice_FailedAttempts", "\"FailedAttempts\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.CommercePermission", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -1229,6 +1325,68 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_DepositRequest_Positive", "\"Amount\" > 0");
 
                             t.HasCheckConstraint("CK_DepositRequest_Review", "(\"Status\"='Pending' AND \"ReviewedBy\" IS NULL AND \"ReviewedAtUtc\" IS NULL) OR (\"Status\" IN ('Approved','Rejected') AND \"ReviewedBy\" IS NOT NULL AND \"ReviewedAtUtc\" IS NOT NULL AND \"ConfirmationReference\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.EmailAuthChallengeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmailIdentifierHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdentifierHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("LastSentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PhoneIdentifierHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc", "ConsumedAtUtc");
+
+                    b.HasIndex("IdentifierHash", "Purpose", "CreatedAtUtc");
+
+                    b.ToTable("EmailAuthChallenges", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_EmailAuthChallenge_Attempts", "\"AttemptCount\" >= 0 AND \"AttemptCount\" <= \"MaxAttempts\"");
                         });
                 });
 
@@ -1596,6 +1754,74 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.ToTable("PublicWorkspaceProfiles", "v3", t =>
                         {
                             t.HasCheckConstraint("CK_PublicProfile_Metrics", "\"VerifiedFollowers\" >= 0 AND \"VerifiedViews\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.RoleEnrollmentRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ProposedBusinessId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedRole")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SubmissionJson")
+                        .IsRequired()
+                        .HasMaxLength(6000)
+                        .HasColumnType("character varying(6000)");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "RequestedRole", "Status");
+
+                    b.ToTable("RoleEnrollments", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_RoleEnrollment_Status", "\"Status\" IN ('Pending','Approved','Rejected')");
                         });
                 });
 

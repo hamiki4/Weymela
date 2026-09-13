@@ -31,6 +31,7 @@ import {
   AdminCampaigns,
   AdminCreators,
   AdminDashboard,
+  AdminRoleEnrollments,
 } from "../features/admin/AdminPages";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
@@ -41,6 +42,7 @@ import {
 } from "../features/commerce/CustomerPages";
 import { Checkout } from "../features/commerce/Checkout";
 import { Inbox } from "../features/notifications/Inbox";
+import { Onboarding } from "./Onboarding";
 
 function Home() {
   const { user, loading } = useSession();
@@ -55,6 +57,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/sign-in" element={<SignIn />} />
+      <Route path="/onboarding" element={<Onboarding />} />
       <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin"]}><Shell /></RoleGate>}>
         <Route path="/notifications" element={<Inbox />} />
       </Route>
@@ -123,6 +126,7 @@ export function App() {
         <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
         <Route path="/admin/businesses" element={<AdminBusinesses />} />
         <Route path="/admin/creators" element={<AdminCreators />} />
+        <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
         <Route path="/admin/settings" element={<AdminFinancialSettings />} />
         <Route
           path="/admin/financial-settings"

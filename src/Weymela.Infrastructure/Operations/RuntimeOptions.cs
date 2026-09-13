@@ -14,6 +14,9 @@ public sealed class RuntimeOptions
     public string PublicWebUrl { get; init; } = "";
     public string PublicApiUrl { get; init; } = "";
     public string FirebaseProjectId { get; init; } = "";
+    public string EmailDeliveryMode { get; init; } = "Disabled";
+    public string FirebaseCustomTokenMode { get; init; } = "Disabled";
+    public string? AuthCodeHashKey { get; init; }
     public string CookieKeyDirectory { get; init; } = "";
     public string CookieCertificatePath { get; init; } = "";
     public string? CookieCertificatePassword { get; init; }
@@ -59,6 +62,8 @@ public sealed class RuntimeOptions
         var web = config["V3:PublicWebUrl"] ?? ""; var api = config["V3:PublicApiUrl"] ?? "";
         foreach (var origin in origins) Require(IsOrigin(origin, dev), "Allowed origins must be explicit origins, never wildcards.");
         var project = config["V3:Auth:FirebaseProjectId"] ?? "";
+        var emailDelivery = config["V3:Auth:EmailDeliveryMode"] ?? "Disabled";
+        var customToken = config["V3:Auth:FirebaseCustomTokenMode"] ?? "Disabled";
         if (!dev)
         {
             Require(config["V3:Auth:Provider"] == "Firebase", "Firebase authentication must be explicitly configured.");
@@ -66,6 +71,10 @@ public sealed class RuntimeOptions
             Require(origins.Length > 0 && IsOrigin(web, false) && IsOrigin(api, false) && origins.Contains(web, StringComparer.Ordinal), "Explicit HTTPS Web/API URLs and allowed Web origin are required.");
             Require(config["V3:Security:CameraPolicy"] == CameraPolicy, "The approved same-origin camera policy is required.");
             Require(config["V3:Security:TlsEdgeConfirmed"] == "true", "TLS edge and HSTS configuration must be confirmed.");
+            Require(emailDelivery is "Disabled" or "Smtp" or "Provider", "Unsupported email delivery mode.");
+            Require(customToken is "Disabled" or "FirebaseAdmin", "Unsupported Firebase custom-token mode.");
+            if (emailDelivery != "Disabled" || customToken != "Disabled")
+                Require(!string.IsNullOrWhiteSpace(config["V3:Auth:CodeHashKey"]), "An external auth code hash key is required when email authentication is enabled.");
             if (!worker) Require(Path.IsPathFullyQualified(config["V3:Auth:CookieKeyDirectory"] ?? "") && Path.IsPathFullyQualified(config["V3:Auth:CookieCertificatePath"] ?? ""), "External protected cookie-key storage is required.");
         }
         var deposits = config["V3:Deposits:Mode"] ?? "Disabled";
@@ -83,6 +92,7 @@ public sealed class RuntimeOptions
         {
             EnvironmentName = environment, Development = dev, DevelopmentIdentity = devIdentity, ConnectionString = db.ConnectionString, AllowedOrigins = origins,
             PublicWebUrl = web, PublicApiUrl = api, FirebaseProjectId = project,
+            EmailDeliveryMode = emailDelivery, FirebaseCustomTokenMode = customToken, AuthCodeHashKey = config["V3:Auth:CodeHashKey"],
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
             CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,

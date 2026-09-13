@@ -1121,6 +1121,27 @@ td .button {
   color: #6f7d67;
   margin: 8px 0 18px;
 }
+.profile-switcher {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+.profile-switcher label {
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.profile-switcher select {
+  width: 100%;
+  min-height: 40px;
+  font-size: .8rem;
+}
+.profile-switcher small {
+  color: #9a3b31;
+  line-height: 1.35;
+}
 .nav-link {
   display: flex;
   align-items: center;
@@ -1369,6 +1390,51 @@ td .button {
 }
 .sign-in-form .loading {
   width: 100%;
+}
+.sign-in-secure {
+  width: 100%;
+}
+.profile-choice {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7faf4;
+}
+.profile-choice p { margin: 0; }
+.profile-choice .eyebrow { margin-bottom: -5px; }
+.sign-in-secure h1 {
+  font-family: Georgia, serif;
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  margin-bottom: 18px;
+}
+.auth-methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0 0 22px;
+}
+.auth-methods .button {
+  margin: 0;
+  min-height: 46px;
+  font-size: 0.78rem;
+}
+.text-action {
+  display: block;
+  margin: 6px auto 20px;
+  border: 0;
+  padding: 8px;
+  background: transparent;
+  color: var(--green);
+  font-weight: 650;
+  cursor: pointer;
+}
+.text-action:hover {
+  text-decoration: underline;
 }
 .overview-highlight {
   padding: 26px 23px;

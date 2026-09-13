@@ -46,5 +46,44 @@ internal static class OperationalReadinessConfiguration
         checkpoint.ToTable("WorkerCheckpoints"); checkpoint.Property(x => x.Name).HasMaxLength(100); checkpoint.Property(x => x.LastErrorCode).HasMaxLength(80); Mapping.Version(checkpoint);
         model.Entity<OutboxMessage>().HasIndex(x => x.NextAttemptAtUtc).HasFilter("\"ProcessedAtUtc\" IS NULL AND \"FailedAtUtc\" IS NULL");
         model.Entity<OfferQrSession>().HasIndex(x => x.ExpiresAtUtc).HasFilter("\"Status\"='Issued'");
+
+        var identifier = model.Entity<AuthIdentifierRecord>();
+        identifier.HasKey(x => x.Id); identifier.ToTable("AuthIdentifiers");
+        identifier.Property(x => x.Kind).HasMaxLength(20);
+        identifier.Property(x => x.IdentifierHash).HasMaxLength(64);
+        identifier.Property(x => x.DeliveryAddress).HasMaxLength(320);
+        identifier.HasIndex(x => new { x.Kind, x.IdentifierHash }).IsUnique();
+        identifier.HasIndex(x => x.UserId);
+
+        var challenge = model.Entity<EmailAuthChallengeRecord>();
+        challenge.HasKey(x => x.Id); challenge.ToTable("EmailAuthChallenges", t =>
+            t.HasCheckConstraint("CK_EmailAuthChallenge_Attempts", "\"AttemptCount\" >= 0 AND \"AttemptCount\" <= \"MaxAttempts\""));
+        challenge.Property(x => x.IdentifierHash).HasMaxLength(64);
+        challenge.Property(x => x.EmailIdentifierHash).HasMaxLength(64);
+        challenge.Property(x => x.PhoneIdentifierHash).HasMaxLength(64);
+        challenge.Property(x => x.Purpose).HasMaxLength(40);
+        challenge.Property(x => x.CodeHash).HasMaxLength(128);
+        challenge.HasIndex(x => new { x.IdentifierHash, x.Purpose, x.CreatedAtUtc });
+        challenge.HasIndex(x => new { x.ExpiresAtUtc, x.ConsumedAtUtc });
+
+        var device = model.Entity<AuthorizedDeviceRecord>();
+        device.HasKey(x => x.Id); device.ToTable("AuthorizedDevices", t =>
+            t.HasCheckConstraint("CK_AuthorizedDevice_FailedAttempts", "\"FailedAttempts\" >= 0"));
+        device.Property(x => x.CredentialKind).HasMaxLength(30);
+        device.Property(x => x.CredentialIdHash).HasMaxLength(128);
+        device.HasIndex(x => new { x.UserId, x.CredentialIdHash }).IsUnique();
+        device.HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+        Mapping.Version(device);
+
+        var enrollment = model.Entity<RoleEnrollmentRecord>();
+        Mapping.Scalars(enrollment);
+        enrollment.HasKey(x => x.Id); enrollment.ToTable("RoleEnrollments", t =>
+            t.HasCheckConstraint("CK_RoleEnrollment_Status", "\"Status\" IN ('Pending','Approved','Rejected')"));
+        enrollment.Property(x => x.SubmissionJson).HasMaxLength(6000);
+        enrollment.Property(x => x.DecisionReason).HasMaxLength(500);
+        enrollment.Property(x => x.IdempotencyKey).HasMaxLength(200);
+        enrollment.HasIndex(x => new { x.UserId, x.RequestedRole, x.Status });
+        enrollment.HasIndex(x => new { x.UserId, x.IdempotencyKey }).IsUnique();
+        Mapping.Version(enrollment);
     }
 }

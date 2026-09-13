@@ -6,20 +6,27 @@ import { Button, Field, Notice, PageHeader, Resource, Section } from "../ui/comp
 
 type Enrollment = {
   id: string;
-  role: "Customer" | "Creator" | "Business";
-  status: "Pending" | "Approved" | "Rejected";
+  role: "Customer" | "Creator" | "Business" | number;
+  status: "Pending" | "Approved" | "Rejected" | number;
   displayName: string;
   publicId: string;
   submittedAtUtc: string;
   decisionReason: string | null;
 };
 
+function statusLabel(status: Enrollment["status"]) {
+  if (status === 0 || status === "Pending") return "Under review";
+  if (status === 1 || status === "Approved") return "Approved";
+  return "Rejected";
+}
+
 export function Onboarding() {
-  const { user, refresh, signOut } = useSession();
+  const { user, loading, refresh, signOut } = useSession();
   const status = useResource<{ profiles: Enrollment[] }>("/onboarding/status");
   const action = useAction();
   const [role, setRole] = useState<Enrollment["role"] | null>(null);
   const [form, setForm] = useState({ displayName: "", publicId: "", region: "", category: "", submission: "" });
+  if (loading) return <div className="loading" role="status">Opening your account setup…</div>;
   if (!user) return <Navigate to="/sign-in" replace />;
   const approved = new Set((user.profiles ?? []).map((profile) => profile.role));
   const set = (name: keyof typeof form, value: string) => setForm((current) => ({ ...current, [name]: value }));
@@ -32,7 +39,7 @@ export function Onboarding() {
     <PageHeader eyebrow="Your Weymela account" title="Choose how you want to use Weymela" description="Approved profiles share one account and keep their own workspace, permissions and financial records." action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
     <Resource resource={status}>{(data) => <>
       {data.profiles.length > 0 && <Section title="Requests and profiles" description="Pending requests stay separate from active profile choices.">
-        <div className="stack-list">{data.profiles.map((item) => <div className="amount-row" key={item.id}><div><strong>{item.displayName || item.role} — {item.status === "Pending" ? "Under review" : item.status}</strong><small>{item.publicId}{item.decisionReason ? ` · ${item.decisionReason}` : ""}</small></div></div>)}</div>
+        <div className="stack-list">{data.profiles.map((item) => <div className="amount-row" key={item.id}><div><strong>{item.displayName || item.role} — {statusLabel(item.status)}</strong><small>{item.publicId}{item.decisionReason ? ` · ${item.decisionReason}` : ""}</small></div></div>)}</div>
       </Section>}
       <Section title="Add a profile" description="You can add another approved profile without creating another account.">
         <div className="content-grid profile-choice-grid">

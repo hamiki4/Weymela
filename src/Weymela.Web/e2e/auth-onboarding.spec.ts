@@ -147,8 +147,9 @@ async function establishFirebaseSession(context: Parameters<typeof login>[0], to
 
 async function approveLatest(context: Parameters<typeof login>[0], role: "Customer" | "Creator" | "Business", publicId?: string) {
   await login(context, "admin");
-  const pending = await (await context.request.get("/api/admin/role-enrollments")).json() as { id: string; role: string; version: number; publicId?: string }[];
-  const row = pending.find((item) => item.role === role && (!publicId || (item as { publicId?: string }).publicId === publicId));
+  const roleValue = enrollmentRoles[role];
+  const pending = await (await context.request.get("/api/admin/role-enrollments")).json() as { id: string; role: number; version: number; publicId?: string }[];
+  const row = pending.find((item) => item.role === roleValue && (!publicId || item.publicId === publicId));
   expect(row, `pending ${role} request`).toBeTruthy();
   const reviewed = await context.request.post(`/api/admin/role-enrollments/${row!.id}/review`, {
     headers: { "X-Weymela-Request": "1" },
@@ -158,6 +159,8 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
 }
 
 type AccountFixture = { suffix: string; email: string; phone: string; token: string; customerPublicId: string };
+const enrollmentRoles = { Business: 1, Creator: 2, Customer: 3 } as const;
+const enrollmentStatuses = { Pending: 0, Approved: 1, Rejected: 2 } as const;
 
 async function createVerifiedAccount(context: Parameters<typeof login>[0]): Promise<Omit<AccountFixture, "customerPublicId">> {
   const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
@@ -188,9 +191,9 @@ async function submitAdditionalProfile(context: Parameters<typeof login>[0], acc
   expect(response.status()).toBe(200);
   const status = await context.request.get("/api/onboarding/status");
   expect(status.status()).toBe(200);
-  const body = await status.json() as { profiles: { role: string; status: string; publicId: string }[] };
+  const body = await status.json() as { profiles: { role: number; status: number; publicId: string }[] };
   expect(body.profiles).toEqual(expect.arrayContaining([
-    expect.objectContaining({ role, status: "Pending", publicId }),
+    expect.objectContaining({ role: enrollmentRoles[role], status: enrollmentStatuses.Pending, publicId }),
   ]));
   return publicId;
 }

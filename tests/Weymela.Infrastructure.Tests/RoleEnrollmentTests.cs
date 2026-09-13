@@ -11,6 +11,31 @@ namespace Weymela.Infrastructure.Tests;
 public sealed class RoleEnrollmentTests(PostgresFixture fixture)
 {
     [Fact]
+    public async Task Customer_activation_is_immediate_idempotent_and_zero_balance()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+
+        var first = await service.SubmitAsync(new Actor(user, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null), "customer-1", default);
+        var replay = await service.SubmitAsync(new Actor(user, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null), "customer-1", default);
+
+        Assert.Equal(RoleEnrollmentStatus.Approved, first.Status);
+        Assert.Equal(first.Id, replay.Id);
+        Assert.Single(await db.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Customer).ToListAsync());
+        Assert.Empty(await service.PendingAsync(default));
+        var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Customer);
+        Assert.True(permission.IsActive);
+        Assert.True(await db.PublicWorkspaceProfiles.AnyAsync(x => x.SubjectId == permission.SubjectId && x.Role == ActorRole.Customer));
+        var cashback = await db.CustomerCashbackAccounts.SingleAsync(x => x.CustomerId == permission.SubjectId);
+        Assert.Equal(0m, cashback.AvailableCashback.Amount);
+        Assert.Contains(await db.AuditEvents.Where(x => x.ActorId == user).ToListAsync(), x => x.EventType == "CustomerProfileActivated");
+    }
+
+    [Fact]
     public async Task Existing_customer_can_request_creator_without_losing_customer_access()
     {
         var database = await fixture.CreateAsync();

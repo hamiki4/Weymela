@@ -59,9 +59,8 @@ test("one email-verified account can sign in by phone and complete independent p
   await page.getByRole("button", { name: "Use as Customer", exact: true }).click();
   await page.getByLabel("Display name", { exact: true }).fill(`Customer ${suffix}`);
   await page.getByLabel("Public ID", { exact: true }).fill(`CU-${suffix}`);
-  await page.getByRole("button", { name: "Submit for review", exact: true }).click();
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible();
-  await approveLatest(context, "Customer");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
 
   // The same verified account can resolve through its phone alias; only the
   // server-stored email receives the code, and the custom-token subject stays stable.

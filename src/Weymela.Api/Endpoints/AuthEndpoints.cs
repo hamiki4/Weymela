@@ -30,9 +30,11 @@ internal static class AuthEndpoints
             var onboarding = c.User.FindFirst("onboarding") is not null;
             var a = onboarding ? new Actor(userId, ActorRole.Customer, CustomerId: Guid.Empty) : EndpointSupport.Actor(c);
             var checkout=onboarding ? false : await db.CommercePermissions.AnyAsync(x=>x.UserId==a.UserId&&x.Role==a.Role&&x.IsActive&&x.CanCheckout,ct);
-            var profiles = development
-                ? new List<SessionProfile> { new(a.Role.ToString(), SubjectId(a), a.BusinessId, c.User.Identity!.Name!, c.User.FindFirst("publicId")?.Value??"", checkout) }
-                : (await c.RequestServices.GetRequiredService<TrustedIdentityService>().ProfilesForUserAsync(a.UserId, ct)).Select(ToSessionProfile).ToList();
+            var profiles = onboarding
+                ? new List<SessionProfile>()
+                : development
+                    ? new List<SessionProfile> { new(a.Role.ToString(), SubjectId(a), a.BusinessId, c.User.Identity!.Name!, c.User.FindFirst("publicId")?.Value??"", checkout) }
+                    : (await c.RequestServices.GetRequiredService<TrustedIdentityService>().ProfilesForUserAsync(a.UserId, ct)).Select(ToSessionProfile).ToList();
             var role = onboarding ? "Onboarding" : a.Role.ToString();
             return Results.Ok(new SessionUser(role,onboarding ? "Account setup" : c.User.Identity!.Name!,c.User.FindFirst("publicId")?.Value??"",development,checkout,
                 profiles, c.User.FindFirst("profile-key")?.Value));

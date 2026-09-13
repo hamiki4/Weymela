@@ -25,4 +25,15 @@ describe("additional profile onboarding", () => {
     await userEvent.click(screen.getByRole("button", { name: "Submit for review" }));
     expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({ role: "Creator", displayName: "Bella", publicId: "CR-1" }), "enroll-key");
   });
+
+  it("activates a Customer without a review action", async () => {
+    render(<Onboarding />);
+    await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
+    await userEvent.type(screen.getByLabelText("Display name"), "Hana");
+    await userEvent.type(screen.getByLabelText("Public ID"), "CU-1");
+    expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(mocks.post).toHaveBeenLastCalledWith("/onboarding/profile", expect.objectContaining({ role: "Customer", displayName: "Hana", publicId: "CU-1" }), "enroll-key");
+  });
 });

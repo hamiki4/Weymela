@@ -5,7 +5,7 @@ Authentication and recovery are governed by [AUTHENTICATION-AND-RECOVERY.md](AUT
 
 One verified account may hold multiple independently approved profiles. The active profile is selected in the protected session and is revalidated against `CommercePermission` on every request; profile switching never grants permissions or combines financial accounts.
 
-Additional profiles are requested from the restricted onboarding workspace (`Become a Creator`, `Add a Business`, or `Use as Customer`) and reviewed independently by Platform Admin. Requests are historical `RoleEnrollment` records; only approved active `CommercePermission` memberships grant access. Pending or rejected onboarding never disables an existing profile, and new Business identities are generated server-side rather than claimed from client input.
+Additional profiles are requested from the restricted onboarding workspace (`Become a Creator`, `Add a Business`, or `Use as Customer`). Customer activation completes immediately after account/terms checks; Creator and Business requests are reviewed independently by Platform Admin. Requests are historical `RoleEnrollment` records; only approved active `CommercePermission` memberships grant access. Pending or rejected onboarding never disables an existing profile, and new Business identities are generated server-side rather than claimed from client input.
 
 ## Ownership and lifecycle
 

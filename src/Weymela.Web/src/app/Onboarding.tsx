@@ -45,7 +45,7 @@ export function Onboarding() {
           <Field label="Display name" wide><input required maxLength={120} value={form.displayName} onChange={(event) => set("displayName", event.target.value)} /></Field>
           <Field label="Public ID" help="A public identifier, not a phone number or email address."><input required maxLength={80} value={form.publicId} onChange={(event) => set("publicId", event.target.value)} /></Field>
           {role !== "Customer" && <><Field label="Region"><input maxLength={80} value={form.region} onChange={(event) => set("region", event.target.value)} /></Field><Field label="Category"><input maxLength={80} value={form.category} onChange={(event) => set("category", event.target.value)} /></Field><Field label="About this profile" wide><textarea maxLength={3000} rows={4} value={form.submission} onChange={(event) => set("submission", event.target.value)} /></Field></>}
-          {action.error && <Notice error>{action.error}</Notice>}<div className="form-footer"><Button type="button" variant="secondary" onClick={() => setRole(null)}>Cancel</Button><Button type="submit" disabled={action.busy}>{action.busy ? "Submitting…" : "Submit for review"}</Button></div>
+          {action.error && <Notice error>{action.error}</Notice>}<div className="form-footer"><Button type="button" variant="secondary" onClick={() => setRole(null)}>Cancel</Button><Button type="submit" disabled={action.busy}>{action.busy ? "Saving…" : role === "Customer" ? "Continue" : "Submit for review"}</Button></div>
         </form>}
       </Section>
     </>}</Resource>

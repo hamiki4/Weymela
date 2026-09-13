@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Operations;
@@ -21,6 +22,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     {
         if (actor.UserId == Guid.Empty || !PublicRoles.Contains(request.Role)) throw Denied();
         Validate(request, idempotencyKey);
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var existing = await db.RoleEnrollments.SingleOrDefaultAsync(x => x.UserId == actor.UserId && x.IdempotencyKey == idempotencyKey, ct);
         if (existing is not null)
         {
@@ -36,7 +38,25 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
         var now = clock.GetUtcNow().UtcDateTime;
         var row = new RoleEnrollmentRecord { UserId = actor.UserId, RequestedRole = request.Role, SubmissionJson = JsonSerializer.Serialize(new { request.DisplayName, request.PublicId, request.Region, request.Category, request.Submission }), SubmittedAtUtc = now, IdempotencyKey = idempotencyKey };
-        db.RoleEnrollments.Add(row); await db.SaveChangesAsync(ct); return Summary(row);
+        db.RoleEnrollments.Add(row);
+        if (request.Role == ActorRole.Customer)
+        {
+            var subject = Guid.NewGuid();
+            row.Status = RoleEnrollmentStatus.Approved;
+            row.ReviewedAtUtc = now;
+            row.DecisionReason = "Customer profile activated by the account holder.";
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile
+            {
+                SubjectId = subject, Role = ActorRole.Customer, DisplayName = request.DisplayName.Trim(), PublicId = request.PublicId.Trim()
+            });
+            db.CommercePermissions.Add(new CommercePermission(actor.UserId, ActorRole.Customer, subject, null, true, false));
+            db.CustomerCashbackAccounts.Add(new CustomerCashbackAccount(subject));
+            db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "CustomerProfileActivated", actor.UserId, null, null, null,
+                Guid.NewGuid(), now, $"enrollment={row.Id:D};customerId={subject:D}"));
+        }
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Summary(row);
     }
 
     public async Task<IReadOnlyList<RoleEnrollmentSummary>> MineAsync(Guid userId, CancellationToken ct)

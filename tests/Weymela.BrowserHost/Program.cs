@@ -6,9 +6,11 @@ using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using Weymela.Api;
 using Weymela.Infrastructure.Development;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Operations;
 using Weymela.Application.Operations;
+using Weymela.Application.Web;
 using Weymela.BrowserHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 

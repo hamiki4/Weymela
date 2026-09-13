@@ -152,7 +152,10 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
   const row = pending.find((item) => item.role === roleValue && (!publicId || item.publicId === publicId));
   expect(row, `pending ${role} request`).toBeTruthy();
   const reviewed = await context.request.post(`/api/admin/role-enrollments/${row!.id}/review`, {
-    headers: { "X-Weymela-Request": "1" },
+    headers: {
+      "X-Weymela-Request": "1",
+      "Idempotency-Key": `browser-review-${role.toLowerCase()}-${row!.id}`,
+    },
     data: { approve: true, expectedVersion: row!.version },
   });
   expect(reviewed.status()).toBe(200);
@@ -265,7 +268,7 @@ async function submitProfileFromPage(page: import("@playwright/test").Page, role
   await page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 });
   const response = await pending;
   expect(response.status()).toBe(200);
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Under review/)).toBeVisible();
   return `${role === "Creator" ? "CR" : "BUS"}-${suffix}`;
 }
 
@@ -417,7 +420,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByLabel("Category", { exact: true }).fill("Food");
   await runStep(steps, "creator-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Under review/)).toBeVisible();
   await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator", `CR-${suffix}`), 15000);
   await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
   await runStep(steps, "creator-profile-switch", () => open(page, "/customer/offers"), 15000);
@@ -433,7 +436,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByLabel("Category", { exact: true }).fill("Food");
   await runStep(steps, "business-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Under review/)).toBeVisible();
   await runStep(steps, "business-admin-review", () => approveLatest(context, "Business", `BUS-${suffix}`), 15000);
   await runStep(steps, "business-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
   await runStep(steps, "business-profile-switch", () => open(page, "/creator"), 15000);

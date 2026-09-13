@@ -186,7 +186,15 @@ test("one email-verified account can sign in by phone and complete independent p
     throw error;
   }
   await runStep(steps, "customer-form-fill-public-id", () => page.getByLabel("Public ID", { exact: true }).fill(`CU-${suffix}`, { timeout: 7000 }), 8000);
-  await runStep(steps, "customer-submit", () => page.getByRole("button", { name: "Continue", exact: true }).click({ timeout: 7000 }), 8000);
+  await runStep(steps, "customer-submit", async () => {
+    const activationResponse = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return response.request().method() === "POST" && url.pathname === "/api/onboarding/profile";
+    }, { timeout: 7000 });
+    await page.getByRole("button", { name: "Continue", exact: true }).click({ timeout: 7000 });
+    const response = await activationResponse;
+    expect(response.status()).toBe(200);
+  }, 12000);
   await runStep(steps, "customer-session-refresh", async () => expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Customer" }), 12000);
 
   // The same verified account can resolve through its phone alias; only the

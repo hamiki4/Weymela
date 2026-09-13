@@ -26,7 +26,7 @@ await using var app=ApiHost.Build(["--environment","Development"],builder=>
     builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>
     {
         ["ConnectionStrings:WeymelaV3"]=postgres.GetConnectionString(),["V3:EnableDevelopmentIdentity"]="true",
-        ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20"
+        ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20"
     });
     builder.Services.AddSingleton<IEmailCodeDelivery, BrowserEmailCodeDelivery>();
     builder.Services.AddScoped<IFirebaseCustomTokenIssuer, BrowserFirebaseCustomTokenIssuer>();

@@ -145,10 +145,10 @@ async function establishFirebaseSession(context: Parameters<typeof login>[0], to
   expect(selected.status()).toBe(204);
 }
 
-async function approveLatest(context: Parameters<typeof login>[0], role: "Customer" | "Creator" | "Business") {
+async function approveLatest(context: Parameters<typeof login>[0], role: "Customer" | "Creator" | "Business", publicId?: string) {
   await login(context, "admin");
-  const pending = await (await context.request.get("/api/admin/role-enrollments")).json() as { id: string; role: string; version: number }[];
-  const row = pending.find((item) => item.role === role);
+  const pending = await (await context.request.get("/api/admin/role-enrollments")).json() as { id: string; role: string; version: number; publicId?: string }[];
+  const row = pending.find((item) => item.role === role && (!publicId || (item as { publicId?: string }).publicId === publicId));
   expect(row, `pending ${role} request`).toBeTruthy();
   const reviewed = await context.request.post(`/api/admin/role-enrollments/${row!.id}/review`, {
     headers: { "X-Weymela-Request": "1" },
@@ -157,7 +157,199 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
   expect(reviewed.status()).toBe(200);
 }
 
-test("one email-verified account can sign in by phone and complete independent profile approvals", async ({ page, context }) => {
+type AccountFixture = { suffix: string; email: string; phone: string; token: string; customerPublicId: string };
+
+async function createVerifiedAccount(context: Parameters<typeof login>[0]): Promise<Omit<AccountFixture, "customerPublicId">> {
+  const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
+  const email = `browser-${suffix}@example.com`;
+  const phone = `+2519${suffix.slice(-8)}`;
+  const token = await emailCode(context, email, "Signup", phone);
+  await establishFirebaseSession(context, token, "Customer");
+  return { suffix, email, phone, token };
+}
+
+async function activateCustomer(context: Parameters<typeof login>[0], account: Omit<AccountFixture, "customerPublicId">) {
+  const customerPublicId = `CU-${account.suffix}`;
+  const response = await context.request.post("/api/onboarding/profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `customer-${account.suffix}` },
+    data: { role: "Customer", displayName: `Customer ${account.suffix}`, publicId: customerPublicId },
+  });
+  expect(response.status()).toBe(200);
+  await expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Customer" });
+  return { ...account, customerPublicId };
+}
+
+async function submitAdditionalProfile(context: Parameters<typeof login>[0], account: AccountFixture, role: "Creator" | "Business") {
+  const publicId = `${role === "Creator" ? "CR" : "BUS"}-${account.suffix}`;
+  const response = await context.request.post("/api/onboarding/profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `${role.toLowerCase()}-${account.suffix}` },
+    data: { role, displayName: `${role} ${account.suffix}`, publicId, region: "Addis Ababa", category: "Food", submission: `${role} test profile` },
+  });
+  expect(response.status()).toBe(200);
+  return publicId;
+}
+
+async function creatorChoiceDiagnostics(page: import("@playwright/test").Page, context: Parameters<typeof login>[0], signals: RuntimeSignals, marker: unknown) {
+  const safeJson = async (path: string) => {
+    const response = await context.request.get(path, { timeout: 5000 });
+    const body = await response.json().catch(() => null) as { role?: string; activeProfileKey?: string | null; profiles?: { role?: string; subjectId?: string; businessId?: string | null; status?: string; publicId?: string }[] } | null;
+    return {
+      status: response.status(),
+      ...(path === "/api/session" ? {
+        role: body?.role ?? null,
+        activeProfileKey: body?.activeProfileKey ?? null,
+        profiles: (body?.profiles ?? []).map((profile) => ({ role: profile.role ?? null, subjectId: profile.subjectId ?? null, businessId: profile.businessId ?? null })),
+      } : {
+        profiles: (body?.profiles ?? []).map((profile) => ({ role: profile.role ?? null, status: profile.status ?? null, publicId: profile.publicId ?? null })),
+      }),
+    };
+  };
+  const controls = {
+    customer: page.getByRole("button", { name: /^Use as Customer/ }),
+    creator: page.getByRole("button", { name: /^Become a Creator/ }),
+    business: page.getByRole("button", { name: /^Add a Business/ }),
+  };
+  const evidence = {
+    revision: marker,
+    url: page.url(),
+    heading: await page.locator("main h1").innerText().catch(() => "unavailable"),
+    session: await safeJson("/api/session").catch(() => ({ status: "unavailable" })),
+    onboarding: await safeJson("/api/onboarding/status").catch(() => ({ status: "unavailable" })),
+    controls: {
+      useAsCustomer: await controls.customer.count().catch(() => "unavailable"),
+      becomeCreator: await controls.creator.count().catch(() => "unavailable"),
+      addBusiness: await controls.business.count().catch(() => "unavailable"),
+    },
+    signals,
+    capturedAtUtc: new Date().toISOString(),
+  };
+  try { mkdirSync(resolve(diagnosticRoot, "phase6-screenshots"), { recursive: true }); } catch { /* best effort */ }
+  try { writeFileSync(resolve(diagnosticRoot, "phase6-creator-choice-diagnostics.json"), `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 }); } catch { /* best effort */ }
+  await page.screenshot({ path: resolve(diagnosticRoot, "phase6-screenshots/creator-choice-failure.png"), fullPage: true, animations: "disabled", timeout: 1500 }).catch(() => undefined);
+}
+
+async function chooseProfile(page: import("@playwright/test").Page, label: string) {
+  const select = page.getByLabel("Switch profile", { exact: true });
+  await expect(select).toBeVisible();
+  const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");
+  expect(value).toBeTruthy();
+  await select.selectOption(value!);
+}
+
+async function buildMarker(context: Parameters<typeof login>[0]) {
+  const response = await context.request.get("/__test/build-info");
+  expect(response.status()).toBe(200);
+  const marker = await response.json() as { revision: string };
+  expect(marker.revision).toBe(process.env.V3_TEST_BUILD_REVISION ?? process.env.GITHUB_SHA ?? "local");
+  return marker;
+}
+
+async function submitProfileFromPage(page: import("@playwright/test").Page, role: "Creator" | "Business", suffix: string) {
+  await page.getByLabel("Display name", { exact: true }).fill(`${role} ${suffix}`);
+  await page.getByLabel("Public ID", { exact: true }).fill(`${role === "Creator" ? "CR" : "BUS"}-${suffix}`);
+  await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
+  await page.getByLabel("Category", { exact: true }).fill("Food");
+  const pending = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === "/api/onboarding/profile";
+  }, { timeout: 7000 });
+  await page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 });
+  const response = await pending;
+  expect(response.status()).toBe(200);
+  await expect(page.getByText("Under review", { exact: true })).toBeVisible();
+  return `${role === "Creator" ? "CR" : "BUS"}-${suffix}`;
+}
+
+test("account-signup-and-customer-activation", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  await open(page, "/onboarding");
+  await page.getByRole("button", { name: /^Use as Customer/ }).click();
+  await page.getByLabel("Display name", { exact: true }).fill(`Customer ${account.suffix}`);
+  await page.getByLabel("Public ID", { exact: true }).fill(`CU-${account.suffix}`);
+  const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/profile", { timeout: 7000 });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect((await activation).status()).toBe(200);
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
+});
+
+test("customer-to-creator-enrollment", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+  const signals = installRuntimeSignals(page);
+  const marker = await buildMarker(context);
+  await open(page, "/onboarding");
+  await creatorChoiceDiagnostics(page, context, signals, marker);
+  const creatorChoice = page.getByRole("button", { name: /^Become a Creator/ });
+  await expect(creatorChoice).toHaveCount(1);
+  await creatorChoice.click();
+  await submitProfileFromPage(page, "Creator", account.suffix);
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
+  await open(page, "/customer/offers");
+});
+
+test("creator-admin-approval-and-switch", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  const active = await activateCustomer(context, account);
+  const creatorPublicId = await submitAdditionalProfile(context, active, "Creator");
+  await approveLatest(context, "Creator", creatorPublicId);
+  await establishFirebaseSession(context, account.token, "Customer");
+  await open(page, "/customer/offers");
+  await chooseProfile(page, "Creator");
+  await expect(page).toHaveURL(/\/creator/);
+});
+
+test("customer-to-business-enrollment", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+  await open(page, "/onboarding");
+  const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
+  await expect(businessChoice).toHaveCount(1);
+  await businessChoice.click();
+  await submitProfileFromPage(page, "Business", account.suffix);
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
+  await open(page, "/customer/offers");
+});
+
+test("business-admin-approval-and-switch", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  const active = await activateCustomer(context, account);
+  const businessPublicId = await submitAdditionalProfile(context, active, "Business");
+  await approveLatest(context, "Business", businessPublicId);
+  await establishFirebaseSession(context, account.token, "Customer");
+  await open(page, "/customer/offers");
+  await chooseProfile(page, "Business");
+  await expect(page).toHaveURL(/\/business/);
+});
+
+test("multi-role-switching", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  const active = await activateCustomer(context, account);
+  const creatorPublicId = await submitAdditionalProfile(context, active, "Creator");
+  const businessPublicId = await submitAdditionalProfile(context, active, "Business");
+  await approveLatest(context, "Creator", creatorPublicId);
+  await approveLatest(context, "Business", businessPublicId);
+  await establishFirebaseSession(context, account.token, "Customer");
+  await open(page, "/customer/offers");
+  const select = page.getByLabel("Switch profile", { exact: true });
+  await expect(select.locator("option")).toHaveCount(3);
+  const tampered = await context.request.post("/api/session/switch-profile", {
+    headers: { "X-Weymela-Request": "1" },
+    data: { role: "Business", subjectId: "00000000-0000-0000-0000-000000000000", businessId: null },
+  });
+  expect(tampered.status()).not.toBe(204);
+  await chooseProfile(page, "Creator");
+  await expect(page).toHaveURL(/\/creator/);
+  await chooseProfile(page, "Business");
+  await expect(page).toHaveURL(/\/business/);
+});
+
+test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   page.setDefaultNavigationTimeout(12000);
   const steps: StepRecord[] = [];
@@ -203,6 +395,7 @@ test("one email-verified account can sign in by phone and complete independent p
   expect(phoneToken).toBe(token);
   await runStep(steps, "firebase-phone-session", () => establishFirebaseSession(context, phoneToken), 12000);
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);
+  await creatorChoiceDiagnostics(page, context, signals, marker);
   await runStep(steps, "creator-choice", () => page.getByRole("button", { name: /^Become a Creator/ }).click({ timeout: 7000 }), 8000);
   await page.getByLabel("Display name", { exact: true }).fill(`Creator ${suffix}`);
   await page.getByLabel("Public ID", { exact: true }).fill(`CR-${suffix}`);
@@ -210,7 +403,7 @@ test("one email-verified account can sign in by phone and complete independent p
   await page.getByLabel("Category", { exact: true }).fill("Food");
   await runStep(steps, "creator-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
   await expect(page.getByText("Under review", { exact: true })).toBeVisible();
-  await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator"), 15000);
+  await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator", `CR-${suffix}`), 15000);
   await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
   await runStep(steps, "creator-profile-switch", () => open(page, "/customer/offers"), 15000);
   await expect(page.getByLabel("Switch profile", { exact: true })).toBeVisible();
@@ -226,7 +419,7 @@ test("one email-verified account can sign in by phone and complete independent p
   await page.getByLabel("Category", { exact: true }).fill("Food");
   await runStep(steps, "business-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
   await expect(page.getByText("Under review", { exact: true })).toBeVisible();
-  await runStep(steps, "business-admin-review", () => approveLatest(context, "Business"), 15000);
+  await runStep(steps, "business-admin-review", () => approveLatest(context, "Business", `BUS-${suffix}`), 15000);
   await runStep(steps, "business-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
   await runStep(steps, "business-profile-switch", () => open(page, "/creator"), 15000);
   await expect(page.getByLabel("Switch profile", { exact: true })).toBeVisible();

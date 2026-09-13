@@ -19,6 +19,7 @@ await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
 await postgres.StartAsync();
 var root=Path.GetFullPath(Environment.GetEnvironmentVariable("V3_SOURCE_ROOT")??Directory.GetCurrentDirectory());
 var key=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+var testBuildRevision=Environment.GetEnvironmentVariable("V3_TEST_BUILD_REVISION")??"local";
 await using var app=ApiHost.Build(["--environment","Development"],builder=>
 {
     builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -26,7 +27,7 @@ await using var app=ApiHost.Build(["--environment","Development"],builder=>
     builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>
     {
         ["ConnectionStrings:WeymelaV3"]=postgres.GetConnectionString(),["V3:EnableDevelopmentIdentity"]="true",
-        ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20"
+        ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20",["V3:TestBuildRevision"]=testBuildRevision
     });
     builder.Services.AddSingleton<IEmailCodeDelivery, BrowserEmailCodeDelivery>();
     builder.Services.AddScoped<IFirebaseCustomTokenIssuer, BrowserFirebaseCustomTokenIssuer>();
@@ -42,6 +43,7 @@ app.MapGet("/__test/email-code", (string identifier) =>
     var code = BrowserEmailCodeDelivery.Read(identifier);
     return code is null ? Results.NotFound() : Results.Ok(new { code });
 }).AllowAnonymous();
+app.MapGet("/__test/build-info", () => Results.Ok(new { revision = testBuildRevision })).AllowAnonymous();
 await app.StartAsync();
 var worker = Task.Run(async () => {
     var stopping = app.Lifetime.ApplicationStopping;

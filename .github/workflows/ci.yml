@@ -183,6 +183,8 @@ jobs:
           include-hidden-files: true
           path: |
             .artifacts/phase6-e2e-results.json
+            .artifacts/phase6-customer-form-diagnostics.json
+            .artifacts/phase6-screenshots/customer-form-failure.png
             .artifacts/ci/stage-timings.tsv
           # Never upload browser-host.json, its log, tokens, or a broad .artifacts glob.
 

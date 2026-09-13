@@ -1,5 +1,76 @@
 import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+type RuntimeSignals = {
+  consoleErrors: string[];
+  pageErrors: string[];
+  failedRequests: string[];
+  apiResponses: { method: string; path: string; status: number }[];
+};
+
+const diagnosticRoot = resolve("../../.artifacts");
+const diagnosticScreenshot = resolve(diagnosticRoot, "phase6-screenshots/customer-form-failure.png");
+const diagnosticJson = resolve(diagnosticRoot, "phase6-customer-form-diagnostics.json");
+
+function redact(value: string, limit = 2000) {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[REDACTED_EMAIL]")
+    .replace(/\+?\d[\d\s().-]{7,}\d/g, "[REDACTED_PHONE]")
+    .replace(/(authorization|cookie|token|password|pin|secret|code)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .slice(0, limit);
+}
+
+function record<T>(items: T[], value: T, limit = 50) {
+  if (items.length < limit) items.push(value);
+}
+
+function installRuntimeSignals(page: import("@playwright/test").Page): RuntimeSignals {
+  const signals: RuntimeSignals = { consoleErrors: [], pageErrors: [], failedRequests: [], apiResponses: [] };
+  page.on("console", message => { if (message.type() === "error") record(signals.consoleErrors, redact(message.text())); });
+  page.on("pageerror", error => record(signals.pageErrors, redact(error.message)));
+  page.on("requestfailed", request => record(signals.failedRequests, `${request.method()} ${new URL(request.url()).pathname}`));
+  page.on("response", response => {
+    const url = new URL(response.url());
+    if (url.pathname.startsWith("/api/session") || url.pathname.startsWith("/api/onboarding"))
+      record(signals.apiResponses, { method: response.request().method(), path: url.pathname, status: response.status() });
+  });
+  return signals;
+}
+
+async function visibleCount(locator: import("@playwright/test").Locator) {
+  return locator.evaluateAll(elements => elements.filter(element => {
+    const node = element as HTMLElement;
+    return node.checkVisibility();
+  }).length);
+}
+
+async function captureCustomerFormFailure(page: import("@playwright/test").Page, signals: RuntimeSignals, marker: unknown, error: unknown) {
+  mkdirSync(resolve(diagnosticRoot, "phase6-screenshots"), { recursive: true });
+  const body = await page.locator("body").innerText().catch(() => "<body unavailable>");
+  const main = await page.locator("main").innerHTML().catch(() => "<main unavailable>");
+  const selectors = {
+    useAsCustomer: page.getByRole("button", { name: "Use as Customer", exact: true }),
+    displayName: page.getByLabel("Display name", { exact: true }),
+    publicId: page.getByLabel("Public ID", { exact: true }),
+    continue: page.getByRole("button", { name: "Continue", exact: true }),
+  };
+  const counts = await Promise.all(Object.entries(selectors).map(async ([name, locator]) => [name, { total: await locator.count(), visible: await visibleCount(locator) }] as const));
+  const evidence = {
+    revision: marker,
+    url: page.url(),
+    title: await page.title().catch(() => "<title unavailable>"),
+    bodyText: redact(body, 8000),
+    onboardingDom: redact(main, 12000),
+    controls: Object.fromEntries(counts),
+    signals,
+    failure: redact(error instanceof Error ? error.message : String(error)),
+    capturedAtUtc: new Date().toISOString(),
+  };
+  writeFileSync(diagnosticJson, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
+  await page.screenshot({ path: diagnosticScreenshot, fullPage: true, animations: "disabled" }).catch(() => undefined);
+}
 
 async function emailCode(context: Parameters<typeof login>[0], identifier: string, purpose: string, phone?: string, deliveryIdentifier = identifier) {
   const started = await context.request.post("/api/auth/email/start", {
@@ -48,6 +119,11 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
 }
 
 test("one email-verified account can sign in by phone and complete independent profile approvals", async ({ page, context }) => {
+  const signals = installRuntimeSignals(page);
+  const markerResponse = await context.request.get("/__test/build-info");
+  expect(markerResponse.status()).toBe(200);
+  const marker = await markerResponse.json() as { revision: string };
+  expect(marker.revision).toBe(process.env.V3_TEST_BUILD_REVISION ?? process.env.GITHUB_SHA ?? "local");
   const suffix = Date.now().toString();
   const email = `browser-${suffix}@example.com`;
   const phone = `+2519${suffix.slice(-8)}`;
@@ -56,8 +132,13 @@ test("one email-verified account can sign in by phone and complete independent p
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Onboarding" });
 
   await open(page, "/onboarding");
-  await page.getByRole("button", { name: "Use as Customer", exact: true }).click();
-  await page.getByLabel("Display name", { exact: true }).fill(`Customer ${suffix}`);
+  try {
+    await page.getByRole("button", { name: "Use as Customer", exact: true }).click();
+    await page.getByLabel("Display name", { exact: true }).fill(`Customer ${suffix}`);
+  } catch (error) {
+    await captureCustomerFormFailure(page, signals, marker, error);
+    throw error;
+  }
   await page.getByLabel("Public ID", { exact: true }).fill(`CU-${suffix}`);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });

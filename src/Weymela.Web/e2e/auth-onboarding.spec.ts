@@ -186,6 +186,12 @@ async function submitAdditionalProfile(context: Parameters<typeof login>[0], acc
     data: { role, displayName: `${role} ${account.suffix}`, publicId, region: "Addis Ababa", category: "Food", submission: `${role} test profile` },
   });
   expect(response.status()).toBe(200);
+  const status = await context.request.get("/api/onboarding/status");
+  expect(status.status()).toBe(200);
+  const body = await status.json() as { profiles: { role: string; status: string; publicId: string }[] };
+  expect(body.profiles).toEqual(expect.arrayContaining([
+    expect.objectContaining({ role, status: "Pending", publicId }),
+  ]));
   return publicId;
 }
 
@@ -280,6 +286,9 @@ test("customer-to-creator-enrollment", async ({ page, context }) => {
   const signals = installRuntimeSignals(page);
   const marker = await buildMarker(context);
   await open(page, "/onboarding");
+  await expect(page.locator("main h1")).toHaveText(/Choose how you want to use Weymela/);
+  await expect(page.getByRole("button", { name: /^Add a Business/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^Use as Customer/ })).toHaveCount(0);
   await creatorChoiceDiagnostics(page, context, signals, marker);
   const creatorChoice = page.getByRole("button", { name: /^Become a Creator/ });
   await expect(creatorChoice).toHaveCount(1);
@@ -306,6 +315,9 @@ test("customer-to-business-enrollment", async ({ page, context }) => {
   const account = await createVerifiedAccount(context);
   await activateCustomer(context, account);
   await open(page, "/onboarding");
+  await expect(page.locator("main h1")).toHaveText(/Choose how you want to use Weymela/);
+  await expect(page.getByRole("button", { name: /^Become a Creator/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^Use as Customer/ })).toHaveCount(0);
   const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
   await expect(businessChoice).toHaveCount(1);
   await businessChoice.click();

@@ -40,9 +40,16 @@ describe("approved profile selector", () => {
 // and ProfileSwitcher must commit a consistent role/location together.
 function sessionServer(switchStatus = 200) {
   let current = sessionFor(profiles[0]);
+  const now = Date.now();
+  const accessStatus = {
+    state: "Unlocked",
+    idleExpiresAtUtc: new Date(now + 20 * 60 * 1000).toISOString(),
+    sessionExpiresAtUtc: new Date(now + 60 * 60 * 1000).toISOString(),
+    retryAfterSeconds: null,
+  };
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (input === "/api/device/access" && !init?.method)
-      return Response.json({ state: "Unlocked", idleExpiresAtUtc: "2026-09-14T12:20:00Z", sessionExpiresAtUtc: "2026-09-14T13:00:00Z", retryAfterSeconds: null });
+      return Response.json(accessStatus);
     if (input === "/api/session" && !init?.method) return Response.json(current);
     if (input === "/api/device/enrollment" && !init?.method)
       return Response.json({ state: "Enrolled", expiresAtUtc: "2026-10-14T00:00:00Z" });

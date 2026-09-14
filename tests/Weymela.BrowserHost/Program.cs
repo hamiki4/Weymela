@@ -15,6 +15,7 @@ using Weymela.BrowserHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Claims;
 using Weymela.Api.Auth;
+using Weymela.Api.Endpoints;
 
 // This executable owns its one disposable database/container. It never accepts an external connection string.
 await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
@@ -65,6 +66,25 @@ app.MapPost("/__test/device-session/idle", async (HttpContext context, WeymelaDb
     session.LastActivityAtUtc = DateTime.UtcNow.Subtract(DeviceAccessPolicy.IdleLock).AddSeconds(-1);
     session.LockedAtUtc = null;
     session.Version++;
+    await db.SaveChangesAsync(ct);
+    return Results.NoContent();
+}).RequireAuthorization("VerifiedAccount");
+// Disposable BrowserHost-only state setup for the verified-email recovery flow.
+// It resolves only the signed-in test account's HttpOnly device credential and
+// is never mapped by ApiHost in Pilot or Production.
+app.MapPost("/__test/device/recovery-required", async (HttpContext context, WeymelaDbContext db, CancellationToken ct) =>
+{
+    if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        || !OpaqueDeviceCredential.TryDigest(
+            context.Request.Cookies[DeviceCredentialCookie.Name], out var digest))
+        return Results.Unauthorized();
+    var device = await db.AuthorizedDevices.SingleOrDefaultAsync(x => x.UserId == userId
+        && x.CredentialIdHash == digest && x.RevokedAtUtc == null, ct);
+    if (device is null) return Results.Unauthorized();
+    device.FailedAttempts = DeviceAccessPolicy.RecoveryAttemptThreshold;
+    device.LockedUntilUtc = null;
+    device.RequiresRecovery = true;
+    device.Version++;
     await db.SaveChangesAsync(ct);
     return Results.NoContent();
 }).RequireAuthorization("VerifiedAccount");

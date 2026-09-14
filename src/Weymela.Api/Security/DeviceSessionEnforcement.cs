@@ -20,6 +20,7 @@ internal static class DeviceSessionRequestPolicy
     {
         "/api/device/access",
         "/api/device/unlock",
+        "/api/device/pin-recovery/complete",
         "/api/session/sign-out"
     };
 

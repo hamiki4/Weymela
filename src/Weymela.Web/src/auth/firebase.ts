@@ -131,14 +131,6 @@ export class FirebaseWebAuthAdapter {
     await this.signInWithCustomToken(result.customToken);
   }
 
-  async resetPin(email: string, code: string, newPin: string): Promise<void> {
-    if (!/^[0-9]{5}$/.test(newPin)) throw new Error("PIN must contain exactly five digits.");
-    const normalized = email.trim().toLowerCase();
-    if (!/^[^@\s]{1,96}@[^@\s]{1,96}$/.test(normalized) || !/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
-    const response = await fetch("/api/auth/pin/reset", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ email: normalized, code: code.trim(), newPin }) });
-    if (!response.ok) throw new Error("The code is invalid or expired.");
-  }
-
   async signOut(): Promise<void> {
     await this.persistenceReady;
     let firebaseFailure: unknown;

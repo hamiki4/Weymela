@@ -424,6 +424,105 @@ test("server idle lock requires the authorized-device PIN and propagates across 
   await second.close();
 });
 
+test("forgot PIN on a locked recognized device uses verified email and replaces old credentials", async ({ page, context, browser }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+  await open(page, "/customer/offers");
+  const otherTab = await context.newPage();
+  await open(otherTab, "/customer/offers");
+
+  const oldContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  await oldContext.addCookies(await context.cookies());
+  try {
+    expect((await context.request.post("/__test/device-session/idle")).status()).toBe(204);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
+    await page.getByRole("button", { name: "Forgot PIN" }).click();
+    await expect(page.getByRole("heading", { name: "Recover your Weymela PIN" })).toBeVisible();
+    for (const width of [375, 390, 393, 430, 768, 1440]) {
+      await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+      await layout(page);
+    }
+
+    await page.getByLabel("Phone number or registered email").fill(account.phone);
+    const started = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/auth/email/start");
+    await page.getByRole("button", { name: "Send recovery code" }).click();
+    expect((await started).status()).toBe(202);
+    await expect(page.getByText(/If the account is eligible/)).toBeVisible();
+    const codeResponse = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(account.email)}`);
+    expect(codeResponse.status()).toBe(200);
+    const { code } = await codeResponse.json() as { code: string };
+
+    await page.getByLabel("Email recovery code").fill("999999");
+    await page.getByLabel("New 5-digit PIN", { exact: true }).fill("56789");
+    await page.getByLabel("Confirm new 5-digit PIN", { exact: true }).fill("56789");
+    const invalid = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/device/pin-recovery/complete");
+    await page.getByRole("button", { name: "Recover device" }).click();
+    expect((await invalid).status()).toBe(400);
+    await expect(page.getByRole("alert")).toHaveText(/invalid or expired/);
+
+    await page.getByLabel("Email recovery code").fill(code);
+    const completed = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/device/pin-recovery/complete");
+    await page.getByRole("button", { name: "Recover device" }).click();
+    expect((await completed).status()).toBe(200);
+    await expect(page).toHaveURL(/\/customer\/offers/);
+    await expect(page.getByRole("heading", { name: /Offers/ })).toBeVisible();
+    await expect(otherTab.getByRole("heading", { name: /Offers/ })).toBeVisible();
+
+    const oldAccess = await oldContext.request.get("/api/device/access");
+    expect(oldAccess.status()).toBe(200);
+    await expect(oldAccess.json()).resolves.toMatchObject({ state: "FullAuthenticationRequired" });
+
+    expect((await context.request.post("/__test/device-session/idle")).status()).toBe(204);
+    await page.reload();
+    await page.getByLabel("5-digit PIN").fill("01234");
+    const oldPin = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/device/unlock");
+    await page.getByRole("button", { name: "Unlock" }).click();
+    expect((await oldPin).status()).toBe(401);
+    await page.getByLabel("5-digit PIN").fill("56789");
+    const newPin = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/device/unlock");
+    await page.getByRole("button", { name: "Unlock" }).click();
+    expect((await newPin).status()).toBe(200);
+    await expect(page.getByRole("heading", { name: /Offers/ })).toBeVisible();
+  } finally {
+    await otherTab.close();
+    await oldContext.close();
+  }
+});
+
+test("recovery-required device can complete verified-email PIN recovery", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+  expect((await context.request.post("/__test/device/recovery-required")).status()).toBe(204);
+  await page.goto("/customer/offers");
+  await expect(page.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("recovery is required");
+  await page.getByRole("button", { name: "Forgot PIN" }).click();
+  await page.getByLabel("Phone number or registered email").fill(account.email);
+  const started = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/auth/email/start");
+  await page.getByRole("button", { name: "Send recovery code" }).click();
+  expect((await started).status()).toBe(202);
+  const codeResponse = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(account.email)}`);
+  const { code } = await codeResponse.json() as { code: string };
+  await page.getByLabel("Email recovery code").fill(code);
+  await page.getByLabel("New 5-digit PIN", { exact: true }).fill("24680");
+  await page.getByLabel("Confirm new 5-digit PIN", { exact: true }).fill("24680");
+  const completed = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/device/pin-recovery/complete");
+  await page.getByRole("button", { name: "Recover device" }).click();
+  expect((await completed).status()).toBe(200);
+  await expect(page).toHaveURL(/\/customer\/offers/);
+  await expect(page.getByRole("heading", { name: /Offers/ })).toBeVisible();
+});
+
 test("customer-to-creator-enrollment", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context);

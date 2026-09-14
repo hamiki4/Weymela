@@ -19,7 +19,6 @@ internal static class AuthEndpoints
     private sealed record ProfileSwitchInput(string Role, Guid SubjectId, Guid? BusinessId);
     private sealed record EmailCodeStart(string Identifier, string? Phone, string Purpose);
     private sealed record EmailCodeVerify(string Identifier, string Purpose, string Code);
-    private sealed record PinReset(string Email, string Code, string NewPin);
     public static void MapAuthEndpoints(this WebApplication app,bool development)
     {
         app.MapGet("/api/auth/mode",()=>Results.Ok(new{development,personas=development?new DevelopmentDirectory().Personas.Select(x=>new{x.Alias,x.Name,role=x.Actor.Role.ToString()}):null})).AllowAnonymous();
@@ -130,11 +129,6 @@ internal static class AuthEndpoints
                 throw new ApplicationFailure(FailureKind.Validation, "The verification request is invalid.");
             var result = await auth.VerifyAsync(input.Identifier, purpose, input.Code, ct);
             return Results.Ok(new { customToken = result.CustomToken, expiresAtUtc = result.ExpiresAtUtc });
-        }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
-        app.MapPost("/api/auth/pin/reset", async (PinReset input, EmailAuthService auth, CancellationToken ct) =>
-        {
-            await auth.ResetPinAsync(input.Email, input.Code, input.NewPin, ct);
-            return Results.NoContent();
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
         if(!development)return;
         app.MapPost("/api/development/session",async(DevelopmentSignIn input,HttpContext c,DevelopmentDirectory directory,IConfiguration configuration)=>

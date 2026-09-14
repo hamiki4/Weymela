@@ -23,11 +23,10 @@ function FirebaseSignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   const [error, setError] = useState<string | null>(null);
   const [adapter, setAdapter] = useState<FirebaseWebAuthAdapter | null>(null);
   const redirectHandled = useRef(false);
-  const [accountMode, setAccountMode] = useState<"signIn" | "signUp" | "recovery">("signIn");
+  const [accountMode, setAccountMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
-  const [pin, setPin] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<SessionProfile[]>([]);
@@ -69,18 +68,13 @@ function FirebaseSignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   };
   const sendCode = () => submit(async () => {
     if (!adapter) throw new Error("Secure sign-in is unavailable in this environment.");
-    await adapter.startEmailCode(email, accountMode === "recovery" ? "PinRecovery" : accountMode === "signUp" ? "Signup" : "DeviceEnrollment", accountMode === "signUp" ? phone : undefined);
+    await adapter.startEmailCode(email, accountMode === "signUp" ? "Signup" : "DeviceEnrollment", accountMode === "signUp" ? phone : undefined);
     setCodeSent(true);
   });
   const confirmCode = () => submit(async () => {
     if (!adapter || !codeSent) throw new Error("Request an email code first.");
-    if (accountMode === "recovery") {
-      await adapter.resetPin(email, code, pin);
-      setCodeSent(false); setCode(""); setPin(""); setAccountMode("signIn");
-    } else {
-      await adapter.verifyEmailCode(email, accountMode === "signUp" ? "Signup" : "DeviceEnrollment", code);
-      await onSignedIn();
-    }
+    await adapter.verifyEmailCode(email, accountMode === "signUp" ? "Signup" : "DeviceEnrollment", code);
+    await onSignedIn();
   });
   return (
     <div className="sign-in-secure" aria-live="polite">
@@ -103,15 +97,14 @@ function FirebaseSignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
       </div> : null}
       {adapter ? <form onSubmit={(event) => { event.preventDefault(); void (codeSent ? confirmCode() : sendCode()); }}>
         {accountMode === "signUp" ? <Field label="Phone number" help="Your phone identifies the account; it is not verified by SMS."><input type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required={!codeSent} disabled={codeSent} /></Field> : null}
-        <Field label={accountMode === "signIn" ? "Phone number or registered email" : "Registered email address"} help="Verification and recovery codes are sent only to the registered email."><input type={accountMode === "signIn" && !email.includes("@") ? "tel" : "email"} autoComplete={accountMode === "signIn" ? "username" : "email"} value={email} onChange={(e) => setEmail(e.target.value)} required disabled={codeSent} /></Field>
+        <Field label={accountMode === "signIn" ? "Phone number or registered email" : "Registered email address"} help="Verification codes are sent only to the registered email."><input type={accountMode === "signIn" && !email.includes("@") ? "tel" : "email"} autoComplete={accountMode === "signIn" ? "username" : "email"} value={email} onChange={(e) => setEmail(e.target.value)} required disabled={codeSent} /></Field>
         {codeSent ? <Field label="Email verification code"><input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} pattern="[0-9]{6}" required /></Field> : null}
-        {accountMode === "recovery" && codeSent ? <Field label="New five-digit app PIN" help="A PIN unlocks an already enrolled device; it is not an Internet password."><input inputMode="numeric" autoComplete="new-password" value={pin} onChange={(e) => setPin(e.target.value)} pattern="[0-9]{5}" minLength={5} maxLength={5} required /></Field> : null}
-        <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Working…" : codeSent ? accountMode === "recovery" ? "Reset PIN" : "Verify email" : accountMode === "recovery" ? "Send recovery code" : accountMode === "signUp" ? "Send signup code" : "Send email code"}</Button>
+        <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Working…" : codeSent ? "Verify email" : accountMode === "signUp" ? "Send signup code" : "Send email code"}</Button>
       </form> : null}
       {adapter ? <div className="auth-actions">
         <button className="text-action" type="button" onClick={() => { setAccountMode(accountMode === "signIn" ? "signUp" : "signIn"); setCodeSent(false); setError(null); }}>{accountMode === "signIn" ? "Create a new Weymela account" : "I already have an account"}</button>
-        <button className="text-action" type="button" onClick={() => { setAccountMode("recovery"); setCodeSent(false); setError(null); }}>Forgot PIN</button>
       </div> : null}
+      {adapter ? <p className="fine-print">Forgot your PIN? Recover it from the lock screen on your recognized device.</p> : null}
       {!adapter && !error ? <Notice>Preparing secure sign-in…</Notice> : null}
       <p className="fine-print">
         Sign-in uses a short-lived Firebase ID token only to establish a secure Weymela

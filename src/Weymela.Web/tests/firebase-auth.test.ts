@@ -175,9 +175,12 @@ describe("V3 Firebase Web adapter", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("keeps PIN recovery fail-closed until a secure device reset provider exists", async () => {
+  it("starts PIN recovery without calling an anonymous reset or Firebase session exchange", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(null, { status: 503 }));
-    await expect(adapter.resetPin("owner@example.com", "123456", "12345")).rejects.toThrow("invalid or expired");
+    await adapter.startEmailCode("owner@example.com", "PinRecovery");
+    const call = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[0]).toBe("/api/auth/email/start");
+    expect(JSON.parse(call[1].body as string)).toEqual({ identifier: "owner@example.com", phone: null, purpose: "PinRecovery" });
+    expect(signInWithCustomToken).not.toHaveBeenCalled();
   });
 });

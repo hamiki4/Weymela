@@ -68,12 +68,33 @@ internal static class OperationalReadinessConfiguration
 
         var device = model.Entity<AuthorizedDeviceRecord>();
         device.HasKey(x => x.Id); device.ToTable("AuthorizedDevices", t =>
-            t.HasCheckConstraint("CK_AuthorizedDevice_FailedAttempts", "\"FailedAttempts\" >= 0"));
+        {
+            t.HasCheckConstraint("CK_AuthorizedDevice_FailedAttempts", "\"FailedAttempts\" >= 0 AND \"FailedAttempts\" <= 10");
+            t.HasCheckConstraint("CK_AuthorizedDevice_Recovery", "\"RequiresRecovery\" = (\"FailedAttempts\" = 10)");
+            t.HasCheckConstraint("CK_AuthorizedDevice_Cooldown", "\"LockedUntilUtc\" IS NULL OR \"FailedAttempts\" >= 5");
+            t.HasCheckConstraint("CK_AuthorizedDevice_Expiry", "\"ExpiresAtUtc\" IS NULL OR \"ExpiresAtUtc\" = \"EnrolledAtUtc\" + INTERVAL '30 days'");
+        });
         device.Property(x => x.CredentialKind).HasMaxLength(30);
         device.Property(x => x.CredentialIdHash).HasMaxLength(128);
+        device.Property(x => x.PinVerifier).HasMaxLength(128);
         device.HasIndex(x => new { x.UserId, x.CredentialIdHash }).IsUnique();
         device.HasIndex(x => new { x.UserId, x.RevokedAtUtc });
         Mapping.Version(device);
+
+        var session = model.Entity<DeviceSessionRecord>();
+        session.HasKey(x => x.Id);
+        session.ToTable("DeviceSessions", t =>
+        {
+            t.HasCheckConstraint("CK_DeviceSession_Lifetime", "\"ExpiresAtUtc\" > \"CreatedAtUtc\" AND \"ExpiresAtUtc\" <= \"CreatedAtUtc\" + INTERVAL '1 hour'");
+            t.HasCheckConstraint("CK_DeviceSession_Generation", "\"Generation\" > 0");
+        });
+        session.Property(x => x.SessionIdentifierHash).HasMaxLength(64);
+        session.HasIndex(x => x.SessionIdentifierHash).IsUnique();
+        session.HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+        session.HasIndex(x => new { x.AuthorizedDeviceId, x.CreatedAtUtc });
+        session.HasOne<AuthorizedDeviceRecord>().WithMany().HasForeignKey(x => x.AuthorizedDeviceId).OnDelete(DeleteBehavior.Restrict);
+        session.HasOne<IdentityBinding>().WithMany().HasForeignKey(x => x.IdentityBindingId).OnDelete(DeleteBehavior.Restrict);
+        Mapping.Version(session);
 
         var enrollment = model.Entity<RoleEnrollmentRecord>();
         Mapping.Scalars(enrollment);

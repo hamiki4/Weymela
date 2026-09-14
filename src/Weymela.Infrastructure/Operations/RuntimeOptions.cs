@@ -17,6 +17,7 @@ public sealed class RuntimeOptions
     public string EmailDeliveryMode { get; init; } = "Disabled";
     public string FirebaseCustomTokenMode { get; init; } = "Disabled";
     public string? AuthCodeHashKey { get; init; }
+    public string? PinPepper { get; init; }
     public string CookieKeyDirectory { get; init; } = "";
     public string CookieCertificatePath { get; init; } = "";
     public string? CookieCertificatePassword { get; init; }
@@ -93,6 +94,7 @@ public sealed class RuntimeOptions
             EnvironmentName = environment, Development = dev, DevelopmentIdentity = devIdentity, ConnectionString = db.ConnectionString, AllowedOrigins = origins,
             PublicWebUrl = web, PublicApiUrl = api, FirebaseProjectId = project,
             EmailDeliveryMode = emailDelivery, FirebaseCustomTokenMode = customToken, AuthCodeHashKey = config["V3:Auth:CodeHashKey"],
+            PinPepper = config["V3:Auth:PinPepper"],
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
             CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,

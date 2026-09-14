@@ -37,7 +37,7 @@ public static class ApiHost
         builder.Services.AddWeymelaPersistence(options.ConnectionString);
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
-        builder.Services.AddScoped<DeviceEnrollmentService>();
+        builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();
         builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();
         builder.Services.TryAddSingleton<INotificationPushProvider,DisabledPushProvider>();
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());

@@ -2,7 +2,7 @@ using Weymela.Infrastructure.Identity;
 
 namespace Weymela.Api.Auth;
 
-/// <summary>Prepared Phase 9A.3 cookie policy. No endpoint issues this cookie yet.</summary>
+/// <summary>Separate DeviceSession credential policy. It is never an authentication scheme.</summary>
 public static class DeviceSessionCredentialCookie
 {
     public const string DevelopmentName = "WeymelaV3.DeviceSession";
@@ -26,4 +26,13 @@ public static class DeviceSessionCredentialCookie
             IsEssential = true
         };
     }
+
+    public static CookieOptions DeleteOptions(bool development) => new()
+    {
+        HttpOnly = true,
+        Secure = !development,
+        SameSite = SameSiteMode.Strict,
+        Path = "/",
+        IsEssential = true
+    };
 }

@@ -255,6 +255,37 @@ public sealed class DeviceSessionServiceTests(PostgresFixture fixture)
             (await service.ResolveAsync(seeded.Identity, winner.Credential.Value)).State);
     }
 
+    [Fact]
+    public async Task Trusted_establishment_requires_recognized_device_and_supersedes_prior_session()
+    {
+        var database = await fixture.CreateAsync();
+        var seeded = await SeedAsync(database, Start);
+        var clock = new ManualClock(Start);
+        CreatedDeviceSession first;
+        await using (var db = database.Open())
+        {
+            var service = new DeviceSessionService(db, clock);
+            Assert.Null(await service.EstablishForRecognizedDeviceAsync(seeded.Identity, new string('0', 64)));
+            first = (await service.EstablishForRecognizedDeviceAsync(
+                seeded.Identity, seeded.DeviceCredential.Value))!;
+        }
+
+        clock.Set(Start.AddMinutes(1));
+        CreatedDeviceSession second;
+        await using (var db = database.Open())
+            second = await new DeviceSessionService(db, clock).EstablishAsync(seeded.Identity, seeded.DeviceId);
+
+        Assert.NotEqual(first.Credential.Value, second.Credential.Value);
+        Assert.Equal(Start.AddMinutes(1).AddHours(1), second.Session.ExpiresAtUtc);
+        await using var verify = database.Open();
+        var sessions = await verify.DeviceSessions.Where(x => x.UserId == seeded.Identity.UserId)
+            .OrderBy(x => x.CreatedAtUtc).ToListAsync();
+        Assert.Equal(2, sessions.Count);
+        Assert.Equal(Start.AddMinutes(1), sessions[0].RevokedAtUtc);
+        Assert.Null(sessions[1].RevokedAtUtc);
+        Assert.Single(sessions, x => x.RevokedAtUtc is null);
+    }
+
     private static async Task<Seeded> SeedAsync(TestDatabase database, DateTime now)
     {
         await using var db = database.Open();
@@ -273,7 +304,7 @@ public sealed class DeviceSessionServiceTests(PostgresFixture fixture)
             "pin-v1$salt$verifier", now);
         db.AddRange(binding, device);
         await db.SaveChangesAsync();
-        return new(new DeviceSessionIdentity(userId, binding.Id, binding.Version), device.Id);
+        return new(new DeviceSessionIdentity(userId, binding.Id, binding.Version), device.Id, deviceCredential);
     }
 
     private static async Task<AuthorizedDeviceRecord> AddDeviceAsync(TestDatabase database, Guid userId,
@@ -344,7 +375,7 @@ public sealed class DeviceSessionServiceTests(PostgresFixture fixture)
         catch (ApplicationFailure failure) { return new(null, failure.Kind); }
     }
 
-    private sealed record Seeded(DeviceSessionIdentity Identity, Guid DeviceId);
+    private sealed record Seeded(DeviceSessionIdentity Identity, Guid DeviceId, OpaqueDeviceCredential DeviceCredential);
     private sealed record RotationResult(RotatedDeviceSession? Result, FailureKind? Failure);
 
     private sealed class ManualClock(DateTime initial) : TimeProvider

@@ -49,4 +49,19 @@ public sealed class DevicePinVerifierTests
         foreach (var malformed in new[] { "", "pin-v1$bad$bad", "v1$code$hash", "pin-v1$$" })
             await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => DevicePinVerifier.VerifyAsync("12345", malformed, Pepper(), default));
     }
+
+    [Fact]
+    public void Enrollment_confirmation_is_exact_and_crypto_configuration_fails_closed()
+    {
+        Assert.True(DevicePinVerifier.ConfirmationMatches("01234", "01234"));
+        Assert.False(DevicePinVerifier.ConfirmationMatches("01234", "01235"));
+        Assert.Throws<ApplicationFailure>(() => DevicePinVerifier.ConfirmationMatches("1234", "1234"));
+        Assert.Throws<ApplicationFailure>(() => DevicePinVerifier.ConfirmationMatches("１２３４５", "１２３４５"));
+
+        DevicePinVerifier.EnsureConfigured(Pepper());
+        Assert.Throws<AuthChallengeUnavailableException>(() => DevicePinVerifier.EnsureConfigured(null));
+        Assert.Throws<AuthChallengeUnavailableException>(() => DevicePinVerifier.EnsureConfigured("not-base64"));
+        Assert.Throws<AuthChallengeUnavailableException>(() =>
+            DevicePinVerifier.EnsureConfigured(Convert.ToBase64String(RandomNumberGenerator.GetBytes(31))));
+    }
 }

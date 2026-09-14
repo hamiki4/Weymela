@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { post, request } from "../api/client";
-import type { Role, SessionProfile, SessionUser } from "../api/types";
+import type { DeviceEnrollmentStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
 export const roleHome: Record<Role, string> = {
@@ -22,7 +22,9 @@ export const roleHome: Record<Role, string> = {
 interface SessionContextValue {
   user: SessionUser | null;
   loading: boolean;
+  deviceEnrollment: DeviceEnrollmentStatus | null;
   refresh: () => Promise<void>;
+  enrollDevice: (pin: string, confirmPin: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchProfile: (profile: SessionProfile) => Promise<SessionUser>;
 }
@@ -30,14 +32,25 @@ const Context = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [deviceEnrollment, setDeviceEnrollment] = useState<DeviceEnrollmentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
+    setLoading(true);
     try {
       const next = await request<SessionUser>("/session");
+      let enrollment: DeviceEnrollmentStatus;
+      try {
+        enrollment = await request<DeviceEnrollmentStatus>("/device/enrollment");
+      } catch {
+        // Authenticated workspaces fail closed when device state cannot be read.
+        enrollment = { state: "Unavailable", expiresAtUtc: null };
+      }
       setUser(next);
+      setDeviceEnrollment(enrollment);
       if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
     } catch {
       setUser(null);
+      setDeviceEnrollment(null);
       window.sessionStorage.removeItem("weymela.profile-key");
     } finally {
       setLoading(false);
@@ -54,8 +67,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       else throw error;
     } finally {
       setUser(null);
+      setDeviceEnrollment(null);
       window.sessionStorage.removeItem("weymela.profile-key");
     }
+  };
+  const enrollDevice = async (pin: string, confirmPin: string) => {
+    const status = await post<DeviceEnrollmentStatus>("/device/enrollment", { pin, confirmPin });
+    if (status.state !== "Enrolled") throw new Error("Secure device setup did not complete.");
+    setDeviceEnrollment(status);
   };
   const switchProfile = async (profile: SessionProfile) => {
     const next = await post<SessionUser>("/session/switch-profile", {
@@ -74,7 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return next;
   };
   return (
-    <Context.Provider value={{ user, loading, refresh, signOut, switchProfile }}>
+    <Context.Provider value={{ user, loading, deviceEnrollment, refresh, enrollDevice, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

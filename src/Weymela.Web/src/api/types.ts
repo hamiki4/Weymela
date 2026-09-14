@@ -23,6 +23,18 @@ export interface SessionProfile {
   publicId: string;
   canCheckout: boolean;
 }
+export type DeviceEnrollmentState =
+  | "EnrollmentRequired"
+  | "Enrolled"
+  | "Expired"
+  | "Revoked"
+  | "RecoveryRequired"
+  | "NotRequired"
+  | "Unavailable";
+export interface DeviceEnrollmentStatus {
+  state: DeviceEnrollmentState;
+  expiresAtUtc: string | null;
+}
 export interface BusinessCard {
   id: string;
   displayName: string;

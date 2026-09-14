@@ -1412,6 +1412,32 @@ td .button {
   letter-spacing: -0.04em;
   margin-bottom: 18px;
 }
+.pin-setup-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f4f7ef;
+}
+.pin-setup-card {
+  width: min(100%, 430px);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(42, 62, 34, 0.08);
+}
+.pin-setup-card .brand { margin-bottom: 32px; }
+.pin-setup-card h1 {
+  margin: 6px 0 12px;
+  font-family: Georgia, serif;
+  font-size: clamp(1.8rem, 7vw, 2.35rem);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+}
+.pin-setup-card form { margin-top: 24px; }
+.pin-setup-card fieldset { display: grid; gap: 16px; }
+.pin-setup-card .button { width: 100%; margin-top: 4px; }
 .auth-methods {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

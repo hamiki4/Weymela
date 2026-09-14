@@ -21,6 +21,26 @@ public static class DevicePinVerifier
             throw new ApplicationFailure(FailureKind.Validation, "Enter exactly five digits.");
     }
 
+    public static void EnsureConfigured(string? pepper)
+    {
+        if (string.IsNullOrWhiteSpace(pepper)) throw Unavailable();
+        byte[] key;
+        try { key = Convert.FromBase64String(pepper); }
+        catch (FormatException) { throw Unavailable(); }
+        try { if (key.Length < 32) throw Unavailable(); }
+        finally { CryptographicOperations.ZeroMemory(key); }
+    }
+
+    public static bool ConfirmationMatches(string pin, string confirmation)
+    {
+        Validate(pin);
+        Validate(confirmation);
+        var left = Encoding.ASCII.GetBytes(pin);
+        var right = Encoding.ASCII.GetBytes(confirmation);
+        try { return CryptographicOperations.FixedTimeEquals(left, right); }
+        finally { CryptographicOperations.ZeroMemory(left); CryptographicOperations.ZeroMemory(right); }
+    }
+
     public static async Task<string> HashAsync(string pin, string pepper, CancellationToken ct)
     {
         Validate(pin);
@@ -47,7 +67,7 @@ public static class DevicePinVerifier
 
     private static async Task<byte[]> DeriveAsync(string pin, string pepper, byte[] salt, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(pepper)) throw Unavailable();
+        EnsureConfigured(pepper);
         byte[] key;
         try { key = Convert.FromBase64String(pepper); }
         catch (FormatException) { throw Unavailable(); }

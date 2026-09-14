@@ -78,4 +78,13 @@ public static class DeviceCredentialCookie
         MaxAge = DeviceAccessPolicy.AuthorizedDeviceLifetime,
         IsEssential = true
     };
+
+    public static CookieOptions DeleteOptions(bool development) => new()
+    {
+        HttpOnly = true,
+        Secure = !development,
+        SameSite = SameSiteMode.Strict,
+        Path = "/",
+        IsEssential = true
+    };
 }

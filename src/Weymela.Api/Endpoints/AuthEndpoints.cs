@@ -106,13 +106,21 @@ internal static class AuthEndpoints
             claims.AddClaim(new("auth-strength", "firebase-verified"));
             if (identity.Profiles.Count == 0) claims.AddClaim(new("onboarding", "true"));
             var now=clock.GetUtcNow();var expiry=new DateTimeOffset(identity.ExpiresAtUtc);
-            var deviceSession = await deviceSessions.EstablishForRecognizedDeviceAsync(
+            var deviceSession = await deviceSessions.EstablishAfterFullAuthenticationAsync(
                 new DeviceSessionIdentity(identity.Actor.UserId, identity.BindingId, identity.BindingVersion),
                 c.Request.Cookies[DeviceCredentialCookie.Name], ct);
             await c.SignInAsync(WorkspaceAuthentication.Scheme,principal,new AuthenticationProperties{IsPersistent=false,IssuedUtc=now,ExpiresUtc=expiry<now.AddHours(1)?expiry:now.AddHours(1),AllowRefresh=false});
-            if (deviceSession is not null)
+            if (deviceSession.ClearStaleCredentials)
+            {
+                c.Response.Cookies.Delete(DeviceCredentialCookie.Name,
+                    DeviceCredentialCookie.DeleteOptions(development));
+                c.Response.Cookies.Delete(DeviceSessionCredentialCookie.Name(development),
+                    DeviceSessionCredentialCookie.DeleteOptions(development));
+            }
+            else if (deviceSession.Session is not null)
                 c.Response.Cookies.Append(DeviceSessionCredentialCookie.Name(development),
-                    deviceSession.Credential.Value, DeviceSessionCredentialCookie.Options(development, deviceSession.Session));
+                    deviceSession.Session.Credential.Value,
+                    DeviceSessionCredentialCookie.Options(development, deviceSession.Session.Session));
             return Results.NoContent();
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
         app.MapPost("/api/auth/email/start", async (EmailCodeStart input, EmailAuthService auth, CancellationToken ct) =>

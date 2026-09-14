@@ -35,6 +35,19 @@ export interface DeviceEnrollmentStatus {
   state: DeviceEnrollmentState;
   expiresAtUtc: string | null;
 }
+export type DeviceAccessState =
+  | "Unlocked"
+  | "Locked"
+  | "Cooldown"
+  | "RecoveryRequired"
+  | "EnrollmentRequired"
+  | "FullAuthenticationRequired";
+export interface DeviceAccessStatus {
+  state: DeviceAccessState;
+  idleExpiresAtUtc: string | null;
+  sessionExpiresAtUtc: string | null;
+  retryAfterSeconds: number | null;
+}
 export interface BusinessCard {
   id: string;
   displayName: string;

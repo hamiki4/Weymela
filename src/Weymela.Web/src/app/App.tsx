@@ -44,6 +44,7 @@ import { Checkout } from "../features/commerce/Checkout";
 import { Inbox } from "../features/notifications/Inbox";
 import { Onboarding } from "./Onboarding";
 import { PinSetup } from "./PinSetup";
+import { LockScreen } from "./LockScreen";
 
 function Home() {
   const { user, loading } = useSession();
@@ -56,6 +57,9 @@ function Home() {
 export function App() {
   const session = useSession();
   const location = useLocation();
+  if (!session.loading && session.deviceAccess
+      && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
+    return <LockScreen />;
   if (!session.loading && session.user) {
     const state = session.deviceEnrollment?.state ?? "Unavailable";
     const recognized = state === "Enrolled" || state === "NotRequired";

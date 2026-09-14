@@ -13,6 +13,8 @@ using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.BrowserHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Security.Claims;
+using Weymela.Api.Auth;
 
 // This executable owns its one disposable database/container. It never accepts an external connection string.
 await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
@@ -48,6 +50,24 @@ app.MapGet("/__test/email-code", (string identifier) =>
     return code is null ? Results.NotFound() : Results.Ok(new { code });
 }).AllowAnonymous();
 app.MapGet("/__test/build-info", () => Results.Ok(new { revision = testBuildRevision })).AllowAnonymous();
+// Disposable BrowserHost-only clock control. It accepts no identity/session input,
+// resolves only the authenticated test account's HttpOnly credential, and is never
+// mapped by ApiHost in Pilot or Production.
+app.MapPost("/__test/device-session/idle", async (HttpContext context, WeymelaDbContext db, CancellationToken ct) =>
+{
+    if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        || !OpaqueDeviceCredential.TryDigest(
+            context.Request.Cookies[DeviceSessionCredentialCookie.DevelopmentName], out var digest))
+        return Results.Unauthorized();
+    var session = await db.DeviceSessions.SingleOrDefaultAsync(x => x.UserId == userId
+        && x.SessionIdentifierHash == digest && x.RevokedAtUtc == null, ct);
+    if (session is null) return Results.Unauthorized();
+    session.LastActivityAtUtc = DateTime.UtcNow.Subtract(DeviceAccessPolicy.IdleLock).AddSeconds(-1);
+    session.LockedAtUtc = null;
+    session.Version++;
+    await db.SaveChangesAsync(ct);
+    return Results.NoContent();
+}).RequireAuthorization("VerifiedAccount");
 await app.StartAsync();
 var worker = Task.Run(async () => {
     var stopping = app.Lifetime.ApplicationStopping;

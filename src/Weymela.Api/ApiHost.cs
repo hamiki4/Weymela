@@ -35,6 +35,7 @@ public static class ApiHost
         builder.Logging.AddJsonConsole(o=>{o.IncludeScopes=true;o.TimestampFormat="yyyy-MM-ddTHH:mm:ss.fffZ";o.UseUtcTimestamp=true;});
         builder.Services.ConfigureHttpJsonOptions(o=>{o.SerializerOptions.UnmappedMemberHandling=JsonUnmappedMemberHandling.Disallow;o.SerializerOptions.MaxDepth=16;});
         builder.Services.AddWeymelaPersistence(options.ConnectionString);
+        builder.Services.AddPilotAuthenticationAdapters(options);
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();builder.Services.AddScoped<DeviceAccessService>();builder.Services.AddScoped<DevicePinRecoveryService>();
@@ -65,6 +66,22 @@ public static class ApiHost
         });
         builder.Services.AddScoped<IAuthorizationHandler,ActiveWorkspaceHandler>();
         var app=builder.Build();
+        if(options.EnvironmentName=="Pilot")
+        {
+            using var scope=app.Services.CreateScope();
+            if(!scope.ServiceProvider.GetRequiredService<IEmailCodeDelivery>().Enabled
+                || !scope.ServiceProvider.GetRequiredService<IFirebaseCustomTokenIssuer>().Enabled)
+                throw new InvalidOperationException("Pilot authentication adapters are unavailable.");
+            var signer=scope.ServiceProvider.GetRequiredService<IFirebaseAdminTokenSigner>();
+            var signingProbe=signer.CreateCustomTokenAsync("weymela-pilot-startup-probe",CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+            if(string.IsNullOrWhiteSpace(signingProbe))
+                throw new InvalidOperationException("Pilot Firebase custom-token signing is unavailable.");
+            var protector=app.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("WeymelaV3.PilotStartupProbe");
+            var probe=Guid.NewGuid().ToString("N");
+            if(protector.Unprotect(protector.Protect(probe))!=probe)
+                throw new InvalidOperationException("Pilot cookie protection is unavailable.");
+        }
         if(options.TrustedProxies.Length>0)app.UseForwardedHeaders();
         app.UseRouting();
         app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();

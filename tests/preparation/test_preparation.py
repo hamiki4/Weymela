@@ -1,5 +1,6 @@
 """Offline preparation checks. No image builds, live DB or service changes."""
 import importlib.util
+import base64
 import copy
 import hashlib
 import json
@@ -76,18 +77,48 @@ class RepositoryGateTests(unittest.TestCase):
             self.assertIn('USER ', text)
             self.assertIn('HEALTHCHECK ', text)
 
+    def test_private_authentication_material_is_excluded_from_images(self):
+        ignore = (ROOT / '.dockerignore').read_text()
+        self.assertIn('**/*firebase-admin*.json', ignore)
+        web = (ROOT / 'docker/Dockerfile.web').read_text()
+        self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', web)
+        self.assertNotIn('ResendApiKey', web)
+        worker = (ROOT / 'docker/Dockerfile.worker').read_text()
+        self.assertNotIn('firebase-admin', worker.lower())
+        self.assertNotIn('resend', worker.lower())
+
 class ComposeIsolationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.directory = tempfile.TemporaryDirectory(prefix='v3-compose-fixture-')
         root = pathlib.Path(cls.directory.name)
-        (root / 'empty.env').write_text('# dry-parse only\n')
+        test_secret = base64.b64encode(bytes(range(1, 33))).decode('ascii')
+        (root / 'api.env').write_text(
+            'V3__Auth__Provider=Firebase\n'
+            'V3__Auth__EmailDeliveryMode=Resend\n'
+            'V3__Auth__FirebaseCustomTokenMode=FirebaseAdmin\n'
+            'V3__Auth__FirebaseProjectId=weymela-pilot\n'
+            'V3__Auth__ResendApiKey=re_test_only_not_a_live_key_123456\n'
+            'V3__Auth__ResendFromAddress=no-reply@pilot-mail.weymela.com\n'
+            'V3__Auth__ResendFromName=Weymela Pilot\n'
+            f'V3__Auth__CodeHashKey={test_secret}\n'
+            f'V3__Auth__PinPepper={test_secret}\n')
+        (root / 'worker.env').write_text(
+            'V3__Auth__Provider=Firebase\n'
+            'V3__Auth__FirebaseProjectId=weymela-pilot\n')
         (root / 'placeholder').write_text('not-a-credential\n')
+        firebase = root / 'firebase-admin.json'
+        firebase.write_text(json.dumps({
+            'type': 'service_account', 'project_id': 'weymela-pilot',
+            'client_email': 'test@weymela-pilot.iam.gserviceaccount.com',
+            'private_key': '-----BEGIN ' + 'PRIVATE KEY-----\ntest-only\n-----END PRIVATE KEY-----\n'}))
+        firebase.chmod(0o600)
         env = dict(os.environ)
         env.update({f'V3_{kind}_IMAGE': f'ghcr.io/example/weymela-v3-{kind.lower()}@sha256:' + '0' * 64 for kind in ('API', 'WORKER', 'WEB')})
         env.update({'V3_POSTGRES_IMAGE': 'postgres:17-alpine@sha256:' + '0'*64,
-                    'V3_API_ENV_FILE': str(root/'empty.env'), 'V3_WORKER_ENV_FILE': str(root/'empty.env'),
+                    'V3_API_ENV_FILE': str(root/'api.env'), 'V3_WORKER_ENV_FILE': str(root/'worker.env'),
                     'V3_POSTGRES_PASSWORD_FILE': str(root/'placeholder'), 'V3_COOKIE_CERTIFICATE_FILE': str(root/'placeholder'),
+                    'V3_FIREBASE_ADMIN_CREDENTIALS_FILE': str(firebase),
                     'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
         cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.v3-pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
 
@@ -132,6 +163,16 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertNotIn('secrets', worker)
         self.assertNotIn('volumes', worker)
 
+    def test_firebase_admin_and_resend_secrets_are_api_only(self):
+        api = self.config['services']['weymela-v3-pilot-api']
+        self.assertIn('v3-firebase-admin.json', {item['source'] for item in api['secrets']})
+        self.assertEqual(api['environment']['GOOGLE_APPLICATION_CREDENTIALS'], '/run/secrets/v3-firebase-admin.json')
+        for part in ('worker', 'web'):
+            service = self.config['services']['weymela-v3-pilot-'+part]
+            self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', service.get('environment', {}))
+            self.assertNotIn('V3__Auth__ResendApiKey', service.get('environment', {}))
+            self.assertNotIn('v3-firebase-admin.json', {item['source'] for item in service.get('secrets', [])})
+
     def test_readonly_apps_have_exact_single_bounded_tmpfs(self):
         for part in ('api', 'worker', 'web'):
             app = self.config['services']['weymela-v3-pilot-'+part]
@@ -139,7 +180,9 @@ class ComposeIsolationTests(unittest.TestCase):
             self.assertEqual(app['tmpfs'], ['/tmp:size=32m,mode=1777'])
 
     def manifest(self):
-        return {'commit': 'test-commit', 'images': [{'component': p, 'commit': 'test-commit', 'digest': self.config['services']['weymela-v3-pilot-'+p]['image']} for p in ('api', 'worker', 'web')]}
+        images = [{'component': p, 'commit': 'test-commit', 'digest': self.config['services']['weymela-v3-pilot-'+p]['image']} for p in ('api', 'worker', 'web')]
+        next(item for item in images if item['component'] == 'web')['firebaseProjectId'] = 'weymela-pilot'
+        return {'commit': 'test-commit', 'images': images}
 
     def test_preflight_accepts_matching_isolated_manifest(self):
         self.assertEqual(preflight.validate(self.config, self.manifest()), [])
@@ -165,6 +208,40 @@ class ComposeIsolationTests(unittest.TestCase):
         config['services']['weymela-v3-pilot-api']['environment']['V3__FinancialWritesEnabled'] = 'true'
         self.assertTrue(preflight.validate(config, self.manifest()))
 
+    def test_preflight_rejects_disabled_or_mismatched_authentication(self):
+        for key, value in (
+            ('V3__Auth__EmailDeliveryMode', 'Disabled'),
+            ('V3__Auth__FirebaseCustomTokenMode', 'Disabled'),
+            ('V3__Auth__FirebaseProjectId', 'wrong-project'),
+            ('V3__Auth__ResendApiKey', ''),
+            ('V3__Auth__PinPepper', 'weak'),
+            ('V3__Auth__CodeHashKey', 'weak')):
+            with self.subTest(key=key):
+                config = copy.deepcopy(self.config)
+                config['services']['weymela-v3-pilot-api']['environment'][key] = value
+                self.assertTrue(preflight.validate(config, self.manifest()))
+
+        config = copy.deepcopy(self.config)
+        config['services']['weymela-v3-pilot-worker']['environment']['V3__Auth__FirebaseProjectId'] = 'other-project'
+        self.assertTrue(preflight.validate(config, self.manifest()))
+
+    def test_preflight_rejects_web_api_firebase_project_mismatch(self):
+        manifest = self.manifest()
+        next(item for item in manifest['images'] if item['component'] == 'web')['firebaseProjectId'] = 'other-project'
+        self.assertTrue(preflight.validate(self.config, manifest))
+
+    def test_preflight_rejects_missing_or_unsafe_firebase_credential_file(self):
+        for path in ('/tmp/does-not-exist-weymela-firebase.json', None):
+            config = copy.deepcopy(self.config)
+            if path is None:
+                path = config['secrets']['v3-firebase-admin.json']['file']
+                pathlib.Path(path).chmod(0o644)
+            config['secrets']['v3-firebase-admin.json']['file'] = path
+            with self.subTest(path=path):
+                self.assertTrue(preflight.validate(config, self.manifest()))
+            if path != '/tmp/does-not-exist-weymela-firebase.json':
+                pathlib.Path(path).chmod(0o600)
+
 class ReleaseIntegrityTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='v3-release-fixture-')
@@ -174,6 +251,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
         (self.root/'migrations').mkdir()
         commit = 'a'*40
         images = [{'component':p,'commit':commit,'digest':f'ghcr.io/example/weymela-v3-{p}@sha256:'+('1'*64)} for p in ('api','worker','web')]
+        next(item for item in images if item['component'] == 'web')['firebaseProjectId'] = 'weymela-pilot'
         for image in images:
             (self.root/f"images/{image['component']}-image.json").write_text(json.dumps(image))
         (self.root/'migrations/efbundle').write_text('inert test artifact, not executable')

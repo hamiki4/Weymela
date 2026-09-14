@@ -5,6 +5,38 @@ import json
 import pathlib
 import re
 import subprocess
+import base64
+import stat
+
+def _secret_bytes(value, minimum=32):
+    try:
+        decoded = base64.b64decode(value or '', validate=True)
+        return len(decoded) >= minimum and len(set(decoded)) >= 16
+    except (ValueError, TypeError):
+        return False
+
+def _secret_sources(service):
+    return {
+        item if isinstance(item, str) else item.get('source', '')
+        for item in service.get('secrets', [])
+    }
+
+def _valid_firebase_credential(config):
+    try:
+        path = pathlib.Path(config['secrets']['v3-firebase-admin.json']['file'])
+        if not path.is_absolute() or path.is_symlink() or not path.is_file():
+            return False
+        details = path.stat()
+        if stat.S_IMODE(details.st_mode) & 0o077 or details.st_size < 100 or details.st_size > 64 * 1024:
+            return False
+        value = json.loads(path.read_text())
+        pem_header = '-----BEGIN ' + 'PRIVATE KEY-----'
+        return (value.get('type') == 'service_account'
+                and value.get('project_id') == 'weymela-pilot'
+                and isinstance(value.get('client_email'), str) and value['client_email'].endswith('.iam.gserviceaccount.com')
+                and isinstance(value.get('private_key'), str) and value['private_key'].startswith(pem_header))
+    except (KeyError, OSError, UnicodeError, json.JSONDecodeError):
+        return False
 
 def validate(config, manifest):
     errors = []
@@ -27,6 +59,42 @@ def validate(config, manifest):
             environment = service.get('environment', {})
             if environment.get('V3__FinancialWritesEnabled') != 'false' or environment.get('V3__EnableDevelopmentIdentity') != 'false':
                 errors.append(f'{part}: preparation must stay frozen with Development identity disabled.')
+    api = config['services']['weymela-v3-pilot-api']
+    api_environment = api.get('environment', {})
+    required_api = {
+        'V3__Auth__Provider': 'Firebase',
+        'V3__Auth__EmailDeliveryMode': 'Resend',
+        'V3__Auth__FirebaseCustomTokenMode': 'FirebaseAdmin',
+        'V3__Auth__FirebaseProjectId': 'weymela-pilot',
+        'V3__Auth__ResendFromAddress': 'no-reply@pilot-mail.weymela.com',
+        'V3__Auth__ResendFromName': 'Weymela Pilot',
+        'GOOGLE_APPLICATION_CREDENTIALS': '/run/secrets/v3-firebase-admin.json',
+    }
+    for key, expected_value in required_api.items():
+        if api_environment.get(key) != expected_value:
+            errors.append(f'api: invalid or missing Pilot authentication setting {key}.')
+    resend_key = api_environment.get('V3__Auth__ResendApiKey', '')
+    if not re.fullmatch(r're_[A-Za-z0-9_-]{17,253}', resend_key):
+        errors.append('api: protected Resend API key is missing or malformed.')
+    for key in ('V3__Auth__CodeHashKey', 'V3__Auth__PinPepper'):
+        if not _secret_bytes(api_environment.get(key)):
+            errors.append(f'api: {key} must contain base64-encoded 32+ byte secret material.')
+    if 'v3-firebase-admin.json' not in _secret_sources(api):
+        errors.append('api: read-only Firebase Admin credential secret is required.')
+    elif not _valid_firebase_credential(config):
+        errors.append('api: external Firebase Admin credential file is missing, unsafe, or structurally invalid.')
+    for part in ('worker', 'web'):
+        service = config['services'][f'weymela-v3-pilot-{part}']
+        environment = service.get('environment', {})
+        forbidden = ('V3__Auth__ResendApiKey', 'GOOGLE_APPLICATION_CREDENTIALS')
+        if any(key in environment for key in forbidden) or 'v3-firebase-admin.json' in _secret_sources(service):
+            errors.append(f'{part}: API authentication secrets are forbidden.')
+    worker_environment = config['services']['weymela-v3-pilot-worker'].get('environment', {})
+    if worker_environment.get('V3__Auth__Provider') != 'Firebase' or worker_environment.get('V3__Auth__FirebaseProjectId') != 'weymela-pilot':
+        errors.append('worker: approved public Firebase project identity is required.')
+    web_image = images.get('web', {})
+    if web_image.get('firebaseProjectId') != api_environment.get('V3__Auth__FirebaseProjectId'):
+        errors.append('web/api: Firebase project identities do not match.')
     if not config.get('networks', {}).get('data', {}).get('internal'): errors.append('V3 data network must be internal.')
     for network in config.get('networks', {}).values():
         if not network.get('name', '').startswith('weymela-v3-pilot-') or network.get('external'):

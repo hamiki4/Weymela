@@ -16,6 +16,10 @@ public sealed class RuntimeOptions
     public string FirebaseProjectId { get; init; } = "";
     public string EmailDeliveryMode { get; init; } = "Disabled";
     public string FirebaseCustomTokenMode { get; init; } = "Disabled";
+    public string? ResendApiKey { get; init; }
+    public string ResendFromAddress { get; init; } = "";
+    public string ResendFromName { get; init; } = "";
+    public string FirebaseAdminCredentialsPath { get; init; } = "";
     public string? AuthCodeHashKey { get; init; }
     public string? PinPepper { get; init; }
     public string CookieKeyDirectory { get; init; } = "";
@@ -65,6 +69,10 @@ public sealed class RuntimeOptions
         var project = config["V3:Auth:FirebaseProjectId"] ?? "";
         var emailDelivery = config["V3:Auth:EmailDeliveryMode"] ?? "Disabled";
         var customToken = config["V3:Auth:FirebaseCustomTokenMode"] ?? "Disabled";
+        var resendApiKey = config["V3:Auth:ResendApiKey"];
+        var resendFromAddress = config["V3:Auth:ResendFromAddress"] ?? "";
+        var resendFromName = config["V3:Auth:ResendFromName"] ?? "";
+        var firebaseAdminCredentials = config["GOOGLE_APPLICATION_CREDENTIALS"] ?? "";
         if (!dev)
         {
             Require(config["V3:Auth:Provider"] == "Firebase", "Firebase authentication must be explicitly configured.");
@@ -72,11 +80,25 @@ public sealed class RuntimeOptions
             Require(origins.Length > 0 && IsOrigin(web, false) && IsOrigin(api, false) && origins.Contains(web, StringComparer.Ordinal), "Explicit HTTPS Web/API URLs and allowed Web origin are required.");
             Require(config["V3:Security:CameraPolicy"] == CameraPolicy, "The approved same-origin camera policy is required.");
             Require(config["V3:Security:TlsEdgeConfirmed"] == "true", "TLS edge and HSTS configuration must be confirmed.");
-            Require(emailDelivery is "Disabled" or "Smtp" or "Provider", "Unsupported email delivery mode.");
+            Require(emailDelivery is "Disabled" or "Resend", "Unsupported email delivery mode.");
             Require(customToken is "Disabled" or "FirebaseAdmin", "Unsupported Firebase custom-token mode.");
+            if (environment == "Production")
+                Require(emailDelivery == "Disabled" && customToken == "Disabled", "Production authentication adapters are not activated by the Pilot implementation.");
             if (emailDelivery != "Disabled" || customToken != "Disabled")
                 Require(!string.IsNullOrWhiteSpace(config["V3:Auth:CodeHashKey"]), "An external auth code hash key is required when email authentication is enabled.");
             if (!worker) Require(Path.IsPathFullyQualified(config["V3:Auth:CookieKeyDirectory"] ?? "") && Path.IsPathFullyQualified(config["V3:Auth:CookieCertificatePath"] ?? ""), "External protected cookie-key storage is required.");
+            if (!worker && environment == "Pilot")
+            {
+                Require(project == "weymela-pilot", "Pilot must use the approved Firebase project.");
+                Require(emailDelivery == "Resend", "Pilot requires the Resend email delivery adapter.");
+                Require(customToken == "FirebaseAdmin", "Pilot requires Firebase Admin custom-token signing.");
+                Require(IsResendKey(resendApiKey), "A protected Resend API key is required.");
+                Require(resendFromAddress == "no-reply@pilot-mail.weymela.com" && IsEmail(resendFromAddress), "The approved Pilot Resend sender address is required.");
+                Require(resendFromName == "Weymela Pilot", "The approved Pilot Resend sender name is required.");
+                Require(SecretBytes(config["V3:Auth:CodeHashKey"], 32), "The auth code hash key must be base64-encoded 32+ byte secret material.");
+                Require(SecretBytes(config["V3:Auth:PinPepper"], 32), "The PIN pepper must be base64-encoded 32+ byte secret material.");
+                Require(firebaseAdminCredentials == "/run/secrets/v3-firebase-admin.json" && Path.IsPathFullyQualified(firebaseAdminCredentials), "The approved external Firebase Admin credential file is required.");
+            }
         }
         var deposits = config["V3:Deposits:Mode"] ?? "Disabled";
         Require(deposits is "Disabled" or "ManualApproval" || dev && deposits == "Development", "No configured deposit provider/approval mechanism.");
@@ -95,6 +117,8 @@ public sealed class RuntimeOptions
             PublicWebUrl = web, PublicApiUrl = api, FirebaseProjectId = project,
             EmailDeliveryMode = emailDelivery, FirebaseCustomTokenMode = customToken, AuthCodeHashKey = config["V3:Auth:CodeHashKey"],
             PinPepper = config["V3:Auth:PinPepper"],
+            ResendApiKey = resendApiKey, ResendFromAddress = resendFromAddress, ResendFromName = resendFromName,
+            FirebaseAdminCredentialsPath = firebaseAdminCredentials,
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
             CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
@@ -106,5 +130,21 @@ public sealed class RuntimeOptions
         && (u.Scheme == "https" || development && u.Scheme == "http" && u.IsLoopback)
         && u.AbsolutePath == "/" && string.IsNullOrEmpty(u.Query) && string.IsNullOrEmpty(u.Fragment)
         && string.IsNullOrEmpty(u.UserInfo) && !value.Contains('*') && value == u.GetLeftPart(UriPartial.Authority);
+    private static bool IsEmail(string value) => value.Length is > 3 and <= 320
+        && System.Text.RegularExpressions.Regex.IsMatch(value, "^[^@\\s<>]+@[^@\\s<>]+$")
+        && !value.Any(char.IsControl);
+    private static bool IsResendKey(string? value) => value is { Length: >= 20 and <= 256 }
+        && value.StartsWith("re_", StringComparison.Ordinal)
+        && value.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-');
+    private static bool SecretBytes(string? value, int minimum)
+    {
+        try
+        {
+            if (value is null) return false;
+            var bytes = Convert.FromBase64String(value);
+            return bytes.Length >= minimum && bytes.Distinct().Count() >= 16;
+        }
+        catch (FormatException) { return false; }
+    }
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

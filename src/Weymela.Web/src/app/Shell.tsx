@@ -89,7 +89,7 @@ export function Shell() {
       </Link>
       <p className="nav-eyebrow">{roles[user.role]} workspace</p>
       {user.profiles && user.profiles.length > 1 && (
-        <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={switchProfile} navigate={navigate} />
+        <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={switchProfile} />
       )}
       <nav aria-label="Main navigation">
         {items.map(([to, label, icon]) => (
@@ -184,12 +184,10 @@ export function ProfileSwitcher({
   profiles,
   activeKey,
   onSwitch,
-  navigate,
 }: {
   profiles: SessionProfile[];
   activeKey?: string | null;
   onSwitch: (profile: SessionProfile) => Promise<unknown>;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,8 +203,7 @@ export function ProfileSwitcher({
           if (!profile) return;
           setBusy(true); setError(null);
           try {
-            const next = await onSwitch(profile) as { role: Role };
-            navigate(roleHome[next.role], { replace: true });
+            await onSwitch(profile);
           } catch {
             setError("That profile is no longer available. Refresh and try again.");
           } finally { setBusy(false); }

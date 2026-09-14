@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { SessionUser } from "../src/api/types";
 
 type RuntimeSignals = {
   consoleErrors: string[];
@@ -240,12 +241,74 @@ async function creatorChoiceDiagnostics(page: import("@playwright/test").Page, c
   await page.screenshot({ path: resolve(diagnosticRoot, "phase6-screenshots/creator-choice-failure.png"), fullPage: true, animations: "disabled", timeout: 1500 }).catch(() => undefined);
 }
 
-async function chooseProfile(page: import("@playwright/test").Page, label: string) {
-  const select = page.getByLabel("Switch profile", { exact: true });
-  await expect(select).toBeVisible();
-  const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");
-  expect(value).toBeTruthy();
-  await select.selectOption(value!);
+const switchSignals = new WeakMap<import("@playwright/test").Page, RuntimeSignals>();
+async function chooseProfile(page: import("@playwright/test").Page, label: "Customer" | "Creator" | "Business") {
+  const signals = switchSignals.get(page) ?? installRuntimeSignals(page);
+  switchSignals.set(page, signals);
+  const paths = [new URL(page.url()).pathname];
+  const onNavigation = (frame: import("@playwright/test").Frame) => {
+    if (frame === page.mainFrame()) record(paths, new URL(frame.url()).pathname);
+  };
+  page.on("framenavigated", onNavigation);
+  let stage = "selector-visible";
+  try {
+    const select = page.getByLabel("Switch profile", { exact: true });
+    await expect(select).toBeVisible({ timeout: 5000 });
+    const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value", { timeout: 3000 });
+    expect(value).toBeTruthy();
+    const [role, subjectId, businessId] = value!.split(":");
+    expect(role).toBe(label);
+    stage = "switch-response";
+    // Register before the change event; selectOption does not await the async
+    // React handler, the protected cookie, or the coordinated route transition.
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/api/session/switch-profile", { timeout: 7000 }),
+      select.selectOption(value!, { timeout: 5000 }),
+    ]);
+    expect(response.request().postDataJSON()).toEqual({ role: label, subjectId, businessId: businessId === "-" ? null : businessId });
+    expect(response.status()).toBe(200);
+    const switched = await response.json() as SessionUser;
+    expect(switched).toMatchObject({ role: label, activeProfileKey: value });
+    stage = "session-refresh";
+    await expect.poll(async () => {
+      const sessionResponse = await page.context().request.get("/api/session", { timeout: 3000 });
+      expect(sessionResponse.status()).toBe(200);
+      const session = await sessionResponse.json() as SessionUser;
+      return { role: session.role, activeProfileKey: session.activeProfileKey };
+    }, { timeout: 7000 }).toEqual({ role: label, activeProfileKey: value });
+    stage = "workspace-settled";
+    const destination = { Customer: /\/customer\/offers(?:[/?#]|$)/, Creator: /\/creator(?:[/?#]|$)/, Business: /\/business(?:[/?#]|$)/ }[label];
+    await expect(page).toHaveURL(destination, { timeout: 7000 });
+    await expect(page.locator("main h1")).toBeVisible({ timeout: 5000 });
+    await expect(select).toBeVisible({ timeout: 5000 });
+    await expect(select).toHaveValue(value!, { timeout: 5000 });
+    await expect(page).toHaveURL(destination);
+    expect(paths, "A successful switch must never visit an unauthorized workspace").not.toContain("/unauthorized");
+  } catch (error) {
+    // Allowlisted server state only. Never record cookie/token/header values or
+    // arbitrary response bodies; diagnostics must not replace the real failure.
+    try {
+      const response = await page.context().request.get("/api/session", { timeout: 1500 }).catch(() => null);
+      const session = response?.ok() ? await response.json().catch(() => null) as SessionUser | null : null;
+      const evidence = {
+        stage, selectedRole: label, url: new URL(page.url()).pathname, paths,
+        session: {
+          status: response?.status() ?? "unavailable",
+          role: session?.role ?? "unavailable", activeProfileKey: session?.activeProfileKey ?? null,
+          profiles: session?.profiles?.map(profile => ({ role: profile.role, subjectId: profile.subjectId, businessId: profile.businessId })) ?? [],
+        },
+        signals, failure: redact(error instanceof Error ? error.message : String(error)),
+      };
+      // stderr is retained in the existing JSON reporter artifact, as well as
+      // the attachment. No workflow expansion to sensitive artifact paths.
+      console.error("Profile switch diagnostics:", JSON.stringify(evidence));
+      await test.info().attach("profile-switch-diagnostics", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });
+    } catch { /* best effort; preserve the original assertion */ }
+    throw error;
+  } finally {
+    page.off("framenavigated", onNavigation);
+  }
 }
 
 async function buildMarker(context: Parameters<typeof login>[0]) {
@@ -356,11 +419,20 @@ test("multi-role-switching", async ({ page, context }) => {
   await open(page, "/customer/offers");
   const select = page.getByLabel("Switch profile", { exact: true });
   await expect(select.locator("option")).toHaveCount(3);
+  const beforeSwitch = await context.request.get("/api/session");
+  expect(beforeSwitch.status()).toBe(200);
+  const approved = await beforeSwitch.json() as SessionUser;
+  expect(approved.role).toBe("Customer");
+  expect(approved.profiles?.map(profile => profile.role).sort()).toEqual(["Business", "Creator", "Customer"]);
   const tampered = await context.request.post("/api/session/switch-profile", {
     headers: { "X-Weymela-Request": "1" },
     data: { role: "Business", subjectId: "00000000-0000-0000-0000-000000000000", businessId: null },
   });
-  expect(tampered.status()).not.toBe(204);
+  expect(tampered.status()).toBe(400);
+  await expect(tampered.json()).resolves.toMatchObject({ code: "Validation" });
+  const afterTampering = await context.request.get("/api/session");
+  expect(afterTampering.status()).toBe(200);
+  await expect(afterTampering.json()).resolves.toMatchObject({ role: "Customer", activeProfileKey: approved.activeProfileKey });
   await chooseProfile(page, "Creator");
   await expect(page).toHaveURL(/\/creator/);
   await chooseProfile(page, "Business");
@@ -424,9 +496,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator", `CR-${suffix}`), 15000);
   await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Customer"), 12000);
   await runStep(steps, "creator-profile-switch", () => open(page, "/customer/offers"), 15000);
-  await expect(page.getByLabel("Switch profile", { exact: true })).toBeVisible();
-  const creatorProfile = await page.getByLabel("Switch profile", { exact: true }).locator("option").filter({ hasText: "Creator" }).first().getAttribute("value");
-  await page.getByLabel("Switch profile", { exact: true }).selectOption(creatorProfile!);
+  await chooseProfile(page, "Creator");
   await expect(page).toHaveURL(/\/creator/);
 
   await runStep(steps, "business-onboarding-open", () => open(page, "/onboarding"), 15000);
@@ -440,9 +510,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await runStep(steps, "business-admin-review", () => approveLatest(context, "Business", `BUS-${suffix}`), 15000);
   await runStep(steps, "business-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
   await runStep(steps, "business-profile-switch", () => open(page, "/creator"), 15000);
-  await expect(page.getByLabel("Switch profile", { exact: true })).toBeVisible();
-  const businessProfile = await page.getByLabel("Switch profile", { exact: true }).locator("option").filter({ hasText: "Business" }).first().getAttribute("value");
-  await page.getByLabel("Switch profile", { exact: true }).selectOption(businessProfile!);
+  await chooseProfile(page, "Business");
   await expect(page).toHaveURL(/\/business/);
   await layout(page);
   await screenshot(page, "auth-multi-role-approved-profiles");

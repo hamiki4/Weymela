@@ -1,11 +1,12 @@
 import {
   createContext,
+  startTransition,
   useContext,
   useEffect,
   useState,
   type ReactNode,
 } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { post, request } from "../api/client";
 import type { Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
@@ -27,6 +28,7 @@ interface SessionContextValue {
 }
 const Context = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
@@ -61,9 +63,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       subjectId: profile.subjectId,
       businessId: profile.businessId,
     });
-    setUser(next);
     if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
-    window.dispatchEvent(new Event("weymela-profile-switched"));
+    // BrowserRouter transitions location updates. Commit the authoritative role
+    // in that same transition so the old route never sees the new role alone.
+    startTransition(() => {
+      setUser(next);
+      navigate(roleHome[next.role], { replace: true });
+      window.dispatchEvent(new Event("weymela-profile-switched"));
+    });
     return next;
   };
   return (

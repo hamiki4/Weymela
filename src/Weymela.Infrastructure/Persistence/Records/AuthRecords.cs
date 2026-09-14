@@ -55,7 +55,7 @@ public sealed class DeviceSessionRecord
     public Guid IdentityBindingId { get; init; }
     public long IdentityVersion { get; set; }
     public Guid AuthorizedDeviceId { get; init; }
-    public string SessionIdentifierHash { get; init; } = "";
+    public string SessionIdentifierHash { get; set; } = "";
     public DateTime CreatedAtUtc { get; init; }
     public DateTime ExpiresAtUtc { get; init; }
     public DateTime LastActivityAtUtc { get; set; }

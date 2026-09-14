@@ -3,12 +3,13 @@ import {
   startTransition,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { post, request } from "../api/client";
-import type { DeviceEnrollmentStatus, Role, SessionProfile, SessionUser } from "../api/types";
+import type { DeviceAccessStatus, DeviceEnrollmentStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
 export const roleHome: Record<Role, string> = {
@@ -23,8 +24,10 @@ interface SessionContextValue {
   user: SessionUser | null;
   loading: boolean;
   deviceEnrollment: DeviceEnrollmentStatus | null;
+  deviceAccess: DeviceAccessStatus | null;
   refresh: () => Promise<void>;
   enrollDevice: (pin: string, confirmPin: string) => Promise<void>;
+  unlockDevice: (pin: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchProfile: (profile: SessionProfile) => Promise<SessionUser>;
 }
@@ -33,10 +36,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [deviceEnrollment, setDeviceEnrollment] = useState<DeviceEnrollmentStatus | null>(null);
+  const [deviceAccess, setDeviceAccess] = useState<DeviceAccessStatus | null>(null);
+  const accessState = useRef<DeviceAccessStatus["state"] | null>(null);
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
     setLoading(true);
     try {
+      const access = await request<DeviceAccessStatus>("/device/access");
+      const previousAccess = accessState.current;
+      accessState.current = access.state;
+      setDeviceAccess(access);
+      if (["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(access.state)
+          && previousAccess !== access.state && typeof BroadcastChannel !== "undefined") {
+        const channel = new BroadcastChannel("weymela-v3-access");
+        channel.postMessage(access.state === "FullAuthenticationRequired" ? "full-authentication-required" : "locked");
+        channel.close();
+      }
+      if (!["Unlocked", "EnrollmentRequired"].includes(access.state)) return;
       const next = await request<SessionUser>("/session");
       let enrollment: DeviceEnrollmentStatus;
       try {
@@ -51,6 +67,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       setUser(null);
       setDeviceEnrollment(null);
+      setDeviceAccess(null);
+      accessState.current = null;
       window.sessionStorage.removeItem("weymela.profile-key");
     } finally {
       setLoading(false);
@@ -59,6 +77,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, []);
+  useEffect(() => {
+    const accessChanged = () => void refresh();
+    window.addEventListener("weymela-device-access", accessChanged);
+    const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("weymela-v3-access");
+    if (channel) channel.onmessage = () => void refresh();
+    return () => {
+      window.removeEventListener("weymela-device-access", accessChanged);
+      channel?.close();
+    };
+  }, []);
+  useEffect(() => {
+    if (deviceAccess?.state !== "Unlocked" || !deviceAccess.idleExpiresAtUtc) return;
+    const delay = Math.max(0, new Date(deviceAccess.idleExpiresAtUtc).getTime() - Date.now());
+    const timer = window.setTimeout(() => void refresh(), Math.min(delay + 50, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [deviceAccess?.state, deviceAccess?.idleExpiresAtUtc]);
   const signOut = async () => {
     try {
       await createFirebaseWebAuthAdapter().signOut();
@@ -68,13 +102,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setDeviceEnrollment(null);
+      setDeviceAccess(null);
+      accessState.current = null;
       window.sessionStorage.removeItem("weymela.profile-key");
+      if (typeof BroadcastChannel !== "undefined") {
+        const channel = new BroadcastChannel("weymela-v3-access");
+        channel.postMessage("signed-out");
+        channel.close();
+      }
     }
   };
   const enrollDevice = async (pin: string, confirmPin: string) => {
     const status = await post<DeviceEnrollmentStatus>("/device/enrollment", { pin, confirmPin });
     if (status.state !== "Enrolled") throw new Error("Secure device setup did not complete.");
     setDeviceEnrollment(status);
+    await refresh();
+  };
+  const unlockDevice = async (pin: string) => {
+    const status = await post<DeviceAccessStatus>("/device/unlock", { pin });
+    accessState.current = status.state;
+    setDeviceAccess(status);
+    await refresh();
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("weymela-v3-access");
+      channel.postMessage("unlocked");
+      channel.close();
+    }
   };
   const switchProfile = async (profile: SessionProfile) => {
     const next = await post<SessionUser>("/session/switch-profile", {
@@ -93,7 +146,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return next;
   };
   return (
-    <Context.Provider value={{ user, loading, deviceEnrollment, refresh, enrollDevice, signOut, switchProfile }}>
+    <Context.Provider value={{ user, loading, deviceEnrollment, deviceAccess, refresh, enrollDevice, unlockDevice, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

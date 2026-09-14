@@ -164,7 +164,7 @@ public sealed class DeviceEnrollmentHttpTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Expired_revoked_and_recovery_required_credentials_fail_closed_without_new_rows()
+    public async Task Strict_access_contract_requires_full_auth_or_recovery_without_enrollment_bypass()
     {
         await using var host = await Host();
         var userId = Guid.NewGuid();
@@ -187,11 +187,18 @@ public sealed class DeviceEnrollmentHttpTests(PostgresFixture fixture)
         {
             using var client = ClientWithCookies(host, authCookie,
                 $"{DeviceCredentialCookie.Name}={fixtureDevice.Credential.Value}");
-            var status = await client.GetFromJsonAsync<JsonObject>("/api/device/enrollment");
-            Assert.Equal(fixtureDevice.State, status!["state"]!.GetValue<string>());
+            var status = await client.GetFromJsonAsync<JsonObject>("/api/device/access");
+            var expectedAccess = fixtureDevice.State == DeviceEnrollmentStates.RecoveryRequired
+                ? DeviceAccessStates.RecoveryRequired
+                : DeviceAccessStates.FullAuthenticationRequired;
+            Assert.Equal(expectedAccess, status!["state"]!.GetValue<string>());
             var reenroll = await client.Post("/api/device/enrollment",
                 new { pin = "12345", confirmPin = "12345" });
-            Assert.Equal(HttpStatusCode.Forbidden, reenroll.StatusCode);
+            Assert.Equal(fixtureDevice.State == DeviceEnrollmentStates.RecoveryRequired
+                ? (HttpStatusCode)423 : HttpStatusCode.Unauthorized, reenroll.StatusCode);
+            Assert.Contains(fixtureDevice.State == DeviceEnrollmentStates.RecoveryRequired
+                ? "PinRecoveryRequired" : "FullAuthenticationRequired",
+                await reenroll.Content.ReadAsStringAsync(), StringComparison.Ordinal);
             Assert.False(reenroll.Headers.Contains("Set-Cookie"));
         }
         await using var verify = host.Database.Open();

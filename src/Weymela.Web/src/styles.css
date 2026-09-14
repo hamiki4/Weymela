@@ -1438,6 +1438,28 @@ td .button {
 .pin-setup-card form { margin-top: 24px; }
 .pin-setup-card fieldset { display: grid; gap: 16px; }
 .pin-setup-card .button { width: 100%; margin-top: 4px; }
+.lock-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--surface-soft, #f4f7f5);
+}
+.lock-card {
+  width: min(100%, 440px);
+  padding: clamp(24px, 5vw, 40px);
+  border-radius: 24px;
+  background: var(--surface, #fff);
+  box-shadow: 0 18px 48px rgba(20, 45, 34, .12);
+}
+.lock-card .brand { margin-bottom: 32px; }
+.lock-card h1 { margin: 6px 0 10px; }
+.lock-card form { margin-top: 24px; }
+.lock-card fieldset { display: grid; gap: 16px; }
+.lock-card .button { width: 100%; }
+.lock-actions { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; }
+.text-button { border: 0; background: transparent; color: var(--ink, #17372a); text-decoration: underline; padding: 10px 0; cursor: pointer; }
+.text-button:hover { color: var(--ink, #17372a); }
 .auth-methods {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

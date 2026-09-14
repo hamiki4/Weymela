@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
+    public retryAfterSeconds?: number | null,
   ) {
     super(message);
   }
@@ -27,7 +29,7 @@ export async function request<T>(
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new ApiError(
+    const apiError = new ApiError(
       response.status,
       error.message ??
         (error.code === "ProfileContextChanged"
@@ -37,7 +39,18 @@ export async function request<T>(
           : response.status === 403
             ? "You do not have access to this workspace."
             : "We could not complete that request. Please try again."),
+      error.code,
+      error.retryAfterSeconds,
     );
+    if (typeof window !== "undefined" && ["SessionLocked", "PinCooldown", "PinRecoveryRequired", "FullAuthenticationRequired"].includes(error.code)) {
+      window.dispatchEvent(new CustomEvent("weymela-device-access", { detail: { state: error.state ?? error.code } }));
+      if (typeof BroadcastChannel !== "undefined") {
+        const channel = new BroadcastChannel("weymela-v3-access");
+        channel.postMessage(error.code === "FullAuthenticationRequired" ? "full-authentication-required" : "locked");
+        channel.close();
+      }
+    }
+    throw apiError;
   }
   return response.status === 204
     ? (undefined as T)
@@ -50,7 +63,7 @@ export function post<T = { id: string }>(
 ): Promise<T> {
   return request<T>(path, {
     method: "POST",
-    headers: { "Idempotency-Key": key },
+    headers: { "Idempotency-Key": key, "X-Weymela-Activity": "1" },
     body: data === undefined ? undefined : JSON.stringify(data),
   });
 }

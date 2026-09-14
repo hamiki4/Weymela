@@ -376,6 +376,54 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
 });
 
+test("server idle lock requires the authorized-device PIN and propagates across tabs", async ({ page, context }) => {
+  page.setDefaultTimeout(8000);
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+  const second = await context.newPage();
+  await open(page, "/customer/offers");
+  await open(second, "/customer/offers");
+
+  const idled = await context.request.post("/__test/device-session/idle");
+  expect(idled.status()).toBe(204);
+  const direct = await context.request.get("/api/customer/offers");
+  expect(direct.status()).toBe(423);
+  await expect(direct.json()).resolves.toMatchObject({ code: "SessionLocked" });
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
+  await expect(second.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
+  for (const width of [375, 390, 393, 430, 768, 1440]) {
+    await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+    await layout(page);
+  }
+
+  const session = await context.request.get("/api/session");
+  expect(session.status()).toBe(423);
+  const switchAttempt = await context.request.post("/api/session/switch-profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `locked-switch-${account.suffix}` },
+    data: { role: "Customer", subjectId: "00000000-0000-0000-0000-000000000001", businessId: null },
+  });
+  expect(switchAttempt.status()).toBe(423);
+
+  await page.getByLabel("5-digit PIN", { exact: true }).fill("99999");
+  const rejected = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/device/unlock");
+  await page.getByRole("button", { name: "Unlock", exact: true }).click();
+  expect((await rejected).status()).toBe(401);
+  await expect(page.getByRole("alert")).toContainText("incorrect");
+
+  await page.getByLabel("5-digit PIN", { exact: true }).fill("01234");
+  const unlocked = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/device/unlock");
+  await page.getByRole("button", { name: "Unlock", exact: true }).click();
+  expect((await unlocked).status()).toBe(200);
+  await expect(page).toHaveURL(/\/customer\/offers/);
+  await expect(page.getByRole("heading", { name: /Offers/ })).toBeVisible();
+  await expect(second.getByRole("heading", { name: /Offers/ })).toBeVisible();
+  await second.close();
+});
+
 test("customer-to-creator-enrollment", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context);

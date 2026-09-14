@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Weymela.Application;
+using Weymela.Application.Operations;
 using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Persistence.Outbox;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
 
 namespace Weymela.Infrastructure.Persistence;
 
@@ -36,6 +39,10 @@ public static class ServiceRegistration
         services.AddScoped<VerifiedViewService>();
         services.AddScoped<FinancialQueries>();
         services.AddScoped<IAdminFinancialQueries>(sp => sp.GetRequiredService<FinancialQueries>());
+        services.AddScoped<EmailAuthService>();
+        services.AddScoped<RoleEnrollmentService>();
+        services.TryAddSingleton<IEmailCodeDelivery, DisabledEmailCodeDelivery>();
+        services.TryAddSingleton<IFirebaseCustomTokenIssuer, DisabledFirebaseCustomTokenIssuer>();
         // Host must provide IVerifiedViewProvider and IPublicIdentityDirectory.
         // No live provider, permissive identity stub or external connection is registered here.
         return services;

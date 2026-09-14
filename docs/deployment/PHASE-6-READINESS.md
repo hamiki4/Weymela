@@ -68,7 +68,7 @@ Automated synthetic-camera frames exercise the real decoder and real checkout; c
 ## Deferred integrations / owner decisions
 
 1. Authorize exact new V3 Pilot hosts, database, network and service budgets without modifying existing services.
-2. Approve Firebase client sign-in adapter wiring, trusted identity/account provisioning and local-vs-Firebase-global revocation policy. The server verifier is tested, but no live sign-in or live Firebase project configuration was performed.
+2. Supply protected Web public configuration, email delivery and custom-token signing adapters, approve trusted identity/account provisioning and local-vs-Firebase-global revocation policy. The server verifier and email-code Web adapter are tested, but no live sign-in, user provisioning or Firebase project mutation was performed.
 3. Publish legally reviewed current documents and deliver their exact text/hash through an approved acceptance presentation; no new live user is auto-accepted. No two-year restriction is hard-coded.
 4. Decide whether manual deposit approval is enabled and who verifies external receipts. Approval API uses the existing ledger; bank/payment provider automation remains disabled.
 5. Approve and implement live social adapter credentials/capabilities/evidence provenance before any real verified reward. Test metrics are Development-only. Push is optional and disabled; core in-app delivery is durable.

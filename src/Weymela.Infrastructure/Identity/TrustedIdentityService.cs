@@ -7,30 +7,89 @@ using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Infrastructure.Identity;
 
-public sealed record TrustedWorkspaceIdentity(Actor Actor, string DisplayName, string PublicId, Guid BindingId, long BindingVersion, DateTime AuthenticatedAtUtc, DateTime ExpiresAtUtc);
+public sealed record TrustedWorkspaceProfile(string Key, Actor Actor, string DisplayName, string PublicId, bool CanCheckout);
+public sealed class ProfileSelectionRequiredException(IReadOnlyList<TrustedWorkspaceProfile> profiles)
+    : Exception("An approved profile must be selected before opening a workspace.")
+{
+    public IReadOnlyList<TrustedWorkspaceProfile> Profiles { get; } = profiles;
+}
+public sealed record ProfileSelection(ActorRole Role, Guid SubjectId, Guid? BusinessId);
+public sealed record TrustedWorkspaceIdentity(Actor Actor, string DisplayName, string PublicId, Guid BindingId, long BindingVersion,
+    DateTime AuthenticatedAtUtc, DateTime ExpiresAtUtc, IReadOnlyList<TrustedWorkspaceProfile> Profiles);
 public sealed class TrustedIdentityService(WeymelaDbContext db, IIdentityTokenVerifier verifier, IWorkspaceDirectory directory)
 {
-    public async Task<TrustedWorkspaceIdentity> SignInAsync(string sensitiveIdToken, CancellationToken ct)
+    public Task<TrustedWorkspaceIdentity> SignInAsync(string sensitiveIdToken, CancellationToken ct)
+        => SignInAsync(sensitiveIdToken, null, ct);
+
+    public async Task<TrustedWorkspaceIdentity> SignInAsync(string sensitiveIdToken, ProfileSelection? selection, CancellationToken ct)
     {
         var verified = await verifier.VerifyAsync(sensitiveIdToken, ct);
         var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.Provider == verified.Provider
             && x.ProjectId == verified.ProjectId && x.ExternalSubject == verified.Subject && x.IsActive, ct);
         if (binding is null || verified.AuthenticatedAtUtc < binding.ValidAfterUtc) throw Denied();
-        var memberships = await db.CommercePermissions.AsNoTracking().Where(x => x.UserId == binding.UserId && x.IsActive).Take(2).ToListAsync(ct);
-        // Multiple memberships need an explicitly designed server-side workspace switch, not a client role claim.
-        if (memberships.Count != 1) throw Denied();
-        var p = memberships[0];
-        var actor = ActorFrom(p);
-        var name = "Weymela Admin"; var publicId = "Admin";
-        switch (p.Role)
+        var profiles = await ProfilesForUserAsync(binding.UserId, ct);
+        // A verified account may exist before its first approved commerce profile.
+        // Give it a restricted onboarding context; all commerce policies still require
+        // an active CommercePermission and therefore cannot be entered with this actor.
+        if (profiles.Count == 0)
         {
-            case ActorRole.Business: var b = await directory.BusinessCardAsync(p.SubjectId, ct); name = b.DisplayName; publicId = (await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == p.SubjectId && x.Role == p.Role, ct)).PublicId; break;
-            case ActorRole.Creator: var c = await directory.CreatorCardAsync(p.SubjectId, ct); name = c.DisplayName; publicId = c.PublicId; break;
-            case ActorRole.Customer: var u = await directory.CustomerCardAsync(p.SubjectId, ct); name = u.DisplayName; publicId = u.PublicId; break;
-            case ActorRole.Cashier: name = "Cashier"; publicId = "Checkout"; break;
+            if (selection is not null) throw Denied();
+            return new(new Actor(binding.UserId, ActorRole.Customer, CustomerId: Guid.Empty),
+                "Account setup", "", binding.Id, binding.Version, verified.AuthenticatedAtUtc, verified.ExpiresAtUtc, profiles);
         }
-        return new(actor, name, publicId, binding.Id, binding.Version, verified.AuthenticatedAtUtc, verified.ExpiresAtUtc);
+        var selected = selection is null
+            ? profiles.Count == 1 ? profiles[0] : throw new ProfileSelectionRequiredException(profiles)
+            : profiles.SingleOrDefault(x => x.Actor.Role == selection.Role && SubjectId(x.Actor) == selection.SubjectId
+                && x.Actor.BusinessId == selection.BusinessId);
+        if (selected is null) throw Denied();
+        return new(selected.Actor, selected.DisplayName, selected.PublicId, binding.Id, binding.Version,
+            verified.AuthenticatedAtUtc, verified.ExpiresAtUtc, profiles);
     }
+
+    public async Task<IReadOnlyList<TrustedWorkspaceProfile>> ProfilesForUserAsync(Guid userId, CancellationToken ct)
+    {
+        var memberships = await db.CommercePermissions.AsNoTracking().Where(x => x.UserId == userId && x.IsActive)
+            .OrderBy(x => x.Role).ThenBy(x => x.SubjectId).ToListAsync(ct);
+        var profiles = new List<TrustedWorkspaceProfile>(memberships.Count);
+        foreach (var membership in memberships)
+        {
+            var actor = ActorFrom(membership);
+            var name = "Weymela Admin"; var publicId = "Admin";
+            switch (membership.Role)
+            {
+                case ActorRole.Business:
+                    var b = await directory.BusinessCardAsync(membership.SubjectId, ct);
+                    name = b.DisplayName;
+                    publicId = (await db.PublicWorkspaceProfiles.AsNoTracking().SingleAsync(x => x.SubjectId == membership.SubjectId && x.Role == membership.Role, ct)).PublicId;
+                    break;
+                case ActorRole.Creator:
+                    var c = await directory.CreatorCardAsync(membership.SubjectId, ct); name = c.DisplayName; publicId = c.PublicId; break;
+                case ActorRole.Customer:
+                    var u = await directory.CustomerCardAsync(membership.SubjectId, ct); name = u.DisplayName; publicId = u.PublicId; break;
+                case ActorRole.Cashier: name = "Cashier"; publicId = "Checkout"; break;
+            }
+            profiles.Add(new(WorkspaceProfileKey(actor), actor, name, publicId, membership.CanCheckout));
+        }
+        return profiles;
+    }
+
+    public async Task<TrustedWorkspaceIdentity> SelectAsync(Guid userId, Guid bindingId, long bindingVersion,
+        ProfileSelection selection, DateTime authenticatedAtUtc, DateTime expiresAtUtc, CancellationToken ct)
+    {
+        var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == bindingId && x.UserId == userId
+            && x.Version == bindingVersion && x.IsActive && x.ValidAfterUtc <= authenticatedAtUtc, ct);
+        if (binding is null) throw Denied();
+        var profiles = await ProfilesForUserAsync(userId, ct);
+        var selected = profiles.SingleOrDefault(x => x.Actor.Role == selection.Role && SubjectId(x.Actor) == selection.SubjectId
+            && x.Actor.BusinessId == selection.BusinessId) ?? throw Denied();
+        return new(selected.Actor, selected.DisplayName, selected.PublicId, binding.Id, binding.Version,
+            authenticatedAtUtc, expiresAtUtc, profiles);
+    }
+
+    public static string WorkspaceProfileKey(Actor actor) => WorkspaceProfileKey(actor.Role, SubjectId(actor), actor.BusinessId);
+    public static string WorkspaceProfileKey(ActorRole role, Guid subjectId, Guid? businessId)
+        => $"{role}:{subjectId:D}:{businessId?.ToString("D") ?? "-"}";
+
     public static Actor ActorFrom(CommercePermission permission)
     {
         if (permission.Role == ActorRole.Business && permission.BusinessId != permission.SubjectId
@@ -39,6 +98,13 @@ public sealed class TrustedIdentityService(WeymelaDbContext db, IIdentityTokenVe
             permission.Role == ActorRole.Business ? permission.SubjectId : permission.Role == ActorRole.Cashier ? permission.BusinessId : null,
             permission.Role == ActorRole.Creator ? permission.SubjectId : null, permission.Role == ActorRole.Customer ? permission.SubjectId : null);
     }
+    private static Guid SubjectId(Actor actor) => actor.Role switch
+    {
+        ActorRole.Business => actor.BusinessId ?? Guid.Empty,
+        ActorRole.Creator => actor.CreatorId ?? Guid.Empty,
+        ActorRole.Customer => actor.CustomerId ?? Guid.Empty,
+        _ => actor.UserId
+    };
     private static ApplicationFailure Denied() => new(FailureKind.Forbidden, "No authorized active workspace is available for this identity.");
 }
 

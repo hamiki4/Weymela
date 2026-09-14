@@ -37,7 +37,7 @@ Visual inspection included375px Business wallet,390px Creator inbox,1366px inbox
 
 | Area | Accepted source behavior |
 |---|---|
-| Authentication | Firebase-compatible signed token verifier with test keys; exact project/issuer/audience/recent authentication; trusted DB roles; encrypted environment-isolated cookie keyring; live wiring/provisioning deferred |
+| Authentication | Firebase-compatible signed token verifier with test keys; exact project/issuer/audience/recent authentication; trusted DB roles; encrypted environment-isolated cookie keyring; Web email-code/custom-token adapter implemented, live delivery/signing/provisioning deferred |
 | Authorization | Explicit route inventory, other-role denial, other-Business/Creator/Customer IDOR, Cashier reassignment and checkout-permission removal; no payload role assignment |
 | Privacy | Role-specific DTOs, no private marketplace contacts or unnecessary cross-role finances; server-created safe notification routes |
 | Inputs / rate limits | Bounded JSON including unknown-length requests, unsupported body rejection, positive/precision constraints, IDs/strings/dates; endpoint-specific429 and Retry-After |

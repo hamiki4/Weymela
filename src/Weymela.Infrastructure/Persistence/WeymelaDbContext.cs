@@ -41,6 +41,10 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<DepositRequest> DepositRequests => Set<DepositRequest>();
     public DbSet<InAppNotification> InAppNotifications => Set<InAppNotification>();
     public DbSet<WorkerCheckpoint> WorkerCheckpoints => Set<WorkerCheckpoint>();
+    public DbSet<AuthIdentifierRecord> AuthIdentifiers => Set<AuthIdentifierRecord>();
+    public DbSet<EmailAuthChallengeRecord> EmailAuthChallenges => Set<EmailAuthChallengeRecord>();
+    public DbSet<AuthorizedDeviceRecord> AuthorizedDevices => Set<AuthorizedDeviceRecord>();
+    public DbSet<RoleEnrollmentRecord> RoleEnrollments => Set<RoleEnrollmentRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {

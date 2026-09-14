@@ -42,7 +42,7 @@ public static class ApiHost
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());
         if(development)
         {
-            builder.Services.AddSingleton<DevelopmentDirectory>();builder.Services.AddSingleton<IWorkspaceDirectory>(sp=>sp.GetRequiredService<DevelopmentDirectory>());
+            builder.Services.AddSingleton<DevelopmentDirectory>();builder.Services.TryAddSingleton<IWorkspaceDirectory>(sp=>sp.GetRequiredService<DevelopmentDirectory>());
             builder.Services.AddSingleton<DevelopmentViewProvider>();builder.Services.AddSingleton<IVerifiedViewProvider>(sp=>sp.GetRequiredService<DevelopmentViewProvider>());
         }
         else
@@ -52,23 +52,23 @@ public static class ApiHost
         builder.Services.AddScoped<IPublicIdentityDirectory>(sp=>sp.GetRequiredService<IWorkspaceDirectory>());
         LiveAuthentication.Add(builder.Services,options);
         EndpointSecurity.AddLimits(builder.Services,options);
-        builder.Services.AddCors(o=>o.AddPolicy("V3Origins",p=>{if(options.AllowedOrigins.Length>0)p.WithOrigins(options.AllowedOrigins).WithMethods("GET","POST","OPTIONS").WithHeaders("Content-Type","X-Weymela-Request","Idempotency-Key","X-Correlation-ID").WithExposedHeaders("Retry-After","X-Correlation-ID").AllowCredentials();}));
+        builder.Services.AddCors(o=>o.AddPolicy("V3Origins",p=>{if(options.AllowedOrigins.Length>0)p.WithOrigins(options.AllowedOrigins).WithMethods("GET","POST","OPTIONS").WithHeaders("Content-Type","X-Weymela-Request","X-Weymela-Profile","Idempotency-Key","X-Correlation-ID").WithExposedHeaders("Retry-After","X-Correlation-ID").AllowCredentials();}));
         if(options.TrustedProxies.Length>0)builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o=>
         {o.ForwardedHeaders=Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor|Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;o.ForwardLimit=1;o.KnownIPNetworks.Clear();o.KnownProxies.Clear();foreach(var proxy in options.TrustedProxies)o.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));});
         builder.Services.AddAuthorization(o=>
         {
             foreach(var role in Enum.GetValues<ActorRole>())o.AddPolicy(role.ToString(),p=>p.RequireAuthenticatedUser().RequireRole(role.ToString()).AddRequirements(new ActiveWorkspaceRequirement()));
             o.AddPolicy("Workspace",p=>p.RequireAuthenticatedUser().AddRequirements(new ActiveWorkspaceRequirement()));
+            o.AddPolicy("VerifiedAccount", p => p.RequireAuthenticatedUser());
             o.AddPolicy("Checkout",p=>p.RequireAuthenticatedUser().RequireRole(ActorRole.Business.ToString(),ActorRole.Cashier.ToString()).AddRequirements(new ActiveWorkspaceRequirement(checkout:true)));
         });
         builder.Services.AddScoped<IAuthorizationHandler,ActiveWorkspaceHandler>();
         var app=builder.Build();
         if(options.TrustedProxies.Length>0)app.UseForwardedHeaders();
         app.UseRouting();
-        app.UseMiddleware<ApiSafetyMiddleware>();
-        app.UseCors("V3Origins");app.UseAuthentication();app.UseRateLimiter();app.UseAuthorization();
+        app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapOnboardingEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

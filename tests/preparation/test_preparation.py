@@ -35,10 +35,10 @@ class RepositoryGateTests(unittest.TestCase):
             (pathlib.Path(directory) / 'example.dump').write_bytes(b'not a real backup')
             self.assertTrue(safety.inventory(pathlib.Path(directory))['errors'])
 
-    def test_source_migration_order_is_exactly_approved_phase6(self):
+    def test_source_migration_order_is_exactly_approved_step8b(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -59,6 +59,9 @@ class RepositoryGateTests(unittest.TestCase):
         headers = (ROOT / 'docker/web/security-headers.conf').read_text()
         self.assertIn('camera=(self), microphone=(), geolocation=(), payment=(), usb=()', headers)
         self.assertIn("frame-ancestors 'none'", headers)
+        self.assertIn('https://identitytoolkit.googleapis.com', headers)
+        self.assertIn('https://securetoken.googleapis.com', headers)
+        self.assertNotIn('recaptcha', headers.lower())
         config = (ROOT / 'docker/web/nginx.conf').read_text()
         self.assertIn('proxy_cache_bypass 1', config)
         self.assertIn("add_header Cache-Control 'no-cache'", config)

@@ -9,6 +9,11 @@ namespace Weymela.Api.Endpoints;
 internal static class DeviceAccessEndpoints
 {
     private sealed record PinUnlockInput(string Pin);
+    private sealed record PinRecoveryInput(
+        string Identifier,
+        string Code,
+        string NewPin,
+        string ConfirmPin);
 
     public static void MapDeviceAccessEndpoints(this WebApplication app, bool development)
     {
@@ -66,6 +71,63 @@ internal static class DeviceAccessEndpoints
                 result.Credential!.Value, DeviceSessionCredentialCookie.Options(development,
                     result.Session!));
             return Results.Ok(result.Status);
+        });
+
+        group.MapPost("/pin-recovery/complete", async (PinRecoveryInput input,
+            HttpContext context, DeviceAccessService access,
+            DevicePinRecoveryService recovery, CancellationToken ct) =>
+        {
+            if (!DeviceSessionPrincipal.TryGet(context.User, out var identity))
+                return Results.Json(new { code = "FullAuthenticationRequired", message = "Complete account authentication to continue." }, statusCode: 401);
+
+            DeviceAccessStatus accessStatus;
+            try
+            {
+                accessStatus = await access.InspectAsync(identity,
+                    context.Request.Cookies[DeviceCredentialCookie.Name],
+                    context.Request.Cookies[DeviceSessionCredentialCookie.Name(development)], ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                return Results.Json(new { code = "DeviceAccessUnavailable", message = "Secure device access is temporarily unavailable." }, statusCode: 503);
+            }
+
+            if (accessStatus.State is DeviceAccessStates.EnrollmentRequired
+                or DeviceAccessStates.FullAuthenticationRequired)
+                return await StatusResultAsync(context, accessStatus);
+            if (accessStatus.State is not (DeviceAccessStates.Unlocked
+                or DeviceAccessStates.Locked
+                or DeviceAccessStates.Cooldown
+                or DeviceAccessStates.RecoveryRequired))
+                return Results.Json(new { code = "DeviceAccessUnavailable", message = "Secure device access is temporarily unavailable." }, statusCode: 503);
+
+            DevicePinRecoveryResult result;
+            try
+            {
+                result = await recovery.CompleteAsync(new DevicePinRecoveryRequest(
+                    identity,
+                    context.Request.Cookies[DeviceCredentialCookie.Name] ?? string.Empty,
+                    input.Identifier,
+                    input.Code,
+                    input.NewPin,
+                    input.ConfirmPin,
+                    EndpointSupport.Key(context)), ct);
+            }
+            catch (DevicePinRecoveryUnavailableException)
+            {
+                return Results.Json(new { code = "PinRecoveryUnavailable", message = "PIN recovery is temporarily unavailable." }, statusCode: 503);
+            }
+
+            context.Response.Cookies.Append(DeviceCredentialCookie.Name,
+                result.DeviceCredential.Value,
+                DeviceCredentialCookie.Options(development,
+                    DeviceAccessPolicy.DeviceExpiresAt(result.Session.CreatedAtUtc)));
+            context.Response.Cookies.Append(DeviceSessionCredentialCookie.Name(development),
+                result.DeviceSessionCredential.Value,
+                DeviceSessionCredentialCookie.Options(development, result.Session));
+            return Results.Ok(new DeviceAccessStatus(DeviceAccessStates.Unlocked,
+                DeviceAccessPolicy.IdleDeadline(result.Session.LastActivityAtUtc),
+                result.Session.ExpiresAtUtc, null));
         });
     }
 

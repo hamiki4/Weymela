@@ -160,6 +160,23 @@ public sealed class DevicePinRecoveryService(
                 request.Identity.UserId, null, null, null, Guid.NewGuid(), now,
                 $"request={request.IdempotencyKey};replacementDevice={replacementDevice.Id:D};replacementSession={replacementSession.Id:D};revokedDevices={devices.Count};revokedSessions={sessions.Count}"));
 
+            var notificationRoles = await db.CommercePermissions.AsNoTracking()
+                .Where(x => x.UserId == request.Identity.UserId && x.IsActive)
+                .Select(x => x.Role).Distinct().ToListAsync(ct);
+            foreach (var role in notificationRoles)
+                db.InAppNotifications.Add(new InAppNotification
+                {
+                    UserId = request.Identity.UserId,
+                    Role = role,
+                    SourceKey = $"DevicePinRecovered:{replacementDevice.Id:D}",
+                    EventType = "DevicePinRecovered",
+                    Title = "PIN and device security reset",
+                    Message = "Your Weymela PIN was changed and prior authorized devices were signed out.",
+                    Route = "/notifications",
+                    CreatedAtUtc = now,
+                    PushState = PushDeliveryState.NotRequested
+                });
+
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return new DevicePinRecoveryResult(replacementDevice.Id,

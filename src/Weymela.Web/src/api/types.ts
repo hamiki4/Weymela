@@ -48,6 +48,11 @@ export interface DeviceAccessStatus {
   sessionExpiresAtUtc: string | null;
   retryAfterSeconds: number | null;
 }
+export interface EmailCodeStartStatus {
+  accepted: true;
+  expiresAtUtc: string;
+  resendAfterSeconds: number;
+}
 export interface BusinessCard {
   id: string;
   displayName: string;

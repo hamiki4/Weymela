@@ -187,14 +187,6 @@ public sealed class EmailAuthService(
         return result;
     }
 
-    public Task ResetPinAsync(string email, string code, string newPin, CancellationToken ct)
-    {
-        // A browser cannot safely implement native-style device PIN reset yet. Never
-        // report success or consume a recovery code until a reviewed device credential
-        // provider is configured.
-        throw new AuthChallengeUnavailableException("Secure device PIN reset is not configured.");
-    }
-
     private void EnsureConfigured()
     {
         if (!delivery.Enabled || !tokenIssuer.Enabled || string.IsNullOrWhiteSpace(options.AuthCodeHashKey))

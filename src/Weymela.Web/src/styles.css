@@ -1458,6 +1458,8 @@ td .button {
 .lock-card fieldset { display: grid; gap: 16px; }
 .lock-card .button { width: 100%; }
 .lock-actions { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; }
+.pin-recovery h1 { margin: 6px 0 10px; }
+.pin-recovery > .text-button { margin-top: 10px; }
 .text-button { border: 0; background: transparent; color: var(--ink, #17372a); text-decoration: underline; padding: 10px 0; cursor: pointer; }
 .text-button:hover { color: var(--ink, #17372a); }
 .auth-methods {

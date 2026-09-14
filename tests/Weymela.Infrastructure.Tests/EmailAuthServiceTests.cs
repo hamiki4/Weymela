@@ -136,7 +136,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Recovery_requires_a_registered_verified_email_and_pin_reset_remains_fail_closed()
+    public async Task Recovery_initiation_requires_a_registered_verified_email()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = Guid.NewGuid(), Kind = "Email", IdentifierHash = HashIdentifier("owner@example.com"), IsVerified = false, CreatedAtUtc = DateTime.UtcNow });
@@ -144,7 +144,6 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var delivery = new TestDelivery(); var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System);
         var result = await service.StartAsync("owner@example.com", null, EmailCodePurpose.PinRecovery, default);
         Assert.False(result.Accepted); Assert.Empty(delivery.Codes);
-        await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => service.ResetPinAsync("owner@example.com", "123456", "12345", default));
     }
 
     private sealed class TestDelivery : IEmailCodeDelivery

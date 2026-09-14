@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { post, request } from "../api/client";
-import type { DeviceAccessStatus, DeviceEnrollmentStatus, Role, SessionProfile, SessionUser } from "../api/types";
+import type { DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
 export const roleHome: Record<Role, string> = {
@@ -28,6 +28,8 @@ interface SessionContextValue {
   refresh: () => Promise<void>;
   enrollDevice: (pin: string, confirmPin: string) => Promise<void>;
   unlockDevice: (pin: string) => Promise<void>;
+  startPinRecovery: (identifier: string) => Promise<EmailCodeStartStatus>;
+  completePinRecovery: (identifier: string, code: string, newPin: string, confirmPin: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchProfile: (profile: SessionProfile) => Promise<SessionUser>;
 }
@@ -129,6 +131,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       channel.close();
     }
   };
+  const startPinRecovery = (identifier: string) => request<EmailCodeStartStatus>("/auth/email/start", {
+    method: "POST",
+    body: JSON.stringify({ identifier, phone: null, purpose: "PinRecovery" }),
+  });
+  const completePinRecovery = async (identifier: string, code: string, newPin: string, confirmPin: string) => {
+    const status = await post<DeviceAccessStatus>("/device/pin-recovery/complete", {
+      identifier, code, newPin, confirmPin,
+    });
+    if (status.state !== "Unlocked") throw new Error("Secure PIN recovery did not complete.");
+    accessState.current = status.state;
+    setDeviceAccess(status);
+    await refresh();
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("weymela-v3-access");
+      channel.postMessage("recovery-completed");
+      channel.close();
+    }
+  };
   const switchProfile = async (profile: SessionProfile) => {
     const next = await post<SessionUser>("/session/switch-profile", {
       role: profile.role,
@@ -146,7 +166,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return next;
   };
   return (
-    <Context.Provider value={{ user, loading, deviceEnrollment, deviceAccess, refresh, enrollDevice, unlockDevice, signOut, switchProfile }}>
+    <Context.Provider value={{ user, loading, deviceEnrollment, deviceAccess, refresh, enrollDevice, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

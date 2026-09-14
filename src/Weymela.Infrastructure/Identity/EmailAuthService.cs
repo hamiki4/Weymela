@@ -208,7 +208,7 @@ public sealed class EmailAuthService(
         return normalized;
     }
 
-    private static string NormalizeIdentifier(string value, out AuthIdentifierKind kind)
+    internal static string NormalizeIdentifier(string value, out AuthIdentifierKind kind)
     {
         var trimmed = value.Trim();
         if (trimmed.Contains('@', StringComparison.Ordinal))

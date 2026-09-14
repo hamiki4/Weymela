@@ -124,6 +124,14 @@ public sealed class OpaqueDeviceCredential
         finally { CryptographicOperations.ZeroMemory(actual); CryptographicOperations.ZeroMemory(expected); }
     }
 
+    public static bool TryDigest(string? candidate, out string digest)
+    {
+        digest = "";
+        if (candidate is not { Length: 64 } || candidate.Any(c => !Uri.IsHexDigit(c))) return false;
+        digest = Hash(candidate);
+        return true;
+    }
+
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.ASCII.GetBytes(value)));
 
     public override string ToString() => "[REDACTED DEVICE CREDENTIAL]";

@@ -42,6 +42,8 @@ function sessionServer(switchStatus = 200) {
   let current = sessionFor(profiles[0]);
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (input === "/api/session" && !init?.method) return Response.json(current);
+    if (input === "/api/device/enrollment" && !init?.method)
+      return Response.json({ state: "Enrolled", expiresAtUtc: "2026-10-14T00:00:00Z" });
     if (input === "/api/session/switch-profile" && init?.method === "POST") {
       if (switchStatus !== 200) return Response.json({ message: "Switch rejected." }, { status: switchStatus });
       const requested = JSON.parse(String(init.body)) as SessionProfile;

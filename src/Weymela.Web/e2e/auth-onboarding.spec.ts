@@ -58,7 +58,7 @@ function installRuntimeSignals(page: import("@playwright/test").Page): RuntimeSi
   page.on("requestfailed", request => record(signals.failedRequests, `${request.method()} ${new URL(request.url()).pathname}`));
   page.on("response", response => {
     const url = new URL(response.url());
-    if (url.pathname.startsWith("/api/session") || url.pathname.startsWith("/api/onboarding"))
+    if (url.pathname.startsWith("/api/session") || url.pathname.startsWith("/api/onboarding") || url.pathname.startsWith("/api/device"))
       record(signals.apiResponses, { method: response.request().method(), path: url.pathname, status: response.status() });
   });
   return signals;
@@ -146,6 +146,20 @@ async function establishFirebaseSession(context: Parameters<typeof login>[0], to
   expect(selected.status()).toBe(204);
 }
 
+async function enrollDevice(context: Parameters<typeof login>[0], suffix: string) {
+  const before = await context.request.get("/api/device/enrollment");
+  expect(before.status()).toBe(200);
+  await expect(before.json()).resolves.toMatchObject({ state: "EnrollmentRequired" });
+  const enrolled = await context.request.post("/api/device/enrollment", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `browser-device-${suffix}` },
+    data: { pin: "01234", confirmPin: "01234" },
+  });
+  expect(enrolled.status()).toBe(200);
+  await expect(enrolled.json()).resolves.toMatchObject({ state: "Enrolled" });
+  const after = await context.request.get("/api/device/enrollment");
+  await expect(after.json()).resolves.toMatchObject({ state: "Enrolled" });
+}
+
 async function approveLatest(context: Parameters<typeof login>[0], role: "Customer" | "Creator" | "Business", publicId?: string) {
   await login(context, "admin");
   const roleValue = enrollmentRoles[role];
@@ -166,12 +180,13 @@ type AccountFixture = { suffix: string; email: string; phone: string; token: str
 const enrollmentRoles = { Business: 1, Creator: 2, Customer: 3 } as const;
 const enrollmentStatuses = { Pending: 0, Approved: 1, Rejected: 2 } as const;
 
-async function createVerifiedAccount(context: Parameters<typeof login>[0]): Promise<Omit<AccountFixture, "customerPublicId">> {
+async function createVerifiedAccount(context: Parameters<typeof login>[0], enroll = true): Promise<Omit<AccountFixture, "customerPublicId">> {
   const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
   const email = `browser-${suffix}@example.com`;
   const phone = `+2519${suffix.slice(-8)}`;
   const token = await emailCode(context, email, "Signup", phone);
   await establishFirebaseSession(context, token, "Customer");
+  if (enroll) await enrollDevice(context, suffix);
   return { suffix, email, phone, token };
 }
 
@@ -337,8 +352,21 @@ async function submitProfileFromPage(page: import("@playwright/test").Page, role
 
 test("account-signup-and-customer-activation", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
-  const account = await createVerifiedAccount(context);
+  const account = await createVerifiedAccount(context, false);
   await open(page, "/onboarding");
+  await expect(page).toHaveURL(/\/pin-setup/);
+  await expect(page.getByRole("heading", { name: "Set up your Weymela PIN" })).toBeVisible();
+  for (const width of [375, 390, 393, 430, 768, 1366]) {
+    await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+    await layout(page);
+  }
+  await page.getByLabel("5-digit PIN", { exact: true }).fill("01234");
+  await page.getByLabel("Confirm 5-digit PIN", { exact: true }).fill("01234");
+  const deviceEnrollment = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/device/enrollment", { timeout: 7000 });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect((await deviceEnrollment).status()).toBe(200);
+  await expect(page).toHaveURL(/\/onboarding/);
   await page.getByRole("button", { name: /^Use as Customer/ }).click();
   await page.getByLabel("Display name", { exact: true }).fill(`Customer ${account.suffix}`);
   await page.getByLabel("Public ID", { exact: true }).fill(`CU-${account.suffix}`);
@@ -453,6 +481,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   const phone = `+2519${suffix.slice(-8)}`;
   const token = await runStep(steps, "signup-verify", () => emailCode(context, email, "Signup", phone), 15000);
   await runStep(steps, "firebase-session", () => establishFirebaseSession(context, token, "Customer"), 12000);
+  await runStep(steps, "device-enrollment", () => enrollDevice(context, suffix), 15000);
   await runStep(steps, "onboarding-session", async () => expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Onboarding" }), 12000);
 
   try {

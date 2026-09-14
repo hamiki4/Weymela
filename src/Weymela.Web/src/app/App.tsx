@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { RoleGate, roleHome, useSession } from "./Session";
 import { Shell } from "./Shell";
 import { SignIn } from "./SignIn";
@@ -43,6 +43,7 @@ import {
 import { Checkout } from "../features/commerce/Checkout";
 import { Inbox } from "../features/notifications/Inbox";
 import { Onboarding } from "./Onboarding";
+import { PinSetup } from "./PinSetup";
 
 function Home() {
   const { user, loading } = useSession();
@@ -53,10 +54,21 @@ function Home() {
   );
 }
 export function App() {
+  const session = useSession();
+  const location = useLocation();
+  if (!session.loading && session.user) {
+    const state = session.deviceEnrollment?.state ?? "Unavailable";
+    const recognized = state === "Enrolled" || state === "NotRequired";
+    if (!recognized && location.pathname !== "/pin-setup")
+      return <Navigate to="/pin-setup" replace />;
+    if (recognized && location.pathname === "/pin-setup")
+      return <Navigate to={roleHome[session.user.role]} replace />;
+  }
   return (
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/sign-in" element={<SignIn />} />
+      <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin"]}><Shell /></RoleGate>}>
         <Route path="/notifications" element={<Inbox />} />

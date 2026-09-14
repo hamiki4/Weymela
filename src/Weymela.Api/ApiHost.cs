@@ -37,6 +37,7 @@ public static class ApiHost
         builder.Services.AddWeymelaPersistence(options.ConnectionString);
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
+        builder.Services.AddScoped<DeviceEnrollmentService>();
         builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();
         builder.Services.TryAddSingleton<INotificationPushProvider,DisabledPushProvider>();
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());
@@ -68,7 +69,7 @@ public static class ApiHost
         app.UseRouting();
         app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapOnboardingEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapOnboardingEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

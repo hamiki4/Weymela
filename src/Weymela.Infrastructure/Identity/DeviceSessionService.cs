@@ -31,6 +31,9 @@ public sealed record DeviceSessionSnapshot(
 public sealed record DeviceSessionResolution(DeviceSessionAccessState State, DeviceSessionSnapshot? Session);
 public sealed record CreatedDeviceSession(DeviceSessionSnapshot Session, OpaqueDeviceCredential Credential);
 public sealed record RotatedDeviceSession(DeviceSessionSnapshot Session, OpaqueDeviceCredential Credential);
+public sealed record FullAuthenticationDeviceSession(
+    CreatedDeviceSession? Session,
+    bool ClearStaleCredentials);
 
 /// <summary>
 /// Durable device-session operations only. This service does not authenticate HTTP
@@ -38,6 +41,35 @@ public sealed record RotatedDeviceSession(DeviceSessionSnapshot Session, OpaqueD
 /// </summary>
 public sealed class DeviceSessionService(WeymelaDbContext db, TimeProvider clock)
 {
+    /// <summary>
+    /// Trusted full-authentication hook. Only a revoked or expired credential owned
+    /// by the newly authenticated account is classified for cookie cleanup. Unknown,
+    /// cross-account and recovery-required credentials remain unusable and are not
+    /// converted into device-enrollment eligibility.
+    /// </summary>
+    public async Task<FullAuthenticationDeviceSession> EstablishAfterFullAuthenticationAsync(
+        DeviceSessionIdentity identity,
+        string? rawDeviceCredential,
+        CancellationToken ct = default)
+    {
+        ValidateIdentity(identity);
+        if (!OpaqueDeviceCredential.TryDigest(rawDeviceCredential, out var digest))
+            return new(null, false);
+
+        var now = UtcNow();
+        var device = await db.AuthorizedDevices.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.UserId == identity.UserId && x.CredentialIdHash == digest, ct);
+        if (device is null || device.RequiresRecovery)
+            return new(null, false);
+        if (device.RevokedAtUtc is not null || device.ExpiresAtUtc is null
+            || DeviceAccessPolicy.IsDeviceExpired(device.ExpiresAtUtc.Value, now))
+            return new(null, true);
+        if (string.IsNullOrWhiteSpace(device.PinVerifier))
+            return new(null, false);
+
+        return new(await EstablishAsync(identity, device.Id, ct), false);
+    }
+
     /// <summary>
     /// Trusted full-authentication hook. An absent, unknown, or unusable authorized-device
     /// credential does not create a session and does not disclose device state.

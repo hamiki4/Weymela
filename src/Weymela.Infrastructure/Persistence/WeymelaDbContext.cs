@@ -44,6 +44,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<AuthIdentifierRecord> AuthIdentifiers => Set<AuthIdentifierRecord>();
     public DbSet<EmailAuthChallengeRecord> EmailAuthChallenges => Set<EmailAuthChallengeRecord>();
     public DbSet<AuthorizedDeviceRecord> AuthorizedDevices => Set<AuthorizedDeviceRecord>();
+    public DbSet<DeviceSessionRecord> DeviceSessions => Set<DeviceSessionRecord>();
     public DbSet<RoleEnrollmentRecord> RoleEnrollments => Set<RoleEnrollmentRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)

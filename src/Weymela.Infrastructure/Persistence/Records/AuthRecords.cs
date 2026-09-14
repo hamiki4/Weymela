@@ -41,5 +41,26 @@ public sealed class AuthorizedDeviceRecord
     public DateTime? RevokedAtUtc { get; set; }
     public int FailedAttempts { get; set; }
     public DateTime? LockedUntilUtc { get; set; }
+    public bool RequiresRecovery { get; set; }
+    public long Version { get; set; }
+    public DateTime? ExpiresAtUtc { get; set; }
+    public string? PinVerifier { get; set; }
+}
+
+/// <summary>Server-owned ordinary access state. Never stores a PIN or bearer credential.</summary>
+public sealed class DeviceSessionRecord
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid UserId { get; init; }
+    public Guid IdentityBindingId { get; init; }
+    public long IdentityVersion { get; set; }
+    public Guid AuthorizedDeviceId { get; init; }
+    public string SessionIdentifierHash { get; init; } = "";
+    public DateTime CreatedAtUtc { get; init; }
+    public DateTime ExpiresAtUtc { get; init; }
+    public DateTime LastActivityAtUtc { get; set; }
+    public DateTime? LockedAtUtc { get; set; }
+    public DateTime? RevokedAtUtc { get; set; }
+    public long Generation { get; set; } = 1;
     public long Version { get; set; }
 }

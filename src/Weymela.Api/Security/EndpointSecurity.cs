@@ -13,6 +13,10 @@ public static class EndpointSecurity
     public static string Category(HttpContext c)
     {
         var route = Operation(c);
+        // The access-key-protected development persona endpoint is a deterministic
+        // BrowserHost fixture. Keep it bounded, but do not let fixture setup consume
+        // the production-shaped Firebase/session authentication partition.
+        if (route == "/api/development/session") return "development-fixture";
         // Device enrollment mutates credential state and stays on the strict auth
         // limiter. Its authenticated, privacy-safe status projection is an ordinary
         // account read so normal page loads do not consume sign-in attempt capacity.
@@ -51,8 +55,8 @@ public static class EndpointSecurity
             PartitionedRateLimiter.Create<HttpContext, string>(c =>
             {
                 var category = Category(c);
-                var identity = category == "auth" ? c.Connection.RemoteIpAddress?.ToString() ?? "local" : c.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? c.Connection.RemoteIpAddress?.ToString() ?? "local";
-                var limit = category switch { "auth" => 20, "qr" => 20, "checkout" => 60, "lookup" => 10, "views" => 12, "join" => 10, "deposit" => 10, "payout" => 10, "settings" => 12, "notifications" => 90, "reads" => 240, _ => 60 };
+                var identity = category is "auth" or "development-fixture" ? c.Connection.RemoteIpAddress?.ToString() ?? "local" : c.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? c.Connection.RemoteIpAddress?.ToString() ?? "local";
+                var limit = category switch { "auth" or "development-fixture" => 20, "qr" => 20, "checkout" => 60, "lookup" => 10, "views" => 12, "join" => 10, "deposit" => 10, "payout" => 10, "settings" => 12, "notifications" => 90, "reads" => 240, _ => 60 };
                 return RateLimitPartition.GetFixedWindowLimiter(category + ":" + identity, _ => new() { PermitLimit = limit * config.RateLimitMultiplier, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
             }));
     });

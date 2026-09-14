@@ -29,12 +29,25 @@ public sealed class OperationalHttpSecurityTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/notifications")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/business/deposit-requests")).StatusCode);
     }
-    [Fact] public async Task Auth_sensitive_rate_limit_returns_429_and_retry_after()
+    [Fact] public async Task Development_fixture_rate_limit_is_bounded_without_consuming_firebase_auth_capacity()
     {
         await using var host = await ApiFixture.CreateAsync(fixture); using var client = host.Anonymous();
-        HttpResponseMessage? response = null;
-        for (var i = 0; i < 21; i++) response = await client.PostAsJsonAsync("/api/development/session", new { alias = "admin", accessKey = "incorrect-but-not-secret" });
-        Assert.Equal(HttpStatusCode.TooManyRequests, response!.StatusCode); Assert.True(response.Headers.Contains("Retry-After"));
+        for (var i = 0; i < 20; i++)
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await client.PostAsJsonAsync("/api/development/session", new { alias = "admin", accessKey = "incorrect-but-not-secret" })).StatusCode);
+        var response = await client.PostAsJsonAsync("/api/development/session", new { alias = "admin", accessKey = "incorrect-but-not-secret" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode); Assert.True(response.Headers.Contains("Retry-After"));
+        Assert.NotEqual(HttpStatusCode.TooManyRequests,
+            (await client.PostAsJsonAsync("/api/auth/firebase/session", new { idToken = "invalid-test-token" })).StatusCode);
+    }
+    [Fact] public async Task Firebase_auth_rate_limit_remains_bounded_and_returns_retry_after()
+    {
+        await using var host = await ApiFixture.CreateAsync(fixture); using var client = host.Anonymous();
+        for (var i = 0; i < 20; i++)
+            Assert.NotEqual(HttpStatusCode.TooManyRequests,
+                (await client.PostAsJsonAsync("/api/auth/firebase/session", new { idToken = "invalid-test-token" })).StatusCode);
+        var response = await client.PostAsJsonAsync("/api/auth/firebase/session", new { idToken = "invalid-test-token" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode); Assert.True(response.Headers.Contains("Retry-After"));
     }
     [Fact] public async Task Notification_rate_limit_does_not_block_separate_wallet_reads()
     {

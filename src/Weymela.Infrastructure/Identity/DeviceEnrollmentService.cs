@@ -27,7 +27,8 @@ public sealed class DeviceEnrollmentUnavailableException : Exception
 
 /// <summary>
 /// Initial account-level PIN enrollment only. It does not authenticate a request,
-/// create/renew a protected session, select a profile, unlock, or recover a device.
+/// select a profile, unlock, or recover a device. The trusted HTTP completion hook
+/// may establish a separate DeviceSession after this transaction succeeds.
 /// </summary>
 public sealed class DeviceEnrollmentService(WeymelaDbContext db, RuntimeOptions options, TimeProvider clock)
 {

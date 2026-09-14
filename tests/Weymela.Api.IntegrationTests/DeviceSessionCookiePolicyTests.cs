@@ -26,6 +26,13 @@ public sealed class DeviceSessionCookiePolicyTests
         Assert.Null(production.Domain);
         Assert.Null(production.MaxAge);
         Assert.Equal(new DateTimeOffset(session.ExpiresAtUtc), production.Expires);
+
+        var deletion = DeviceSessionCredentialCookie.DeleteOptions(development: false);
+        Assert.True(deletion.HttpOnly);
+        Assert.True(deletion.Secure);
+        Assert.Equal(SameSiteMode.Strict, deletion.SameSite);
+        Assert.Equal("/", deletion.Path);
+        Assert.Null(deletion.Domain);
     }
 
     [Fact]

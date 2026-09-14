@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Weymela.Api;
+using Weymela.Api.Auth;
 using Weymela.Api.Endpoints;
 using Weymela.Application;
 using Weymela.Application.Operations;
@@ -87,7 +88,11 @@ public sealed class DeviceEnrollmentHttpTests(PostgresFixture fixture)
         var safeBody = await enrolled.Content.ReadFromJsonAsync<JsonObject>();
         Assert.Equal(DeviceEnrollmentStates.Enrolled, safeBody!["state"]!.GetValue<string>());
         Assert.DoesNotContain(rawPin, safeBody.ToJsonString(), StringComparison.Ordinal);
-        var setCookie = enrolled.Headers.GetValues("Set-Cookie").Single();
+        var setCookies = enrolled.Headers.GetValues("Set-Cookie").ToArray();
+        Assert.Equal(2, setCookies.Length);
+        var setCookie = Assert.Single(setCookies, value => value.StartsWith(DeviceCredentialCookie.Name + "=", StringComparison.Ordinal));
+        var sessionSetCookie = Assert.Single(setCookies, value => value.StartsWith(
+            DeviceSessionCredentialCookie.DevelopmentName + "=", StringComparison.Ordinal));
         var lower = setCookie.ToLowerInvariant();
         Assert.Contains("httponly", lower);
         Assert.Contains("samesite=strict", lower);
@@ -96,7 +101,10 @@ public sealed class DeviceEnrollmentHttpTests(PostgresFixture fixture)
         Assert.DoesNotContain("secure", lower); // Development host only.
         var deviceCookie = setCookie.Split(';')[0];
         var rawCredential = deviceCookie[(deviceCookie.IndexOf('=') + 1)..];
+        var deviceSessionCookie = sessionSetCookie.Split(';')[0];
+        var rawSessionCredential = deviceSessionCookie[(deviceSessionCookie.IndexOf('=') + 1)..];
         Assert.Equal(64, rawCredential.Length);
+        Assert.Equal(64, rawSessionCredential.Length);
 
         await using (var db = host.Database.Open())
         {
@@ -109,7 +117,17 @@ public sealed class DeviceEnrollmentHttpTests(PostgresFixture fixture)
             Assert.Equal(0, device.FailedAttempts);
             Assert.Null(device.LockedUntilUtc);
             Assert.False(device.RequiresRecovery);
-            Assert.Empty(db.DeviceSessions);
+            var binding = await db.IdentityBindings.SingleAsync(x => x.UserId == userId);
+            var session = await db.DeviceSessions.SingleAsync(x => x.UserId == userId);
+            Assert.Equal(device.Id, session.AuthorizedDeviceId);
+            Assert.Equal(binding.Id, session.IdentityBindingId);
+            Assert.Equal(binding.Version, session.IdentityVersion);
+            Assert.Equal(session.CreatedAtUtc, session.LastActivityAtUtc);
+            Assert.Equal(session.CreatedAtUtc.AddHours(1), session.ExpiresAtUtc);
+            Assert.Null(session.LockedAtUtc);
+            Assert.Null(session.RevokedAtUtc);
+            Assert.True(OpaqueDeviceCredential.Matches(rawSessionCredential, session.SessionIdentifierHash));
+            Assert.DoesNotContain(rawSessionCredential, session.SessionIdentifierHash, StringComparison.Ordinal);
             var audit = Assert.Single(db.AuditEvents.Where(x => x.ActorId == userId && x.EventType == "AuthorizedDeviceEnrolled"));
             var idempotency = Assert.Single(db.IdempotencyRecords.Where(x => x.ActorId == userId && x.OperationType == "InitialDevicePinEnrollment"));
             Assert.DoesNotContain(rawPin, audit.Detail, StringComparison.Ordinal);
@@ -119,14 +137,18 @@ public sealed class DeviceEnrollmentHttpTests(PostgresFixture fixture)
         }
 
         client.DefaultRequestHeaders.Remove("Cookie");
-        client.DefaultRequestHeaders.Add("Cookie", $"{authCookie}; {deviceCookie}");
+        client.DefaultRequestHeaders.Add("Cookie", $"{authCookie}; {deviceCookie}; {deviceSessionCookie}");
         Assert.Equal(DeviceEnrollmentStates.Enrolled,
             (await client.GetFromJsonAsync<JsonObject>("/api/device/enrollment"))!["state"]!.GetValue<string>());
         var replay = await client.Post("/api/device/enrollment",
             new { pin = rawPin, confirmPin = rawPin }, "another-safe-browser-request");
         Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
         Assert.False(replay.Headers.Contains("Set-Cookie"));
-        await using (var db = host.Database.Open()) Assert.Single(db.AuthorizedDevices.Where(x => x.UserId == userId));
+        await using (var db = host.Database.Open())
+        {
+            Assert.Single(db.AuthorizedDevices.Where(x => x.UserId == userId));
+            Assert.Single(db.DeviceSessions.Where(x => x.UserId == userId && x.RevokedAtUtc == null));
+        }
 
         using var replayWithoutDeviceCredential = ClientWithCookies(host, authCookie);
         var ambiguousReplay = await replayWithoutDeviceCredential.Post("/api/device/enrollment",

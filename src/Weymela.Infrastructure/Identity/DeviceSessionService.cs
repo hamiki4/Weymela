@@ -1,4 +1,6 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Weymela.Application;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -36,6 +38,73 @@ public sealed record RotatedDeviceSession(DeviceSessionSnapshot Session, OpaqueD
 /// </summary>
 public sealed class DeviceSessionService(WeymelaDbContext db, TimeProvider clock)
 {
+    /// <summary>
+    /// Trusted full-authentication hook. An absent, unknown, or unusable authorized-device
+    /// credential does not create a session and does not disclose device state.
+    /// </summary>
+    public async Task<CreatedDeviceSession?> EstablishForRecognizedDeviceAsync(
+        DeviceSessionIdentity identity,
+        string? rawDeviceCredential,
+        CancellationToken ct = default)
+    {
+        ValidateIdentity(identity);
+        if (!OpaqueDeviceCredential.TryDigest(rawDeviceCredential, out var digest)) return null;
+        var now = UtcNow();
+        var deviceId = await db.AuthorizedDevices.AsNoTracking()
+            .Where(x => x.UserId == identity.UserId && x.CredentialIdHash == digest
+                && x.RevokedAtUtc == null && !x.RequiresRecovery && x.ExpiresAtUtc != null
+                && x.ExpiresAtUtc > now && x.PinVerifier != null && x.PinVerifier != "")
+            .Select(x => (Guid?)x.Id)
+            .SingleOrDefaultAsync(ct);
+        return deviceId is null ? null : await EstablishAsync(identity, deviceId.Value, ct);
+    }
+
+    /// <summary>
+    /// Creates the sole current DeviceSession for an authenticated account/device pair.
+    /// Prior unrevoked sessions for that pair are superseded atomically.
+    /// </summary>
+    public async Task<CreatedDeviceSession> EstablishAsync(
+        DeviceSessionIdentity identity,
+        Guid authorizedDeviceId,
+        CancellationToken ct = default)
+    {
+        ValidateIdentity(identity);
+        if (authorizedDeviceId == Guid.Empty) throw Forbidden();
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        try
+        {
+            var now = UtcNow();
+            var bindingIsCurrent = await db.IdentityBindings.AsNoTracking().AnyAsync(x =>
+                x.Id == identity.IdentityBindingId && x.UserId == identity.UserId
+                && x.Version == identity.IdentityVersion && x.IsActive, ct);
+            var device = await db.AuthorizedDevices.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.Id == authorizedDeviceId && x.UserId == identity.UserId, ct);
+            if (!bindingIsCurrent || !UsableDevice(device, now)) throw Forbidden();
+
+            var prior = await db.DeviceSessions.Where(x => x.UserId == identity.UserId
+                && x.AuthorizedDeviceId == authorizedDeviceId && x.RevokedAtUtc == null).ToListAsync(ct);
+            foreach (var session in prior)
+            {
+                session.RevokedAtUtc = now;
+                session.Version++;
+            }
+
+            var credential = OpaqueDeviceCredential.Create();
+            var established = DeviceAccessPolicy.NewSession(identity.UserId, identity.IdentityBindingId,
+                identity.IdentityVersion, authorizedDeviceId, credential.Digest, now);
+            db.DeviceSessions.Add(established);
+            await SaveAsync(ct);
+            await transaction.CommitAsync(ct);
+            return new(ToSnapshot(established), credential);
+        }
+        catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.SerializationFailure)
+        {
+            db.ChangeTracker.Clear();
+            throw new ApplicationFailure(FailureKind.ConcurrencyConflict,
+                "The device session changed. Complete authenticated device setup again.", exception);
+        }
+    }
+
     public async Task<CreatedDeviceSession> CreateAsync(
         DeviceSessionIdentity identity,
         Guid authorizedDeviceId,

@@ -46,7 +46,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build digest-pinned linux/amd64 runtime image in CI
         id: build
-        env: { COMPONENT: '${{ matrix.component }}' }
+        env:
+          COMPONENT: '${{ matrix.component }}'
+          VITE_FIREBASE_API_KEY: '${{ vars.VITE_FIREBASE_API_KEY }}'
+          VITE_FIREBASE_AUTH_DOMAIN: '${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}'
+          VITE_FIREBASE_PROJECT_ID: '${{ vars.VITE_FIREBASE_PROJECT_ID }}'
+          VITE_FIREBASE_APP_ID: '${{ vars.VITE_FIREBASE_APP_ID }}'
         run: bash tools/ci/build-image.sh "$COMPONENT"
       - name: Scan before publishing; high/critical findings block release
         id: scan
@@ -72,7 +77,12 @@ jobs:
           d=json.load(sys.stdin); name=os.environ["IMAGE"].split(":")[0]
           digest=next(x for x in d["RepoDigests"] if x.startswith(name+"@"))
           p=pathlib.Path(".artifacts/release")/(os.environ["COMPONENT"]+"-image.json")
-          p.write_text(json.dumps({"component":os.environ["COMPONENT"],"image":os.environ["IMAGE"],"digest":digest,"imageId":d["Id"],"unpackedBytes":d["Size"],"commit":os.environ["GITHUB_SHA"]},indent=2)+"\n")
+          record={"component":os.environ["COMPONENT"],"image":os.environ["IMAGE"],"digest":digest,"imageId":d["Id"],"unpackedBytes":d["Size"],"commit":os.environ["GITHUB_SHA"]}
+          if os.environ["COMPONENT"]=="web":
+              project=pathlib.Path(".artifacts/release/web-firebase-project.txt").read_text().strip()
+              assert project=="weymela-pilot"
+              record["firebaseProjectId"]=project
+          p.write_text(json.dumps(record,indent=2)+"\n")
           with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write("name="+name+"\ndigest="+digest.split("@")[1]+"\n")'
       - name: Record SBOM
         id: sbom
@@ -165,6 +175,7 @@ jobs:
           assert len(images)==3
           assert {i['component'] for i in images}=={'api','worker','web'}
           assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)
+          assert next(i for i in images if i['component']=='web')['firebaseProjectId']=='weymela-pilot'
           for i in images:
               assert i['buildStatus']=='passed' and i['publishStatus']=='passed'
               assert i['scan']['status']=='passed'

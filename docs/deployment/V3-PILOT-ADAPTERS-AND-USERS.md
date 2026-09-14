@@ -1,16 +1,35 @@
 # Pilot adapters, legal publication and test identities
 
-No Firebase call/configuration/resource change, user provisioning, legal publication, fabricated activity or financial posting was performed. The Web adapter and trusted bootstrap tooling are source-only implementation; they have not been run against Pilot.
+No Firebase call/configuration/resource change, user provisioning, live email, legal publication, fabricated activity or financial posting was performed. The Resend and Firebase Admin adapters and Pilot Web build wiring are source-only implementation; they have not been run against Pilot.
 
 ## Firebase: reuse existing identity, do not create a new project
 
-Owner must provide the exact approved existing Firebase **project ID** through protected deployment configuration `V3__Auth__FirebaseProjectId`. It is a public identifier, not a secret; no value is guessed from a domain and no current V2 secret file is copied. Expected issuer `https://securetoken.google.com/<project-id>`, audience `<project-id>`, RS256, valid expiry/subject and recently authenticated ID token. Current verifier obtains Google's public X.509 signing certificates from the fixed HTTPS endpoint and validates exact project identity. No service-account private key or Firebase Admin credential is needed for this verification path.
+Pilot requires the exact existing Firebase project `weymela-pilot` through `V3__Auth__FirebaseProjectId`. It is a public identifier, not a secret. Expected issuer `https://securetoken.google.com/weymela-pilot`, audience `weymela-pilot`, RS256, valid expiry/subject and recently authenticated ID token. The verifier still uses Google's fixed X.509 endpoint and does not need private credentials. Custom-token signing is a separate API-only boundary: `V3__Auth__FirebaseCustomTokenMode=FirebaseAdmin` and `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/v3-firebase-admin.json` select an externally mounted, read-only service-account JSON. The file is never copied into an image, exposed to Web/Worker, or printed.
 
-The Web sign-in adapter uses email-code verification followed by a server-issued Firebase custom token and the existing `/api/auth/firebase/session` exchange over HTTPS/same-origin. Phone is the preferred, unverified login alias; email is also accepted, and both aliases resolve to the same server account. Challenges for phone sign-in are sent only to the stored verified email. No SMS, Phone OTP, reCAPTCHA or second account password is used. One verified Firebase UID maps to one V3 account. V3 uses its own encrypted/authenticated Secure/HttpOnly/SameSite=Strict `__Host-` session cookie, not client-selected role claims. Email delivery, signing configuration and trusted identity provisioning remain deployment-owned gates; no Google provider is required.
+The Web sign-in adapter uses email-code verification followed by a server-issued Firebase custom token and the existing `/api/auth/firebase/session` exchange over HTTPS/same-origin. Phone is the preferred, unverified login alias; email is also accepted, and both aliases resolve to the same server account. Challenges for phone sign-in are sent only to the stored verified email. No SMS, Phone OTP, reCAPTCHA or second account password is used. One verified Firebase UID maps to one V3 account. V3 uses its own encrypted/authenticated Secure/HttpOnly/SameSite=Strict `__Host-` session cookie, not client-selected role claims.
+
+Pilot email delivery is explicitly `V3__Auth__EmailDeliveryMode=Resend`, with the protected `V3__Auth__ResendApiKey` and fixed sender `Weymela Pilot <no-reply@pilot-mail.weymela.com>`. The adapter posts only to Resend's fixed HTTPS API with bounded timeouts and generic failures. It supports Signup, DeviceEnrollment/sign-in, and PinRecovery codes; it never sends a readiness email or places a code in a URL. Provider failure rolls back challenge creation/consumption.
 
 Trusted roles are V3-local `IdentityBinding` + active `CommercePermission`, with safe `PublicWorkspaceProfile`. Ignore client role/business IDs. Bind exact provider/project/UID to one active workspace; ambiguous multiple memberships fail closed. Provision mapping only through reviewed Admin/bootstrap tooling under separate authorization, with audit/version and inactive/revocation tests. No public endpoint accepts arbitrary role grants. Cashier Business assignment is explicit; business actor maps to its own Business. Existing Firebase UID does not imply V3 authorization.
 
-Required owner inputs before live sign-in: Firebase public client configuration, protected email delivery and custom-token signing adapters, trusted provisioning authority and role-sync lifecycle, plus enabling the approved email sign-in capability in the `weymela-pilot` Console. The authorized V3 hostname is already approved. Existing Android package/signing/OAuth identities remain untouched. V3-local binding revoke is immediate; global Firebase revocation policy and session lifetime (current <=1hour/token expiry) require owner approval. No Firebase-user bulk import or V2 credential reuse.
+Required external inputs before live sign-in are: the four public Web build variables `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID=weymela-pilot`, `VITE_FIREBASE_APP_ID`; API-only Resend settings; API-only read-only Firebase Admin JSON; base64 32+ byte `V3__Auth__CodeHashKey` and `V3__Auth__PinPepper`; and the existing external cookie certificate/key directory. Release evidence records the Web Firebase project, and Pilot preflight rejects a Web/API mismatch. The authorized V3 hostnames are already approved, but real email/Firebase calls and Pilot deployment still require a separately authorized external acceptance. Existing Android/OAuth identities remain untouched. No Firebase-user bulk import or V2 credential reuse.
+
+| Setting/input | Classification | Scope |
+|---|---|---|
+| `V3__Auth__EmailDeliveryMode=Resend` | environment setting | API only |
+| `V3__Auth__ResendApiKey` | secret | protected API env only |
+| `V3__Auth__ResendFromAddress=no-reply@pilot-mail.weymela.com` | environment setting | API only |
+| `V3__Auth__ResendFromName=Weymela Pilot` | environment setting | API only |
+| `V3__Auth__FirebaseCustomTokenMode=FirebaseAdmin` | environment setting | API only |
+| `V3__Auth__FirebaseProjectId=weymela-pilot` | public config | API/Worker; must match Web evidence |
+| `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/v3-firebase-admin.json` | file path only | API only |
+| `/opt/weymela/secrets/v3-firebase-admin.json` | private read-only service-account file | mounted into API only |
+| `V3__Auth__CodeHashKey` | base64 32+ byte secret | protected API env only |
+| `V3__Auth__PinPepper` | base64 32+ byte secret | protected API env only |
+| cookie PFX/password and persistent key directory | private file/secret/storage | API only |
+| four `VITE_FIREBASE_*` values | public build config | Web build only |
+
+Source validation cannot prove domain verification, API-key permissions, mounted-file ownership, or real provider delivery/signing. The separately authorized external acceptance must verify those without printing secrets, then execute one controlled signup/sign-in/recovery path before participant admission.
 
 The additive `AddPhoneLoginAliases` migration adds the challenge's bound email/phone hashes and a server-only email delivery address. It does not change financial tables. After isolated migration, the existing API runtime grants on `AuthIdentifiers` and `EmailAuthChallenges` remain sufficient; no new Worker grant is required. Applying this migration to live Pilot requires the normal migration review and backup gate.
 

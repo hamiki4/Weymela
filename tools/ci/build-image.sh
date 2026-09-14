@@ -19,12 +19,25 @@ resolve_base() {
   printf '%s@%s' "$reference" "$digest"
 }
 if test "$component" = web; then
+  : "${VITE_FIREBASE_API_KEY:?Pilot Firebase Web API key is required}"
+  : "${VITE_FIREBASE_AUTH_DOMAIN:?Pilot Firebase Web auth domain is required}"
+  : "${VITE_FIREBASE_PROJECT_ID:?Pilot Firebase Web project is required}"
+  : "${VITE_FIREBASE_APP_ID:?Pilot Firebase Web app ID is required}"
+  test "$VITE_FIREBASE_PROJECT_ID" = weymela-pilot
+  [[ "$VITE_FIREBASE_API_KEY" =~ ^AIza[A-Za-z0-9_-]{35}$ ]]
+  [[ "$VITE_FIREBASE_AUTH_DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$ ]]
+  [[ "$VITE_FIREBASE_APP_ID" =~ ^[0-9]+:[0-9]+:web:[A-Za-z0-9]+$ ]]
   node_image="$(resolve_base node:24-bookworm-slim)"
   # Current upstream still contains vulnerable libuuid. Keep the Alpine base
   # fixed while Dockerfile.web applies the checksum-pinned, package-only fix.
   web_image="nginx:stable-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c"
-  build_args=(--build-arg "NODE_IMAGE=$node_image" --build-arg "WEB_IMAGE=$web_image")
+  build_args=(--build-arg "NODE_IMAGE=$node_image" --build-arg "WEB_IMAGE=$web_image"
+    --build-arg "VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY"
+    --build-arg "VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN"
+    --build-arg "VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID"
+    --build-arg "VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID")
   printf '%s\n%s\n' "$node_image" "$web_image" > ".artifacts/release/$component-bases.txt"
+  printf '%s\n' "$VITE_FIREBASE_PROJECT_ID" > ".artifacts/release/web-firebase-project.txt"
 else
   sdk_image="$(resolve_base mcr.microsoft.com/dotnet/sdk:10.0-noble)"
   runtime_image="$(resolve_base mcr.microsoft.com/dotnet/aspnet:10.0-noble)"

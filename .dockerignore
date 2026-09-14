@@ -20,6 +20,7 @@
 **/*.key
 **/*.keystore
 **/*service-account*.json
+**/*firebase-admin*.json
 **/*firebase-adminsdk*.json
 **/test-results
 **/playwright-report

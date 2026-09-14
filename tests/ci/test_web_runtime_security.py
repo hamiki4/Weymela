@@ -30,7 +30,11 @@ class ShellFixture(unittest.TestCase):
                     'GITHUB_ACTIONS': 'true', 'GITHUB_REF': 'refs/heads/main',
                     'GITHUB_SHA': 'a' * 40, 'GITHUB_REPOSITORY_OWNER': 'HamiKi4',
                     'GITHUB_REPOSITORY': 'hamiki4/WeymelaV3', 'GITHUB_RUN_ID': '456',
-                    'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_OUTPUT': str(self.root / 'output')}
+                    'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_OUTPUT': str(self.root / 'output'),
+                    'VITE_FIREBASE_API_KEY': 'AIza' + 'a' * 35,
+                    'VITE_FIREBASE_AUTH_DOMAIN': 'weymela-pilot.firebaseapp.com',
+                    'VITE_FIREBASE_PROJECT_ID': 'weymela-pilot',
+                    'VITE_FIREBASE_APP_ID': '1:123456789:web:abcdef123456'}
         stub = '#!' + sys.executable + '\n' + textwrap.dedent('''\
             import json,os,pathlib,sys
             args=sys.argv[1:]
@@ -108,7 +112,7 @@ class RuntimePackagePatchTests(ShellFixture):
         runtime = DOCKERFILE.split('FROM ${WEB_IMAGE} AS runtime\n', 1)[1]
         self.assertNotRegex(runtime, r'--allow-untrusted|--force|--no-check-certificate|apk (?:upgrade|update)')
         self.assertLess(runtime.index('apk add'), runtime.index('USER 101:101'))
-        self.assertIn('RUN npm run build', DOCKERFILE)
+        self.assertIn('&& npm run build', DOCKERFILE)
         self.assertIn('COPY docker/web/security-headers.conf', runtime)
         self.assertIn('HEALTHCHECK ', runtime)
 
@@ -129,6 +133,27 @@ class HostedRuntimeGateTests(ShellFixture):
         self.assertNotIn('nginx:stable-alpine', [call['args'][3] for call in calls
                          if call['args'][:3] == ['buildx', 'imagetools', 'inspect']])
         self.assertIn(BASE, (self.root / '.artifacts/release/web-bases.txt').read_text())
+        for value in (
+            'VITE_FIREBASE_API_KEY=' + self.env['VITE_FIREBASE_API_KEY'],
+            'VITE_FIREBASE_AUTH_DOMAIN=weymela-pilot.firebaseapp.com',
+            'VITE_FIREBASE_PROJECT_ID=weymela-pilot',
+            'VITE_FIREBASE_APP_ID=1:123456789:web:abcdef123456'):
+            self.assertIn(value, build)
+        self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', ' '.join(build))
+        self.assertNotIn('RESEND', ' '.join(build).upper())
+        self.assertEqual((self.root / '.artifacts/release/web-firebase-project.txt').read_text(), 'weymela-pilot\n')
+
+    def test_missing_or_wrong_web_firebase_project_blocks_release_build(self):
+        for key, value in (
+            ('VITE_FIREBASE_API_KEY', ''),
+            ('VITE_FIREBASE_AUTH_DOMAIN', ''),
+            ('VITE_FIREBASE_PROJECT_ID', ''),
+            ('VITE_FIREBASE_APP_ID', ''),
+            ('VITE_FIREBASE_API_KEY', 'not-a-firebase-key'),
+            ('VITE_FIREBASE_APP_ID', 'not-an-app-id'),
+            ('VITE_FIREBASE_PROJECT_ID', 'other-project')):
+            with self.subTest(key=key, value=value):
+                self.assertNotEqual(self.run_build(**{key: value}).returncode, 0)
 
     def test_runtime_gate_inspects_exact_built_image_without_network_or_writes(self):
         result = self.run_build()

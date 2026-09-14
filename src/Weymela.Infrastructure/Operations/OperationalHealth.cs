@@ -12,6 +12,8 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
         using var bound = CancellationTokenSource.CreateLinkedTokenSource(ct); bound.CancelAfter(TimeSpan.FromSeconds(3));
         try
         {
+            if (options.EnvironmentName == "Pilot" && (options.EmailDeliveryMode != "Resend"
+                || options.FirebaseCustomTokenMode != "FirebaseAdmin")) return new(false, "not_ready");
             if (!await db.Database.CanConnectAsync(bound.Token) || (await db.Database.GetPendingMigrationsAsync(bound.Token)).Any()) return new(false, "not_ready");
             if (!options.Development && (!await db.FinancialConfigurationVersions.AnyAsync(x => x.EffectiveFromUtc <= clock.GetUtcNow().UtcDateTime, bound.Token)
                 || !await db.IdentityBindings.AnyAsync(x => x.IsActive && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId && db.CommercePermissions.Any(p => p.UserId == x.UserId && p.Role == ActorRole.PlatformAdmin && p.IsActive), bound.Token))) return new(false, "not_ready");

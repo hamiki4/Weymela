@@ -100,6 +100,16 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn("assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)", manifest)
         self.assertIn("assert manifest['migrations']['commit']==manifest['commit']", manifest)
 
+    def test_web_release_requires_public_pilot_firebase_configuration_only(self):
+        images = RELEASE.split('  images:\n', 1)[1].split('\n  migrations:', 1)[0]
+        for name in ('VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN',
+                     'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID'):
+            self.assertIn(f'{name}: \'${{{{ vars.{name} }}}}\'', images)
+        self.assertIn("record[\"firebaseProjectId\"]=project", images)
+        self.assertIn("assert project==\"weymela-pilot\"", images)
+        self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', images)
+        self.assertNotIn('V3__Auth__ResendApiKey', images)
+
     def test_browser_installer_has_own_deadline_and_raw_control_is_not_uploaded(self):
         self.assertIn('timeout-minutes: 10\n        working-directory: src/Weymela.Web\n        run: npx playwright install --with-deps chromium', CI)
         self.assertNotRegex(CI, r'(?m)^\s+\.artifacts/browser-host\.(json|log)$')

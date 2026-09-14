@@ -54,8 +54,9 @@ services:
       V3__FinancialWritesEnabled: "false"
       V3__Auth__CookieKeyDirectory: /run/weymela-v3/keys
       V3__Auth__CookieCertificatePath: /run/secrets/v3-cookie-protection.pfx
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/v3-firebase-admin.json
       V3__Security__TrustedProxies__0: "${V3_WEB_PROXY_IP:?Approved isolated proxy IP required}"
-    secrets: [v3-cookie-protection.pfx]
+    secrets: [v3-cookie-protection.pfx, v3-firebase-admin.json]
     volumes:
       - type: bind
         source: ${V3_COOKIE_KEYS_DIRECTORY:?Pre-provision protected V3-only key directory}
@@ -126,3 +127,5 @@ secrets:
     file: ${V3_POSTGRES_PASSWORD_FILE:?External V3-only bootstrap password file}
   v3-cookie-protection.pfx:
     file: ${V3_COOKIE_CERTIFICATE_FILE:?External V3-only certificate file}
+  v3-firebase-admin.json:
+    file: ${V3_FIREBASE_ADMIN_CREDENTIALS_FILE:?External read-only Pilot Firebase Admin credential required}

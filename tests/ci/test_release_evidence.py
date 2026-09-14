@@ -91,6 +91,7 @@ class ImageEvidenceTests(unittest.TestCase):
                      'image': f'ghcr.io/hamiki4/weymela-v3-{component}:v3-test',
                      'digest': f'ghcr.io/hamiki4/weymela-v3-{component}@sha256:'+'1'*64,
                      'imageId': 'sha256:'+'2'*64}
+            if component == 'web': image['firebaseProjectId'] = 'weymela-pilot'
             self.write(f'{component}-image', image)
             self.write(f'{component}-security', {'SchemaVersion': 2, 'Metadata': {'ImageID': image['imageId']}, 'Results': []})
             self.write(f'{component}-sbom', {'bomFormat': 'CycloneDX', 'specVersion': '1.6'})
@@ -284,6 +285,7 @@ class ImageEvidenceTests(unittest.TestCase):
         manifest = json.loads((self.root/'release/release-manifest.json').read_text())
         self.assertEqual(manifest['releaseId'], 'v3-'+'a'*40+'-run123-attempt1')
         self.assertEqual(len(manifest['images']), 3)
+        self.assertEqual(next(image for image in manifest['images'] if image['component'] == 'web')['firebaseProjectId'], 'weymela-pilot')
         self.assertIn('migrations/migration-manifest.json', manifest['checksums'])
         for image in manifest['images']:
             self.assertEqual(image['attestation']['status'], 'unavailable')

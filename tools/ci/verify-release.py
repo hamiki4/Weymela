@@ -20,6 +20,9 @@ def verify(root):
     for item in images:
         if item['commit'] != manifest['commit'] or not re.fullmatch(r'ghcr\.io/[a-z0-9_.-]+/weymela-v3-'+item['component']+r'@sha256:[a-f0-9]{64}', item['digest']):
             raise ValueError('Invalid image source/digest')
+    web = next(item for item in images if item['component'] == 'web')
+    if web.get('firebaseProjectId') != 'weymela-pilot':
+        raise ValueError('Invalid Web Firebase project identity')
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
     checksums = manifest.get('checksums', {})

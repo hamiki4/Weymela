@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Weymela.Application;
@@ -8,16 +9,23 @@ using Weymela.Application.Operations;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Providers;
+using Weymela.Infrastructure.Persistence;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
 
 public sealed class AdapterSecurityTests
 {
+    private static readonly string TestSecret = Convert.ToBase64String(Enumerable.Range(1, 32).Select(x => (byte)x).ToArray());
     private static Dictionary<string, string?> Config() => new()
     {
         ["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_pilot_test;Username=isolated;Password=test-only",
-        ["V3:Auth:Provider"] = "Firebase", ["V3:Auth:FirebaseProjectId"] = "isolated-v3-test",
+        ["V3:Auth:Provider"] = "Firebase", ["V3:Auth:FirebaseProjectId"] = "weymela-pilot",
+        ["V3:Auth:EmailDeliveryMode"] = "Resend", ["V3:Auth:FirebaseCustomTokenMode"] = "FirebaseAdmin",
+        ["V3:Auth:ResendApiKey"] = "re_test_only_not_a_live_resend_key_123456",
+        ["V3:Auth:ResendFromAddress"] = "no-reply@pilot-mail.weymela.com", ["V3:Auth:ResendFromName"] = "Weymela Pilot",
+        ["GOOGLE_APPLICATION_CREDENTIALS"] = "/run/secrets/v3-firebase-admin.json",
+        ["V3:Auth:CodeHashKey"] = TestSecret, ["V3:Auth:PinPepper"] = TestSecret,
         ["V3:AllowedOrigins:0"] = "https://v3-web.example.invalid", ["V3:PublicWebUrl"] = "https://v3-web.example.invalid",
         ["V3:PublicApiUrl"] = "https://v3-api.example.invalid", ["V3:Security:CameraPolicy"] = RuntimeOptions.CameraPolicy,
         ["V3:Security:TlsEdgeConfirmed"] = "true", ["V3:Auth:CookieKeyDirectory"] = "/tmp/unused-test-keys", ["V3:Auth:CookieCertificatePath"] = "/tmp/unused-test.pfx"
@@ -26,8 +34,38 @@ public sealed class AdapterSecurityTests
     {
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
         Assert.False(options.DevelopmentIdentity); Assert.False(options.FinancialWritesEnabled); Assert.Equal("Disabled", options.DepositMode);
+        Assert.Equal("Resend", options.EmailDeliveryMode); Assert.Equal("FirebaseAdmin", options.FirebaseCustomTokenMode);
         Assert.Equal(20, new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString).MaxPoolSize);
         Assert.False(new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString).IncludeErrorDetail);
+    }
+    [Fact] public void Pilot_modes_replace_only_the_disabled_adapter_registrations()
+    {
+        var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
+        var services = new ServiceCollection();
+        services.AddWeymelaPersistence(options.ConnectionString).AddPilotAuthenticationAdapters(options);
+        Assert.Equal(ServiceLifetime.Singleton, services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).Lifetime);
+        Assert.NotNull(services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationFactory);
+        Assert.Equal(typeof(FirebaseAdminCustomTokenIssuer), services.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
+
+        var disabled = new ServiceCollection();
+        disabled.AddWeymelaPersistence(options.ConnectionString).AddPilotAuthenticationAdapters(new RuntimeOptions());
+        Assert.Equal(typeof(DisabledEmailCodeDelivery), disabled.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);
+        Assert.Equal(typeof(DisabledFirebaseCustomTokenIssuer), disabled.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
+    }
+    [Fact] public void Pilot_adapters_cannot_be_activated_as_Production_configuration()
+    {
+        var config = Config();
+        config["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_prod_test;Username=isolated;Password=test-only";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config["V3:Auth:EmailDeliveryMode"] = "Disabled";
+        config["V3:Auth:FirebaseCustomTokenMode"] = "Disabled";
+        var production = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        var services = new ServiceCollection();
+        services.AddWeymelaPersistence(production.ConnectionString).AddPilotAuthenticationAdapters(production);
+        Assert.Equal(typeof(DisabledEmailCodeDelivery), services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);
+        Assert.Equal(typeof(DisabledFirebaseCustomTokenIssuer), services.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
     }
     [Theory]
     [InlineData("V3:Auth:Provider", "")][InlineData("V3:Auth:FirebaseProjectId", "")]
@@ -37,6 +75,12 @@ public sealed class AdapterSecurityTests
     [InlineData("V3:Push:Enabled", "true")][InlineData("V3:Security:CameraPolicy", "camera=*")]
     [InlineData("V3:Security:TlsEdgeConfirmed", "false")][InlineData("V3:Worker:BatchSize", "10000")]
     [InlineData("V3:RateLimitMultiplier", "20")][InlineData("V3:Auth:CookieCertificatePath", "relative.pfx")]
+    [InlineData("V3:Auth:EmailDeliveryMode", "Disabled")][InlineData("V3:Auth:FirebaseCustomTokenMode", "Disabled")]
+    [InlineData("V3:Auth:ResendApiKey", "")][InlineData("V3:Auth:ResendFromAddress", "other@example.com")]
+    [InlineData("V3:Auth:ResendFromName", "Other")][InlineData("V3:Auth:CodeHashKey", "weak")]
+    [InlineData("V3:Auth:PinPepper", "weak")][InlineData("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/other.json")]
+    [InlineData("V3:Auth:CodeHashKey", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")]
+    [InlineData("V3:Auth:PinPepper", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")]
     public void Unsafe_pilot_configuration_fails_closed(string key, string value)
     {
         var config = Config(); config[key] = value;

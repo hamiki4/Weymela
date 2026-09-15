@@ -4,6 +4,7 @@ using Weymela.Domain;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Persistence.Records;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -68,10 +69,54 @@ public sealed class OperationalPolicyTests(PostgresFixture fixture)
         await new WorkerPump(db,options,new DisabledPushProvider(),s.Clock).RunOnceAsync(default); Assert.True((await health.ReadinessAsync(default)).Ready);
         s.Clock.Now=s.Clock.Now.AddMinutes(2); Assert.False((await health.ReadinessAsync(default)).Ready);
     }
+    [Fact] public async Task Readiness_requires_recent_success_seen_state_and_no_failed_worker_cycle()
+    {
+        var s=await Phase4Scenario.Create(fixture); await using var db=s.Database.Open();
+        var options=new RuntimeOptions { Development=true,WorkerEnabled=true,WorkerIntervalSeconds=5 };
+        db.WorkerCheckpoints.Add(new WorkerCheckpoint { Name="operational-worker",LastSeenAtUtc=s.Clock.Now,LastSuccessAtUtc=s.Clock.Now.AddMinutes(-2) });
+        await db.SaveChangesAsync();
+        var health=new OperationalHealth(db,options,s.Clock);
+        Assert.False((await health.ReadinessAsync(default)).Ready);
+        var checkpoint=await db.WorkerCheckpoints.SingleAsync();
+        checkpoint.LastSuccessAtUtc=s.Clock.Now; checkpoint.LastErrorCode="WorkerUnavailable"; await db.SaveChangesAsync();
+        Assert.False((await health.ReadinessAsync(default)).Ready);
+        checkpoint.LastErrorCode=null; await db.SaveChangesAsync();
+        Assert.True((await health.ReadinessAsync(default)).Ready);
+    }
     [Fact] public async Task Live_readiness_rejects_missing_trusted_admin_identity_even_when_database_is_healthy()
     {
         var s=await Phase4Scenario.Create(fixture); await using var db=s.Database.Open();
         Assert.False((await new OperationalHealth(db,new RuntimeOptions { FirebaseProjectId="isolated-v3-test",WorkerEnabled=false },s.Clock).ReadinessAsync(default)).Ready);
+    }
+    [Fact] public async Task Live_readiness_accepts_only_exact_active_platform_admin_mapping()
+    {
+        var s=await Phase4Scenario.Create(fixture); await using var db=s.Database.Open();
+        var options=new RuntimeOptions { FirebaseProjectId="isolated-v3-test",WorkerEnabled=false };
+        db.IdentityBindings.Add(new IdentityBinding { Provider="Firebase",ProjectId="isolated-v3-test",ExternalSubject="admin-ready",
+            UserId=Phase4Scenario.Admin.UserId,IsActive=true,ValidAfterUtc=s.Clock.Now.AddMinutes(-1),Version=1 });
+        db.CommercePermissions.Add(new(Phase4Scenario.Admin.UserId,ActorRole.PlatformAdmin,
+            Phase4Scenario.Admin.UserId,null,true,false));
+        db.LegalDocumentVersions.AddRange(
+            new(Guid.NewGuid(),LegalDocumentType.TermsOfService,"pilot-1","terms-hash",s.Clock.Now.AddMinutes(-1)),
+            new(Guid.NewGuid(),LegalDocumentType.PrivacyPolicy,"pilot-1","privacy-hash",s.Clock.Now.AddMinutes(-1)));
+        await db.SaveChangesAsync();
+        var health=new OperationalHealth(db,options,s.Clock);
+        Assert.True((await health.ReadinessAsync(default)).Ready);
+        var conflictingUser=Guid.NewGuid();
+        db.IdentityBindings.Add(new IdentityBinding { Provider="Firebase",ProjectId="other-project",ExternalSubject="conflicting-admin",
+            UserId=conflictingUser,IsActive=true,ValidAfterUtc=s.Clock.Now.AddMinutes(-1),Version=1 });
+        db.CommercePermissions.Add(new(conflictingUser,ActorRole.PlatformAdmin,conflictingUser,null,true,false));
+        await db.SaveChangesAsync();
+        Assert.False((await health.ReadinessAsync(default)).Ready);
+        await db.CommercePermissions.Where(x=>x.UserId==conflictingUser).ExecuteDeleteAsync();
+        await db.IdentityBindings.Where(x=>x.UserId==conflictingUser).ExecuteDeleteAsync();
+        db.ChangeTracker.Clear();
+        Assert.True((await health.ReadinessAsync(default)).Ready);
+        await db.CommercePermissions.Where(x=>x.UserId==Phase4Scenario.Admin.UserId&&x.Role==ActorRole.PlatformAdmin).ExecuteDeleteAsync();
+        db.ChangeTracker.Clear();
+        db.CommercePermissions.Add(new(Phase4Scenario.Admin.UserId,ActorRole.PlatformAdmin,Guid.NewGuid(),null,true,false));
+        await db.SaveChangesAsync();
+        Assert.False((await health.ReadinessAsync(default)).Ready);
     }
     [Fact] public async Task Creator_completion_reconciles_campaign_reserve_without_refunding_business_available()
     {

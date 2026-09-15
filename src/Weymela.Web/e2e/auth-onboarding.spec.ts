@@ -192,9 +192,18 @@ async function createVerifiedAccount(context: Parameters<typeof login>[0], enrol
 
 async function activateCustomer(context: Parameters<typeof login>[0], account: Omit<AccountFixture, "customerPublicId">) {
   const customerPublicId = `CU-${account.suffix}`;
+  const legalResponse = await context.request.get("/api/onboarding/legal");
+  expect(legalResponse.status()).toBe(200);
+  const legal = await legalResponse.json() as { documents: { kind: string; documentId: string; contentHash: string }[] };
+  const terms = legal.documents.find(document => document.kind === "TermsOfService")!;
+  const privacy = legal.documents.find(document => document.kind === "PrivacyPolicy")!;
   const response = await context.request.post("/api/onboarding/profile", {
     headers: { "X-Weymela-Request": "1", "Idempotency-Key": `customer-${account.suffix}` },
-    data: { role: "Customer", displayName: `Customer ${account.suffix}`, publicId: customerPublicId },
+    data: { role: "Customer", displayName: `Customer ${account.suffix}`, publicId: customerPublicId,
+      accountLegal: {
+        termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
+        privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true }
+      } },
   });
   expect(response.status()).toBe(200);
   await expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Customer" });
@@ -368,8 +377,17 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   expect((await deviceEnrollment).status()).toBe(200);
   await expect(page).toHaveURL(/\/onboarding/);
   await page.getByRole("button", { name: /^Use as Customer/ }).click();
+  const consent = page.getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ });
+  await expect(consent).not.toBeChecked();
+  await expect(page.getByRole("link", { name: "Terms of Service" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Privacy Policy" })).toBeVisible();
+  for (const width of [375, 390, 393, 430, 768, 1366]) {
+    await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+    await layout(page);
+  }
   await page.getByLabel("Display name", { exact: true }).fill(`Customer ${account.suffix}`);
   await page.getByLabel("Public ID", { exact: true }).fill(`CU-${account.suffix}`);
+  await consent.check();
   const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/profile", { timeout: 7000 });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await activation).status()).toBe(200);
@@ -644,6 +662,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     throw error;
   }
   await runStep(steps, "customer-form-fill-public-id", () => page.getByLabel("Public ID", { exact: true }).fill(`CU-${suffix}`, { timeout: 7000 }), 8000);
+  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ }).check({ timeout: 7000 }), 8000);
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
       const url = new URL(response.url());

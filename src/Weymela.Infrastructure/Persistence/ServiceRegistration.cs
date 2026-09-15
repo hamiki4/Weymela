@@ -41,6 +41,7 @@ public static class ServiceRegistration
         services.AddScoped<IAdminFinancialQueries>(sp => sp.GetRequiredService<FinancialQueries>());
         services.AddScoped<EmailAuthService>();
         services.AddScoped<RoleEnrollmentService>();
+        services.AddScoped<AccountLegalOnboardingService>();
         services.TryAddSingleton<IEmailCodeDelivery, DisabledEmailCodeDelivery>();
         services.TryAddSingleton<IFirebaseCustomTokenIssuer, DisabledFirebaseCustomTokenIssuer>();
         // Host must provide IVerifiedViewProvider and IPublicIdentityDirectory.

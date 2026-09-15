@@ -13,7 +13,8 @@ internal static class DeviceSessionRequestPolicy
     private static readonly HashSet<string> BootstrapRoutes = new(StringComparer.Ordinal)
     {
         "/api/session",
-        "/api/device/enrollment"
+        "/api/device/enrollment",
+        "/api/onboarding/legal"
     };
 
     private static readonly HashSet<string> LockedRoutes = new(StringComparer.Ordinal)

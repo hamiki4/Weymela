@@ -22,7 +22,7 @@ public enum PlatformRevenueSource { ViewRewardPlatformShare, SalePlatformShare, 
 public enum RevenueStatus { Accrued, Settled }
 public enum JournalLineType { Debit, Credit }
 public enum JournalSourceType { Deposit, PromotionReservation, Allocation, ViewReward, VerifiedSale, Payout, Adjustment, Settlement }
-public enum LegalRole { Business, Creator }
+public enum LegalRole { Account, Business, Creator }
 public enum LegalDocumentType { TermsOfService, BusinessAgreement, CreatorAgreement, AntiCircumventionAgreement, PrivacyPolicy }
 
 public abstract record DomainEvent;

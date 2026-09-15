@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Operations;
+using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence.Records;
 using Xunit;
@@ -17,11 +18,12 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid();
         var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var legal = await SeedAccountLegalAsync(db);
 
         var first = await service.SubmitAsync(new Actor(user, ActorRole.Customer),
-            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null), "customer-1", default);
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null, AccountLegal: legal), "customer-1", default);
         var replay = await service.SubmitAsync(new Actor(user, ActorRole.Customer),
-            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null), "customer-1", default);
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null, AccountLegal: legal), "customer-1", default);
 
         Assert.Equal(RoleEnrollmentStatus.Approved, first.Status);
         Assert.Equal(first.Id, replay.Id);
@@ -33,6 +35,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var cashback = await db.CustomerCashbackAccounts.SingleAsync(x => x.CustomerId == permission.SubjectId);
         Assert.Equal(0m, cashback.AvailableCashback.Amount);
         Assert.Contains(await db.AuditEvents.Where(x => x.ActorId == user).ToListAsync(), x => x.EventType == "CustomerProfileActivated");
+        Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == user && x.Role == LegalRole.Account));
     }
 
     [Fact]
@@ -47,16 +50,91 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
             IsActive = true, ValidAfterUtc = DateTime.UtcNow.AddMinutes(-1), Version = 1
         });
         await db.SaveChangesAsync();
+        var legal = await SeedAccountLegalAsync(db);
 
         var enrollment = new RoleEnrollmentService(db, TimeProvider.System);
         await enrollment.SubmitAsync(new Actor(user, ActorRole.Customer),
-            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-REFRESH", null, null, null), "customer-refresh", default);
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-REFRESH", null, null, null, AccountLegal: legal), "customer-refresh", default);
 
         var result = await new TrustedIdentityService(db, new Verifier(), new PersistentWorkspaceDirectory(db)).SignInAsync("token", default);
         Assert.Equal(ActorRole.Customer, result.Actor.Role);
         Assert.NotEqual(Guid.Empty, result.Actor.CustomerId);
         Assert.Single(result.Profiles);
         Assert.Equal("CU-REFRESH", result.PublicId);
+    }
+
+    [Fact]
+    public async Task Customer_activation_fails_atomically_for_missing_stale_or_tampered_legal_documents()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-LEGAL", null, null, null), "missing", default));
+        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user));
+
+        var legal = await SeedAccountLegalAsync(db);
+        var tampered = legal with { TermsOfService = legal.TermsOfService! with { ContentHash = "tampered" } };
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-LEGAL", null, null, null, AccountLegal: tampered), "tampered", default));
+        Assert.False(await db.RoleEnrollments.AnyAsync(x => x.UserId == user));
+        Assert.False(await db.LegalAcceptances.AnyAsync(x => x.UserId == user));
+    }
+
+    [Fact]
+    public async Task Account_legal_status_detects_a_new_current_version_without_mutating_history()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var legal = await SeedAccountLegalAsync(db);
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        await service.SubmitAsync(new Actor(user, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-VERSION", null, null, null, AccountLegal: legal), "version-1", default);
+        var oldCount = await db.LegalAcceptances.CountAsync(x => x.UserId == user);
+        db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.TermsOfService, "fixture-2", "fixture-terms-hash-2", DateTime.UtcNow));
+        await db.SaveChangesAsync();
+        var status = await new AccountLegalOnboardingService(db, TimeProvider.System).StatusAsync(user, default);
+        Assert.False(status.Current);
+        Assert.Equal(oldCount, await db.LegalAcceptances.CountAsync(x => x.UserId == user));
+    }
+
+    [Fact]
+    public async Task Concurrent_customer_activation_never_creates_duplicate_profile_or_acceptance_evidence()
+    {
+        var database = await fixture.CreateAsync();
+        AccountLegalConfirmation legal;
+        await using (var seed = database.Open()) legal = await SeedAccountLegalAsync(seed);
+        var user = Guid.NewGuid();
+        await using var firstDb = database.Open();
+        await using var secondDb = database.Open();
+        async Task<bool> Attempt(Weymela.Infrastructure.Persistence.WeymelaDbContext db)
+        {
+            try
+            {
+                await new RoleEnrollmentService(db, TimeProvider.System).SubmitAsync(new Actor(user, ActorRole.Customer),
+                    new RoleEnrollmentRequest(ActorRole.Customer, "Concurrent", "CU-CONCURRENT", null, null, null,
+                        AccountLegal: legal), "concurrent-customer", default);
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+        var outcomes = await Task.WhenAll(Attempt(firstDb), Attempt(secondDb));
+        Assert.Contains(true, outcomes);
+        await using var verify = database.Open();
+        Assert.Single(await verify.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Customer).ToListAsync());
+        Assert.Single(await verify.CommercePermissions.Where(x => x.UserId == user && x.Role == ActorRole.Customer).ToListAsync());
+        Assert.Equal(2, await verify.LegalAcceptances.CountAsync(x => x.UserId == user && x.Role == LegalRole.Account));
+    }
+
+    private static async Task<AccountLegalConfirmation> SeedAccountLegalAsync(Weymela.Infrastructure.Persistence.WeymelaDbContext db)
+    {
+        var terms = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.TermsOfService, "fixture-1", "fixture-terms-hash", DateTime.UtcNow.AddMinutes(-1));
+        var privacy = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.PrivacyPolicy, "fixture-1", "fixture-privacy-hash", DateTime.UtcNow.AddMinutes(-1));
+        db.LegalDocumentVersions.AddRange(terms, privacy);
+        await db.SaveChangesAsync();
+        return new(new(terms.Id, terms.ContentHash, true), new(privacy.Id, privacy.ContentHash, true));
     }
 
     [Fact]

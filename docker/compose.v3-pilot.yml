@@ -61,6 +61,7 @@ services:
       - type: bind
         source: ${V3_COOKIE_KEYS_DIRECTORY:?Pre-provision protected V3-only key directory}
         target: /run/weymela-v3/keys
+        read_only: false
         bind: { create_host_path: false }
     networks: [data, edge]
     depends_on:

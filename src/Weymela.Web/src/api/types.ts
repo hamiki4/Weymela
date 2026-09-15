@@ -53,6 +53,20 @@ export interface EmailCodeStartStatus {
   expiresAtUtc: string;
   resendAfterSeconds: number;
 }
+export interface AccountLegalDocument {
+  documentId: string;
+  kind: "TermsOfService" | "PrivacyPolicy";
+  title: string;
+  version: string;
+  contentHash: string;
+  effectiveFromUtc: string;
+  viewPath: string;
+  accepted: boolean;
+}
+export interface AccountLegalStatus {
+  current: boolean;
+  documents: AccountLegalDocument[];
+}
 export interface BusinessCard {
   id: string;
   displayName: string;

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
+using Weymela.Domain;
 using Weymela.Infrastructure.Persistence;
 
 namespace Weymela.Infrastructure.Operations;
@@ -16,16 +17,43 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
                 || options.FirebaseCustomTokenMode != "FirebaseAdmin")) return new(false, "not_ready");
             if (!await db.Database.CanConnectAsync(bound.Token) || (await db.Database.GetPendingMigrationsAsync(bound.Token)).Any()) return new(false, "not_ready");
             if (!options.Development && (!await db.FinancialConfigurationVersions.AnyAsync(x => x.EffectiveFromUtc <= clock.GetUtcNow().UtcDateTime, bound.Token)
-                || !await db.IdentityBindings.AnyAsync(x => x.IsActive && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId && db.CommercePermissions.Any(p => p.UserId == x.UserId && p.Role == ActorRole.PlatformAdmin && p.IsActive), bound.Token))) return new(false, "not_ready");
+                || !await RequiredAccountLegalReadyAsync(bound.Token) || !await PlatformAdminReadyAsync(bound.Token)))
+                return new(false, "not_ready");
             if (options.WorkerEnabled)
             {
                 var since = clock.GetUtcNow().UtcDateTime.AddSeconds(-Math.Max(60, options.WorkerIntervalSeconds * 4));
-                if (!await db.WorkerCheckpoints.AnyAsync(x => x.Name == "operational-worker" && x.LastSuccessAtUtc >= since, bound.Token)) return new(false, "not_ready");
+                if (!await db.WorkerCheckpoints.AnyAsync(x => x.Name == "operational-worker"
+                    && x.LastSeenAtUtc >= since && x.LastSuccessAtUtc >= since
+                    && x.LastSuccessAtUtc <= x.LastSeenAtUtc && x.LastErrorCode == null, bound.Token))
+                    return new(false, "not_ready");
             }
             return new(true, "ready");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch { return new(false, "not_ready"); }
+    }
+    private async Task<bool> RequiredAccountLegalReadyAsync(CancellationToken ct)
+    {
+        var now = clock.GetUtcNow().UtcDateTime;
+        return await db.LegalDocumentVersions.AnyAsync(x => x.Type == LegalDocumentType.TermsOfService
+                && x.EffectiveFromUtc <= now && x.ContentHash.Trim() != "", ct)
+            && await db.LegalDocumentVersions.AnyAsync(x => x.Type == LegalDocumentType.PrivacyPolicy
+                && x.EffectiveFromUtc <= now && x.ContentHash.Trim() != "", ct);
+    }
+    private async Task<bool> PlatformAdminReadyAsync(CancellationToken ct)
+    {
+        var permissions = await db.CommercePermissions.AsNoTracking()
+            .Where(x => x.Role == ActorRole.PlatformAdmin && x.IsActive).ToListAsync(ct);
+        if (permissions.Count == 0 || permissions.Any(x => x.SubjectId != x.UserId || x.BusinessId != null)
+            || permissions.GroupBy(x => x.UserId).Any(x => x.Count() != 1)) return false;
+        var userIds = permissions.Select(x => x.UserId).ToArray();
+        var bindings = await db.IdentityBindings.AsNoTracking().Where(x => userIds.Contains(x.UserId)).ToListAsync(ct);
+        var now = clock.GetUtcNow().UtcDateTime;
+        return permissions.All(permission => bindings.Count(x => x.UserId == permission.UserId && x.IsActive
+            && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId
+            && !string.IsNullOrWhiteSpace(x.ExternalSubject) && x.Version > 0 && x.ValidAfterUtc <= now) == 1)
+            && bindings.Where(x => x.IsActive).All(x => x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId
+                && !string.IsNullOrWhiteSpace(x.ExternalSubject) && x.Version > 0 && x.ValidAfterUtc <= now);
     }
     public async Task<object> DetailsAsync(CancellationToken ct)
     {

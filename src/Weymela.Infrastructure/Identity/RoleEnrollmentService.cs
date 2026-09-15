@@ -10,7 +10,8 @@ using Weymela.Infrastructure.Persistence.Records;
 namespace Weymela.Infrastructure.Identity;
 
 public sealed record RoleEnrollmentRequest(ActorRole Role, string DisplayName, string PublicId, string? Region,
-    string? Category, string? Submission, Guid? ProposedBusinessId = null);
+    string? Category, string? Submission, Guid? ProposedBusinessId = null,
+    AccountLegalConfirmation? AccountLegal = null, string? IpReference = null, string? UserAgentReference = null);
 public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollmentStatus Status, string DisplayName,
     string PublicId, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc, string? DecisionReason, long Version);
 
@@ -37,6 +38,9 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
         var now = clock.GetUtcNow().UtcDateTime;
+        if (request.Role == ActorRole.Customer)
+            await new AccountLegalOnboardingService(db, clock).AcceptCurrentAsync(actor.UserId,
+                request.AccountLegal, request.IpReference, request.UserAgentReference, ct);
         var row = new RoleEnrollmentRecord { UserId = actor.UserId, RequestedRole = request.Role, SubmissionJson = JsonSerializer.Serialize(new { request.DisplayName, request.PublicId, request.Region, request.Category, request.Submission }), SubmittedAtUtc = now, IdempotencyKey = idempotencyKey };
         db.RoleEnrollments.Add(row);
         if (request.Role == ActorRole.Customer)

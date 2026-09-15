@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Weymela.Infrastructure.Operations;
 
@@ -95,9 +97,20 @@ public sealed class RuntimeOptions
                 Require(IsResendKey(resendApiKey), "A protected Resend API key is required.");
                 Require(resendFromAddress == "no-reply@pilot-mail.weymela.com" && IsEmail(resendFromAddress), "The approved Pilot Resend sender address is required.");
                 Require(resendFromName == "Weymela Pilot", "The approved Pilot Resend sender name is required.");
-                Require(SecretBytes(config["V3:Auth:CodeHashKey"], 32), "The auth code hash key must be base64-encoded 32+ byte secret material.");
-                Require(SecretBytes(config["V3:Auth:PinPepper"], 32), "The PIN pepper must be base64-encoded 32+ byte secret material.");
+                var codeHashKey = SecretMaterial(config["V3:Auth:CodeHashKey"], 32);
+                var pinPepper = SecretMaterial(config["V3:Auth:PinPepper"], 32);
+                Require(codeHashKey is not null, "The auth code hash key must be strict base64-encoded 32+ byte secret material.");
+                Require(pinPepper is not null, "The PIN pepper must be strict base64-encoded 32+ byte secret material.");
+                Require(!CryptographicOperations.FixedTimeEquals(codeHashKey!, pinPepper!), "Auth code and PIN secrets must be independent.");
                 Require(firebaseAdminCredentials == "/run/secrets/v3-firebase-admin.json" && Path.IsPathFullyQualified(firebaseAdminCredentials), "The approved external Firebase Admin credential file is required.");
+                Require(config["V3:Auth:CookieKeyDirectory"] == "/run/weymela-v3/keys"
+                    && config["V3:Auth:CookieCertificatePath"] == "/run/secrets/v3-cookie-protection.pfx",
+                    "Pilot cookie protection must use the approved mounted paths.");
+                Require(IsProtectedPassword(config["V3:Auth:CookieCertificatePassword"]),
+                    "A protected cookie certificate password is required.");
+                Require(web == "https://v3-pilot.weymela.com" && api == "https://api-v3-pilot.weymela.com"
+                    && origins.SequenceEqual([web], StringComparer.Ordinal),
+                    "Pilot Web/API origins must match the approved endpoints.");
             }
         }
         var deposits = config["V3:Deposits:Mode"] ?? "Disabled";
@@ -109,6 +122,8 @@ public sealed class RuntimeOptions
         var recipientBatch = config.GetValue("V3:Worker:RecipientBatchSize", 100); var multiplier = config.GetValue("V3:RateLimitMultiplier", 1);
         Require(batch is >= 1 and <= 50 && interval is >= 2 and <= 60 && recipientBatch is >= 1 and <= 200, "Worker limits must be bounded.");
         Require(multiplier is >= 1 and <= 20 && (dev || multiplier == 1), "Rate-limit overrides are development-only.");
+        var financialWrites = config.GetValue("V3:FinancialWritesEnabled", dev);
+        Require(dev || !financialWrites, "Financial writes must remain disabled outside Development.");
         var proxies = config.GetSection("V3:Security:TrustedProxies").Get<string[]>() ?? [];
         Require(proxies.All(p => System.Net.IPAddress.TryParse(p, out _)), "Trusted proxies must be explicit IP addresses.");
         return new()
@@ -122,7 +137,7 @@ public sealed class RuntimeOptions
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
             CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
-            FinancialWritesEnabled = config.GetValue("V3:FinancialWritesEnabled", dev),
+            FinancialWritesEnabled = financialWrites,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies
         };
     }
@@ -135,16 +150,25 @@ public sealed class RuntimeOptions
         && !value.Any(char.IsControl);
     private static bool IsResendKey(string? value) => value is { Length: >= 20 and <= 256 }
         && value.StartsWith("re_", StringComparison.Ordinal)
-        && value.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-');
-    private static bool SecretBytes(string? value, int minimum)
+        && value.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-')
+        && !ContainsPlaceholder(value);
+    private static bool IsProtectedPassword(string? value) => value is { Length: >= 16 and <= 512 }
+        && !value.Any(char.IsControl) && !ContainsPlaceholder(value);
+    private static bool ContainsPlaceholder(string value) =>
+        new[] { "placeholder", "replace-me", "replace_me", "change-me", "example", "external", "test-only", "not-a-live" }
+            .Any(candidate => value.Contains(candidate, StringComparison.OrdinalIgnoreCase));
+    private static byte[]? SecretMaterial(string? value, int minimum)
     {
         try
         {
-            if (value is null) return false;
+            if (value is null || value.Any(char.IsWhiteSpace)) return null;
             var bytes = Convert.FromBase64String(value);
-            return bytes.Length >= minimum && bytes.Distinct().Count() >= 16;
+            if (Convert.ToBase64String(bytes) != value || bytes.Length < minimum || bytes.Distinct().Count() < 16
+                || bytes.SequenceEqual(Enumerable.Range(1, 32).Select(x => (byte)x))) return null;
+            var printable = Encoding.UTF8.GetString(bytes).ToLowerInvariant();
+            return ContainsPlaceholder(printable) ? null : bytes;
         }
-        catch (FormatException) { return false; }
+        catch (FormatException) { return null; }
     }
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

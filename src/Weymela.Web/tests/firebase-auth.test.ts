@@ -87,6 +87,13 @@ describe("V3 Firebase Web adapter", () => {
     expect(fetch).toHaveBeenCalledWith("/api/auth/email/start", expect.objectContaining({ method: "POST" }));
   });
 
+  it("rejects an invalid signup phone with a clear validation message before network", async () => {
+    const adapter = new FirebaseWebAuthAdapter(auth as never);
+    await expect(adapter.startEmailCode("owner@example.com", "Signup", "0900000000"))
+      .rejects.toThrow("Enter a valid phone number with country code, for example +251900000000.");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("uses verified email code -> custom token -> Firebase ID token exchange for signup", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
     await adapter.startEmailCode("owner@example.com", "Signup", "+251900000000");

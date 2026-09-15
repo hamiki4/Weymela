@@ -186,7 +186,7 @@ public sealed class FirebaseAdminCustomTokenIssuer(
                 binding = new IdentityBinding
                 {
                     Provider = "Firebase", ProjectId = projectId, ExternalSubject = uid,
-                    UserId = userId, IsActive = true, ValidAfterUtc = clock.GetUtcNow().UtcDateTime,
+                    UserId = userId, IsActive = true, ValidAfterUtc = FirebaseAuthTime(clock.GetUtcNow()),
                     Version = 1
                 };
                 db.IdentityBindings.Add(binding);
@@ -202,6 +202,9 @@ public sealed class FirebaseAdminCustomTokenIssuer(
 
     private static AuthChallengeUnavailableException Unavailable() =>
         new("Firebase custom-token signing is temporarily unavailable.");
+
+    private static DateTime FirebaseAuthTime(DateTimeOffset now) =>
+        DateTimeOffset.FromUnixTimeSeconds(now.ToUnixTimeSeconds()).UtcDateTime;
 }
 
 public static class PilotAuthenticationAdapters

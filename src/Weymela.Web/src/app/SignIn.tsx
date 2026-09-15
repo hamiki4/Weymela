@@ -78,8 +78,8 @@ function FirebaseSignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   });
   return (
     <div className="sign-in-secure" aria-live="polite">
-      <p className="eyebrow">Secure workspace sign-in</p>
       <h1>Welcome to Weymela</h1>
+      <p className="muted">We’ll send a verification code to your email.</p>
       {error ? <Notice error>{error}</Notice> : null}
       {profiles.length > 1 && adapter ? <div className="profile-choice" aria-label="Choose a profile">
         <p className="eyebrow">Choose a profile</p>
@@ -106,10 +106,6 @@ function FirebaseSignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
       </div> : null}
       {adapter ? <p className="fine-print">Forgot your PIN? Recover it from the lock screen on your recognized device.</p> : null}
       {!adapter && !error ? <Notice>Preparing secure sign-in…</Notice> : null}
-      <p className="fine-print">
-        Sign-in uses a short-lived Firebase ID token only to establish a secure Weymela
-        session. Tokens are not stored in the browser or sent in URLs.
-      </p>
     </div>
   );
 }

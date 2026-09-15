@@ -157,7 +157,8 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         await using var db = database.Open();
         var userId = Guid.NewGuid();
         var signer = new FakeSigner();
-        var issuer = new FirebaseAdminCustomTokenIssuer(db, signer, Options(), TimeProvider.System);
+        var issuedAt = new DateTimeOffset(2026, 9, 15, 18, 57, 57, 789, TimeSpan.Zero);
+        var issuer = new FirebaseAdminCustomTokenIssuer(db, signer, Options(), new FixedClock(issuedAt));
 
         await issuer.IssueAsync(userId, "weymela-pilot", default);
         await db.SaveChangesAsync();
@@ -165,6 +166,8 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
 
         var binding = Assert.Single(await db.IdentityBindings.Where(x => x.UserId == userId).ToListAsync());
         Assert.Equal(userId.ToString("N"), binding.ExternalSubject);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(issuedAt.ToUnixTimeSeconds()).UtcDateTime, binding.ValidAfterUtc);
+        Assert.Equal(0, binding.ValidAfterUtc.Ticks % TimeSpan.TicksPerSecond);
         Assert.Equal([binding.ExternalSubject, binding.ExternalSubject], signer.Uids);
     }
 
@@ -332,5 +335,10 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
             Uids.Add(uid);
             return Task.FromResult("test-custom-token");
         }
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

@@ -116,7 +116,8 @@ export class FirebaseWebAuthAdapter {
     const normalized = normalizeLoginIdentifier(identifier);
     if (purpose === "Signup" && !normalized.includes("@")) throw new Error("Signup requires an email address and phone number.");
     if (purpose === "Signup" && !phone?.trim()) throw new Error("Phone number and email are required.");
-    const response = await fetch("/api/auth/email/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, phone: phone?.trim() || null, purpose }) });
+    const normalizedPhone = purpose === "Signup" ? normalizeSignupPhone(phone) : null;
+    const response = await fetch("/api/auth/email/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, phone: normalizedPhone, purpose }) });
     if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again." : "Email verification is temporarily unavailable.");
   }
 
@@ -147,4 +148,11 @@ function normalizeLoginIdentifier(identifier: string): string {
   const phone = normalized.replace(/\s+/g, "");
   if (/^\+[1-9][0-9]{6,14}$/.test(phone)) return phone;
   throw new Error("Enter a registered phone number or email address.");
+}
+
+function normalizeSignupPhone(phone?: string): string {
+  const normalized = phone?.trim().replace(/\s+/g, "") ?? "";
+  if (!/^\+[1-9][0-9]{6,14}$/.test(normalized))
+    throw new Error("Enter a valid phone number with country code, for example +251900000000.");
+  return normalized;
 }

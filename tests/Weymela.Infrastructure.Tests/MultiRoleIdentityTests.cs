@@ -80,6 +80,50 @@ public sealed class MultiRoleIdentityTests(PostgresFixture fixture)
         Assert.Empty(result.Profiles);
     }
 
+    [Fact]
+    public async Task Same_second_firebase_auth_time_is_accepted_for_a_new_binding()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var authTime = new DateTime(2026, 9, 15, 18, 57, 57, DateTimeKind.Utc);
+        db.IdentityBindings.Add(new IdentityBinding { Provider = "Firebase", ProjectId = "weymela-pilot", ExternalSubject = "uid", UserId = user, IsActive = true, ValidAfterUtc = authTime, Version = 1 });
+        await db.SaveChangesAsync();
+
+        var result = await new TrustedIdentityService(db, new Verifier(authTime), new Directory()).SignInAsync("token", default);
+
+        Assert.Equal(user, result.Actor.UserId);
+        Assert.Equal(ActorRole.Customer, result.Actor.Role);
+    }
+
+    [Fact]
+    public async Task Firebase_auth_time_older_than_binding_is_rejected()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var validAfter = new DateTime(2026, 9, 15, 18, 57, 57, DateTimeKind.Utc);
+        db.IdentityBindings.Add(new IdentityBinding { Provider = "Firebase", ProjectId = "weymela-pilot", ExternalSubject = "uid", UserId = user, IsActive = true, ValidAfterUtc = validAfter, Version = 1 });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ApplicationFailure>(() =>
+            new TrustedIdentityService(db, new Verifier(validAfter.AddSeconds(-1)), new Directory()).SignInAsync("token", default));
+    }
+
+    [Fact]
+    public async Task Revoked_firebase_binding_is_rejected_even_at_the_same_auth_time()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var authTime = new DateTime(2026, 9, 15, 18, 57, 57, DateTimeKind.Utc);
+        db.IdentityBindings.Add(new IdentityBinding { Provider = "Firebase", ProjectId = "weymela-pilot", ExternalSubject = "uid", UserId = user, IsActive = false, ValidAfterUtc = authTime, Version = 1 });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ApplicationFailure>(() =>
+            new TrustedIdentityService(db, new Verifier(authTime), new Directory()).SignInAsync("token", default));
+    }
+
     private static async Task SeedAsync(WeymelaDbContext db, Guid user, Guid business, Guid creator, Guid customer)
     {
         db.IdentityBindings.Add(new IdentityBinding { Provider = "Firebase", ProjectId = "weymela-pilot", ExternalSubject = "uid", UserId = user, IsActive = true, ValidAfterUtc = DateTime.UtcNow.AddMinutes(-1), Version = 1 });
@@ -94,10 +138,12 @@ public sealed class MultiRoleIdentityTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
     }
 
-    private sealed class Verifier : IIdentityTokenVerifier
+    private sealed class Verifier(DateTime? requestedAuthenticatedAtUtc = null) : IIdentityTokenVerifier
     {
+        private readonly DateTime authenticatedAtUtc = requestedAuthenticatedAtUtc ?? DateTime.UtcNow;
+
         public Task<VerifiedIdentity> VerifyAsync(string _, CancellationToken __)
-            => Task.FromResult(new VerifiedIdentity("Firebase", "weymela-pilot", "uid", DateTime.UtcNow, DateTime.UtcNow.AddHours(1)));
+            => Task.FromResult(new VerifiedIdentity("Firebase", "weymela-pilot", "uid", authenticatedAtUtc, authenticatedAtUtc.AddHours(1)));
     }
 
     private sealed class Directory : IWorkspaceDirectory

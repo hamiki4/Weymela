@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -16,19 +17,23 @@ namespace Weymela.Infrastructure.Tests;
 
 public sealed class AdapterSecurityTests
 {
-    private static readonly string TestSecret = Convert.ToBase64String(Enumerable.Range(1, 32).Select(x => (byte)x).ToArray());
+    private static string TestSecret(string purpose) => Convert.ToBase64String(
+        SHA256.HashData(Encoding.UTF8.GetBytes("isolated-adapter-fixture-" + purpose)));
     private static Dictionary<string, string?> Config() => new()
     {
         ["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_pilot_test;Username=isolated;Password=test-only",
         ["V3:Auth:Provider"] = "Firebase", ["V3:Auth:FirebaseProjectId"] = "weymela-pilot",
         ["V3:Auth:EmailDeliveryMode"] = "Resend", ["V3:Auth:FirebaseCustomTokenMode"] = "FirebaseAdmin",
-        ["V3:Auth:ResendApiKey"] = "re_test_only_not_a_live_resend_key_123456",
+        ["V3:Auth:ResendApiKey"] = "re_" + Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes("isolated-resend-key"))),
         ["V3:Auth:ResendFromAddress"] = "no-reply@pilot-mail.weymela.com", ["V3:Auth:ResendFromName"] = "Weymela Pilot",
         ["GOOGLE_APPLICATION_CREDENTIALS"] = "/run/secrets/v3-firebase-admin.json",
-        ["V3:Auth:CodeHashKey"] = TestSecret, ["V3:Auth:PinPepper"] = TestSecret,
-        ["V3:AllowedOrigins:0"] = "https://v3-web.example.invalid", ["V3:PublicWebUrl"] = "https://v3-web.example.invalid",
-        ["V3:PublicApiUrl"] = "https://v3-api.example.invalid", ["V3:Security:CameraPolicy"] = RuntimeOptions.CameraPolicy,
-        ["V3:Security:TlsEdgeConfirmed"] = "true", ["V3:Auth:CookieKeyDirectory"] = "/tmp/unused-test-keys", ["V3:Auth:CookieCertificatePath"] = "/tmp/unused-test.pfx"
+        ["V3:Auth:CodeHashKey"] = TestSecret("code"), ["V3:Auth:PinPepper"] = TestSecret("pin"),
+        ["V3:AllowedOrigins:0"] = "https://v3-pilot.weymela.com", ["V3:PublicWebUrl"] = "https://v3-pilot.weymela.com",
+        ["V3:PublicApiUrl"] = "https://api-v3-pilot.weymela.com", ["V3:Security:CameraPolicy"] = RuntimeOptions.CameraPolicy,
+        ["V3:Security:TlsEdgeConfirmed"] = "true", ["V3:Auth:CookieKeyDirectory"] = "/run/weymela-v3/keys",
+        ["V3:Auth:CookieCertificatePath"] = "/run/secrets/v3-cookie-protection.pfx",
+        ["V3:Auth:CookieCertificatePassword"] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("isolated-cookie-password")))
     };
     [Fact] public void Fully_explicit_pilot_configuration_defaults_to_frozen_and_bounded_without_connecting()
     {
@@ -81,10 +86,20 @@ public sealed class AdapterSecurityTests
     [InlineData("V3:Auth:PinPepper", "weak")][InlineData("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/other.json")]
     [InlineData("V3:Auth:CodeHashKey", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")]
     [InlineData("V3:Auth:PinPepper", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")]
+    [InlineData("V3:Auth:CookieCertificatePassword", "short")]
+    [InlineData("V3:Auth:ResendApiKey", "re_replace-me-with-a-secret")]
+    [InlineData("V3:Auth:CookieCertificatePassword", "replace-me-password")]
+    [InlineData("V3:FinancialWritesEnabled", "true")]
     public void Unsafe_pilot_configuration_fails_closed(string key, string value)
     {
         var config = Config(); config[key] = value;
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+    }
+    [Fact] public void Pilot_rejects_reused_auth_code_and_pin_secret_material()
+    {
+        var config = Config(); config["V3:Auth:PinPepper"] = config["V3:Auth:CodeHashKey"];
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
     }
     [Theory] [InlineData("https://evil.invalid/profile")][InlineData("javascript:alert(1)")]
     [InlineData("https://www.tiktok.com@evil.invalid/x")][InlineData("https://www.tiktok.com.evil.invalid/x")][InlineData("http://www.tiktok.com/x")]

@@ -43,7 +43,7 @@ export function Onboarding() {
     setRole(null); setLegalAccepted(false); setForm({ displayName: "", publicId: "", region: "", category: "", submission: "" });
     status.reload(); await refresh();
   });
-  return <main className="page-shell section-kicker-space onboarding-page">
+  return <main className="main-content page-shell section-kicker-space onboarding-page">
     <PageHeader eyebrow="Your Weymela account" title="Choose how you want to use Weymela" description="Approved profiles share one account and keep their own workspace, permissions and financial records." action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
     <Resource resource={status}>{(data) => <>
       {data.profiles.length > 0 && <Section title="Requests and profiles" description="Pending requests stay separate from active profile choices.">

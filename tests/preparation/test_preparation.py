@@ -234,6 +234,15 @@ class ComposeIsolationTests(unittest.TestCase):
         manifest['images'][0]['commit'] = 'wrong-commit'
         self.assertTrue(preflight.validate(self.config, manifest))
 
+    def test_preflight_rejects_image_id_used_as_registry_digest(self):
+        config = copy.deepcopy(self.config)
+        manifest = self.manifest()
+        image = next(item for item in manifest['images'] if item['component'] == 'api')
+        image['imageId'] = 'sha256:' + '2' * 64
+        config['services']['weymela-v3-pilot-api']['image'] = image['digest'].split('@', 1)[0] + '@' + image['imageId']
+        errors = preflight.validate(config, manifest)
+        self.assertIn('api: imageId is not a registry digest reference.', errors)
+
     def test_preflight_rejects_public_listener_and_external_network(self):
         config = copy.deepcopy(self.config)
         config['services']['weymela-v3-pilot-web']['ports'][0]['host_ip'] = '0.0.0.0'

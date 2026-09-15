@@ -71,8 +71,14 @@ def validate(config, manifest):
         expression = (r'postgres:17-alpine@sha256:[a-f0-9]{64}' if part == 'postgres' else rf'ghcr\.io/[a-z0-9_.-]+/weymela-v3-{part}@sha256:[a-f0-9]{{64}}')
         if not re.fullmatch(expression, service.get('image', '')): errors.append(f'{part}: exact approved V3 digest reference required.')
         if 'build' in service or service.get('privileged') or service.get('network_mode') == 'host': errors.append(f'{part}: unsafe runtime mode.')
-        if part in images and (images[part]['digest'] != service['image'] or images[part]['commit'] != manifest.get('commit')):
-            errors.append(f'{part}: source/digest does not match manifest.')
+        if part in images:
+            approved_digest = images[part]['digest']
+            image_id = images[part].get('imageId')
+            if (image_id and re.fullmatch(r'sha256:[a-f0-9]{64}', image_id)
+                    and service.get('image') == approved_digest.split('@', 1)[0] + '@' + image_id):
+                errors.append(f'{part}: imageId is not a registry digest reference.')
+            if approved_digest != service['image'] or images[part]['commit'] != manifest.get('commit'):
+                errors.append(f'{part}: source/digest does not match manifest.')
         if part != 'web' and service.get('ports'): errors.append(f'{part}: host port forbidden.')
         if part == 'web' and any(p.get('host_ip') != '127.0.0.1' or str(p.get('published')) != '18080' for p in service.get('ports', [])):
             errors.append('Web must use only approved loopback port18080.')

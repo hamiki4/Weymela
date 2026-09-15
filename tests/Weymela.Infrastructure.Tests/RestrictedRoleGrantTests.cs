@@ -456,6 +456,17 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
     {
         await using var db = database.Open();
         var adminUserId = Guid.NewGuid();
+        db.IdentityBindings.Add(new IdentityBinding
+        {
+            Provider = "Firebase",
+            ProjectId = "weymela-pilot",
+            ExternalSubject = $"restricted-admin-{adminUserId:N}",
+            UserId = adminUserId,
+            IsActive = true,
+            ValidAfterUtc = Now.AddMinutes(-1),
+            Version = 1
+        });
+        await db.SaveChangesAsync();
         var result = await new PlatformAdminBootstrapper(db).ProvisionAsync(
             new PlatformAdminBootstrapRequest(
                 "weymela-pilot",

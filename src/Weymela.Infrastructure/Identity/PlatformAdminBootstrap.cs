@@ -64,21 +64,20 @@ public sealed class PlatformAdminBootstrapper(WeymelaDbContext db)
             if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(existing.RequestFingerprint), Encoding.UTF8.GetBytes(fingerprint)))
                 throw new InvalidOperationException("The bootstrap idempotency key was already used for a different request.");
             var replayId = Guid.Parse(existing.ResultReference);
-            var binding = await db.IdentityBindings.SingleAsync(x => x.Id == replayId, cancellationToken);
+            var replayedBinding = await db.IdentityBindings.SingleAsync(x => x.Id == replayId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new(binding.UserId, binding.Id, true);
+            return new(replayedBinding.UserId, replayedBinding.Id, true);
         }
 
-        var byExternal = await db.IdentityBindings.SingleOrDefaultAsync(x => x.Provider == "Firebase"
-            && x.ProjectId == request.FirebaseProjectId && x.ExternalSubject == request.FirebaseUid, cancellationToken);
-        if (byExternal is not null)
-        {
-            if (byExternal.UserId != request.UserId || !byExternal.IsActive || byExternal.ValidAfterUtc != request.ValidAfterUtc)
-                throw new InvalidOperationException("The Firebase UID is already bound to a conflicting V3 identity.");
-            throw new InvalidOperationException("An identity binding exists without its bootstrap idempotency record; operator review is required.");
-        }
-        if (await db.IdentityBindings.AnyAsync(x => x.UserId == request.UserId, cancellationToken))
-            throw new InvalidOperationException("The V3 user is already bound to a different external identity.");
+        if (await db.CommercePermissions.AnyAsync(x => x.Role == ActorRole.PlatformAdmin && x.IsActive, cancellationToken))
+            throw new InvalidOperationException("A Trusted Platform Admin already exists; first-admin bootstrap is closed.");
+
+        var externalBindings = await db.IdentityBindings.Where(x => x.Provider == "Firebase"
+            && x.ProjectId == request.FirebaseProjectId && x.ExternalSubject == request.FirebaseUid)
+            .ToListAsync(cancellationToken);
+        var userBindings = await db.IdentityBindings.Where(x => x.UserId == request.UserId)
+            .ToListAsync(cancellationToken);
+        var binding = RequireExistingBinding(externalBindings, userBindings, request);
 
         var activePermissions = await db.CommercePermissions.Where(x => x.UserId == request.UserId && x.IsActive).ToListAsync(cancellationToken);
         if (activePermissions.Any(x => x.Role != ActorRole.PlatformAdmin || x.SubjectId != request.UserId || x.BusinessId is not null))
@@ -86,18 +85,7 @@ public sealed class PlatformAdminBootstrapper(WeymelaDbContext db)
         if (activePermissions.Any(x => x.Role == ActorRole.PlatformAdmin && x.SubjectId == request.UserId && x.BusinessId is null))
             throw new InvalidOperationException("A Platform Admin permission exists without its bootstrap idempotency record; operator review is required.");
 
-        var bindingId = Guid.NewGuid();
-        db.IdentityBindings.Add(new IdentityBinding
-        {
-            Id = bindingId,
-            Provider = "Firebase",
-            ProjectId = request.FirebaseProjectId,
-            ExternalSubject = request.FirebaseUid,
-            UserId = request.UserId,
-            IsActive = true,
-            ValidAfterUtc = request.ValidAfterUtc,
-            Version = 1
-        });
+        var bindingId = binding.Id;
         db.CommercePermissions.Add(new CommercePermission(request.UserId, ActorRole.PlatformAdmin, request.UserId, null, true, false));
         db.IdempotencyRecords.Add(new StoredIdempotencyRecord(request.OperatorUserId, Operation, request.IdempotencyKey,
             fingerprint, bindingId.ToString(), DateTime.UtcNow));
@@ -107,6 +95,30 @@ public sealed class PlatformAdminBootstrapper(WeymelaDbContext db)
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(request.UserId, bindingId, false);
+    }
+
+    internal static IdentityBinding RequireExistingBinding(
+        IReadOnlyList<IdentityBinding> externalBindings,
+        IReadOnlyList<IdentityBinding> userBindings,
+        PlatformAdminBootstrapRequest request)
+    {
+        if (externalBindings.Count != 1 || userBindings.Count != 1)
+            throw new InvalidOperationException("An unambiguous existing Firebase identity binding is required for first-admin bootstrap.");
+
+        var binding = externalBindings[0];
+        var requestedValidAfter = request.ValidAfterUtc.ToUniversalTime();
+        if (userBindings[0].Id != binding.Id
+            || binding.Provider != "Firebase"
+            || binding.ProjectId != request.FirebaseProjectId
+            || binding.ExternalSubject != request.FirebaseUid
+            || binding.UserId != request.UserId
+            || !binding.IsActive
+            || binding.Version <= 0
+            || binding.ValidAfterUtc > DateTime.UtcNow
+            || binding.ValidAfterUtc != requestedValidAfter)
+            throw new InvalidOperationException("The supplied Firebase identity binding is inactive, invalid, or mapped to a different V3 user.");
+
+        return binding;
     }
 
     public static string Fingerprint(PlatformAdminBootstrapRequest request)

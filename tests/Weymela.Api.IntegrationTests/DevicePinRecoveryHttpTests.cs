@@ -39,11 +39,11 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
 
         var known = await client.PostAsJsonAsync("/api/auth/email/start", new
         {
-            identifier = seeded.Phone, phone = (string?)null, purpose = "PinRecovery"
+            identifier = seeded.Email, phone = (string?)null, purpose = "PinRecovery"
         });
         var unknown = await client.PostAsJsonAsync("/api/auth/email/start", new
         {
-            identifier = "+251900000001", phone = (string?)null, purpose = "PinRecovery"
+            identifier = "unknown@example.test", phone = (string?)null, purpose = "PinRecovery"
         });
 
         Assert.Equal(HttpStatusCode.Accepted, known.StatusCode);
@@ -60,13 +60,39 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         Assert.Equal(EmailCodePurpose.PinRecovery, delivery.SinglePurpose);
         Assert.Equal(before, await CredentialState(host, seeded.UserId));
 
+        var phoneRecovery = await client.PostAsJsonAsync("/api/auth/email/start", new
+        {
+            identifier = seeded.Phone, phone = (string?)null, purpose = "PinRecovery"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, phoneRecovery.StatusCode);
+
         var replacementDestination = await client.PostAsJsonAsync("/api/auth/email/start", new
         {
-            identifier = seeded.Phone, phone = "+251911111111", email = "attacker@example.test",
+            identifier = seeded.Email, phone = "+251911111111", email = "attacker@example.test",
             purpose = "PinRecovery"
         });
         Assert.Equal(HttpStatusCode.BadRequest, replacementDestination.StatusCode);
         Assert.Equal(seeded.Email, delivery.SingleDestination);
+    }
+
+    [Fact]
+    public async Task Phone_alias_update_requires_verified_unlocked_account_and_keeps_one_binding()
+    {
+        var delivery = new CaptureDelivery();
+        await using var host = await Host(delivery);
+        var seeded = await SeedAsync(host);
+        using var anonymous = host.Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await anonymous.PostAsJsonAsync("/api/account/phone-alias", new { phone = "0911111111" })).StatusCode);
+        var signedIn = await SignInAsync(host, seeded);
+        using var current = Client(host, signedIn.AllCookies);
+        var updated = await current.PostAsJsonAsync("/api/account/phone-alias", new { phone = "0911111111" });
+        Assert.Equal(HttpStatusCode.NoContent, updated.StatusCode);
+        await using var db = host.Database.Open();
+        var alias = Assert.Single(await db.AuthIdentifiers.Where(x => x.UserId == seeded.UserId && x.Kind == "Phone").ToListAsync());
+        Assert.Equal(HashIdentifier("+251911111111"), alias.IdentifierHash);
+        Assert.Single(await db.IdentityBindings.Where(x => x.UserId == seeded.UserId).ToListAsync());
+        Assert.Single(await db.AuditEvents.Where(x => x.ActorId == seeded.UserId && x.EventType == "PhoneAliasUpdated").ToListAsync());
     }
 
     [Fact]
@@ -80,10 +106,10 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         using var current = Client(host, signedIn.AllCookies);
         Assert.Equal((HttpStatusCode)423, (await current.GetAsync("/api/customer/offers")).StatusCode);
 
-        var code = await StartAsync(current, delivery, seeded.Phone, seeded.Email);
+        var code = await StartAsync(current, delivery, seeded.Email, seeded.Email);
         var wrong = await current.Post("/api/device/pin-recovery/complete", new
         {
-            identifier = seeded.Phone, code = "999999", newPin = NewPin, confirmPin = NewPin
+            identifier = seeded.Email, code = "999999", newPin = NewPin, confirmPin = NewPin
         }, "recover-wrong-code");
         Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
         Assert.Equal("InvalidCode", (await wrong.Content.ReadFromJsonAsync<JsonObject>())!["code"]!.GetValue<string>());
@@ -91,7 +117,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
 
         var recovered = await current.Post("/api/device/pin-recovery/complete", new
         {
-            identifier = seeded.Phone, code, newPin = NewPin, confirmPin = NewPin
+            identifier = seeded.Email, code, newPin = NewPin, confirmPin = NewPin
         }, "recover-success");
         Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
         Assert.Equal(DeviceAccessStates.Unlocked,
@@ -139,7 +165,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
 
         var replay = await replacement.Post("/api/device/pin-recovery/complete", new
         {
-            identifier = seeded.Phone, code, newPin = NewPin, confirmPin = NewPin
+            identifier = seeded.Email, code, newPin = NewPin, confirmPin = NewPin
         }, "recover-replay");
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
         Assert.Equal("InvalidCode", (await replay.Content.ReadFromJsonAsync<JsonObject>())!["code"]!.GetValue<string>());

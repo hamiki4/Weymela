@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
+using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
@@ -16,24 +17,23 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     private static RuntimeOptions Options() => new() { FirebaseProjectId = "isolated-v3-test", AuthCodeHashKey = "test-only-key" };
 
     [Fact]
-    public async Task Signup_requires_both_identifiers_and_email_verification_before_token_issue()
+    public async Task Email_only_signup_verifies_once_without_creating_a_phone_alias()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
         var delivery = new TestDelivery(); var issuer = new TestIssuer();
         var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
 
-        var started = await service.StartAsync("Owner@Example.com", "+251 900 000000", EmailCodePurpose.Signup, default);
+        var started = await service.StartAsync("Owner@Example.com", null, EmailCodePurpose.Signup, default);
         Assert.True(started.Accepted); Assert.Single(delivery.Codes); Assert.False(issuer.Called);
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
 
         var token = await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[0].Code, default);
         Assert.Equal("custom-token", token.CustomToken); Assert.True(issuer.Called);
         var identifiers = await db.AuthIdentifiers.OrderBy(x => x.Kind).ToListAsync();
-        Assert.Equal(2, identifiers.Count);
+        Assert.Single(identifiers);
         Assert.Equal("Email", identifiers[0].Kind); Assert.True(identifiers[0].IsVerified);
-        Assert.Equal("Phone", identifiers[1].Kind); Assert.False(identifiers[1].IsVerified);
-        Assert.All(identifiers, identifier => Assert.Equal(identifiers[0].UserId, identifier.UserId));
+        Assert.Single(issuer.IssuedUserIds);
     }
 
     [Fact]
@@ -43,17 +43,22 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var delivery = new TestDelivery(); var issuer = new TestIssuer();
         var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
 
-        await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[^1].Code, default);
         var accountUserId = issuer.IssuedUserIds[^1];
+        var binding = new IdentityBinding { UserId = accountUserId, Provider = "Firebase", ProjectId = "isolated-v3-test",
+            ExternalSubject = "test-user", IsActive = true, Version = 1, ValidAfterUtc = DateTime.UtcNow.AddMinutes(-1) };
+        db.IdentityBindings.Add(binding); await db.SaveChangesAsync();
+        await new PhoneAliasService(db, Options(), TimeProvider.System).RegisterAsync(
+            new DeviceSessionIdentity(accountUserId, binding.Id, binding.Version), "+251900000000", default);
 
         await service.StartAsync("owner@example.com", null, EmailCodePurpose.DeviceEnrollment, default);
         await service.VerifyAsync("owner@example.com", EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Code, default);
         var emailLoginUserId = issuer.IssuedUserIds[^1];
 
-        await service.StartAsync("+251 900 000000", null, EmailCodePurpose.DeviceEnrollment, default);
+        await service.StartAsync("0900000000", null, EmailCodePurpose.DeviceEnrollment, default);
         Assert.Equal("owner@example.com", delivery.Codes[^1].Destination);
-        await service.VerifyAsync("+251900000000", EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Code, default);
+        await service.VerifyAsync("900000000", EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Code, default);
         var phoneLoginUserId = issuer.IssuedUserIds[^1];
 
         Assert.Equal(accountUserId, emailLoginUserId);
@@ -63,12 +68,12 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Signup_verification_cannot_substitute_different_email_or_phone()
+    public async Task Signup_verification_cannot_substitute_a_different_email()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var issuer = new TestIssuer();
         var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
-        await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         var code = delivery.Codes[0].Code;
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("other@example.com", EmailCodePurpose.Signup, code, default));
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
@@ -81,12 +86,12 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var issuer = new TestIssuer();
         var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
-        await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         var code = delivery.Codes[0].Code;
         await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, code, default);
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, code, default));
         Assert.Single(issuer.IssuedUserIds);
-        Assert.Equal(2, await db.AuthIdentifiers.CountAsync());
+        Assert.Equal(1, await db.AuthIdentifiers.CountAsync());
     }
 
     [Fact]
@@ -106,7 +111,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var clock = new ManualClock(DateTime.UtcNow);
         var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), clock);
-        await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         var code = delivery.Codes[0].Code;
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.DeviceEnrollment, code, default));
         clock.Advance(TimeSpan.FromMinutes(11));
@@ -118,21 +123,21 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System);
-        await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         for (var i = 0; i < 5; i++) await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, "000000", default));
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[0].Code, default));
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
     }
 
     [Fact]
-    public async Task Conflicting_identifiers_never_create_a_new_mapping_or_send_a_code()
+    public async Task A_registered_phone_does_not_block_a_distinct_email_only_signup()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = Guid.NewGuid(), Kind = "Phone", IdentifierHash = HashIdentifier("+251900000000"), CreatedAtUtc = DateTime.UtcNow });
         await db.SaveChangesAsync();
         var delivery = new TestDelivery(); var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System);
-        var result = await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
-        Assert.False(result.Accepted); Assert.Empty(delivery.Codes); Assert.Single(await db.AuthIdentifiers.ToListAsync());
+        var result = await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
+        Assert.True(result.Accepted); Assert.Single(delivery.Codes); Assert.Single(await db.AuthIdentifiers.ToListAsync());
     }
 
     [Fact]
@@ -145,6 +150,32 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var result = await service.StartAsync("owner@example.com", null, EmailCodePurpose.PinRecovery, default);
         Assert.False(result.Accepted); Assert.Empty(delivery.Codes);
     }
+
+    [Fact]
+    public async Task Recovery_rejects_phone_input_without_sending_a_code()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var delivery = new TestDelivery();
+        var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.StartAsync("0911111111", null, EmailCodePurpose.PinRecovery, default));
+        Assert.Empty(delivery.Codes);
+    }
+
+    [Theory]
+    [InlineData("0911111111", "+251911111111")]
+    [InlineData("911111111", "+251911111111")]
+    [InlineData("+251 911-111-111", "+251911111111")]
+    [InlineData("+1 (202) 555-0123", "+12025550123")]
+    public void Phones_normalize_before_hashing_and_lookup(string input, string canonical)
+        => Assert.Equal(canonical, PhoneNumberNormalizer.Normalize(input));
+
+    [Theory]
+    [InlineData("091111111")]
+    [InlineData("91111111")]
+    [InlineData("+25191111111")]
+    [InlineData("091111111A")]
+    public void Malformed_phones_are_rejected(string input)
+        => Assert.Throws<ApplicationFailure>(() => PhoneNumberNormalizer.Normalize(input));
 
     private sealed class TestDelivery : IEmailCodeDelivery
     {

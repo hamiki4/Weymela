@@ -88,7 +88,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
                 new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
             var service = new EmailAuthService(db, delivery, new FakeIssuer(), Options(), TimeProvider.System);
             await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => service.StartAsync(
-                "owner@example.com", "+251900000000", EmailCodePurpose.Signup, default));
+                "owner@example.com", null, EmailCodePurpose.Signup, default));
         }
         await using var verification = database.Open();
         Assert.Empty(await verification.EmailAuthChallenges.AsNoTracking().ToListAsync());
@@ -104,8 +104,14 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         using var delivery = new ResendEmailCodeDelivery(Options(), handler);
         var service = new EmailAuthService(db, delivery, new FakeIssuer(), Options(), TimeProvider.System);
 
-        await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, Code(handler.Requests[^1].Body), default);
+        var user = (await db.AuthIdentifiers.SingleAsync(x => x.Kind == "Email")).UserId;
+        var binding = new IdentityBinding { UserId = user, Provider = "Firebase", ProjectId = "weymela-pilot",
+            ExternalSubject = "pilot-test-user", IsActive = true, Version = 1, ValidAfterUtc = DateTime.UtcNow.AddMinutes(-1) };
+        db.IdentityBindings.Add(binding); await db.SaveChangesAsync();
+        await new PhoneAliasService(db, Options(), TimeProvider.System).RegisterAsync(
+            new DeviceSessionIdentity(user, binding.Id, binding.Version), "+251900000000", default);
         await service.StartAsync("+251900000000", null, EmailCodePurpose.DeviceEnrollment, default);
 
         using var payload = JsonDocument.Parse(handler.Requests[^1].Body);
@@ -121,7 +127,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         using var delivery = new ResendEmailCodeDelivery(Options(), handler);
         var service = new EmailAuthService(db, delivery, new FakeIssuer(), Options(), TimeProvider.System);
 
-        var result = await service.StartAsync("+251911111111", null, EmailCodePurpose.PinRecovery, default);
+        var result = await service.StartAsync("unknown@example.test", null, EmailCodePurpose.PinRecovery, default);
 
         Assert.False(result.Accepted);
         Assert.Empty(handler.Requests);
@@ -169,6 +175,27 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(issuedAt.ToUnixTimeSeconds()).UtcDateTime, binding.ValidAfterUtc);
         Assert.Equal(0, binding.ValidAfterUtc.Ticks % TimeSpan.TicksPerSecond);
         Assert.Equal([binding.ExternalSubject, binding.ExternalSubject], signer.Uids);
+    }
+
+    [Fact]
+    public async Task Email_only_signup_creates_one_verified_user_and_one_Firebase_binding()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var handler = new RecordingHandler(_ => Success());
+        using var delivery = new ResendEmailCodeDelivery(Options(), handler);
+        var signer = new FakeSigner();
+        var issuer = new FirebaseAdminCustomTokenIssuer(db, signer, Options(), TimeProvider.System);
+        var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
+        await service.StartAsync("new-owner@example.test", null, EmailCodePurpose.Signup, default);
+        var code = Code(handler.Requests[^1].Body);
+        await service.VerifyAsync("new-owner@example.test", EmailCodePurpose.Signup, code, default);
+        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
+            "new-owner@example.test", EmailCodePurpose.Signup, code, default));
+        var email = Assert.Single(await db.AuthIdentifiers.ToListAsync());
+        Assert.Equal("Email", email.Kind); Assert.True(email.IsVerified);
+        var binding = Assert.Single(await db.IdentityBindings.ToListAsync());
+        Assert.Equal(email.UserId, binding.UserId);
+        Assert.Equal(binding.ExternalSubject, Assert.Single(signer.Uids));
     }
 
     [Theory]
@@ -246,7 +273,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
             using var delivery = new ResendEmailCodeDelivery(Options(), handler);
             var issuer = new FirebaseAdminCustomTokenIssuer(db, new FakeSigner(fail: true), Options(), TimeProvider.System);
             var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
-            await service.StartAsync("owner@example.com", "+251900000000", EmailCodePurpose.Signup, default);
+            await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
             await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => service.VerifyAsync(
                 "owner@example.com", EmailCodePurpose.Signup, Code(handler.Requests[^1].Body), default));
         }

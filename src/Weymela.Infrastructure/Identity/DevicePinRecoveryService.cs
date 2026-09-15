@@ -56,6 +56,7 @@ public sealed class DevicePinRecoveryService(
         var replacementDeviceCredential = OpaqueDeviceCredential.Create();
         var replacementSessionCredential = OpaqueDeviceCredential.Create();
         var identifier = EmailAuthService.NormalizeIdentifier(request.Identifier, out var identifierKind);
+        if (identifierKind != AuthIdentifierKind.Email) throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.");
         var identifierHash = EmailAuthService.HashIdentifier(identifier);
         if (!OpaqueDeviceCredential.TryDigest(request.DeviceCredential, out var deviceDigest))
             throw Forbidden();

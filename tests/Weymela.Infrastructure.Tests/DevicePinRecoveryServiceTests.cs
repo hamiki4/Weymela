@@ -25,7 +25,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
     public async Task Valid_recovery_replaces_account_device_state_and_preserves_identity_access_and_balance()
     {
         var database = await fixture.CreateAsync();
-        var seeded = await SeedAsync(database, usePhoneIdentifier: true, additionalDeviceAndSession: true,
+        var seeded = await SeedAsync(database, additionalDeviceAndSession: true,
             failedAttempts: DeviceAccessPolicy.RecoveryAttemptThreshold);
 
         DevicePinRecoveryResult result;
@@ -88,6 +88,16 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
             x.SubjectId == seeded.CustomerId || x.SubjectId == seeded.CreatorId));
         Assert.Equal(seeded.Cashback, (await verify.CustomerCashbackAccounts
             .SingleAsync(x => x.CustomerId == seeded.CustomerId)).AvailableCashback);
+    }
+
+    [Fact]
+    public async Task Phone_identifier_cannot_complete_email_only_recovery()
+    {
+        var database = await fixture.CreateAsync();
+        var seeded = await SeedAsync(database, usePhoneIdentifier: true);
+        await using var db = database.Open();
+        await Assert.ThrowsAsync<ApplicationFailure>(() => Service(db).CompleteAsync(Request(seeded)));
+        Assert.Null((await db.EmailAuthChallenges.SingleAsync(x => x.Id == seeded.ChallengeId)).ConsumedAtUtc);
     }
 
     [Theory]

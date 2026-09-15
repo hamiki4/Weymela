@@ -76,7 +76,7 @@ export async function exchangeFirebaseToken(idToken: string, profile?: SessionPr
       if (body?.code === "ProfileSelectionRequired" && Array.isArray(body.profiles))
         throw new ProfileSelectionRequiredError(body.profiles);
     }
-    throw new Error(response.status === 401 ? "Firebase sign-in was rejected." : "We could not sign you in. Please try again.");
+    throw new Error(response.status === 401 ? "Sign-in was rejected." : "We could not sign you in. Please try again.");
   }
 }
 
@@ -112,18 +112,16 @@ export class FirebaseWebAuthAdapter {
     return true;
   }
 
-  async startEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery", phone?: string): Promise<void> {
-    const normalized = normalizeLoginIdentifier(identifier);
-    if (purpose === "Signup" && !normalized.includes("@")) throw new Error("Signup requires an email address and phone number.");
-    if (purpose === "Signup" && !phone?.trim()) throw new Error("Phone number and email are required.");
-    const normalizedPhone = purpose === "Signup" ? normalizeSignupPhone(phone) : null;
-    const response = await fetch("/api/auth/email/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, phone: normalizedPhone, purpose }) });
-    if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again." : "Email verification is temporarily unavailable.");
+  async startEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery"): Promise<void> {
+    const normalized = purpose === "DeviceEnrollment" ? normalizeLoginIdentifier(identifier) : normalizeEmail(identifier);
+    const response = await fetch("/api/auth/email/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose }) });
+    if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
+      : response.status === 400 ? purpose === "DeviceEnrollment" ? "Enter a valid email or phone number." : "Enter a valid email address."
+      : "Email verification is temporarily unavailable.");
   }
 
   async verifyEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery", code: string): Promise<void> {
-    const normalized = normalizeLoginIdentifier(identifier);
-    if (purpose === "Signup" && !normalized.includes("@")) throw new Error("The code is invalid or expired.");
+    const normalized = purpose === "DeviceEnrollment" ? normalizeLoginIdentifier(identifier) : normalizeEmail(identifier);
     if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
     const response = await fetch("/api/auth/email/verify", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose, code: code.trim() }) });
     if (!response.ok) throw new Error("The code is invalid or expired.");
@@ -138,21 +136,19 @@ export class FirebaseWebAuthAdapter {
     try { await firebaseSignOut(this.auth); } catch (cause) { firebaseFailure = cause; }
     const response = await fetch("/api/session/sign-out", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" } });
     if (!response.ok && response.status !== 401) throw new Error("We could not sign you out. Please try again.");
-    if (firebaseFailure) throw new Error("Firebase sign-out could not be completed.");
+    if (firebaseFailure) throw new Error("We could not sign you out. Please try again.");
   }
 }
 
 function normalizeLoginIdentifier(identifier: string): string {
-  const normalized = identifier.trim().toLowerCase();
-  if (/^[^@\s]{1,96}@[^@\s]{1,96}$/.test(normalized)) return normalized;
-  const phone = normalized.replace(/\s+/g, "");
-  if (/^\+[1-9][0-9]{6,14}$/.test(phone)) return phone;
-  throw new Error("Enter a registered phone number or email address.");
+  const normalized = identifier.trim();
+  if (normalized.includes("@")) return normalizeEmail(normalized);
+  if (/^[+0-9()\s-]{7,24}$/.test(normalized) && /[0-9]/.test(normalized)) return normalized;
+  throw new Error("Enter a valid email or phone number.");
 }
 
-function normalizeSignupPhone(phone?: string): string {
-  const normalized = phone?.trim().replace(/\s+/g, "") ?? "";
-  if (!/^\+[1-9][0-9]{6,14}$/.test(normalized))
-    throw new Error("Enter a valid phone number with country code, for example +251900000000.");
+function normalizeEmail(email: string): string {
+  const normalized = email.trim().toLowerCase();
+  if (!/^[^@\s]{1,96}@[^@\s]{1,96}$/.test(normalized)) throw new Error("Enter a valid email address.");
   return normalized;
 }

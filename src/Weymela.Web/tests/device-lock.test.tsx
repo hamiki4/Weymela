@@ -64,9 +64,9 @@ describe("server-authoritative device lock", () => {
     render(<LockScreen />);
     await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
     expect(screen.getByRole("heading", { name: "Recover your Weymela PIN" })).toBeVisible();
-    await userEvent.type(screen.getByLabelText("Phone number or registered email"), "+251900000000");
-    await userEvent.click(screen.getByRole("button", { name: "Send recovery code" }));
-    expect(mocks.startPinRecovery).toHaveBeenCalledWith("+251900000000");
+    await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
+    await userEvent.click(screen.getByRole("button", { name: "Send verification code" }));
+    expect(mocks.startPinRecovery).toHaveBeenCalledWith("owner@example.test");
     expect(await screen.findByLabelText("Email recovery code")).toHaveAttribute("inputmode", "numeric");
     expect(screen.getByText(/If the account is eligible/)).toBeVisible();
   });
@@ -74,8 +74,8 @@ describe("server-authoritative device lock", () => {
   it("requires a six-digit code and matching masked five-digit PINs", async () => {
     render(<LockScreen />);
     await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
-    await userEvent.type(screen.getByLabelText("Phone number or registered email"), "owner@example.test");
-    await userEvent.click(screen.getByRole("button", { name: "Send recovery code" }));
+    await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
+    await userEvent.click(screen.getByRole("button", { name: "Send verification code" }));
     const newPin = screen.getByLabelText("New 5-digit PIN") as HTMLInputElement;
     const confirmation = screen.getByLabelText("Confirm new 5-digit PIN") as HTMLInputElement;
     expect(newPin.type).toBe("password");
@@ -96,7 +96,7 @@ describe("server-authoritative device lock", () => {
     mocks.state = state;
     render(<LockScreen />);
     await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
-    expect(screen.getByLabelText("Phone number or registered email")).toBeVisible();
+    expect(screen.getByLabelText("Email address")).toBeVisible();
   });
 
   it("requires full sign-in rather than offering recovery from an expired device session", () => {

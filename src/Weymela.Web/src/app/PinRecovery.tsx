@@ -16,7 +16,7 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
   const start = async (event: FormEvent) => {
     event.preventDefault();
     if (!identifier.trim()) {
-      setError("Enter your registered phone number or email.");
+      setError("Enter a valid email address.");
       return;
     }
     setBusy(true);
@@ -62,19 +62,19 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
   };
 
   return <div className="pin-recovery" aria-live="polite">
-    <p className="eyebrow">Verified email recovery</p>
+    <p className="eyebrow">Email recovery</p>
     <h1 id="recovery-title">Recover your Weymela PIN</h1>
     {step === "identifier"
       ? <>
-          <p className="muted">We’ll send a six-digit code only to the verified email already registered to this account.</p>
+          <p className="muted">We’ll send a code to your registered email.</p>
           {error ? <Notice error>{error}</Notice> : null}
           <form noValidate onSubmit={(event) => void start(event)}>
             <fieldset disabled={busy}>
-              <Field label="Phone number or registered email">
-                <input type="text" inputMode="email" autoComplete="username" value={identifier}
+              <Field label="Email address">
+                <input type="email" inputMode="email" autoComplete="email" value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)} required />
               </Field>
-              <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Sending…" : "Send recovery code"}</Button>
+              <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Sending…" : "Send verification code"}</Button>
             </fieldset>
           </form>
         </>

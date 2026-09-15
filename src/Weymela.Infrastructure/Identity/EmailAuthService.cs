@@ -36,18 +36,18 @@ public sealed class EmailAuthService(
     TimeProvider clock)
 {
     private static readonly Regex Email = new("^[^@\\s]{1,96}@[^@\\s]{1,96}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex Phone = new("^\\+[1-9][0-9]{6,14}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ResendWindow = TimeSpan.FromSeconds(60);
     private const int MaxAttempts = 5;
 
     public async Task<EmailCodeStartOutcome> StartAsync(string identifier, string? phone, EmailCodePurpose purpose, CancellationToken ct)
     {
-        EnsureConfigured();
         var normalizedIdentifier = NormalizeIdentifier(identifier, out var identifierKind);
-        var normalizedPhone = string.IsNullOrWhiteSpace(phone) ? null : NormalizePhone(phone);
-        if (purpose == EmailCodePurpose.Signup && (identifierKind != AuthIdentifierKind.Email || normalizedPhone is null))
-            throw new ApplicationFailure(FailureKind.Validation, "Phone number and email are required.");
+        if ((purpose is EmailCodePurpose.Signup or EmailCodePurpose.PinRecovery) && identifierKind != AuthIdentifierKind.Email)
+            throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.");
+        if (!string.IsNullOrWhiteSpace(phone))
+            throw new ApplicationFailure(FailureKind.Validation, "Enter your email or phone in one field.");
+        EnsureConfigured();
 
         var identifierHash = HashIdentifier(normalizedIdentifier);
         var now = clock.GetUtcNow().UtcDateTime;
@@ -57,7 +57,7 @@ public sealed class EmailAuthService(
             : null;
         var existingPhone = identifierKind == AuthIdentifierKind.Phone
             ? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone" && x.IdentifierHash == identifierHash, ct)
-            : normalizedPhone is null ? null : await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone" && x.IdentifierHash == HashIdentifier(normalizedPhone), ct);
+            : null;
 
         // Conflicting identifiers never overwrite or merge accounts. The public endpoint
         // returns the same generic response for this branch as for a normal request.
@@ -119,7 +119,7 @@ public sealed class EmailAuthService(
             UserId = userId,
             IdentifierHash = challengeKeyHash,
             EmailIdentifierHash = emailHash,
-            PhoneIdentifierHash = purpose == EmailCodePurpose.Signup ? HashIdentifier(normalizedPhone!) : identifierKind == AuthIdentifierKind.Phone ? identifierHash : null,
+            PhoneIdentifierHash = identifierKind == AuthIdentifierKind.Phone ? identifierHash : null,
             Purpose = purpose.ToString(),
             CodeHash = AuthCodeHashing.Hash(code, options.AuthCodeHashKey!),
             CreatedAtUtc = now,
@@ -164,13 +164,7 @@ public sealed class EmailAuthService(
             if (emailIdentifier is null)
                 db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Email", IdentifierHash = emailHash, DeliveryAddress = normalizedIdentifier, IsVerified = true, CreatedAtUtc = now });
             else emailIdentifier.IsVerified = true;
-            if (!string.IsNullOrWhiteSpace(challenge.PhoneIdentifierHash))
-            {
-                var phoneIdentifier = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone" && x.IdentifierHash == challenge.PhoneIdentifierHash, ct);
-                if (phoneIdentifier is not null && phoneIdentifier.UserId != userId) throw new AuthChallengeInvalidException();
-                if (phoneIdentifier is null)
-                    db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Phone", IdentifierHash = challenge.PhoneIdentifierHash, IsVerified = false, CreatedAtUtc = now });
-            }
+            if (challenge.PhoneIdentifierHash is not null) throw new AuthChallengeInvalidException();
         }
         else if (emailIdentifier is null || !emailIdentifier.IsVerified || emailIdentifier.UserId != userId)
             throw new AuthChallengeInvalidException();
@@ -212,12 +206,7 @@ public sealed class EmailAuthService(
         return NormalizePhone(trimmed);
     }
 
-    private static string NormalizePhone(string value)
-    {
-        var normalized = value.Trim().Replace(" ", "", StringComparison.Ordinal);
-        if (!Phone.IsMatch(normalized)) throw new ApplicationFailure(FailureKind.Validation, "Enter a valid phone number.");
-        return normalized;
-    }
+    private static string NormalizePhone(string value) => PhoneNumberNormalizer.Normalize(value);
 
     internal static string HashIdentifier(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }

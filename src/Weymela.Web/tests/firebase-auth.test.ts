@@ -83,20 +83,20 @@ describe("V3 Firebase Web adapter", () => {
 
   it("starts email verification without exposing identifiers in a URL", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await adapter.startEmailCode(" owner@example.com ", "Signup", "+251900000000");
+    await adapter.startEmailCode(" owner@example.com ", "Signup");
     expect(fetch).toHaveBeenCalledWith("/api/auth/email/start", expect.objectContaining({ method: "POST" }));
   });
 
-  it("rejects an invalid signup phone with a clear validation message before network", async () => {
+  it("rejects an invalid signup email with a clear validation message before network", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await expect(adapter.startEmailCode("owner@example.com", "Signup", "0900000000"))
-      .rejects.toThrow("Enter a valid phone number with country code, for example +251900000000.");
+    await expect(adapter.startEmailCode("0900000000", "Signup"))
+      .rejects.toThrow("Enter a valid email address.");
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it("uses verified email code -> custom token -> Firebase ID token exchange for signup", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await adapter.startEmailCode("owner@example.com", "Signup", "+251900000000");
+    await adapter.startEmailCode("owner@example.com", "Signup");
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(JSON.stringify({ customToken: "verified-signup-token" }), { status: 200 }));
     await adapter.verifyEmailCode("owner@example.com", "Signup", "123456");
@@ -107,19 +107,33 @@ describe("V3 Firebase Web adapter", () => {
 
   it("uses email-code verification for a phone identifier and makes no SMS/Phone OTP call", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await adapter.startEmailCode("owner@example.com", "Signup", "+251900000000");
+    await adapter.startEmailCode("owner@example.com", "Signup");
     const request = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
-    expect(request).toEqual({ identifier: "owner@example.com", phone: "+251900000000", purpose: "Signup" });
+    expect(request).toEqual({ identifier: "owner@example.com", purpose: "Signup" });
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
   it("sends a phone identifier to the server without supplying a replacement email", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await adapter.startEmailCode("+251 900 000000", "DeviceEnrollment");
+    await adapter.startEmailCode("0900000000", "DeviceEnrollment");
     const request = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
-    expect(request).toEqual({ identifier: "+251900000000", phone: null, purpose: "DeviceEnrollment" });
+    expect(request).toEqual({ identifier: "0900000000", purpose: "DeviceEnrollment" });
     expect(signInWithCustomToken).not.toHaveBeenCalled();
+  });
+
+  it.each(["0911111111", "911111111", "+251911111111"])(
+    "allows registered-phone input %s for server-side canonical lookup", async identifier => {
+      const adapter = new FirebaseWebAuthAdapter(auth as never);
+      await adapter.startEmailCode(identifier, "DeviceEnrollment");
+      const request = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
+      expect(request).toEqual({ identifier, purpose: "DeviceEnrollment" });
+    });
+
+  it("shows validation rather than provider-unavailable wording for ordinary bad input", async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(null, { status: 400 }));
+    await expect(new FirebaseWebAuthAdapter(auth as never).startEmailCode("owner@example.com", "Signup"))
+      .rejects.toThrow("Enter a valid email address.");
   });
 
   it("verifies a phone-identifier challenge through the same custom-token session path", async () => {
@@ -133,7 +147,7 @@ describe("V3 Firebase Web adapter", () => {
   it("does not establish a session when the server rejects conflicting identifiers", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(null, { status: 409 }));
-    await expect(adapter.startEmailCode("owner@example.com", "Signup", "+251900000000")).rejects.toThrow();
+    await expect(adapter.startEmailCode("owner@example.com", "Signup")).rejects.toThrow();
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     // Backend conflict/no-merge enforcement is exercised by EmailAuthServiceTests.
   });
@@ -159,9 +173,9 @@ describe("V3 Firebase Web adapter", () => {
 
   it("requires an email verification exchange before a signup session is established", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await adapter.startEmailCode(" owner@example.com ", "Signup", "+251900000000");
+    await adapter.startEmailCode(" owner@example.com ", "Signup");
     const startBody = JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
-    expect(startBody).toEqual({ identifier: "owner@example.com", phone: "+251900000000", purpose: "Signup" });
+    expect(startBody).toEqual({ identifier: "owner@example.com", purpose: "Signup" });
     expect(signInWithCustomToken).not.toHaveBeenCalled();
 
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(JSON.stringify({ customToken: "verified-signup-token" }), { status: 200 }));
@@ -171,8 +185,9 @@ describe("V3 Firebase Web adapter", () => {
 
   it("does not permit phone-only verification or recovery", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await expect(adapter.startEmailCode("", "Signup", "+251900000000")).rejects.toThrow();
+    await expect(adapter.startEmailCode("", "Signup")).rejects.toThrow();
     await expect(adapter.startEmailCode("", "PinRecovery")).rejects.toThrow();
+    await expect(adapter.startEmailCode("0911111111", "PinRecovery")).rejects.toThrow("Enter a valid email address.");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -187,7 +202,7 @@ describe("V3 Firebase Web adapter", () => {
     await adapter.startEmailCode("owner@example.com", "PinRecovery");
     const call = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[0]).toBe("/api/auth/email/start");
-    expect(JSON.parse(call[1].body as string)).toEqual({ identifier: "owner@example.com", phone: null, purpose: "PinRecovery" });
+    expect(JSON.parse(call[1].body as string)).toEqual({ identifier: "owner@example.com", purpose: "PinRecovery" });
     expect(signInWithCustomToken).not.toHaveBeenCalled();
   });
 });

@@ -151,7 +151,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var issuer = new FirebaseAdminCustomTokenIssuer(db, signer, options, clock);
         var email = new EmailAuthService(db, delivery, issuer, options, clock);
 
-        await email.StartAsync("restricted@example.test", "+251900000001",
+        await email.StartAsync("restricted@example.test", null,
             EmailCodePurpose.Signup, default);
         await email.VerifyAsync("restricted@example.test", EmailCodePurpose.Signup,
             delivery.LatestCode, default);
@@ -225,10 +225,10 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Assert.True(unlocked.Succeeded);
 
         clock.Set(Now.AddMinutes(21));
-        await email.StartAsync("+251900000001", null, EmailCodePurpose.PinRecovery, default);
+        await email.StartAsync("restricted@example.test", null, EmailCodePurpose.PinRecovery, default);
         var recovery = await new DevicePinRecoveryService(db, options, clock).CompleteAsync(
             new DevicePinRecoveryRequest(sessionIdentity, deviceCredential.Value,
-                "+251900000001", delivery.LatestCode, "56789", "56789", "pin-recovery"));
+                "restricted@example.test", delivery.LatestCode, "56789", "56789", "pin-recovery"));
         Assert.Equal(userId, recovery.Session.UserId);
 
         var notices = new NotificationService(db, clock);

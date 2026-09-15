@@ -40,6 +40,7 @@ public static class ServiceRegistration
         services.AddScoped<FinancialQueries>();
         services.AddScoped<IAdminFinancialQueries>(sp => sp.GetRequiredService<FinancialQueries>());
         services.AddScoped<EmailAuthService>();
+        services.AddScoped<PhoneAliasService>();
         services.AddScoped<RoleEnrollmentService>();
         services.AddScoped<AccountLegalOnboardingService>();
         services.TryAddSingleton<IEmailCodeDelivery, DisabledEmailCodeDelivery>();

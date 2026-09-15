@@ -34,31 +34,54 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var suffix = databaseName[^8..];
         var apiRole = $"api_test_{suffix}";
         var workerRole = $"worker_test_{suffix}";
+        var migratorRole = $"migrator_test_{suffix}";
+        var backupRole = $"backup_test_{suffix}";
         var apiPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         var workerPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
+        var migratorPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
+        var backupPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
 
         await AssertMigrationOrderAsync(database.ConnectionString);
         await SeedLegalDocumentsAsync(database);
         var adminUserId = await SeedPlatformAdminAsync(database);
         await CreateRuntimeRoleAsync(database.ConnectionString, apiRole, apiPassword);
         await CreateRuntimeRoleAsync(database.ConnectionString, workerRole, workerPassword);
+        await CreateRuntimeRoleAsync(database.ConnectionString, migratorRole, migratorPassword);
+        await CreateRuntimeRoleAsync(database.ConnectionString, backupRole, backupPassword);
+        await AssignMigrationOwnershipAsync(database.ConnectionString, migratorRole);
         await SeedUnsafeRuntimePrivilegesAsync(database.ConnectionString, apiRole, workerRole);
 
         var root = RepositoryRoot();
         var apiScript = new FileInfo(Path.Combine(root.FullName, "database/grants/v3-api.sql"));
         var workerScript = new FileInfo(Path.Combine(root.FullName, "database/grants/v3-worker.sql"));
         var verifyScript = new FileInfo(Path.Combine(root.FullName, "database/grants/v3-verify.sql"));
+        var migratorScript = new FileInfo(Path.Combine(root.FullName, "database/grants/v3-migrator.sql"));
+        var backupScript = new FileInfo(Path.Combine(root.FullName, "database/grants/v3-backup.sql"));
+        var defaultsScript = new FileInfo(Path.Combine(root.FullName,
+            "database/grants/v3-migrator-defaults.sql"));
         AssertGrantScriptContract(apiScript);
         AssertGrantScriptContract(workerScript);
+        AssertOperationalScriptContract(migratorScript);
+        AssertOperationalScriptContract(backupScript);
+        AssertOperationalScriptContract(defaultsScript);
         await ExecuteScriptAsync(database.ConnectionString, apiScript,
             [("api_role", apiRole), ("database_name", databaseName)]);
         await ExecuteScriptAsync(database.ConnectionString, workerScript,
             [("worker_role", workerRole), ("database_name", databaseName)]);
+        await ExecuteScriptAsync(database.ConnectionString, migratorScript,
+            [("migrator_role", migratorRole), ("database_name", databaseName)]);
+        await ExecuteScriptAsync(database.ConnectionString, backupScript,
+            [("backup_role", backupRole), ("database_name", databaseName)]);
+        var migratorConnection = RuntimeConnection(database.ConnectionString, migratorRole,
+            migratorPassword);
+        await ExecuteScriptAsync(migratorConnection, defaultsScript,
+            [("backup_role", backupRole)]);
         await ExecuteScriptAsync(database.ConnectionString, verifyScript,
-            [("api_role", apiRole), ("worker_role", workerRole), ("database_name", databaseName)]);
+            VerifyVariables(apiRole, workerRole, migratorRole, backupRole, databaseName));
 
         var apiConnection = RuntimeConnection(database.ConnectionString, apiRole, apiPassword);
         var workerConnection = RuntimeConnection(database.ConnectionString, workerRole, workerPassword);
+        var backupConnection = RuntimeConnection(database.ConnectionString, backupRole, backupPassword);
         var account = await ExerciseApiFlowsAsync(apiConnection, adminUserId);
         var workerSeed = await SeedWorkerFlowAsync(database, account.CreatorId, account.CreatorUserId);
         await ExerciseWorkerFlowsAsync(workerConnection, workerSeed);
@@ -68,17 +91,48 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await AssertWorkerDenialsAsync(workerConnection, apiRole, workerRole,
             new NpgsqlConnectionStringBuilder(database.ConnectionString).Username!);
         await AssertPersistedOutcomesAsync(database, account, workerSeed);
+        await ExerciseOperationalRolesAsync(database, databaseName, suffix, migratorConnection,
+            backupConnection, apiConnection, apiRole, workerRole, migratorRole, backupRole,
+            verifyScript);
 
         // The verifier must reject excess access, not merely prove that required grants exist.
         await ExecuteOwnerAsync(database.ConnectionString,
             $"GRANT SELECT ON TABLE v3.\"AuthIdentifiers\" TO {QuoteIdentifier(workerRole)}");
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteScriptAsync(database.ConnectionString,
-            verifyScript, [("api_role", apiRole), ("worker_role", workerRole),
-                ("database_name", databaseName)]));
+            verifyScript, VerifyVariables(apiRole, workerRole, migratorRole, backupRole,
+                databaseName)));
         await ExecuteOwnerAsync(database.ConnectionString,
             $"REVOKE SELECT ON TABLE v3.\"AuthIdentifiers\" FROM {QuoteIdentifier(workerRole)}");
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"GRANT UPDATE ON TABLE v3.\"AuthIdentifiers\" TO {QuoteIdentifier(backupRole)}");
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteScriptAsync(database.ConnectionString,
+            verifyScript, VerifyVariables(apiRole, workerRole, migratorRole, backupRole,
+                databaseName)));
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"REVOKE UPDATE ON TABLE v3.\"AuthIdentifiers\" FROM {QuoteIdentifier(backupRole)}");
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"GRANT CONNECT ON DATABASE {QuoteIdentifier(databaseName)} TO PUBLIC");
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteScriptAsync(database.ConnectionString,
+            verifyScript, VerifyVariables(apiRole, workerRole, migratorRole, backupRole,
+                databaseName)));
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"REVOKE CONNECT ON DATABASE {QuoteIdentifier(databaseName)} FROM PUBLIC");
+        await ExecuteOwnerAsync(database.ConnectionString,
+            "GRANT SELECT ON TABLE v3.\"InAppNotifications\" TO PUBLIC");
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteScriptAsync(database.ConnectionString,
+            verifyScript, VerifyVariables(apiRole, workerRole, migratorRole, backupRole,
+                databaseName)));
+        await ExecuteOwnerAsync(database.ConnectionString,
+            "REVOKE SELECT ON TABLE v3.\"InAppNotifications\" FROM PUBLIC");
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"ALTER DEFAULT PRIVILEGES FOR ROLE {QuoteIdentifier(migratorRole)} IN SCHEMA v3 GRANT SELECT ON TABLES TO PUBLIC");
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteScriptAsync(database.ConnectionString,
+            verifyScript, VerifyVariables(apiRole, workerRole, migratorRole, backupRole,
+                databaseName)));
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"ALTER DEFAULT PRIVILEGES FOR ROLE {QuoteIdentifier(migratorRole)} IN SCHEMA v3 REVOKE SELECT ON TABLES FROM PUBLIC");
         await ExecuteScriptAsync(database.ConnectionString, verifyScript,
-            [("api_role", apiRole), ("worker_role", workerRole), ("database_name", databaseName)]);
+            VerifyVariables(apiRole, workerRole, migratorRole, backupRole, databaseName));
     }
 
     private static async Task<ApiOutcome> ExerciseApiFlowsAsync(
@@ -453,6 +507,190 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Assert.DoesNotContain("GRANT DELETE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("BEGIN;", sql, StringComparison.Ordinal);
         Assert.Contains("COMMIT;", sql, StringComparison.Ordinal);
+    }
+
+    private static void AssertOperationalScriptContract(System.IO.FileInfo path)
+    {
+        var sql = File.ReadAllText(path.FullName);
+        Assert.StartsWith("\\set ON_ERROR_STOP on", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("GRANT ALL", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALL TABLES", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CREATE ROLE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PASSWORD", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("GRANT DELETE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("BEGIN;", sql, StringComparison.Ordinal);
+        Assert.Contains("COMMIT;", sql, StringComparison.Ordinal);
+    }
+
+    private static (string Name, string Value)[] VerifyVariables(
+        string api, string worker, string migrator, string backup, string database) =>
+    [
+        ("api_role", api), ("worker_role", worker), ("migrator_role", migrator),
+        ("backup_role", backup), ("database_name", database)
+    ];
+
+    private static async Task AssignMigrationOwnershipAsync(string connectionString, string migrator)
+    {
+        // The fixture migrates as its disposable owner. Model the Pilot ownership split
+        // before granting privileges, including the EF history table in public.
+        await ExecuteOwnerAsync(connectionString, $"GRANT USAGE, CREATE ON SCHEMA public, v3 TO {QuoteIdentifier(migrator)}");
+        await ExecuteOwnerAsync(connectionString, $"""
+            DO $ownership$
+            DECLARE item record;
+            BEGIN
+                FOR item IN
+                    SELECT n.nspname, c.relname, c.relkind
+                    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE (n.nspname = 'v3' OR
+                           (n.nspname = 'public' AND c.relname = '__EFMigrationsHistory'))
+                      AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+                LOOP
+                    EXECUTE format('ALTER %s %I.%I OWNER TO %I',
+                        CASE item.relkind WHEN 'S' THEN 'SEQUENCE'
+                            WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW'
+                            ELSE 'TABLE' END,
+                        item.nspname, item.relname, {QuoteLiteral(migrator)});
+                END LOOP;
+                FOR item IN
+                    SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                    WHERE n.nspname = 'v3'
+                LOOP
+                    EXECUTE format('ALTER FUNCTION %s OWNER TO %I',
+                        item.oid::regprocedure, {QuoteLiteral(migrator)});
+                END LOOP;
+                EXECUTE format('ALTER SCHEMA v3 OWNER TO %I', {QuoteLiteral(migrator)});
+            END $ownership$;
+            """);
+    }
+
+    private async Task ExerciseOperationalRolesAsync(
+        TestDatabase database, string databaseName, string suffix,
+        string migratorConnection, string backupConnection, string apiConnection,
+        string apiRole, string workerRole, string migratorRole, string backupRole,
+        FileInfo verifyScript)
+    {
+        var ownerConnection = database.ConnectionString;
+        var probeTable = $"ops_future_{suffix}";
+        var probeSequence = $"ops_future_seq_{suffix}";
+        await using (var connection = new NpgsqlConnection(migratorConnection))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT current_user";
+            Assert.Equal(migratorRole, (string)(await command.ExecuteScalarAsync())!);
+            command.CommandText = $"CREATE TABLE v3.{QuoteIdentifier(probeTable)} (\"Id\" integer NOT NULL)";
+            await command.ExecuteNonQueryAsync();
+            command.CommandText = $"ALTER TABLE v3.{QuoteIdentifier(probeTable)} ADD COLUMN \"Value\" text";
+            await command.ExecuteNonQueryAsync();
+            command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
+            await command.ExecuteNonQueryAsync();
+            command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
+            Assert.Equal(7L, (long)(await command.ExecuteScalarAsync())!);
+            await using (var transaction = await connection.BeginTransactionAsync())
+            {
+                command.Transaction = transaction;
+                command.CommandText = "INSERT INTO public.\"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('disposable_migration_probe', '10.0.0')";
+                await command.ExecuteNonQueryAsync();
+                command.CommandText = "DELETE FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = 'disposable_migration_probe'";
+                await command.ExecuteNonQueryAsync();
+                await transaction.RollbackAsync();
+            }
+        }
+
+        await using (var connection = new NpgsqlConnection(backupConnection))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT current_user";
+            Assert.Equal(backupRole, (string)(await command.ExecuteScalarAsync())!);
+            command.CommandText = "SELECT count(*) FROM v3.\"AuthorizedDevices\"";
+            Assert.True((long)(await command.ExecuteScalarAsync())! >= 0);
+            command.CommandText = $"SELECT count(*) FROM v3.{QuoteIdentifier(probeTable)}";
+            Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
+        }
+        await using (var connection = new NpgsqlConnection(ownerConnection))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                SELECT has_sequence_privilege({QuoteLiteral(backupRole)},
+                           {QuoteLiteral($"v3.{QuoteIdentifier(probeSequence)}")}, 'SELECT'),
+                       has_sequence_privilege({QuoteLiteral(backupRole)},
+                           {QuoteLiteral($"v3.{QuoteIdentifier(probeSequence)}")}, 'USAGE'),
+                       has_table_privilege({QuoteLiteral(apiRole)},
+                           {QuoteLiteral($"v3.{QuoteIdentifier(probeTable)}")}, 'SELECT'),
+                       has_table_privilege({QuoteLiteral(workerRole)},
+                           {QuoteLiteral($"v3.{QuoteIdentifier(probeTable)}")}, 'SELECT')
+                """;
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.True(reader.GetBoolean(0));
+            Assert.False(reader.GetBoolean(1));
+            Assert.False(reader.GetBoolean(2));
+            Assert.False(reader.GetBoolean(3));
+        }
+
+        await AssertInsufficientPrivilegeAsync(migratorConnection,
+            "CREATE ROLE forbidden_ops_role", "Migrator must not create roles");
+        await AssertInsufficientPrivilegeAsync(migratorConnection,
+            "CREATE DATABASE forbidden_ops_database", "Migrator must not create databases");
+        await AssertInsufficientPrivilegeAsync(migratorConnection,
+            $"SET ROLE {QuoteIdentifier(apiRole)}", "Migrator must not assume API role");
+        await AssertInsufficientPrivilegeAsync(migratorConnection,
+            $"SET ROLE {QuoteIdentifier(workerRole)}", "Migrator must not assume Worker role");
+        await AssertInsufficientPrivilegeAsync(migratorConnection,
+            $"SET ROLE {QuoteIdentifier(new NpgsqlConnectionStringBuilder(ownerConnection).Username!)}",
+            "Migrator must not assume bootstrap role");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            "INSERT INTO v3.\"AuthorizedDevices\" (\"Id\") VALUES (gen_random_uuid())",
+            "Backup must not insert auth state");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            "UPDATE v3.\"AuthorizedDevices\" SET \"Version\" = \"Version\"",
+            "Backup must not update auth state");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            "DELETE FROM v3.\"AuthorizedDevices\" WHERE false",
+            "Backup must not delete auth state");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            "TRUNCATE v3.\"AuthorizedDevices\"",
+            "Backup must not truncate auth state");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            $"ALTER TABLE v3.{QuoteIdentifier(probeTable)} ADD COLUMN \"Forbidden\" integer",
+            "Backup must not alter schema");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            "CREATE TABLE v3.forbidden_backup_table (id integer)",
+            "Backup must not create schema objects");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            $"DROP TABLE v3.{QuoteIdentifier(probeTable)}",
+            "Backup must not drop schema objects");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            $"SET ROLE {QuoteIdentifier(migratorRole)}", "Backup must not assume migrator role");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            $"SET ROLE {QuoteIdentifier(apiRole)}", "Backup must not assume API role");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            $"SET ROLE {QuoteIdentifier(workerRole)}", "Backup must not assume Worker role");
+        await AssertInsufficientPrivilegeAsync(backupConnection,
+            $"SET ROLE {QuoteIdentifier(new NpgsqlConnectionStringBuilder(ownerConnection).Username!)}",
+            "Backup must not assume bootstrap role");
+        await AssertIneffectiveGrantAsync(backupConnection,
+            $"GRANT SELECT ON v3.{QuoteIdentifier(probeTable)} TO {QuoteIdentifier(apiRole)}",
+            apiConnection,
+            $"SELECT count(*) FROM v3.{QuoteIdentifier(probeTable)}",
+            "Backup must not create effective grants");
+
+        await ExecuteScriptAsync(ownerConnection, verifyScript,
+            VerifyVariables(apiRole, workerRole, migratorRole, backupRole, databaseName));
+        var archive = $"/tmp/v3-ops-{suffix}.dump";
+        var dump = await fixture.ExecuteInContainerAsync(
+            "pg_dump", "-U", backupRole, "-d", databaseName, "-Fc", "--no-owner",
+            "--no-acl", "-f", archive);
+        Assert.True(dump.ExitCode == 0, "Backup-role pg_dump failed without disclosing archive data.");
+        var listing = await fixture.ExecuteInContainerAsync("pg_restore", "--list", archive);
+        Assert.Equal(0, listing.ExitCode);
+        foreach (var table in new[] { "AuthIdentifiers", "EmailAuthChallenges", "AuthorizedDevices",
+                     "DeviceSessions", "LegalAcceptances", "FinancialJournals" })
+            Assert.Contains($"TABLE DATA v3 {table}", listing.Stdout, StringComparison.Ordinal);
+        var decoded = await fixture.ExecuteInContainerAsync("pg_restore", "--file=/dev/null", archive);
+        Assert.Equal(0, decoded.ExitCode);
     }
 
     private static async Task CreateRuntimeRoleAsync(

@@ -24,6 +24,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public Task InitializeAsync() => postgres.StartAsync();
     public async Task DisposeAsync() => await postgres.DisposeAsync();
 
+    public async Task<(long ExitCode, string Stdout, string Stderr)> ExecuteInContainerAsync(
+        params string[] command)
+    {
+        var result = await postgres.ExecAsync(command);
+        return (result.ExitCode, result.Stdout, result.Stderr);
+    }
+
     public async Task<TestDatabase> CreateAsync()
     {
         // Every test uses a fresh database inside this disposable container.

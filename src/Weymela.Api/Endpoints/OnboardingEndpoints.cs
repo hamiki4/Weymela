@@ -13,7 +13,8 @@ namespace Weymela.Api.Endpoints;
 internal static class OnboardingEndpoints
 {
     private sealed record ProfileRequest(string Role, string DisplayName, string PublicId, string? Region,
-        string? Category, string? Submission, Guid? ProposedBusinessId = null);
+        string? Category, string? Submission, Guid? ProposedBusinessId = null,
+        AccountLegalConfirmation? AccountLegal = null);
     private sealed record ReviewRequest(bool Approve, string? Reason, long ExpectedVersion);
 
     public static void MapOnboardingEndpoints(this WebApplication app)
@@ -25,6 +26,8 @@ internal static class OnboardingEndpoints
             var userId = UserId(c);
             return Results.Ok(new { profiles = await service.MineAsync(userId, ct) });
         });
+        account.MapGet("/legal", async (HttpContext c, AccountLegalOnboardingService service, CancellationToken ct) =>
+            Results.Ok(await service.StatusAsync(UserId(c), ct)));
         account.MapPost("/profile", async (ProfileRequest input, HttpContext c, RoleEnrollmentService service,
             WeymelaDbContext db, TrustedIdentityService identities, TimeProvider clock, CancellationToken ct) =>
         {
@@ -33,7 +36,9 @@ internal static class OnboardingEndpoints
                 throw new ApplicationFailure(FailureKind.Validation, "Choose an available profile.");
             var actor = new Actor(userId, ActorRole.Customer, CustomerId: Guid.Empty);
             var result = await service.SubmitAsync(actor,
-                new RoleEnrollmentRequest(role, input.DisplayName, input.PublicId, input.Region, input.Category, input.Submission, input.ProposedBusinessId),
+                new RoleEnrollmentRequest(role, input.DisplayName, input.PublicId, input.Region, input.Category,
+                    input.Submission, input.ProposedBusinessId, input.AccountLegal,
+                    c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString()),
                 EndpointSupport.Key(c), ct);
             if (role == ActorRole.Customer && result.Status == RoleEnrollmentStatus.Approved)
             {

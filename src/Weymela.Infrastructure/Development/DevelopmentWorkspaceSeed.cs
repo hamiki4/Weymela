@@ -27,10 +27,10 @@ public static class DevelopmentWorkspaceSeed
         db.FinancialConfigurationVersions.Add(new(version,config,1,admin.UserId,now.AddDays(-1),
             new(PromotionType.ViewOnly,3000,new Money(300),new Money(200),new Money(100),4.5m,2,3.5m,now.AddDays(-1),version),
             new(PromotionType.ViewPlusCommission,3000,new Money(300),new Money(200),new Money(100),4.5m,2,3.5m,now.AddDays(-1),version),new Money(500),new Money(100)));
-        foreach(var type in new[]{LegalDocumentType.BusinessAgreement,LegalDocumentType.CreatorAgreement,LegalDocumentType.AntiCircumventionAgreement})
+        foreach(var type in new[]{LegalDocumentType.TermsOfService,LegalDocumentType.PrivacyPolicy,LegalDocumentType.BusinessAgreement,LegalDocumentType.CreatorAgreement,LegalDocumentType.AntiCircumventionAgreement})
         {
             var id=Guid.NewGuid();db.LegalDocumentVersions.Add(new(id,type,"fixture-1","development-fixture-not-legal-wording",now.AddDays(-1)));
-            foreach(var persona in directory.Personas.Where(x=>x.Actor.Role is ActorRole.Business or ActorRole.Creator))
+            foreach(var persona in directory.Personas.Where(x=>type is not (LegalDocumentType.TermsOfService or LegalDocumentType.PrivacyPolicy) && x.Actor.Role is ActorRole.Business or ActorRole.Creator))
                 db.LegalAcceptances.Add(new(persona.Actor.UserId,persona.Actor.Role==ActorRole.Business?LegalRole.Business:LegalRole.Creator,id,now,null,null));
         }
         await db.SaveChangesAsync();db.ChangeTracker.Clear();var commands=new FinancialCommands(db,clock);

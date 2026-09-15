@@ -105,9 +105,13 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var binding = await db.IdentityBindings.SingleAsync(x => x.UserId == userId);
 
         var enrollments = new RoleEnrollmentService(db, clock);
+        var terms = await db.LegalDocumentVersions.SingleAsync(x => x.Type == LegalDocumentType.TermsOfService);
+        var privacy = await db.LegalDocumentVersions.SingleAsync(x => x.Type == LegalDocumentType.PrivacyPolicy);
+        var accountLegal = new AccountLegalConfirmation(new(terms.Id, terms.ContentHash, true),
+            new(privacy.Id, privacy.ContentHash, true));
         var customer = await enrollments.SubmitAsync(new Actor(userId, ActorRole.Customer),
             new RoleEnrollmentRequest(ActorRole.Customer, "Restricted Customer", "CU-RUNTIME",
-                null, null, null), "customer-enrollment", default);
+                null, null, null, AccountLegal: accountLegal), "customer-enrollment", default);
         Assert.Equal(RoleEnrollmentStatus.Approved, customer.Status);
         var customerPermission = await db.CommercePermissions.SingleAsync(x =>
             x.UserId == userId && x.Role == ActorRole.Customer);
@@ -372,6 +376,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             x.ActorId == account.CreatorUserId));
         Assert.True(await db.LegalAcceptances.AnyAsync(x =>
             x.UserId == account.CreatorUserId));
+        Assert.Equal(2, await db.LegalAcceptances.CountAsync(x =>
+            x.UserId == account.CreatorUserId && x.Role == LegalRole.Account));
         Assert.True(await db.InAppNotifications.AnyAsync(x =>
             x.UserId == worker.CreatorUserId));
     }
@@ -381,6 +387,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await using var db = database.Open();
         foreach (var type in new[]
         {
+            LegalDocumentType.TermsOfService,
+            LegalDocumentType.PrivacyPolicy,
             LegalDocumentType.CreatorAgreement,
             LegalDocumentType.BusinessAgreement,
             LegalDocumentType.AntiCircumventionAgreement

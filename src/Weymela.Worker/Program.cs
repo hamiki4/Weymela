@@ -24,7 +24,9 @@ if (checkHealth)
         using var scope = host.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<WeymelaDbContext>();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         var since = DateTime.UtcNow.AddSeconds(-Math.Max(60, options.WorkerIntervalSeconds * 4));
-        var healthy = await db.WorkerCheckpoints.AsNoTracking().AnyAsync(x => x.Name == "operational-worker" && x.LastSuccessAtUtc >= since, timeout.Token);
+        var healthy = await db.WorkerCheckpoints.AsNoTracking().AnyAsync(x => x.Name == "operational-worker"
+            && x.LastSeenAtUtc >= since && x.LastSuccessAtUtc >= since
+            && x.LastSuccessAtUtc <= x.LastSeenAtUtc && x.LastErrorCode == null, timeout.Token);
         Console.WriteLine(healthy ? "healthy" : "unhealthy"); return healthy ? 0 : 1;
     }
     catch { Console.WriteLine("unhealthy"); return 1; }

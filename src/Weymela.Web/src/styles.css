@@ -1405,6 +1405,11 @@ td .button {
 }
 .profile-choice p { margin: 0; }
 .profile-choice .eyebrow { margin-bottom: -5px; }
+.onboarding-form { width: min(100%, 52rem); }
+.legal-consent { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 16px; padding: 1rem; background: var(--surface-soft); }
+.legal-consent ul { margin: .65rem 0; padding-left: 1.25rem; }
+.legal-consent .check-row { display: flex; align-items: flex-start; gap: .7rem; cursor: pointer; }
+.legal-consent .check-row input { inline-size: 1.15rem; block-size: 1.15rem; margin-top: .15rem; flex: 0 0 auto; }
 .sign-in-secure h1 {
   font-family: Georgia, serif;
   font-size: 2rem;

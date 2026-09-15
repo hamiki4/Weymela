@@ -6,7 +6,13 @@ const mocks = vi.hoisted(() => ({ post: vi.fn().mockResolvedValue({ id: "enrollm
 vi.mock("../src/api/client", () => ({
   post: mocks.post,
   useAction: () => ({ busy: false, error: null, run: async (fn: (key: string) => Promise<void>) => fn("enroll-key") }),
-  useResource: () => ({ data: { profiles: [] }, loading: false, error: null, reload: mocks.reload }),
+  useResource: (path: string) => ({ data: path === "/onboarding/legal" ? {
+    current: false,
+    documents: [
+      { documentId: "terms-id", kind: "TermsOfService", title: "Terms of Service", version: "pilot-1", contentHash: "terms-hash", effectiveFromUtc: "2026-09-01T00:00:00Z", viewPath: "/legal/terms-of-service", accepted: false },
+      { documentId: "privacy-id", kind: "PrivacyPolicy", title: "Privacy Policy", version: "pilot-1", contentHash: "privacy-hash", effectiveFromUtc: "2026-09-01T00:00:00Z", viewPath: "/legal/privacy-policy", accepted: false },
+    ]
+  } : { profiles: [] }, loading: false, error: null, reload: mocks.reload }),
 }));
 vi.mock("../src/app/Session", () => ({
   useSession: () => ({ user: { role: "Onboarding", displayName: "Account setup", publicId: "", profiles: [] }, refresh: vi.fn(), signOut: vi.fn() }),
@@ -33,7 +39,18 @@ describe("additional profile onboarding", () => {
     await userEvent.type(screen.getByLabelText("Public ID"), "CU-1");
     expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
+    const consent = screen.getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ });
+    expect(consent).not.toBeChecked();
+    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/legal/terms-of-service");
+    expect(screen.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/legal/privacy-policy");
+    await userEvent.click(consent);
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(mocks.post).toHaveBeenLastCalledWith("/onboarding/profile", expect.objectContaining({ role: "Customer", displayName: "Hana", publicId: "CU-1" }), "enroll-key");
+    expect(mocks.post).toHaveBeenLastCalledWith("/onboarding/profile", expect.objectContaining({
+      role: "Customer", displayName: "Hana", publicId: "CU-1",
+      accountLegal: {
+        termsOfService: { documentId: "terms-id", contentHash: "terms-hash", accepted: true },
+        privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true }
+      }
+    }), "enroll-key");
   });
 });

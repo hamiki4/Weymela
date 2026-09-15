@@ -56,6 +56,8 @@ Do not invent legal language or hard-code a time restriction. [`v3-pilot-legal-d
 
 Existing application gates enforce current Business/Creator Agreement + Anti-Circumvention on relevant actions. Terms/Privacy and complete content presentation must be reviewed/enforced before admitting live participants; current acceptance metadata alone is not proof the full text was shown. No automatic acceptance or data-only bypass. Internal test documents may be used only with explicit owner permission, conspicuous INTERNAL TEST / NOT FINAL LEGAL TERMS marking, new test version IDs and recorded tester consent. They must not be published to live participants or counted as final acceptance.
 
+Customer activation now requires explicit account-level acceptance of the exact current Terms of Service and Privacy Policy IDs and content hashes. The Web presents stable links at `/legal/terms-of-service` and `/legal/privacy-policy`; owner-approved content must be published and verified at those paths before Pilot participants are admitted. The application does not invent or seed final legal prose. Pilot readiness remains fail-closed when current effective Terms/Privacy version records are missing, and publication/content/hash verification remains an operator acceptance action.
+
 ## Test identity plan — 10 distinct identities, no credentials in source
 
 | Label | Role | Purpose |

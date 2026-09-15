@@ -100,6 +100,13 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
         var session = await client.GetFromJsonAsync<JsonObject>("/api/session");
         Assert.Equal("Onboarding", session!["role"]!.GetValue<string>());
         Assert.Empty(session["profiles"]!.AsArray());
+        var legal = await client.GetAsync("/api/onboarding/legal");
+        Assert.Equal(HttpStatusCode.OK, legal.StatusCode);
+        var legalBody = await legal.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(new[] { "PrivacyPolicy", "TermsOfService" }, legalBody!["documents"]!.AsArray()
+            .Select(x => x!["kind"]!.GetValue<string>()).OrderBy(x => x).ToArray());
+        var workspace = await client.GetAsync("/api/customer/offers");
+        Assert.NotEqual(HttpStatusCode.OK, workspace.StatusCode);
     }
 
     private sealed class FakeIdentity : IIdentityTokenVerifier

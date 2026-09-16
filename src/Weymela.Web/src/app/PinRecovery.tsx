@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { Button, Field, Notice } from "../ui/components";
+import { PinInput } from "../ui/PinInput";
 import { useSession } from "./Session";
 
 export function PinRecovery({ onCancel }: { onCancel: () => void }) {
@@ -12,6 +13,7 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
   const [confirmPin, setConfirmPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   const start = async (event: FormEvent) => {
     event.preventDefault();
@@ -35,18 +37,22 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
     event.preventDefault();
     if (!/^[0-9]{6}$/.test(code)) {
       setError("Enter the six-digit email code.");
+      setPinError(null);
       return;
     }
     if (!/^[0-9]{5}$/.test(newPin)) {
-      setError("Enter exactly five digits for your new PIN.");
+      setError("Enter five digits for your new PIN.");
+      setPinError("Enter five digits for your new PIN.");
       return;
     }
     if (newPin !== confirmPin) {
-      setError("The PIN entries do not match.");
+      setError("PINs don't match. Try again.");
+      setPinError("PINs don't match. Try again.");
       return;
     }
     setBusy(true);
     setError(null);
+    setPinError(null);
     try {
       await session.completePinRecovery(identifier.trim(), code, newPin, confirmPin);
       setCode("");
@@ -87,14 +93,8 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
                 <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}"
                   minLength={6} maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} required />
               </Field>
-              <Field label="New 5-digit PIN">
-                <input type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{5}"
-                  minLength={5} maxLength={5} value={newPin} onChange={(event) => setNewPin(event.target.value)} required />
-              </Field>
-              <Field label="Confirm new 5-digit PIN">
-                <input type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{5}"
-                  minLength={5} maxLength={5} value={confirmPin} onChange={(event) => setConfirmPin(event.target.value)} required />
-              </Field>
+              <PinInput label="New PIN" value={newPin} onChange={(value) => { setNewPin(value); setError(null); setPinError(null); }} error={pinError} />
+              <PinInput label="Confirm new PIN" value={confirmPin} onChange={(value) => { setConfirmPin(value); setError(null); setPinError(null); }} error={pinError} />
               <Button type="submit" icon="lock" disabled={busy}>{busy ? "Recovering…" : "Recover device"}</Button>
             </fieldset>
           </form>

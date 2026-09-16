@@ -4,6 +4,22 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { SessionUser } from "../src/api/types";
 
+async function fillPin(page: import("@playwright/test").Page, label: string, pin: string) {
+  if (!/^[0-9]{5}$/.test(pin)) throw new Error("Test PIN must be five digits.");
+  const cells = page.getByRole("group", { name: label, exact: true }).locator("input");
+  await expect(cells).toHaveCount(5);
+  for (let index = 0; index < 5; index++) await cells.nth(index).fill(pin[index]);
+}
+
+async function pinTapTargets(page: import("@playwright/test").Page) {
+  const targets = await page.locator(".pin-input-cells input").evaluateAll(elements => elements.map(element => {
+    const rect = element.getBoundingClientRect();
+    return rect.width >= 44 && rect.height >= 44;
+  }));
+  expect(targets.length).toBeGreaterThan(0);
+  expect(targets.every(Boolean)).toBe(true);
+}
+
 type RuntimeSignals = {
   consoleErrors: string[];
   pageErrors: string[];
@@ -370,13 +386,16 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   const account = await createVerifiedAccount(context, false);
   await open(page, "/onboarding");
   await expect(page).toHaveURL(/\/pin-setup/);
-  await expect(page.getByRole("heading", { name: "Set up your Weymela PIN" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
   for (const width of [375, 390, 393, 430, 768, 1366]) {
     await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
     await layout(page);
+    await pinTapTargets(page);
   }
-  await page.getByLabel("5-digit PIN", { exact: true }).fill("01234");
-  await page.getByLabel("Confirm 5-digit PIN", { exact: true }).fill("01234");
+  await page.getByRole("group", { name: "Create PIN", exact: true }).locator("input").first().click();
+  await page.keyboard.type("01234");
+  await expect(page.getByRole("group", { name: "Create PIN", exact: true }).locator("input").last()).toHaveValue("4");
+  await fillPin(page, "Confirm PIN", "01234");
   const deviceEnrollment = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/enrollment", { timeout: 7000 });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -415,11 +434,12 @@ test("server idle lock requires the authorized-device PIN and propagates across 
   await expect(direct.json()).resolves.toMatchObject({ code: "SessionLocked" });
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
-  await expect(second.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(second.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   for (const width of [375, 390, 393, 430, 768, 1440]) {
     await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
     await layout(page);
+    await pinTapTargets(page);
   }
 
   const session = await context.request.get("/api/session");
@@ -430,14 +450,14 @@ test("server idle lock requires the authorized-device PIN and propagates across 
   });
   expect(switchAttempt.status()).toBe(423);
 
-  await page.getByLabel("5-digit PIN", { exact: true }).fill("99999");
+  await fillPin(page, "PIN", "99999");
   const rejected = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/unlock");
   await page.getByRole("button", { name: "Unlock", exact: true }).click();
   expect((await rejected).status()).toBe(401);
   await expect(page.getByRole("alert")).toContainText("incorrect");
 
-  await page.getByLabel("5-digit PIN", { exact: true }).fill("01234");
+  await fillPin(page, "PIN", "01234");
   const unlocked = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/unlock");
   await page.getByRole("button", { name: "Unlock", exact: true }).click();
@@ -461,7 +481,7 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
   try {
     expect((await context.request.post("/__test/device-session/idle")).status()).toBe(204);
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await page.getByRole("button", { name: "Forgot PIN" }).click();
     await expect(page.getByRole("heading", { name: "Recover your Weymela PIN" })).toBeVisible();
     for (const width of [375, 390, 393, 430, 768, 1440]) {
@@ -480,8 +500,8 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
     const { code } = await codeResponse.json() as { code: string };
 
     await page.getByLabel("Email recovery code").fill("999999");
-    await page.getByLabel("New 5-digit PIN", { exact: true }).fill("56789");
-    await page.getByLabel("Confirm new 5-digit PIN", { exact: true }).fill("56789");
+    await fillPin(page, "New PIN", "56789");
+    await fillPin(page, "Confirm new PIN", "56789");
     const invalid = page.waitForResponse(response => response.request().method() === "POST"
       && new URL(response.url()).pathname === "/api/device/pin-recovery/complete");
     await page.getByRole("button", { name: "Recover device" }).click();
@@ -503,12 +523,12 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
 
     expect((await context.request.post("/__test/device-session/idle")).status()).toBe(204);
     await page.reload();
-    await page.getByLabel("5-digit PIN").fill("01234");
+    await fillPin(page, "PIN", "01234");
     const oldPin = page.waitForResponse(response => response.request().method() === "POST"
       && new URL(response.url()).pathname === "/api/device/unlock");
     await page.getByRole("button", { name: "Unlock" }).click();
     expect((await oldPin).status()).toBe(401);
-    await page.getByLabel("5-digit PIN").fill("56789");
+    await fillPin(page, "PIN", "56789");
     const newPin = page.waitForResponse(response => response.request().method() === "POST"
       && new URL(response.url()).pathname === "/api/device/unlock");
     await page.getByRole("button", { name: "Unlock" }).click();
@@ -526,8 +546,8 @@ test("recovery-required device can complete verified-email PIN recovery", async 
   await activateCustomer(context, account);
   expect((await context.request.post("/__test/device/recovery-required")).status()).toBe(204);
   await page.goto("/customer/offers");
-  await expect(page.getByRole("heading", { name: "Weymela is locked" })).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText("recovery is required");
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("Verify your email to reset your PIN");
   await page.getByRole("button", { name: "Forgot PIN" }).click();
   await page.getByLabel("Email address").fill(account.email);
   const started = page.waitForResponse(response => response.request().method() === "POST"
@@ -537,8 +557,8 @@ test("recovery-required device can complete verified-email PIN recovery", async 
   const codeResponse = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(account.email)}`);
   const { code } = await codeResponse.json() as { code: string };
   await page.getByLabel("Email recovery code").fill(code);
-  await page.getByLabel("New 5-digit PIN", { exact: true }).fill("24680");
-  await page.getByLabel("Confirm new 5-digit PIN", { exact: true }).fill("24680");
+  await fillPin(page, "New PIN", "24680");
+  await fillPin(page, "Confirm new PIN", "24680");
   const completed = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/pin-recovery/complete");
   await page.getByRole("button", { name: "Recover device" }).click();

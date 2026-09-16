@@ -1422,6 +1422,8 @@ td .button {
   display: grid;
   place-items: center;
   padding: 24px;
+  padding-block: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-bottom));
+  padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right));
   background: #f4f7ef;
 }
 .pin-setup-card {
@@ -1444,10 +1446,12 @@ td .button {
 .pin-setup-card fieldset { display: grid; gap: 16px; }
 .pin-setup-card .button { width: 100%; margin-top: 4px; }
 .lock-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
+  padding-block: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-bottom));
+  padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right));
   background: var(--surface-soft, #f4f7f5);
 }
 .lock-card {
@@ -1465,6 +1469,35 @@ td .button {
 .lock-actions { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; }
 .pin-recovery h1 { margin: 6px 0 10px; }
 .pin-recovery > .text-button { margin-top: 10px; }
+.pin-input { min-width: 0; }
+.pin-input-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: .84rem;
+  font-weight: 600;
+}
+.pin-input-cells {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(6px, 1.8vw, 10px);
+  width: 100%;
+}
+.pin-input-cells input {
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 1.45rem;
+  font-variant-numeric: tabular-nums;
+}
+.pin-input-cells input[aria-invalid="true"] { border-color: #a94537; }
+@media (max-width: 380px) {
+  .pin-setup-page, .lock-page {
+    padding-block: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-bottom));
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+  }
+  .pin-setup-card, .lock-card { padding: 18px; }
+}
 .text-button { border: 0; background: transparent; color: var(--ink, #17372a); text-decoration: underline; padding: 10px 0; cursor: pointer; }
 .text-button:hover { color: var(--ink, #17372a); }
 .auth-methods {

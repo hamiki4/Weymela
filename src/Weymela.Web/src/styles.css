@@ -1327,38 +1327,41 @@ td .button {
 .sign-in {
   min-height: 100dvh;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .sign-in-story {
   background: #edf2e5;
-  padding: max(18px, env(safe-area-inset-top)) 22px 20px;
+  min-height: clamp(184px, 28dvh, 236px);
+  padding: max(12px, env(safe-area-inset-top)) 18px 12px;
   position: relative;
   overflow: hidden;
 }
 .sign-in-story .brand {
-  margin-bottom: 14px;
+  margin-bottom: 6px;
+  font-size: 1.4rem;
 }
 .sign-in-story h1 {
   font-family: Georgia, serif;
   font-weight: 400;
-  font-size: clamp(2rem, 10vw, 2.7rem);
+  font-size: clamp(1.65rem, 7.5vw, 2rem);
   letter-spacing: -0.055em;
-  line-height: 1.13;
+  line-height: 1.04;
 }
-.sign-in-story .eyebrow { margin-bottom: 7px; }
-.sign-in-story h1 { margin-bottom: 8px; }
-.sign-in-story > p:last-of-type { margin-bottom: 0; line-height: 1.45; }
+.sign-in-story .eyebrow { margin-bottom: 4px; }
+.sign-in-story h1 { margin-bottom: 5px; }
+.sign-in-story > p:last-of-type { margin-bottom: 0; line-height: 1.3; }
 .sign-in-story > p:last-of-type {
-  font-size: 0.9rem;
-  max-width: 300px;
+  font-size: 0.78rem;
+  max-width: 260px;
   color: var(--muted);
 }
 .story-mark {
   position: absolute;
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 6rem;
-  right: 18px;
-  bottom: -24px;
+  font-size: 5rem;
+  right: 14px;
+  bottom: -22px;
   color: #dae5ce;
   pointer-events: none;
 }
@@ -1367,9 +1370,9 @@ td .button {
   z-index: 1;
 }
 .sign-in-form {
-  padding: 26px 22px max(26px, env(safe-area-inset-bottom));
+  padding: 22px 22px max(26px, env(safe-area-inset-bottom));
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 }
 .sign-in-form > div {

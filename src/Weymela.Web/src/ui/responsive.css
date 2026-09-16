@@ -539,6 +539,7 @@
   }
   .sign-in {
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: minmax(0, 1fr);
   }
   .sign-in-story {
     padding: 55px 65px;
@@ -550,6 +551,7 @@
     position: absolute;
     top: 48px;
     left: 65px;
+    font-size: 1.75rem;
   }
   .sign-in-story .brand { margin-bottom: 44px; }
   .sign-in-story h1 {
@@ -562,6 +564,7 @@
   }
   .sign-in-form {
     padding: 65px;
+    align-items: center;
   }
   .workspace-footer {
     padding-left: 36px;

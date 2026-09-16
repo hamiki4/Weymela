@@ -172,24 +172,53 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         => Assert.Throws<ApplicationFailure>(() => PhoneNumberNormalizer.Normalize(input));
 
     [Fact]
-    public async Task Signup_telemetry_distinguishes_created_delivery_and_existing_account_suppression()
+    public async Task Signup_telemetry_distinguishes_new_identity_and_same_identity_continuation()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var issuer = new TestIssuer();
         var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
         var createdBefore = OperationalTelemetry.SignupChallengeCreated.Value;
         var acceptedBefore = OperationalTelemetry.SignupDeliveryAccepted.Value;
-        var suppressedBefore = OperationalTelemetry.SignupSuppressed.Value;
+        var continuationBefore = OperationalTelemetry.SignupContinuation.Value;
 
         await service.StartAsync("telemetry@example.test", null, EmailCodePurpose.Signup, default);
         await service.VerifyAsync("telemetry@example.test", EmailCodePurpose.Signup, delivery.Codes[0].Code, default);
+        var originalUser = issuer.IssuedUserIds.Single();
         var repeated = await service.StartAsync("telemetry@example.test", null, EmailCodePurpose.Signup, default);
+        await service.VerifyAsync("telemetry@example.test", EmailCodePurpose.Signup, delivery.Codes[1].Code, default);
 
-        Assert.False(repeated.Accepted);
-        Assert.Equal(createdBefore + 1, OperationalTelemetry.SignupChallengeCreated.Value);
-        Assert.Equal(acceptedBefore + 1, OperationalTelemetry.SignupDeliveryAccepted.Value);
-        Assert.Equal(suppressedBefore + 1, OperationalTelemetry.SignupSuppressed.Value);
-        Assert.Single(delivery.Codes);
+        Assert.True(repeated.Accepted);
+        Assert.Equal(createdBefore + 2, OperationalTelemetry.SignupChallengeCreated.Value);
+        Assert.Equal(acceptedBefore + 2, OperationalTelemetry.SignupDeliveryAccepted.Value);
+        Assert.Equal(continuationBefore + 1, OperationalTelemetry.SignupContinuation.Value);
+        Assert.Equal(2, delivery.Codes.Count);
+        Assert.All(issuer.IssuedUserIds, issued => Assert.Equal(originalUser, issued));
+        Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Email").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Password_recovery_resumes_verified_identity_when_security_setup_is_incomplete()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
+        await service.StartAsync("resume@example.test", null, EmailCodePurpose.Signup, default);
+        await service.VerifyAsync("resume@example.test", EmailCodePurpose.Signup, delivery.Codes[^1].Code, default);
+        var originalUser = issuer.IssuedUserIds[^1];
+
+        await service.StartAsync("resume@example.test", null, EmailCodePurpose.PasswordRecovery, default);
+        var result = await service.VerifyPasswordRecoveryAsync(
+            "resume@example.test", delivery.Codes[^1].Code, default);
+
+        Assert.Equal(PasswordRecoveryNextStep.AccountSetup, result.NextStep);
+        Assert.Null(result.RecoveryGrant);
+        Assert.NotNull(result.AccountSetupToken);
+        Assert.Equal(originalUser, issuer.IssuedUserIds[^1]);
+        Assert.Single(await db.AuthIdentifiers.ToListAsync());
+        Assert.Empty(await db.PasswordCredentials.ToListAsync());
+        var challenge = await db.EmailAuthChallenges.OrderByDescending(x => x.CreatedAtUtc).FirstAsync();
+        Assert.NotNull(challenge.ConsumedAtUtc);
+        Assert.Null(challenge.RecoveryGrantHash);
     }
 
     [Fact]

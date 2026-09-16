@@ -21,6 +21,12 @@ public sealed class AuthChallengeInvalidException : Exception
     public AuthChallengeInvalidException() : base("The code is invalid or expired.") { }
 }
 
+public sealed class PasswordRecoveryTransactionInvalidException : Exception
+{
+    public PasswordRecoveryTransactionInvalidException()
+        : base("Your reset session has expired. Request a new code.") { }
+}
+
 public sealed record EmailCodeStartOutcome(bool Accepted, DateTime ExpiresAtUtc, int ResendAfterSeconds);
 
 /// <summary>
@@ -54,18 +60,14 @@ public sealed class EmailAuthService(
         var existingEmail = await db.AuthIdentifiers.AsTracking()
             .SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == identifierHash, ct);
 
-        // Conflicting identifiers never overwrite or merge accounts. The public endpoint
-        // returns the same generic response for this branch as for a normal request.
-        if (purpose == EmailCodePurpose.Signup && existingEmail is not null)
-        {
-            OperationalTelemetry.SignupSuppressed.Add(1);
-            await tx.CommitAsync(ct);
-            return new(false, now.Add(Lifetime), (int)ResendWindow.TotalSeconds);
-        }
         AuthIdentifierRecord? deliveryEmail;
         if (purpose == EmailCodePurpose.Signup)
         {
-            deliveryEmail = null;
+            // A verified mailbox may resume its existing Weymela identity. The public
+            // response remains identical, and ownership is established before any
+            // account lifecycle state is exposed.
+            deliveryEmail = existingEmail;
+            if (existingEmail is not null) OperationalTelemetry.SignupContinuation.Add(1);
         }
         else
         {
@@ -78,8 +80,12 @@ public sealed class EmailAuthService(
         }
         var emailHash = identifierHash;
         var challengeKeyHash = identifierHash;
-        var userId = purpose == EmailCodePurpose.Signup ? (Guid?)Guid.NewGuid() : deliveryEmail!.UserId;
-        var deliveryAddress = purpose == EmailCodePurpose.Signup ? normalizedIdentifier : deliveryEmail!.DeliveryAddress!;
+        var userId = purpose == EmailCodePurpose.Signup
+            ? deliveryEmail?.UserId ?? Guid.NewGuid()
+            : deliveryEmail!.UserId;
+        var deliveryAddress = purpose == EmailCodePurpose.Signup
+            ? deliveryEmail?.DeliveryAddress ?? normalizedIdentifier
+            : deliveryEmail!.DeliveryAddress!;
         if (purpose != EmailCodePurpose.Signup && deliveryEmail is null)
         {
             await tx.CommitAsync(ct);
@@ -156,7 +162,7 @@ public sealed class EmailAuthService(
         var emailIdentifier = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == emailHash, ct);
         if (purpose == EmailCodePurpose.Signup)
         {
-            if (emailIdentifier is not null && (emailIdentifier.UserId != userId || emailIdentifier.IsVerified)) throw new AuthChallengeInvalidException();
+            if (emailIdentifier is not null && emailIdentifier.UserId != userId) throw new AuthChallengeInvalidException();
             if (emailIdentifier is null)
                 db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Email", IdentifierHash = emailHash, DeliveryAddress = normalizedIdentifier, IsVerified = true, CreatedAtUtc = now });
             else emailIdentifier.IsVerified = true;
@@ -172,7 +178,7 @@ public sealed class EmailAuthService(
         return result;
     }
 
-    public async Task<PasswordRecoveryGrantResult> VerifyPasswordRecoveryAsync(
+    public async Task<PasswordRecoveryVerificationResult> VerifyPasswordRecoveryAsync(
         string email,
         string code,
         CancellationToken ct)
@@ -201,8 +207,6 @@ public sealed class EmailAuthService(
             && x.IdentifierHash == identifierHash && x.UserId == challenge.UserId && x.IsVerified, ct);
         if (identifier is null) throw new AuthChallengeInvalidException();
 
-        var grant = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var earlierGrants = await db.EmailAuthChallenges.AsTracking()
             .Where(x => x.Id != challenge.Id && x.UserId == challenge.UserId
                 && x.Purpose == EmailCodePurpose.PasswordRecovery.ToString()
@@ -210,11 +214,28 @@ public sealed class EmailAuthService(
             .ToListAsync(ct);
         foreach (var earlier in earlierGrants) earlier.RecoveryGrantConsumedAtUtc = now;
         challenge.ConsumedAtUtc = now;
+        var hasCredential = await db.PasswordCredentials.AsNoTracking()
+            .AnyAsync(x => x.UserId == challenge.UserId.Value, ct);
+        if (!hasCredential)
+        {
+            // Email ownership is sufficient to resume the same incomplete identity,
+            // but it is not a password-reset authorization when no credential exists.
+            var accountSetupToken = await tokenIssuer.IssueAsync(
+                challenge.UserId.Value, options.FirebaseProjectId, ct);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return new(PasswordRecoveryNextStep.AccountSetup, null, accountSetupToken,
+                accountSetupToken.ExpiresAtUtc);
+        }
+
+        var grant = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
         challenge.RecoveryGrantHash = PasswordCredentialService.HashRecoveryGrant(grant);
         challenge.RecoveryGrantExpiresAtUtc = now.Add(RecoveryGrantLifetime);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return new(grant, challenge.RecoveryGrantExpiresAtUtc.Value);
+        return new(PasswordRecoveryNextStep.PasswordReset, grant, null,
+            challenge.RecoveryGrantExpiresAtUtc.Value);
     }
 
     private void EnsureConfigured()

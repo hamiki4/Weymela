@@ -191,7 +191,7 @@ public sealed class PasswordCredentialService(
     {
         PasswordCredentialHasher.ValidateNew(newPassword, confirmPassword);
         if (string.IsNullOrWhiteSpace(recoveryGrant) || recoveryGrant.Length > 128)
-            throw new AuthChallengeInvalidException();
+            throw new PasswordRecoveryTransactionInvalidException();
         var grantHash = HashRecoveryGrant(recoveryGrant);
         var verifier = PasswordCredentialHasher.Hash(newPassword);
         var now = clock.GetUtcNow().UtcDateTime;
@@ -207,13 +207,13 @@ public sealed class PasswordCredentialService(
                 || challenge.RecoveryGrantExpiresAtUtc is null
                 || challenge.RecoveryGrantExpiresAtUtc <= now || challenge.UserId is null
                 || challenge.EmailIdentifierHash != challenge.IdentifierHash)
-                throw new AuthChallengeInvalidException();
+                throw new PasswordRecoveryTransactionInvalidException();
             var emailIdentifier = await db.AuthIdentifiers.AsNoTracking().SingleOrDefaultAsync(x => x.Kind == "Email"
                 && x.IdentifierHash == challenge.IdentifierHash && x.UserId == challenge.UserId && x.IsVerified, ct);
             var credential = await db.PasswordCredentials.FromSqlInterpolated(
                 $"SELECT *, xmin FROM v3.\"PasswordCredentials\" WHERE \"UserId\" = {challenge.UserId.Value} FOR UPDATE")
                 .SingleOrDefaultAsync(ct);
-            if (emailIdentifier is null || credential is null) throw new AuthChallengeInvalidException();
+            if (emailIdentifier is null || credential is null) throw new PasswordRecoveryTransactionInvalidException();
 
             credential.PasswordHash = verifier;
             credential.Algorithm = PasswordCredentialHasher.Algorithm;
@@ -233,7 +233,7 @@ public sealed class PasswordCredentialService(
         }
         catch (Exception exception) when (DatabaseCollision(exception))
         {
-            throw new AuthChallengeInvalidException();
+            throw new PasswordRecoveryTransactionInvalidException();
         }
     }
 

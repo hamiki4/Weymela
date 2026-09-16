@@ -213,9 +213,9 @@ describe("V3 Firebase Web adapter", () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
     await adapter.startEmailCode("owner@example.com", "PasswordRecovery");
     (fetch as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(new Response(JSON.stringify({ expiresAtUtc: "2026-09-16T12:10:00Z" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ next: "PasswordReset", expiresAtUtc: "2026-09-16T12:10:00Z" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await adapter.verifyPasswordRecovery("owner@example.com", "123456");
+    await expect(adapter.verifyPasswordRecovery("owner@example.com", "123456")).resolves.toBe("PasswordReset");
     await adapter.resetPassword("correct horse battery staple", "correct horse battery staple");
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     expect(JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string))
@@ -224,5 +224,32 @@ describe("V3 Firebase Web adapter", () => {
       .toEqual({ newPassword: "correct horse battery staple", confirmPassword: "correct horse battery staple" });
     expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[2][1].body)
       .not.toContain("recoveryGrant");
+  });
+
+  it("uses verified recovery ownership to resume the same account when no password exists", async () => {
+    const adapter = new FirebaseWebAuthAdapter(auth as never);
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(JSON.stringify({
+      next: "AccountSetup", customToken: "same-account-token", expiresAtUtc: "2026-09-16T12:10:00Z",
+    }), { status: 200 }));
+
+    await expect(adapter.verifyPasswordRecovery("owner@example.com", "123456")).resolves.toBe("AccountSetup");
+    expect(signInWithCustomToken).toHaveBeenCalledWith(auth, "same-account-token");
+  });
+
+  it("maps reset authorization and password validation failures accurately", async () => {
+    const adapter = new FirebaseWebAuthAdapter(auth as never);
+    (fetch as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: "RecoverySessionExpired",
+        message: "Your reset session has expired. Request a new code.",
+      }), { status: 400, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: "Validation", message: "Use at least 12 characters for your password.",
+      }), { status: 400, headers: { "Content-Type": "application/json" } }));
+
+    await expect(adapter.resetPassword("replacement passphrase", "replacement passphrase"))
+      .rejects.toThrow("Your reset session has expired. Request a new code.");
+    await expect(adapter.resetPassword("short", "short"))
+      .rejects.toThrow("Use at least 12 characters for your password.");
   });
 });

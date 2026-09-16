@@ -54,7 +54,7 @@ describe("additional profile onboarding", () => {
     mocks.activeProfiles = [{ role: "Customer" }];
     try {
       render(<Onboarding />);
-      expect(screen.queryByRole("button", { name: /Use as Customer/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Customer.*Already added/ })).toBeDisabled();
       expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeVisible();
       expect(screen.getByRole("button", { name: /Add a Business/ })).toBeVisible();
     } finally { mocks.activeProfiles = []; }

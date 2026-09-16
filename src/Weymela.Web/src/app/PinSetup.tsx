@@ -4,6 +4,7 @@ import { Button, Notice } from "../ui/components";
 import { PinInput } from "../ui/PinInput";
 import { roleHome, useSession } from "./Session";
 import { Brand } from "./Shell";
+import { AccountRedirect } from "./AccountEntry";
 
 export function PinSetup() {
   const session = useSession();
@@ -14,7 +15,24 @@ export function PinSetup() {
   const [error, setError] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
 
-  if (!session.loading && !session.user) return <Navigate to="/sign-in" replace />;
+  if (session.loading) return <main className="pin-setup-page">
+    <section className="pin-setup-card" aria-live="polite">
+      <Brand />
+      <div role="status">Opening your PIN setup…</div>
+    </section>
+  </main>;
+  if (session.loadFailed || session.user && (!session.accountSecurity || !session.deviceEnrollment
+      || session.deviceEnrollment.state === "Unavailable"))
+    return <main className="pin-setup-page">
+      <section className="pin-setup-card" aria-labelledby="pin-setup-error-title">
+        <Brand />
+        <h1 id="pin-setup-error-title">We couldn't load your PIN setup.</h1>
+        <Button type="button" onClick={() => void session.refresh()}>Try again</Button>
+      </section>
+    </main>;
+  if (!session.user) return <Navigate to="/sign-in" replace />;
+  if (!session.accountSecurity?.passwordEnrolled)
+    return <AccountRedirect to="/security-setup" />;
   const state = session.deviceEnrollment?.state ?? "Unavailable";
   const canEnroll = state === "EnrollmentRequired";
 

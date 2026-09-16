@@ -184,7 +184,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Email_only_signup_creates_one_verified_user_and_one_Firebase_binding()
+    public async Task Email_only_signup_and_continuation_reuse_one_verified_user_and_one_Firebase_binding()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var handler = new RecordingHandler(_ => Success());
@@ -197,11 +197,14 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         await service.VerifyAsync("new-owner@example.test", EmailCodePurpose.Signup, code, default);
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
             "new-owner@example.test", EmailCodePurpose.Signup, code, default));
+        await service.StartAsync("new-owner@example.test", null, EmailCodePurpose.Signup, default);
+        await service.VerifyAsync("new-owner@example.test", EmailCodePurpose.Signup,
+            Code(handler.Requests[^1].Body), default);
         var email = Assert.Single(await db.AuthIdentifiers.ToListAsync());
         Assert.Equal("Email", email.Kind); Assert.True(email.IsVerified);
         var binding = Assert.Single(await db.IdentityBindings.ToListAsync());
         Assert.Equal(email.UserId, binding.UserId);
-        Assert.Equal(binding.ExternalSubject, Assert.Single(signer.Uids));
+        Assert.Equal([binding.ExternalSubject, binding.ExternalSubject], signer.Uids);
     }
 
     [Theory]

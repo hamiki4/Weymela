@@ -86,6 +86,8 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
             (await anonymous.PostAsJsonAsync("/api/account/phone-alias", new { phone = "0911111111" })).StatusCode);
         var signedIn = await SignInAsync(host, seeded);
         using var current = Client(host, signedIn.AllCookies);
+        var session = await current.GetFromJsonAsync<JsonObject>("/api/session");
+        Assert.False(session!["developmentMode"]!.GetValue<bool>());
         var updated = await current.PostAsJsonAsync("/api/account/phone-alias", new { phone = "0911111111" });
         Assert.Equal(HttpStatusCode.NoContent, updated.StatusCode);
         await using var db = host.Database.Open();
@@ -341,6 +343,46 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Password_recovery_resumes_same_verified_identity_when_password_setup_is_incomplete()
+    {
+        var delivery = new CaptureDelivery();
+        await using var host = await Host(delivery);
+        var seeded = await SeedAsync(host);
+        using var anonymous = host.Anonymous();
+
+        Assert.Equal(HttpStatusCode.Accepted, (await anonymous.PostAsJsonAsync("/api/auth/email/start", new
+        {
+            identifier = seeded.Email, phone = (string?)null, purpose = "PasswordRecovery"
+        })).StatusCode);
+        var verified = await anonymous.PostAsJsonAsync("/api/auth/password/recovery/verify", new
+        {
+            email = seeded.Email, code = delivery.SingleCode
+        });
+
+        Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
+        var body = await verified.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal("AccountSetup", body!["next"]!.GetValue<string>());
+        Assert.NotNull(body["customToken"]);
+        Assert.DoesNotContain(verified.Headers.GetValues("Set-Cookie"), value =>
+            value.StartsWith(PasswordRecoveryTransactionCookie.DevelopmentName + "=", StringComparison.Ordinal)
+            && !value.Contains("expires=", StringComparison.OrdinalIgnoreCase));
+
+        var invalidReset = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
+        {
+            newPassword = "new correct horse battery staple",
+            confirmPassword = "new correct horse battery staple"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidReset.StatusCode);
+        Assert.Equal("RecoverySessionExpired",
+            (await invalidReset.Content.ReadFromJsonAsync<JsonObject>())!["code"]!.GetValue<string>());
+
+        await using var db = host.Database.Open();
+        Assert.Empty(await db.PasswordCredentials.Where(x => x.UserId == seeded.UserId).ToListAsync());
+        Assert.Single(await db.IdentityBindings.Where(x => x.UserId == seeded.UserId).ToListAsync());
+        Assert.Single(await db.AuthIdentifiers.Where(x => x.UserId == seeded.UserId && x.Kind == "Email").ToListAsync());
+    }
+
+    [Fact]
     public async Task Wrong_and_unknown_password_sign_in_are_privacy_safe_and_password_reset_is_email_only()
     {
         const string oldPassword = "old correct horse battery staple";
@@ -387,6 +429,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         });
         Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
         var verifiedBody = await verified.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal("PasswordReset", verifiedBody!["next"]!.GetValue<string>());
         Assert.NotNull(verifiedBody!["expiresAtUtc"]);
         Assert.Null(verifiedBody["recoveryGrant"]);
         var recoveryCookieHeader = Assert.Single(verified.Headers.GetValues("Set-Cookie"));
@@ -399,6 +442,8 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
             newPassword = "too short", confirmPassword = "too short"
         });
         Assert.Equal(HttpStatusCode.BadRequest, invalidPassword.StatusCode);
+        Assert.Equal("Validation",
+            (await invalidPassword.Content.ReadFromJsonAsync<JsonObject>())!["code"]!.GetValue<string>());
         Assert.False(invalidPassword.Headers.Contains("Set-Cookie"));
         var reset = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
         {
@@ -415,11 +460,13 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.OK,
             (await anonymous.PostAsJsonAsync("/api/auth/password/sign-in",
                 new { phone = seeded.Phone, password = newPassword })).StatusCode);
-        Assert.NotEqual(HttpStatusCode.NoContent,
-            (await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
-            {
-                newPassword, confirmPassword = newPassword
-            })).StatusCode);
+        var replay = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
+        {
+            newPassword, confirmPassword = newPassword
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
+        Assert.Equal("RecoverySessionExpired",
+            (await replay.Content.ReadFromJsonAsync<JsonObject>())!["code"]!.GetValue<string>());
 
         await using var db = host.Database.Open();
         Assert.All(await db.DeviceSessions.Where(x => x.UserId == seeded.UserId).ToListAsync(),

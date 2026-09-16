@@ -4,6 +4,7 @@ import { Button, Field, Notice } from "../ui/components";
 import { PasswordField } from "../ui/PasswordField";
 import { Brand } from "./Shell";
 import { roleHome, useSession } from "./Session";
+import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 
 export function SecuritySetup() {
   const session = useSession();
@@ -20,7 +21,8 @@ export function SecuritySetup() {
       <div className="security-setup-status" role="status">Opening your account setup…</div>
     </section>
   </main>;
-  if (session.loadFailed || session.user && !session.accountSecurity) return <main className="pin-setup-page">
+  if (session.loadFailed || session.user && (!session.accountSecurity || !session.deviceEnrollment
+      || session.deviceEnrollment.state === "Unavailable")) return <main className="pin-setup-page">
     <section className="pin-setup-card security-setup-card" aria-labelledby="security-setup-error-title">
       <Brand />
       <h1 id="security-setup-error-title">We couldn't load your account setup.</h1>
@@ -29,7 +31,7 @@ export function SecuritySetup() {
   </main>;
   if (!session.user) return <Navigate to="/sign-in" replace />;
   if (session.accountSecurity?.passwordEnrolled)
-    return <Navigate to={roleHome[session.user!.role]} replace />;
+    return <AccountRedirect to={accountEntryPath(session.user, session.accountSecurity, session.deviceEnrollment)} />;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

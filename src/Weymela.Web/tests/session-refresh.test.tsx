@@ -73,6 +73,17 @@ beforeEach(() => {
 });
 
 describe("authoritative session refresh ordering", () => {
+  it("performs one bounded bootstrap sequence and does not start a refresh loop", async () => {
+    mocks.request.mockImplementation(authenticatedRequests);
+    renderSession();
+    await waitFor(() => expect(screen.getByLabelText("session-state")).toHaveTextContent("authenticated"));
+    expect(mocks.request.mock.calls.map(([path]) => path)).toEqual([
+      "/device/access", "/session", "/account/security", "/device/enrollment",
+    ]);
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    expect(mocks.request).toHaveBeenCalledTimes(4);
+  });
+
   it("does not let an older unauthenticated completion clear a newer authenticated refresh", async () => {
     const older = deferred<typeof access>();
     let accessCalls = 0;

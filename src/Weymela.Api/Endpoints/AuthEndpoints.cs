@@ -32,6 +32,7 @@ internal static class AuthEndpoints
             if (!Guid.TryParse(c.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
                 throw new ApplicationFailure(FailureKind.Forbidden, "Sign in to your account.");
             var onboarding = c.User.FindFirst("onboarding") is not null;
+            var firebaseVerified = c.User.FindFirst("auth-strength")?.Value == "firebase-verified";
             var a = onboarding ? new Actor(userId, ActorRole.Customer, CustomerId: Guid.Empty) : EndpointSupport.Actor(c);
             var checkout=onboarding ? false : await db.CommercePermissions.AnyAsync(x=>x.UserId==a.UserId&&x.Role==a.Role&&x.IsActive&&x.CanCheckout,ct);
             var profiles = onboarding
@@ -40,11 +41,11 @@ internal static class AuthEndpoints
                 // retain their synthetic persona projection. BrowserHost Firebase
                 // identities are verified and must resolve persisted memberships even
                 // while the host runs in Development.
-                : development && c.User.FindFirst("auth-strength")?.Value != "firebase-verified"
+                : development && !firebaseVerified
                     ? new List<SessionProfile> { new(a.Role.ToString(), SubjectId(a), a.BusinessId, c.User.Identity!.Name!, c.User.FindFirst("publicId")?.Value??"", checkout) }
                     : (await c.RequestServices.GetRequiredService<TrustedIdentityService>().ProfilesForUserAsync(a.UserId, ct)).Select(ToSessionProfile).ToList();
             var role = onboarding ? "Onboarding" : a.Role.ToString();
-            return Results.Ok(new SessionUser(role,onboarding ? "Account setup" : c.User.Identity!.Name!,c.User.FindFirst("publicId")?.Value??"",development,checkout,
+            return Results.Ok(new SessionUser(role,onboarding ? "Account setup" : c.User.Identity!.Name!,c.User.FindFirst("publicId")?.Value??"",development && !firebaseVerified,checkout,
                 profiles, c.User.FindFirst("profile-key")?.Value));
         }).RequireAuthorization("VerifiedAccount");
         app.MapPost("/api/session/switch-profile", async (ProfileSwitchInput input, HttpContext c, WeymelaDbContext db,
@@ -77,7 +78,7 @@ internal static class AuthEndpoints
             var now=clock.GetUtcNow();
             await c.SignInAsync(WorkspaceAuthentication.Scheme,principal,new AuthenticationProperties{IsPersistent=false,IssuedUtc=now,ExpiresUtc=now.AddHours(1),AllowRefresh=false});
             var selectedProfile = target.Profiles.Single(x => x.Key == TrustedIdentityService.WorkspaceProfileKey(target.Actor));
-            return Results.Ok(new SessionUser(target.Actor.Role.ToString(), target.DisplayName, target.PublicId, development,
+            return Results.Ok(new SessionUser(target.Actor.Role.ToString(), target.DisplayName, target.PublicId, false,
                 selectedProfile.CanCheckout, target.Profiles.Select(ToSessionProfile).ToList(), selectedProfile.Key));
         }).RequireAuthorization("Workspace").AddEndpointFilter<ValidatedInputFilter>();
         app.MapPost("/api/session/sign-out",async(HttpContext c)=>
@@ -155,9 +156,20 @@ internal static class AuthEndpoints
             HttpContext c, EmailAuthService auth, CancellationToken ct) =>
         {
             var result = await auth.VerifyPasswordRecoveryAsync(input.Email, input.Code, ct);
-            c.Response.Cookies.Append(PasswordRecoveryTransactionCookie.Name(development), result.RecoveryGrant,
-                PasswordRecoveryTransactionCookie.Options(development, result.ExpiresAtUtc));
-            return Results.Ok(new { expiresAtUtc = result.ExpiresAtUtc });
+            var cookieName = PasswordRecoveryTransactionCookie.Name(development);
+            if (result.NextStep == PasswordRecoveryNextStep.PasswordReset
+                && result.RecoveryGrant is not null)
+                c.Response.Cookies.Append(cookieName, result.RecoveryGrant,
+                    PasswordRecoveryTransactionCookie.Options(development, result.ExpiresAtUtc));
+            else
+                c.Response.Cookies.Delete(cookieName,
+                    PasswordRecoveryTransactionCookie.DeleteOptions(development));
+            return Results.Ok(new
+            {
+                next = result.NextStep.ToString(),
+                customToken = result.AccountSetupToken?.CustomToken,
+                expiresAtUtc = result.ExpiresAtUtc
+            });
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
         app.MapPost("/api/auth/password/reset", async (PasswordResetInput input, HttpContext c,
             PasswordCredentialService passwords, CancellationToken ct) =>
@@ -172,7 +184,7 @@ internal static class AuthEndpoints
                     PasswordRecoveryTransactionCookie.DeleteOptions(development));
                 return Results.NoContent();
             }
-            catch (AuthChallengeInvalidException)
+            catch (PasswordRecoveryTransactionInvalidException)
             {
                 c.Response.Cookies.Delete(cookieName,
                     PasswordRecoveryTransactionCookie.DeleteOptions(development));

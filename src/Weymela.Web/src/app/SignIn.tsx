@@ -299,6 +299,7 @@ function FirebaseSignIn({
           setRecoveryVerified={setRecoveryVerified}
           busy={authBusy}
           submit={submit}
+          onAccountSetup={onSignedIn}
           onDone={() => {
             changeView("signIn");
             setNotice(
@@ -332,6 +333,7 @@ function PasswordRecovery(props: {
   setRecoveryVerified: (v: boolean) => void;
   busy: boolean;
   submit: (operation: () => Promise<void>) => Promise<void>;
+  onAccountSetup: () => Promise<void>;
   onDone: () => void;
   onBack: () => void;
 }) {
@@ -377,10 +379,14 @@ function PasswordRecovery(props: {
             void props.submit(async () => {
               if (!props.adapter)
                 throw new Error("Secure recovery is unavailable right now.");
-              await props.adapter.verifyPasswordRecovery(
+              const next = await props.adapter.verifyPasswordRecovery(
                 props.email,
                 props.code,
               );
+              if (next === "AccountSetup") {
+                await props.onAccountSetup();
+                return;
+              }
               props.setRecoveryVerified(true);
             });
           }}

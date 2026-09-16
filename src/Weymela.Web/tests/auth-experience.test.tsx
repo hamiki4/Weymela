@@ -70,7 +70,7 @@ beforeEach(() => {
   mocks.startEmailCode.mockResolvedValue(undefined);
   mocks.verifyEmailCode.mockResolvedValue(undefined);
   mocks.signInWithPassword.mockResolvedValue(undefined);
-  mocks.verifyPasswordRecovery.mockResolvedValue(undefined);
+  mocks.verifyPasswordRecovery.mockResolvedValue("PasswordReset");
   mocks.resetPassword.mockResolvedValue(undefined);
   mocks.cancelPasswordRecovery.mockResolvedValue(undefined);
   mocks.refresh.mockResolvedValue(undefined);
@@ -182,6 +182,20 @@ describe("final authentication experience", () => {
       "new correct horse battery staple",
       "new correct horse battery staple",
     );
+  });
+
+  it("resumes an email-verified account that does not yet have a password", async () => {
+    mocks.verifyPasswordRecovery.mockResolvedValueOnce("AccountSetup");
+    renderSignIn("/sign-in?intent=sign-in");
+    await userEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Verification code"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: "Verify" }));
+
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+    expect(mocks.resetPassword).not.toHaveBeenCalled();
   });
 
   it("cancels the server recovery transaction when returning to sign in", async () => {

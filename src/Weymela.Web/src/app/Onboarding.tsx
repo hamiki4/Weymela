@@ -60,9 +60,23 @@ export function Onboarding() {
       </Section>}
       <Section title="Choose a profile">
         <div className="content-grid profile-choice-grid">
-          {!approved.has("Customer") && <button className="profile-choice role-customer" type="button" aria-label={pending.has("Customer") ? "Customer — Pending" : unavailable.has("Customer") ? "Customer — Unavailable" : "Use as Customer — Shop offers and use Weymela"} disabled={pending.has("Customer") || unavailable.has("Customer")} onClick={() => setRole("Customer")}><strong>Customer</strong><span>Shop offers and use Weymela</span><span className="profile-choice-action">{pending.has("Customer") ? "Pending" : unavailable.has("Customer") ? "Unavailable" : "Use as Customer"}</span></button>}
-          {!approved.has("Creator") && <button className="profile-choice role-creator" type="button" aria-label={pending.has("Creator") ? "Creator — Pending" : unavailable.has("Creator") ? "Creator — Unavailable" : "Become a Creator — Promote businesses and earn"} disabled={pending.has("Creator") || unavailable.has("Creator")} onClick={() => setRole("Creator")}><strong>Creator</strong><span>Promote businesses and earn</span><span className="profile-choice-action">{pending.has("Creator") ? "Pending" : unavailable.has("Creator") ? "Unavailable" : "Become a Creator"}</span></button>}
-          {!approved.has("Business") && <button className="profile-choice role-business" type="button" aria-label={pending.has("Business") ? "Business — Pending" : unavailable.has("Business") ? "Business — Unavailable" : "Add a Business — Create promotions with creators"} disabled={pending.has("Business") || unavailable.has("Business")} onClick={() => setRole("Business")}><strong>Business</strong><span>Create promotions with creators</span><span className="profile-choice-action">{pending.has("Business") ? "Pending" : unavailable.has("Business") ? "Unavailable" : "Add a Business"}</span></button>}
+          {([
+            ["Customer", "Shop offers and use Weymela", "Use as Customer", "role-customer"],
+            ["Creator", "Promote businesses and earn", "Become a Creator", "role-creator"],
+            ["Business", "Create promotions with creators", "Add a Business", "role-business"],
+          ] as const).map(([choice, description, actionLabel, className]) => {
+            const state = approved.has(choice) ? "Already added"
+              : pending.has(choice) ? "Pending"
+                : unavailable.has(choice) ? "Unavailable"
+                  : actionLabel;
+            const disabled = state !== actionLabel;
+            return <button key={choice} className={`profile-choice ${className}`} type="button"
+              aria-label={disabled ? `${choice} — ${state}` : `${actionLabel} — ${description}`}
+              disabled={disabled} onClick={() => setRole(choice)}>
+              <strong>{choice}</strong><span>{description}</span>
+              <span className="profile-choice-action">{state}</span>
+            </button>;
+          })}
           {approved.size === 3 && <p className="fine-print">All three profiles are active. Switch profile to use another one.</p>}
         </div>
         {role && <form className="form-grid onboarding-form" onSubmit={(event) => { event.preventDefault(); submit(); }}><h3>{role === "Creator" ? "Become a Creator" : role === "Business" ? "Add a Business" : "Use as Customer"}</h3>

@@ -424,6 +424,71 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
 });
 
+test("incomplete registration resumes the same identity at PIN setup without a request loop", async ({ browser }) => {
+  const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
+  const email = `resume-${suffix}@example.com`;
+  const phone = `+2519${suffix.slice(-8)}`;
+  const password = `Resume account passphrase ${suffix}`;
+  const firstContext = await browser.newContext();
+  let originalToken = "";
+  try {
+    originalToken = await emailCode(firstContext, email, "Signup");
+    await establishFirebaseSession(firstContext, originalToken);
+    const initialSecurity = await firstContext.request.get("/api/account/security");
+    expect(initialSecurity.status()).toBe(200);
+    await expect(initialSecurity.json()).resolves.toMatchObject({ passwordEnrolled: false });
+    const initialEnrollment = await firstContext.request.get("/api/device/enrollment");
+    expect(initialEnrollment.status()).toBe(200);
+    await expect(initialEnrollment.json()).resolves.toMatchObject({ state: "EnrollmentRequired" });
+    const page = await firstContext.newPage();
+    await page.goto("/security-setup");
+    await expect(page.getByRole("heading", { name: "Secure your account" })).toBeVisible();
+    await page.getByLabel("Phone number").fill(phone);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByLabel("Confirm password", { exact: true }).fill(password);
+    const secured = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/account/password-credential");
+    await page.getByRole("button", { name: "Continue" }).click();
+    expect((await secured).status()).toBe(204);
+    await expect(page).toHaveURL(/\/pin-setup/);
+    await expect(page.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
+  } finally {
+    await firstContext.close();
+  }
+
+  const resumedContext = await browser.newContext();
+  try {
+    const resumedToken = await emailCode(resumedContext, email, "Signup");
+    expect(resumedToken).toBe(originalToken);
+    await establishFirebaseSession(resumedContext, resumedToken);
+    const page = await resumedContext.newPage();
+    const bootstrap: { path: string; status: number }[] = [];
+    page.on("response", response => {
+      const path = new URL(response.url()).pathname;
+      if (["/api/device/access", "/api/session", "/api/account/security", "/api/device/enrollment"].includes(path))
+        bootstrap.push({ path, status: response.status() });
+    });
+    await page.goto("/pin-setup");
+    await expect(page.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
+    await page.waitForTimeout(250);
+    expect(bootstrap.some(item => item.status === 429)).toBe(false);
+    for (const path of ["/api/device/access", "/api/session", "/api/account/security", "/api/device/enrollment"])
+      expect(bootstrap.filter(item => item.path === path)).toHaveLength(1);
+
+    await fillPin(page, "Create PIN", "01234");
+    await fillPin(page, "Confirm PIN", "01234");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/onboarding/);
+    await expect(page.getByRole("heading", { name: "How do you want to use Weymela?" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Use as Customer/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Become a Creator/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Add a Business/ })).toBeVisible();
+    await expect(page.getByText(/Platform Admin/)).toHaveCount(0);
+  } finally {
+    await resumedContext.close();
+  }
+});
+
 test("password recovery uses a server-bound browser transaction", async ({ context, browser }) => {
   const account = await createVerifiedAccount(context);
   const recoveryContext = await browser.newContext();
@@ -664,7 +729,7 @@ test("customer-to-creator-enrollment", async ({ page, context }) => {
   await open(page, "/onboarding");
   await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Add a Business/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Use as Customer/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
   await creatorChoiceDiagnostics(page, context, signals, marker);
   const creatorChoice = page.getByRole("button", { name: /^Become a Creator/ });
   await expect(creatorChoice).toHaveCount(1);
@@ -716,7 +781,7 @@ test("customer-to-business-enrollment", async ({ page, context }) => {
   await open(page, "/onboarding");
   await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Become a Creator/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Use as Customer/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
   const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
   await expect(businessChoice).toHaveCount(1);
   await businessChoice.click();

@@ -46,6 +46,7 @@ import { Onboarding } from "./Onboarding";
 import { PinSetup } from "./PinSetup";
 import { LockScreen } from "./LockScreen";
 import { SecuritySetup } from "./SecuritySetup";
+import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 
 function Home() {
   const { user, loading } = useSession();
@@ -62,19 +63,19 @@ export function App() {
       && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
     return <LockScreen />;
   if (!session.loading && session.user) {
-    if (session.accountSecurity && !session.accountSecurity.passwordEnrolled
-        && location.pathname !== "/security-setup")
-      return <Navigate to="/security-setup" replace />;
-    if (session.accountSecurity?.passwordEnrolled && location.pathname === "/security-setup") {
-      const enrollment = session.deviceEnrollment?.state ?? "Unavailable";
-      return <Navigate to={enrollment === "EnrollmentRequired" ? "/pin-setup" : roleHome[session.user.role]} replace />;
+    if (session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
+      if (location.pathname !== "/security-setup")
+        return <AccountRedirect to="/security-setup" />;
+    } else if (session.accountSecurity?.passwordEnrolled) {
+      if (location.pathname === "/security-setup")
+        return <AccountRedirect to={accountEntryPath(session.user, session.accountSecurity, session.deviceEnrollment)} />;
+      const state = session.deviceEnrollment?.state ?? "Unavailable";
+      const recognized = state === "Enrolled" || state === "NotRequired";
+      if (!recognized && location.pathname !== "/pin-setup")
+        return <AccountRedirect to="/pin-setup" />;
+      if (recognized && location.pathname === "/pin-setup")
+        return <AccountRedirect to={roleHome[session.user.role]} />;
     }
-    const state = session.deviceEnrollment?.state ?? "Unavailable";
-    const recognized = state === "Enrolled" || state === "NotRequired";
-    if (!recognized && location.pathname !== "/pin-setup")
-      return <Navigate to="/pin-setup" replace />;
-    if (recognized && location.pathname === "/pin-setup")
-      return <Navigate to={roleHome[session.user.role]} replace />;
   }
   return (
     <Routes>

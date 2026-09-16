@@ -65,6 +65,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
             await Error(context,status,e.Kind.ToString(),UserLanguage(e.Message));
         }
         catch(AuthChallengeInvalidException){await Error(context,400,"InvalidCode","The code is invalid or expired.");}
+        catch(PasswordRecoveryTransactionInvalidException){await Error(context,400,"RecoverySessionExpired","Your reset session has expired. Request a new code.");}
         catch(AuthChallengeUnavailableException){await Error(context,503,"AuthUnavailable","Email authentication is temporarily unavailable.");}
         catch(DeviceEnrollmentUnavailableException){await Error(context,503,"DeviceEnrollmentUnavailable","Secure device setup is temporarily unavailable.");}
         catch(ArgumentException){await Error(context,400,"Validation","Check the entered amounts, pricing split and required fields.");}

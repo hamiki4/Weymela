@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   loadFailed: false,
   userPresent: true,
   securityPresent: true,
+  deviceState: "EnrollmentRequired",
 }));
 
 vi.mock("../src/app/Session", () => ({
@@ -20,7 +21,7 @@ vi.mock("../src/app/Session", () => ({
     loadFailed: mocks.loadFailed,
     user: mocks.userPresent ? { role: "Customer" } : null,
     accountSecurity: mocks.securityPresent ? { passwordEnrolled: false, phoneEnrolled: mocks.phoneEnrolled } : null,
-    deviceEnrollment: { state: "EnrollmentRequired" },
+    deviceEnrollment: { state: mocks.deviceState },
     enrollPassword: mocks.enrollPassword,
     refresh: mocks.refresh,
   }),
@@ -41,6 +42,7 @@ beforeEach(() => {
   mocks.loadFailed = false;
   mocks.userPresent = true;
   mocks.securityPresent = true;
+  mocks.deviceState = "EnrollmentRequired";
   mocks.enrollPassword.mockReset().mockResolvedValue(undefined);
   mocks.refresh.mockReset().mockResolvedValue(undefined);
 });
@@ -99,5 +101,13 @@ describe("account security setup", () => {
     renderSetup();
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("offers retry when device bootstrap is unavailable", async () => {
+    mocks.deviceState = "Unavailable";
+    renderSetup();
+    expect(screen.getByRole("heading")).toHaveTextContent("couldn't load your account setup");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refresh).toHaveBeenCalledOnce();
   });
 });

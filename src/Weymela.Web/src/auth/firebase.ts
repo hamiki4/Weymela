@@ -81,6 +81,7 @@ export async function exchangeFirebaseToken(idToken: string, profile?: SessionPr
 }
 
 export type FirebaseTokenExchange = (idToken: string, profile?: SessionProfile) => Promise<void>;
+export type PasswordRecoveryNextStep = "PasswordReset" | "AccountSetup";
 
 /** Firebase is used after Weymela email verification, not as a phone/SMS login. */
 export class FirebaseWebAuthAdapter {
@@ -147,7 +148,7 @@ export class FirebaseWebAuthAdapter {
     await this.signInWithCustomToken(result.customToken);
   }
 
-  async verifyPasswordRecovery(email: string, code: string): Promise<void> {
+  async verifyPasswordRecovery(email: string, code: string): Promise<PasswordRecoveryNextStep> {
     const normalized = normalizeEmail(email);
     if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
     const response = await fetch("/api/auth/password/recovery/verify", {
@@ -156,6 +157,15 @@ export class FirebaseWebAuthAdapter {
       body: JSON.stringify({ email: normalized, code: code.trim() }),
     });
     if (!response.ok) throw new Error("The code is invalid or expired.");
+    const result = await response.json() as { next?: PasswordRecoveryNextStep; customToken?: string };
+    if (result.next === "AccountSetup") {
+      if (!result.customToken) throw new Error("The verification session is invalid.");
+      await this.signInWithCustomToken(result.customToken);
+      return "AccountSetup";
+    }
+    if (result.next !== "PasswordReset")
+      throw new Error("The verification session is invalid.");
+    return "PasswordReset";
   }
 
   async resetPassword(newPassword: string, confirmPassword: string): Promise<void> {
@@ -165,9 +175,13 @@ export class FirebaseWebAuthAdapter {
       body: JSON.stringify({ newPassword, confirmPassword }),
     });
     if (!response.ok) {
-      const body = await response.json().catch(() => null) as { message?: string } | null;
+      const body = await response.json().catch(() => null) as { code?: string; message?: string } | null;
       throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
-        : body?.message ?? "The reset request has expired. Start again.");
+        : body?.code === "RecoverySessionExpired"
+          ? "Your reset session has expired. Request a new code."
+          : body?.code === "Validation" && body.message
+            ? body.message
+            : "We couldn't reset your password. Please try again.");
     }
   }
 

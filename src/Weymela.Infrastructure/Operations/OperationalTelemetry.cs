@@ -13,6 +13,10 @@ public static class OperationalTelemetry
     public static readonly TrackedCounter OutboxFailures = new("weymela.outbox.failures");
     public static readonly TrackedCounter NotificationFailures = new("weymela.notification.failures");
     public static readonly TrackedCounter RateLimited = new("weymela.http.rate_limited");
+    public static readonly TrackedCounter SignupChallengeCreated = new("weymela.auth.signup.challenge_created");
+    public static readonly TrackedCounter SignupSuppressed = new("weymela.auth.signup.suppressed");
+    public static readonly TrackedCounter SignupDeliveryAccepted = new("weymela.auth.signup.delivery_accepted");
+    public static readonly TrackedCounter SignupDeliveryFailed = new("weymela.auth.signup.delivery_failed");
     public static void Failure(FailureKind kind, bool financial, bool qr)
     {
         if (financial) FinancialFailures.Add(1);
@@ -21,7 +25,9 @@ public static class OperationalTelemetry
     }
     public static object Snapshot() => new { financialFailures = FinancialFailures.Value, qrFailures = QrFailures.Value,
         concurrencyConflicts = ConcurrencyConflicts.Value, providerErrors = ProviderErrors.Value, outboxFailures = OutboxFailures.Value,
-        notificationFailures = NotificationFailures.Value, rateLimited = RateLimited.Value };
+        notificationFailures = NotificationFailures.Value, rateLimited = RateLimited.Value,
+        signupChallengeCreated = SignupChallengeCreated.Value, signupSuppressed = SignupSuppressed.Value,
+        signupDeliveryAccepted = SignupDeliveryAccepted.Value, signupDeliveryFailed = SignupDeliveryFailed.Value };
 }
 public sealed class TrackedCounter(string name)
 {

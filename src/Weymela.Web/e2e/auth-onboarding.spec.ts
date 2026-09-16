@@ -424,6 +424,86 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
 });
 
+test("password recovery uses a server-bound browser transaction", async ({ context, browser }) => {
+  const account = await createVerifiedAccount(context);
+  const recoveryContext = await browser.newContext();
+  const recoveryPage = await recoveryContext.newPage();
+  try {
+    recoveryPage.setDefaultTimeout(8000);
+    // BrowserHost keeps its seeded Admin fixture available for the broader E2E
+    // suite. This page exercises the real public auth UI against the same real
+    // API endpoints by hiding only that test-only persona selector response.
+    await recoveryPage.route("**/api/auth/mode", route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ development: false, personas: null }),
+    }));
+    await recoveryPage.goto("/sign-in?intent=sign-in");
+    await recoveryPage.getByRole("button", { name: "Forgot password?" }).click();
+    await recoveryPage.getByLabel("Email address").fill(account.email);
+    const recoveryStarted = recoveryPage.waitForResponse(response =>
+      response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/api/auth/email/start",
+    );
+    await recoveryPage.getByRole("button", { name: "Continue" }).click();
+    expect((await recoveryStarted).status()).toBe(202);
+
+    const codeResponse = await recoveryContext.request.get(
+      `/__test/email-code?identifier=${encodeURIComponent(account.email)}`,
+    );
+    expect(codeResponse.status()).toBe(200);
+    const { code } = await codeResponse.json() as { code: string };
+    await recoveryPage.getByLabel("Verification code").fill(code);
+    const verificationResponse = recoveryPage.waitForResponse(response =>
+      response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/api/auth/password/recovery/verify",
+    );
+    await recoveryPage.getByRole("button", { name: "Verify" }).click();
+    const verification = await verificationResponse;
+    expect(verification.status()).toBe(200);
+    await expect(recoveryPage.getByLabel("New password", { exact: true })).toBeVisible();
+
+    const browserStorage = await recoveryPage.evaluate(() => ({
+      localKeys: Object.keys(localStorage),
+      sessionKeys: Object.keys(sessionStorage),
+      readableCookies: document.cookie,
+    }));
+    expect(JSON.stringify(browserStorage)).not.toMatch(/recoverygrant|passwordrecovery/i);
+
+    const replacement = `Browser replacement passphrase ${account.suffix}`;
+    await test.step("enter replacement password", async () => {
+      await recoveryPage.getByLabel("New password", { exact: true }).fill(replacement);
+      await recoveryPage.getByLabel("Confirm new password", { exact: true }).fill(replacement);
+    });
+    const reset = await test.step("submit replacement password", async () => {
+      const resetResponse = recoveryPage.waitForResponse(response =>
+        response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/api/auth/password/reset",
+      );
+      await recoveryPage.getByRole("button", { name: "Reset password" }).click();
+      return resetResponse;
+    });
+    expect(reset.status()).toBe(204);
+    expect(Object.keys(reset.request().postDataJSON()).sort()).toEqual([
+      "confirmPassword", "newPassword",
+    ]);
+    await expect(recoveryPage.getByText("Your password has been reset.")).toBeVisible();
+
+    const replayStatus = await recoveryPage.evaluate(async (password) => {
+      const response = await fetch("/api/auth/password/reset", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },
+        body: JSON.stringify({ newPassword: password, confirmPassword: password }),
+      });
+      return response.status;
+    }, replacement);
+    expect(replayStatus).toBe(400);
+  } finally {
+    await recoveryContext.close();
+  }
+});
+
 test("server idle lock requires the authorized-device PIN and propagates across tabs", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context);

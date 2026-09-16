@@ -24,7 +24,7 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
             if(path is "/api/auth/mode" or "/api/auth/firebase/session" or "/api/development/session"
                 or "/api/auth/email/start" or "/api/auth/email/verify"
                 or "/api/auth/password/sign-in" or "/api/auth/password/recovery/verify"
-                or "/api/auth/password/reset") Assert.NotNull(route.Metadata.GetMetadata<IAllowAnonymous>());
+                or "/api/auth/password/reset" or "/api/auth/password/recovery/cancel") Assert.NotNull(route.Metadata.GetMetadata<IAllowAnonymous>());
             else { Assert.Null(route.Metadata.GetMetadata<IAllowAnonymous>()); Assert.NotEmpty(route.Metadata.GetOrderedMetadata<IAuthorizeData>()); }
         }
     }

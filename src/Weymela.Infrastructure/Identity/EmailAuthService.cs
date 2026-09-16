@@ -58,6 +58,7 @@ public sealed class EmailAuthService(
         // returns the same generic response for this branch as for a normal request.
         if (purpose == EmailCodePurpose.Signup && existingEmail is not null)
         {
+            OperationalTelemetry.SignupSuppressed.Add(1);
             await tx.CommitAsync(ct);
             return new(false, now.Add(Lifetime), (int)ResendWindow.TotalSeconds);
         }
@@ -109,7 +110,21 @@ public sealed class EmailAuthService(
         };
         db.EmailAuthChallenges.Add(challenge);
         await db.SaveChangesAsync(ct);
-        await delivery.SendAsync(deliveryAddress, code, purpose, ct);
+        if (purpose == EmailCodePurpose.Signup) OperationalTelemetry.SignupChallengeCreated.Add(1);
+        try
+        {
+            await delivery.SendAsync(deliveryAddress, code, purpose, ct);
+            if (purpose == EmailCodePurpose.Signup) OperationalTelemetry.SignupDeliveryAccepted.Add(1);
+        }
+        catch
+        {
+            if (purpose == EmailCodePurpose.Signup)
+            {
+                OperationalTelemetry.SignupDeliveryFailed.Add(1);
+                OperationalTelemetry.ProviderErrors.Add(1);
+            }
+            throw;
+        }
         await tx.CommitAsync(ct);
         return new(true, challenge.ExpiresAtUtc, (int)ResendWindow.TotalSeconds);
     }
@@ -188,6 +203,12 @@ public sealed class EmailAuthService(
 
         var grant = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var earlierGrants = await db.EmailAuthChallenges.AsTracking()
+            .Where(x => x.Id != challenge.Id && x.UserId == challenge.UserId
+                && x.Purpose == EmailCodePurpose.PasswordRecovery.ToString()
+                && x.RecoveryGrantHash != null && x.RecoveryGrantConsumedAtUtc == null)
+            .ToListAsync(ct);
+        foreach (var earlier in earlierGrants) earlier.RecoveryGrantConsumedAtUtc = now;
         challenge.ConsumedAtUtc = now;
         challenge.RecoveryGrantHash = PasswordCredentialService.HashRecoveryGrant(grant);
         challenge.RecoveryGrantExpiresAtUtc = now.Add(RecoveryGrantLifetime);

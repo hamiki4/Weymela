@@ -23,7 +23,7 @@ internal static class AuthEndpoints
     private sealed record PasswordSignInInput(string Phone, string Password);
     private sealed record PasswordCredentialInput(string? Phone, string Password, string ConfirmPassword);
     private sealed record PasswordRecoveryVerifyInput(string Email, string Code);
-    private sealed record PasswordResetInput(string Email, string RecoveryGrant, string NewPassword, string ConfirmPassword);
+    private sealed record PasswordResetInput(string NewPassword, string ConfirmPassword);
     public static void MapAuthEndpoints(this WebApplication app,bool development)
     {
         app.MapGet("/api/auth/mode",()=>Results.Ok(new{development,personas=development?new DevelopmentDirectory().Personas.Select(x=>new{x.Alias,x.Name,role=x.Actor.Role.ToString()}):null})).AllowAnonymous();
@@ -152,17 +152,44 @@ internal static class AuthEndpoints
                 : Results.Json(new { code = "InvalidCredentials", message = "Phone number or password is incorrect." }, statusCode: 401);
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
         app.MapPost("/api/auth/password/recovery/verify", async (PasswordRecoveryVerifyInput input,
-            EmailAuthService auth, CancellationToken ct) =>
+            HttpContext c, EmailAuthService auth, CancellationToken ct) =>
         {
             var result = await auth.VerifyPasswordRecoveryAsync(input.Email, input.Code, ct);
-            return Results.Ok(new { recoveryGrant = result.RecoveryGrant, expiresAtUtc = result.ExpiresAtUtc });
+            c.Response.Cookies.Append(PasswordRecoveryTransactionCookie.Name(development), result.RecoveryGrant,
+                PasswordRecoveryTransactionCookie.Options(development, result.ExpiresAtUtc));
+            return Results.Ok(new { expiresAtUtc = result.ExpiresAtUtc });
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
-        app.MapPost("/api/auth/password/reset", async (PasswordResetInput input,
+        app.MapPost("/api/auth/password/reset", async (PasswordResetInput input, HttpContext c,
             PasswordCredentialService passwords, CancellationToken ct) =>
         {
-            await passwords.ResetAsync(input.Email, input.RecoveryGrant, input.NewPassword, input.ConfirmPassword, ct);
-            return Results.NoContent();
+            var cookieName = PasswordRecoveryTransactionCookie.Name(development);
+            var recoveryTransaction = c.Request.Cookies[cookieName];
+            try
+            {
+                await passwords.ResetAsync(recoveryTransaction ?? string.Empty,
+                    input.NewPassword, input.ConfirmPassword, ct);
+                c.Response.Cookies.Delete(cookieName,
+                    PasswordRecoveryTransactionCookie.DeleteOptions(development));
+                return Results.NoContent();
+            }
+            catch (AuthChallengeInvalidException)
+            {
+                c.Response.Cookies.Delete(cookieName,
+                    PasswordRecoveryTransactionCookie.DeleteOptions(development));
+                throw;
+            }
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
+        app.MapPost("/api/auth/password/recovery/cancel", async (HttpContext c,
+            PasswordCredentialService passwords, CancellationToken ct) =>
+        {
+            var cookieName = PasswordRecoveryTransactionCookie.Name(development);
+            var recoveryTransaction = c.Request.Cookies[cookieName];
+            if (!string.IsNullOrWhiteSpace(recoveryTransaction))
+                await passwords.CancelResetAsync(recoveryTransaction, ct);
+            c.Response.Cookies.Delete(cookieName,
+                PasswordRecoveryTransactionCookie.DeleteOptions(development));
+            return Results.NoContent();
+        }).AllowAnonymous();
         app.MapGet("/api/account/security", async (HttpContext c, PasswordCredentialService passwords,
             CancellationToken ct) => Results.Ok(await passwords.StatusAsync(VerifiedIdentity(c).UserId, ct)))
             .RequireAuthorization("VerifiedAccount");

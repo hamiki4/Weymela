@@ -213,13 +213,16 @@ describe("V3 Firebase Web adapter", () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
     await adapter.startEmailCode("owner@example.com", "PasswordRecovery");
     (fetch as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryGrant: "one-time-grant" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ expiresAtUtc: "2026-09-16T12:10:00Z" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
-    const grant = await adapter.verifyPasswordRecovery("owner@example.com", "123456");
-    await adapter.resetPassword("owner@example.com", grant, "correct horse battery staple", "correct horse battery staple");
-    expect(grant).toBe("one-time-grant");
+    await adapter.verifyPasswordRecovery("owner@example.com", "123456");
+    await adapter.resetPassword("correct horse battery staple", "correct horse battery staple");
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     expect(JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string))
       .toEqual({ identifier: "owner@example.com", purpose: "PasswordRecovery" });
+    expect(JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[2][1].body as string))
+      .toEqual({ newPassword: "correct horse battery staple", confirmPassword: "correct horse battery staple" });
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[2][1].body)
+      .not.toContain("recoveryGrant");
   });
 });

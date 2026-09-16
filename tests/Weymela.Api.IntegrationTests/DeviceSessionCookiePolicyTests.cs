@@ -44,6 +44,31 @@ public sealed class DeviceSessionCookiePolicyTests
             Snapshot(DateTime.SpecifyKind(Start.AddHours(1), DateTimeKind.Unspecified))));
     }
 
+    [Fact]
+    public void Password_recovery_cookie_is_host_only_http_only_secure_strict_and_short_lived()
+    {
+        var expires = Start.AddMinutes(10);
+        var production = PasswordRecoveryTransactionCookie.Options(false, expires);
+        var development = PasswordRecoveryTransactionCookie.Options(true, expires);
+
+        Assert.Equal("__Host-WeymelaV3.PasswordRecovery", PasswordRecoveryTransactionCookie.Name(false));
+        Assert.Equal("WeymelaV3.PasswordRecovery", PasswordRecoveryTransactionCookie.Name(true));
+        Assert.True(production.HttpOnly);
+        Assert.True(production.Secure);
+        Assert.False(development.Secure);
+        Assert.Equal(SameSiteMode.Strict, production.SameSite);
+        Assert.Equal("/", production.Path);
+        Assert.Null(production.Domain);
+        Assert.Equal(new DateTimeOffset(expires), production.Expires);
+
+        var deletion = PasswordRecoveryTransactionCookie.DeleteOptions(false);
+        Assert.True(deletion.HttpOnly);
+        Assert.True(deletion.Secure);
+        Assert.Equal(SameSiteMode.Strict, deletion.SameSite);
+        Assert.Equal("/", deletion.Path);
+        Assert.Null(deletion.Domain);
+    }
+
     private static DeviceSessionSnapshot Snapshot(DateTime expiresAtUtc) => new(
         Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Start, Start, null, expiresAtUtc, 1, 0);
 }

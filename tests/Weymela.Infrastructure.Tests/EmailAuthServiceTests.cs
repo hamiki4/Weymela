@@ -171,6 +171,44 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     public void Malformed_phones_are_rejected(string input)
         => Assert.Throws<ApplicationFailure>(() => PhoneNumberNormalizer.Normalize(input));
 
+    [Fact]
+    public async Task Signup_telemetry_distinguishes_created_delivery_and_existing_account_suppression()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
+        var createdBefore = OperationalTelemetry.SignupChallengeCreated.Value;
+        var acceptedBefore = OperationalTelemetry.SignupDeliveryAccepted.Value;
+        var suppressedBefore = OperationalTelemetry.SignupSuppressed.Value;
+
+        await service.StartAsync("telemetry@example.test", null, EmailCodePurpose.Signup, default);
+        await service.VerifyAsync("telemetry@example.test", EmailCodePurpose.Signup, delivery.Codes[0].Code, default);
+        var repeated = await service.StartAsync("telemetry@example.test", null, EmailCodePurpose.Signup, default);
+
+        Assert.False(repeated.Accepted);
+        Assert.Equal(createdBefore + 1, OperationalTelemetry.SignupChallengeCreated.Value);
+        Assert.Equal(acceptedBefore + 1, OperationalTelemetry.SignupDeliveryAccepted.Value);
+        Assert.Equal(suppressedBefore + 1, OperationalTelemetry.SignupSuppressed.Value);
+        Assert.Single(delivery.Codes);
+    }
+
+    [Fact]
+    public async Task Signup_provider_failure_has_safe_telemetry_and_does_not_persist_challenge()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var failedBefore = OperationalTelemetry.SignupDeliveryFailed.Value;
+        var providerBefore = OperationalTelemetry.ProviderErrors.Value;
+        var service = new EmailAuthService(db, new FailingDelivery(), new TestIssuer(), Options(), TimeProvider.System);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartAsync(
+            "provider-failure@example.test", null, EmailCodePurpose.Signup, default));
+        db.ChangeTracker.Clear();
+
+        Assert.Equal(failedBefore + 1, OperationalTelemetry.SignupDeliveryFailed.Value);
+        Assert.Equal(providerBefore + 1, OperationalTelemetry.ProviderErrors.Value);
+        Assert.Empty(await db.EmailAuthChallenges.ToListAsync());
+    }
+
     private sealed class TestDelivery : IEmailCodeDelivery
     {
         public bool Enabled => true;
@@ -185,6 +223,13 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         public List<Guid> IssuedUserIds { get; } = [];
         public Task<FirebaseCustomTokenResult> IssueAsync(Guid userId, string projectId, CancellationToken ct)
         { Called = true; IssuedUserIds.Add(userId); return Task.FromResult(new FirebaseCustomTokenResult("custom-token", DateTime.UtcNow.AddMinutes(5))); }
+    }
+
+    private sealed class FailingDelivery : IEmailCodeDelivery
+    {
+        public bool Enabled => true;
+        public Task SendAsync(string destination, string code, EmailCodePurpose purpose, CancellationToken ct)
+            => throw new InvalidOperationException("test provider failure");
     }
 
     private sealed class ManualClock(DateTime initial) : TimeProvider

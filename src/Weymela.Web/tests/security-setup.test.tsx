@@ -5,17 +5,24 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 const mocks = vi.hoisted(() => ({
   enrollPassword: vi.fn(),
+  refresh: vi.fn(),
   phoneEnrolled: false,
+  loading: false,
+  loadFailed: false,
+  userPresent: true,
+  securityPresent: true,
 }));
 
 vi.mock("../src/app/Session", () => ({
   roleHome: { Customer: "/customer/offers" },
   useSession: () => ({
-    loading: false,
-    user: { role: "Customer" },
-    accountSecurity: { passwordEnrolled: false, phoneEnrolled: mocks.phoneEnrolled },
+    loading: mocks.loading,
+    loadFailed: mocks.loadFailed,
+    user: mocks.userPresent ? { role: "Customer" } : null,
+    accountSecurity: mocks.securityPresent ? { passwordEnrolled: false, phoneEnrolled: mocks.phoneEnrolled } : null,
     deviceEnrollment: { state: "EnrollmentRequired" },
     enrollPassword: mocks.enrollPassword,
+    refresh: mocks.refresh,
   }),
 }));
 
@@ -30,7 +37,12 @@ function renderSetup() {
 
 beforeEach(() => {
   mocks.phoneEnrolled = false;
+  mocks.loading = false;
+  mocks.loadFailed = false;
+  mocks.userPresent = true;
+  mocks.securityPresent = true;
   mocks.enrollPassword.mockReset().mockResolvedValue(undefined);
+  mocks.refresh.mockReset().mockResolvedValue(undefined);
 });
 
 describe("account security setup", () => {
@@ -61,5 +73,31 @@ describe("account security setup", () => {
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match");
     expect(mocks.enrollPassword).not.toHaveBeenCalled();
+  });
+
+  it("shows a branded loading state instead of a blank setup page", () => {
+    mocks.loading = true;
+    renderSetup();
+    expect(screen.getByRole("status")).toHaveTextContent("Opening your account setup");
+    expect(screen.getByRole("img", { name: "Weymela" })).toBeVisible();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("shows a recoverable non-technical failure and retries bootstrap", async () => {
+    mocks.loadFailed = true;
+    mocks.userPresent = false;
+    mocks.securityPresent = false;
+    renderSetup();
+    expect(screen.getByRole("heading")).toHaveTextContent("couldn't load your account setup");
+    expect(screen.queryByText(/Firebase|session|token|binding|API|database/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("fails safely when authenticated account-security state is unavailable", () => {
+    mocks.securityPresent = false;
+    renderSetup();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });
 });

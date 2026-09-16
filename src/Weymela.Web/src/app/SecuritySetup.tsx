@@ -14,8 +14,21 @@ export function SecuritySetup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!session.loading && !session.user) return <Navigate to="/sign-in" replace />;
-  if (!session.loading && session.accountSecurity?.passwordEnrolled)
+  if (session.loading) return <main className="pin-setup-page">
+    <section className="pin-setup-card security-setup-card" aria-live="polite">
+      <Brand />
+      <div className="security-setup-status" role="status">Opening your account setup…</div>
+    </section>
+  </main>;
+  if (session.loadFailed || session.user && !session.accountSecurity) return <main className="pin-setup-page">
+    <section className="pin-setup-card security-setup-card" aria-labelledby="security-setup-error-title">
+      <Brand />
+      <h1 id="security-setup-error-title">We couldn't load your account setup.</h1>
+      <Button type="button" onClick={() => void session.refresh()}>Try again</Button>
+    </section>
+  </main>;
+  if (!session.user) return <Navigate to="/sign-in" replace />;
+  if (session.accountSecurity?.passwordEnrolled)
     return <Navigate to={roleHome[session.user!.role]} replace />;
 
   const submit = async (event: FormEvent) => {

@@ -1700,6 +1700,13 @@ td .button {
 .pin-setup-card form {
   margin-top: 24px;
 }
+.security-setup-status {
+  min-height: 84px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+}
 .pin-setup-card fieldset {
   display: grid;
   gap: 16px;

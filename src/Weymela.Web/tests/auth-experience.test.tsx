@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
   verifyPasswordRecovery: vi.fn(),
   resetPassword: vi.fn(),
+  cancelPasswordRecovery: vi.fn(),
   refresh: vi.fn(),
 }));
 vi.mock("../src/api/client", () => ({
@@ -48,6 +49,7 @@ vi.mock("../src/auth/firebase", () => ({
     signInWithPassword = mocks.signInWithPassword;
     verifyPasswordRecovery = mocks.verifyPasswordRecovery;
     resetPassword = mocks.resetPassword;
+    cancelPasswordRecovery = mocks.cancelPasswordRecovery;
     completeRedirect = vi.fn(async () => false);
     selectProfile = vi.fn();
   },
@@ -68,8 +70,9 @@ beforeEach(() => {
   mocks.startEmailCode.mockResolvedValue(undefined);
   mocks.verifyEmailCode.mockResolvedValue(undefined);
   mocks.signInWithPassword.mockResolvedValue(undefined);
-  mocks.verifyPasswordRecovery.mockResolvedValue("grant");
+  mocks.verifyPasswordRecovery.mockResolvedValue(undefined);
   mocks.resetPassword.mockResolvedValue(undefined);
+  mocks.cancelPasswordRecovery.mockResolvedValue(undefined);
   mocks.refresh.mockResolvedValue(undefined);
 });
 
@@ -112,6 +115,8 @@ describe("final authentication experience", () => {
     expect(
       await screen.findByRole("heading", { name: "Check your email" }),
     ).toBeVisible();
+    expect(screen.getByText(/If this email can be used to create a Weymela account/)).toBeVisible();
+    expect(screen.queryByText("We sent a verification code to your email.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Verify" })).toBeVisible();
   });
 
@@ -159,5 +164,31 @@ describe("final authentication experience", () => {
       screen.getByRole("button", { name: "Forgot password?" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Back" })).toBeVisible();
+  });
+
+  it("finishes password recovery through the server-bound transaction without a client grant", async () => {
+    renderSignIn("/sign-in?intent=sign-in");
+    await userEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Verification code"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: "Verify" }));
+    expect(mocks.verifyPasswordRecovery).toHaveBeenCalledWith("owner@example.com", "123456");
+
+    await userEvent.type(screen.getByLabelText("New password"), "new correct horse battery staple");
+    await userEvent.type(screen.getByLabelText("Confirm new password"), "new correct horse battery staple");
+    await userEvent.click(screen.getByRole("button", { name: "Reset password" }));
+    expect(mocks.resetPassword).toHaveBeenCalledWith(
+      "new correct horse battery staple",
+      "new correct horse battery staple",
+    );
+  });
+
+  it("cancels the server recovery transaction when returning to sign in", async () => {
+    renderSignIn("/sign-in?intent=sign-in");
+    await userEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await userEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
+    expect(mocks.cancelPasswordRecovery).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeVisible();
   });
 });

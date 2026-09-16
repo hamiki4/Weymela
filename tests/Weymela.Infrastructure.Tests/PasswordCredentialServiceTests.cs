@@ -168,9 +168,9 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
         var grant = await email.VerifyPasswordRecoveryAsync("reset@example.test", delivery.Code!, default);
         const string replacement = "new correct horse battery staple";
         var passwords = Service(db, issuer);
-        await passwords.ResetAsync("reset@example.test", grant.RecoveryGrant, replacement, replacement, default);
+        await passwords.ResetAsync(grant.RecoveryGrant, replacement, replacement, default);
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => passwords.ResetAsync(
-            "reset@example.test", grant.RecoveryGrant, replacement, replacement, default));
+            grant.RecoveryGrant, replacement, replacement, default));
         Assert.False((await passwords.SignInAsync("0911111111", Password, default)).Succeeded);
         Assert.True((await passwords.SignInAsync("0911111111", replacement, default)).Succeeded);
         Assert.NotNull((await db.DeviceSessions.SingleAsync()).RevokedAtUtc);
@@ -200,8 +200,7 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
             await using var context = database.Open();
             try
             {
-                await Service(context).ResetAsync("concurrent-reset@example.test", grant,
-                    replacement, replacement, default);
+                await Service(context).ResetAsync(grant, replacement, replacement, default);
                 return true;
             }
             catch (AuthChallengeInvalidException) { return false; }
@@ -215,6 +214,53 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
         Assert.NotNull((await verify.EmailAuthChallenges.SingleAsync()).RecoveryGrantConsumedAtUtc);
         Assert.True((await Service(verify).SignInAsync("0911111111", replacement, default)).Succeeded);
         Assert.Single(await verify.IdentityBindings.Where(x => x.UserId == user).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Cancelling_password_recovery_consumes_only_that_purpose_bound_transaction()
+    {
+        var database = await fixture.CreateAsync(); var user = Guid.NewGuid();
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        await using var db = database.Open();
+        var identity = await SeedIdentity(db, user, "cancel-reset@example.test");
+        var passwords = Service(db, issuer);
+        await passwords.EnrollAsync(identity, "0911111111", Password, Password, default);
+        var email = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
+        await email.StartAsync("cancel-reset@example.test", null, EmailCodePurpose.PasswordRecovery, default);
+        var grant = await email.VerifyPasswordRecoveryAsync("cancel-reset@example.test", delivery.Code!, default);
+
+        await passwords.CancelResetAsync(grant.RecoveryGrant, default);
+        await passwords.CancelResetAsync(grant.RecoveryGrant, default);
+        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => passwords.ResetAsync(
+            grant.RecoveryGrant, "new correct horse battery staple", "new correct horse battery staple", default));
+
+        Assert.True((await passwords.SignInAsync("0911111111", Password, default)).Succeeded);
+        Assert.NotNull((await db.EmailAuthChallenges.SingleAsync()).RecoveryGrantConsumedAtUtc);
+    }
+
+    [Fact]
+    public async Task New_password_recovery_supersedes_earlier_grant_and_expiry_is_server_enforced()
+    {
+        var database = await fixture.CreateAsync(); var user = Guid.NewGuid();
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        var clock = new ManualClock(DateTime.UtcNow);
+        await using var db = database.Open();
+        var identity = await SeedIdentity(db, user, "supersede-reset@example.test");
+        var passwords = new PasswordCredentialService(db, issuer, Options(), clock);
+        await passwords.EnrollAsync(identity, "0911111111", Password, Password, default);
+        var email = new EmailAuthService(db, delivery, issuer, Options(), clock);
+        await email.StartAsync("supersede-reset@example.test", null, EmailCodePurpose.PasswordRecovery, default);
+        var first = await email.VerifyPasswordRecoveryAsync("supersede-reset@example.test", delivery.Code!, default);
+        clock.Advance(TimeSpan.FromMinutes(2));
+        await email.StartAsync("supersede-reset@example.test", null, EmailCodePurpose.PasswordRecovery, default);
+        var second = await email.VerifyPasswordRecoveryAsync("supersede-reset@example.test", delivery.Code!, default);
+
+        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => passwords.ResetAsync(
+            first.RecoveryGrant, "new correct horse battery staple", "new correct horse battery staple", default));
+        clock.Advance(TimeSpan.FromMinutes(11));
+        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => passwords.ResetAsync(
+            second.RecoveryGrant, "new correct horse battery staple", "new correct horse battery staple", default));
+        Assert.True((await passwords.SignInAsync("0911111111", Password, default)).Succeeded);
     }
 
     private static PasswordCredentialService Service(WeymelaDbContext db, TestIssuer? issuer = null) =>
@@ -255,5 +301,12 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
         public string? Code { get; private set; }
         public Task SendAsync(string destination, string code, EmailCodePurpose purpose, CancellationToken ct)
         { Code = code; return Task.CompletedTask; }
+    }
+
+    private sealed class ManualClock(DateTime initial) : TimeProvider
+    {
+        private DateTime value = initial;
+        public override DateTimeOffset GetUtcNow() => new(value, TimeSpan.Zero);
+        public void Advance(TimeSpan duration) => value = value.Add(duration);
     }
 }

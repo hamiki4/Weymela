@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { post, request } from "../api/client";
+import { ApiError, post, request } from "../api/client";
 import type { AccountSecurityStatus, DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
@@ -23,6 +23,7 @@ export const roleHome: Record<Role, string> = {
 interface SessionContextValue {
   user: SessionUser | null;
   loading: boolean;
+  loadFailed: boolean;
   deviceEnrollment: DeviceEnrollmentStatus | null;
   deviceAccess: DeviceAccessStatus | null;
   accountSecurity: AccountSecurityStatus | null;
@@ -43,11 +44,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [deviceAccess, setDeviceAccess] = useState<DeviceAccessStatus | null>(null);
   const [accountSecurity, setAccountSecurity] = useState<AccountSecurityStatus | null>(null);
   const accessState = useRef<DeviceAccessStatus["state"] | null>(null);
+  const refreshGeneration = useRef(0);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const clearSessionState = () => {
+    setUser(null);
+    setDeviceEnrollment(null);
+    setDeviceAccess(null);
+    setAccountSecurity(null);
+    accessState.current = null;
+    window.sessionStorage.removeItem("weymela.profile-key");
+  };
   const refresh = async () => {
+    const generation = ++refreshGeneration.current;
+    const isCurrent = () => refreshGeneration.current === generation;
     setLoading(true);
+    setLoadFailed(false);
     try {
       const access = await request<DeviceAccessStatus>("/device/access");
+      if (!isCurrent()) return;
       const previousAccess = accessState.current;
       accessState.current = access.state;
       setDeviceAccess(access);
@@ -59,9 +74,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       if (!["Unlocked", "EnrollmentRequired"].includes(access.state)) return;
       const next = await request<SessionUser>("/session");
+      if (!isCurrent()) return;
       const security = next.developmentMode
         ? { passwordEnrolled: true, phoneEnrolled: true }
         : await request<AccountSecurityStatus>("/account/security");
+      if (!isCurrent()) return;
       let enrollment: DeviceEnrollmentStatus;
       try {
         enrollment = await request<DeviceEnrollmentStatus>("/device/enrollment");
@@ -69,19 +86,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Authenticated workspaces fail closed when device state cannot be read.
         enrollment = { state: "Unavailable", expiresAtUtc: null };
       }
+      if (!isCurrent()) return;
       setUser(next);
       setAccountSecurity(security);
       setDeviceEnrollment(enrollment);
       if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
-    } catch {
-      setUser(null);
-      setDeviceEnrollment(null);
-      setDeviceAccess(null);
-      setAccountSecurity(null);
-      accessState.current = null;
-      window.sessionStorage.removeItem("weymela.profile-key");
+    } catch (error) {
+      if (!isCurrent()) return;
+      clearSessionState();
+      setLoadFailed(!(error instanceof ApiError && error.status === 401));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
   useEffect(() => {
@@ -91,7 +106,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const accessChanged = () => void refresh();
     window.addEventListener("weymela-device-access", accessChanged);
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("weymela-v3-access");
-    if (channel) channel.onmessage = () => void refresh();
+    if (channel) channel.onmessage = (event) => {
+      if (event.data === "signed-out") {
+        ++refreshGeneration.current;
+        clearSessionState();
+        setLoadFailed(false);
+        setLoading(false);
+      } else void refresh();
+    };
     return () => {
       window.removeEventListener("weymela-device-access", accessChanged);
       channel?.close();
@@ -104,18 +126,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [deviceAccess?.state, deviceAccess?.idleExpiresAtUtc]);
   const signOut = async () => {
+    // Invalidate every in-flight refresh before beginning intentional logout.
+    ++refreshGeneration.current;
     try {
       await createFirebaseWebAuthAdapter().signOut();
     } catch (error) {
       if (error instanceof FirebaseConfigurationError) await post("/session/sign-out");
       else throw error;
     } finally {
-      setUser(null);
-      setDeviceEnrollment(null);
-      setDeviceAccess(null);
-      setAccountSecurity(null);
-      accessState.current = null;
-      window.sessionStorage.removeItem("weymela.profile-key");
+      // Also invalidate a refresh that may have started while remote sign-out
+      // was in progress; logout remains the final authoritative transition.
+      ++refreshGeneration.current;
+      clearSessionState();
+      setLoadFailed(false);
+      setLoading(false);
       if (typeof BroadcastChannel !== "undefined") {
         const channel = new BroadcastChannel("weymela-v3-access");
         channel.postMessage("signed-out");
@@ -179,7 +203,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return next;
   };
   return (
-    <Context.Provider value={{ user, loading, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
+    <Context.Provider value={{ user, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

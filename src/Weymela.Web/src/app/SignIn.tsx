@@ -43,7 +43,7 @@ function FirebaseSignIn({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
-  const [recoveryGrant, setRecoveryGrant] = useState<string | null>(null);
+  const [recoveryVerified, setRecoveryVerified] = useState(false);
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<SessionProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
@@ -105,7 +105,7 @@ function FirebaseSignIn({
     setNotice(null);
     setCodeSent(false);
     setCode("");
-    setRecoveryGrant(null);
+    setRecoveryVerified(false);
     setPassword("");
     setConfirmPassword("");
     setProfiles([]);
@@ -201,6 +201,7 @@ function FirebaseSignIn({
           code={code}
           setCode={setCode}
           codeSent={codeSent}
+          verificationMessage="If this email can be used to create a Weymela account, you'll receive a verification code."
           busy={busy}
           onContinue={() => startAccountEmail("Signup")}
           onVerify={() => verifyAccountEmail("Signup")}
@@ -215,6 +216,7 @@ function FirebaseSignIn({
           code={code}
           setCode={setCode}
           codeSent={codeSent}
+          verificationMessage="If this email is registered, you'll receive a verification code."
           busy={busy}
           onContinue={() => startAccountEmail("DeviceEnrollment")}
           onVerify={() => verifyAccountEmail("DeviceEnrollment")}
@@ -290,8 +292,8 @@ function FirebaseSignIn({
           setConfirmPassword={setConfirmPassword}
           codeSent={codeSent}
           setCodeSent={setCodeSent}
-          recoveryGrant={recoveryGrant}
-          setRecoveryGrant={setRecoveryGrant}
+          recoveryVerified={recoveryVerified}
+          setRecoveryVerified={setRecoveryVerified}
           busy={busy}
           submit={submit}
           onDone={() => {
@@ -300,7 +302,11 @@ function FirebaseSignIn({
               "Your password has been reset. Sign in with your new password.",
             );
           }}
-          onBack={() => changeView("signIn")}
+          onBack={() => {
+            void (adapter?.cancelPasswordRecovery() ?? Promise.resolve())
+              .catch(() => undefined)
+              .finally(() => changeView("signIn"));
+          }}
         />
       ) : null}
     </div>
@@ -319,8 +325,8 @@ function PasswordRecovery(props: {
   setConfirmPassword: (v: string) => void;
   codeSent: boolean;
   setCodeSent: (v: boolean) => void;
-  recoveryGrant: string | null;
-  setRecoveryGrant: (v: string) => void;
+  recoveryVerified: boolean;
+  setRecoveryVerified: (v: boolean) => void;
   busy: boolean;
   submit: (operation: () => Promise<void>) => Promise<void>;
   onDone: () => void;
@@ -361,19 +367,18 @@ function PasswordRecovery(props: {
             </Button>
           </fieldset>
         </form>
-      ) : !props.recoveryGrant ? (
+      ) : !props.recoveryVerified ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();
             void props.submit(async () => {
               if (!props.adapter)
                 throw new Error("Secure recovery is unavailable right now.");
-              props.setRecoveryGrant(
-                await props.adapter.verifyPasswordRecovery(
-                  props.email,
-                  props.code,
-                ),
+              await props.adapter.verifyPasswordRecovery(
+                props.email,
+                props.code,
               );
+              props.setRecoveryVerified(true);
             });
           }}
         >
@@ -409,8 +414,6 @@ function PasswordRecovery(props: {
               if (props.password !== props.confirmPassword)
                 throw new Error("Passwords don't match. Try again.");
               await props.adapter.resetPassword(
-                props.email,
-                props.recoveryGrant!,
                 props.password,
                 props.confirmPassword,
               );
@@ -459,6 +462,7 @@ function EmailAccountFlow(props: {
   code: string;
   setCode: (v: string) => void;
   codeSent: boolean;
+  verificationMessage: string;
   busy: boolean;
   onContinue: () => void;
   onVerify: () => void;
@@ -468,7 +472,7 @@ function EmailAccountFlow(props: {
     <section aria-labelledby="email-account-title">
       <h1 id="email-account-title">{props.title}</h1>
       {props.codeSent ? (
-        <p className="muted">We sent a verification code to your email.</p>
+        <p className="muted">{props.verificationMessage}</p>
       ) : null}
       <form
         onSubmit={(event) => {

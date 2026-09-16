@@ -147,7 +147,7 @@ export class FirebaseWebAuthAdapter {
     await this.signInWithCustomToken(result.customToken);
   }
 
-  async verifyPasswordRecovery(email: string, code: string): Promise<string> {
+  async verifyPasswordRecovery(email: string, code: string): Promise<void> {
     const normalized = normalizeEmail(email);
     if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
     const response = await fetch("/api/auth/password/recovery/verify", {
@@ -156,23 +156,27 @@ export class FirebaseWebAuthAdapter {
       body: JSON.stringify({ email: normalized, code: code.trim() }),
     });
     if (!response.ok) throw new Error("The code is invalid or expired.");
-    const result = await response.json() as { recoveryGrant?: string };
-    if (!result.recoveryGrant) throw new Error("The reset request has expired. Start again.");
-    return result.recoveryGrant;
   }
 
-  async resetPassword(email: string, recoveryGrant: string, newPassword: string, confirmPassword: string): Promise<void> {
-    const normalized = normalizeEmail(email);
+  async resetPassword(newPassword: string, confirmPassword: string): Promise<void> {
     const response = await fetch("/api/auth/password/reset", {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },
-      body: JSON.stringify({ email: normalized, recoveryGrant, newPassword, confirmPassword }),
+      body: JSON.stringify({ newPassword, confirmPassword }),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { message?: string } | null;
       throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
         : body?.message ?? "The reset request has expired. Start again.");
     }
+  }
+
+  async cancelPasswordRecovery(): Promise<void> {
+    const response = await fetch("/api/auth/password/recovery/cancel", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },
+    });
+    if (!response.ok) throw new Error("We could not close password recovery. Please try again.");
   }
 
   async signOut(): Promise<void> {

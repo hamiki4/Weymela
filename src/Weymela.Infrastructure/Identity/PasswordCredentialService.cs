@@ -184,7 +184,6 @@ public sealed class PasswordCredentialService(
     }
 
     public async Task ResetAsync(
-        string email,
         string recoveryGrant,
         string newPassword,
         string confirmPassword,
@@ -193,8 +192,6 @@ public sealed class PasswordCredentialService(
         PasswordCredentialHasher.ValidateNew(newPassword, confirmPassword);
         if (string.IsNullOrWhiteSpace(recoveryGrant) || recoveryGrant.Length > 128)
             throw new AuthChallengeInvalidException();
-        var normalizedEmail = EmailAuthService.NormalizeEmailAddress(email);
-        var emailHash = EmailAuthService.HashIdentifier(normalizedEmail);
         var grantHash = HashRecoveryGrant(recoveryGrant);
         var verifier = PasswordCredentialHasher.Hash(newPassword);
         var now = clock.GetUtcNow().UtcDateTime;
@@ -206,11 +203,13 @@ public sealed class PasswordCredentialService(
                 $"SELECT * FROM v3.\"EmailAuthChallenges\" WHERE \"RecoveryGrantHash\" = {grantHash} FOR UPDATE")
                 .SingleOrDefaultAsync(ct);
             if (challenge is null || challenge.Purpose != EmailCodePurpose.PasswordRecovery.ToString()
-                || challenge.IdentifierHash != emailHash || challenge.RecoveryGrantConsumedAtUtc is not null
-                || challenge.RecoveryGrantExpiresAtUtc <= now || challenge.UserId is null)
+                || challenge.RecoveryGrantConsumedAtUtc is not null
+                || challenge.RecoveryGrantExpiresAtUtc is null
+                || challenge.RecoveryGrantExpiresAtUtc <= now || challenge.UserId is null
+                || challenge.EmailIdentifierHash != challenge.IdentifierHash)
                 throw new AuthChallengeInvalidException();
             var emailIdentifier = await db.AuthIdentifiers.AsNoTracking().SingleOrDefaultAsync(x => x.Kind == "Email"
-                && x.IdentifierHash == emailHash && x.UserId == challenge.UserId && x.IsVerified, ct);
+                && x.IdentifierHash == challenge.IdentifierHash && x.UserId == challenge.UserId && x.IsVerified, ct);
             var credential = await db.PasswordCredentials.FromSqlInterpolated(
                 $"SELECT *, xmin FROM v3.\"PasswordCredentials\" WHERE \"UserId\" = {challenge.UserId.Value} FOR UPDATE")
                 .SingleOrDefaultAsync(ct);
@@ -235,6 +234,33 @@ public sealed class PasswordCredentialService(
         catch (Exception exception) when (DatabaseCollision(exception))
         {
             throw new AuthChallengeInvalidException();
+        }
+    }
+
+    public async Task CancelResetAsync(string recoveryGrant, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(recoveryGrant) || recoveryGrant.Length > 128) return;
+        var grantHash = HashRecoveryGrant(recoveryGrant);
+        var now = clock.GetUtcNow().UtcDateTime;
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            var challenge = await db.EmailAuthChallenges.FromSqlInterpolated(
+                $"SELECT * FROM v3.\"EmailAuthChallenges\" WHERE \"RecoveryGrantHash\" = {grantHash} FOR UPDATE")
+                .SingleOrDefaultAsync(ct);
+            if (challenge is not null
+                && challenge.Purpose == EmailCodePurpose.PasswordRecovery.ToString()
+                && challenge.RecoveryGrantConsumedAtUtc is null)
+            {
+                challenge.RecoveryGrantConsumedAtUtc = now;
+                await db.SaveChangesAsync(ct);
+            }
+            await tx.CommitAsync(ct);
+        }
+        catch (Exception exception) when (DatabaseCollision(exception))
+        {
+            // Cancellation is privacy-safe and idempotent. A concurrent reset/cancel
+            // has already made this browser transaction unusable.
         }
     }
 

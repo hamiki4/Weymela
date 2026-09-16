@@ -386,12 +386,28 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
             email = seeded.Email, code = delivery.SingleCode
         });
         Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
-        var recoveryGrant = (await verified.Content.ReadFromJsonAsync<JsonObject>())!["recoveryGrant"]!.GetValue<string>();
+        var verifiedBody = await verified.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(verifiedBody!["expiresAtUtc"]);
+        Assert.Null(verifiedBody["recoveryGrant"]);
+        var recoveryCookieHeader = Assert.Single(verified.Headers.GetValues("Set-Cookie"));
+        Assert.StartsWith(PasswordRecoveryTransactionCookie.DevelopmentName + "=", recoveryCookieHeader);
+        Assert.Contains("httponly", recoveryCookieHeader, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=strict", recoveryCookieHeader, StringComparison.OrdinalIgnoreCase);
+        anonymous.DefaultRequestHeaders.Add("Cookie", recoveryCookieHeader.Split(';')[0]);
+        var invalidPassword = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
+        {
+            newPassword = "too short", confirmPassword = "too short"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidPassword.StatusCode);
+        Assert.False(invalidPassword.Headers.Contains("Set-Cookie"));
         var reset = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
         {
-            email = seeded.Email, recoveryGrant, newPassword, confirmPassword = newPassword
+            newPassword, confirmPassword = newPassword
         });
         Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+        Assert.Contains(reset.Headers.GetValues("Set-Cookie"), value =>
+            value.StartsWith(PasswordRecoveryTransactionCookie.DevelopmentName + "=", StringComparison.Ordinal)
+            && value.Contains("expires=", StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await anonymous.PostAsJsonAsync("/api/auth/password/sign-in",
@@ -402,7 +418,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         Assert.NotEqual(HttpStatusCode.NoContent,
             (await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
             {
-                email = seeded.Email, recoveryGrant, newPassword, confirmPassword = newPassword
+                newPassword, confirmPassword = newPassword
             })).StatusCode);
 
         await using var db = host.Database.Open();

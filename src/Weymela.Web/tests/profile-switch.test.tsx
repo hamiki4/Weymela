@@ -29,7 +29,7 @@ describe("approved profile selector", () => {
     const onSwitch = vi.fn(async (profile: SessionProfile) => ({ role: profile.role }));
     render(<ProfileSwitcher profiles={profiles} activeKey="Creator:creator-1:-" onSwitch={onSwitch} />);
     expect(screen.getByLabelText("Switch profile")).toBeVisible();
-    await userEvent.selectOptions(screen.getByLabelText("Switch profile"), "Business:business-1:business-1");
+    await userEvent.selectOptions(screen.getByLabelText("Switch profile"), "2");
     expect(onSwitch).toHaveBeenCalledTimes(1);
     expect(onSwitch).toHaveBeenCalledWith(profiles[2]);
     expect(screen.queryByRole("option", { name: /Platform Admin|Cashier/ })).not.toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("profile switching with the real router and session guard", () => {
     let previous = profiles[0];
     for (const index of [1, 2, 0, 2, 1, 0]) {
       const profile = profiles[index];
-      await user.selectOptions(screen.getByLabelText("Switch profile"), profileKey(profile));
+      await user.selectOptions(screen.getByLabelText("Switch profile"), String(index));
       await screen.findByRole("heading", { name: `${profile.role} workspace` });
       await waitFor(() => expect(window.location.pathname).toBe(roleHome[profile.role]));
       expect(screen.getByLabelText("Active role")).toHaveTextContent(profile.role);
@@ -154,7 +154,7 @@ describe("profile switching with the real router and session guard", () => {
     sessionServer(status);
     const commits = renderSessionRoutes();
     await screen.findByRole("heading", { name: "Customer workspace" });
-    await userEvent.selectOptions(screen.getByLabelText("Switch profile"), profileKey(profiles[1]));
+    await userEvent.selectOptions(screen.getByLabelText("Switch profile"), "1");
     expect(await screen.findByRole("alert")).toHaveTextContent("That profile is no longer available");
     expect(screen.getByLabelText("Active role")).toHaveTextContent("Customer");
     expect(window.sessionStorage.getItem("weymela.profile-key")).toBe(profileKey(profiles[0]));

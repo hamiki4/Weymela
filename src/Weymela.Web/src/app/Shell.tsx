@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -78,6 +78,8 @@ export function Shell() {
       ? [["/checkout", "Checkout", "qr"] as [string, string, string]]
       : []),
   ];
+  const isPublicProfile = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
+  const mobileItems = items.slice(0, 3);
   const nav = (
     <>
       <Link
@@ -88,7 +90,7 @@ export function Shell() {
         <Brand />
       </Link>
       <p className="nav-eyebrow">{roles[user.role]} workspace</p>
-      {user.profiles && user.profiles.length > 1 && (
+      {user.profiles && user.profiles.length > 0 && (
         <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={switchProfile} />
       )}
       <nav aria-label="Main navigation">
@@ -107,12 +109,13 @@ export function Shell() {
           </NavLink>
         ))}
       </nav>
+      {isPublicProfile && <Link className="nav-link add-profile-link" to="/onboarding" onClick={() => menu.current?.close()}><Icon name="people" />Add a profile</Link>}
       <div className="sidebar-bottom">
         <div className="person">
           <span className="avatar">{user.displayName.slice(0, 1)}</span>
           <div>
             <strong>{user.displayName}</strong>
-            <small>{user.publicId}</small>
+            <small>{roles[user.role]}</small>
           </div>
         </div>
         <Button
@@ -128,7 +131,7 @@ export function Shell() {
     </>
   );
   return (
-    <div className="app-shell">
+    <div className={`app-shell role-${user.role.toLowerCase()}`}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -171,9 +174,12 @@ export function Shell() {
           <ConnectionStatus />
           <Outlet />
         </main>
+        <nav className="mobile-role-nav" aria-label="Mobile navigation">
+          {mobileItems.map(([to, label, icon]) => <NavLink key={to} to={to} end className={({ isActive }) => `mobile-role-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`}><Icon name={icon} /><span>{label}</span></NavLink>)}
+          <button type="button" className="mobile-role-link" aria-label="More navigation and profiles" onClick={() => menu.current?.showModal()}><Icon name="menu" /><span>More</span></button>
+        </nav>
         <footer className="workspace-footer">
           <span>Grow together, with Weymela.</span>
-          <span>Secure, role-specific workspace</span>
         </footer>
       </div>
     </div>
@@ -191,15 +197,16 @@ export function ProfileSwitcher({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const id = useId();
   return (
     <div className="profile-switcher">
-      <label htmlFor="profile-switch">Switch profile</label>
+      <label htmlFor={id}>Switch profile</label>
       <select
-        id="profile-switch"
-        value={activeKey ?? ""}
-        disabled={busy}
+        id={id}
+        value={String(profiles.findIndex((profile) => `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}` === activeKey))}
+        disabled={busy || profiles.length < 2}
         onChange={async (event) => {
-          const profile = profiles.find((item) => `${item.role}:${item.subjectId}:${item.businessId ?? "-"}` === event.target.value);
+          const profile = profiles[Number(event.target.value)];
           if (!profile) return;
           setBusy(true); setError(null);
           try {
@@ -209,9 +216,9 @@ export function ProfileSwitcher({
           } finally { setBusy(false); }
         }}
       >
-        {profiles.map((profile) => {
+        {profiles.map((profile, index) => {
           const key = `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}`;
-          return <option key={key} value={key}>{profile.displayName} — {roles[profile.role]}</option>;
+          return <option key={key} value={index}>{profile.displayName} — {roles[profile.role]}</option>;
         })}
       </select>
       {error && <small role="alert">{error}</small>}

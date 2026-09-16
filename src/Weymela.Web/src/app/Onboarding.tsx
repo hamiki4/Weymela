@@ -16,9 +16,12 @@ type Enrollment = {
 };
 
 function statusLabel(status: Enrollment["status"]) {
-  if (status === 0 || status === "Pending") return "Under review";
+  if (status === 0 || status === "Pending") return "Pending";
   if (status === 1 || status === "Approved") return "Approved";
   return "Rejected";
+}
+function publicRole(role: Enrollment["role"]) {
+  return role === 3 || role === "Customer" ? "Customer" : role === 2 || role === "Creator" ? "Creator" : role === 1 || role === "Business" ? "Business" : null;
 }
 
 export function Onboarding() {
@@ -44,17 +47,23 @@ export function Onboarding() {
     status.reload(); await refresh();
   });
   return <main className="main-content page-shell section-kicker-space onboarding-page">
-    <PageHeader eyebrow="Your Weymela account" title="Choose how you want to use Weymela" description="Approved profiles share one account and keep their own workspace, permissions and financial records." action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
-    <Resource resource={status}>{(data) => <>
-      {data.profiles.length > 0 && <Section title="Requests and profiles" description="Pending requests stay separate from active profile choices.">
-        <div className="stack-list">{data.profiles.map((item) => <div className="amount-row" key={item.id}><div><strong>{item.displayName || item.role} — {statusLabel(item.status)}</strong><small>{item.publicId}{item.decisionReason ? ` · ${item.decisionReason}` : ""}</small></div></div>)}</div>
+    <PageHeader eyebrow="Your Weymela account" title="How do you want to use Weymela?" action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
+    <Resource resource={status}>{(data) => {
+      const pending = new Set(data.profiles.filter((item) => item.status === "Pending" || item.status === 0).map((item) => publicRole(item.role)));
+      const unavailable = new Set(data.profiles.filter((item) => {
+        const activeRole = publicRole(item.role);
+        return (item.status === "Approved" || item.status === 1) && activeRole !== null && !approved.has(activeRole);
+      }).map((item) => publicRole(item.role)));
+      return <>
+      {data.profiles.length > 0 && <Section title="Your profiles">
+        <div className="stack-list">{data.profiles.map((item) => <div className="amount-row" key={item.id}><div><strong>{item.displayName || publicRole(item.role) || "Profile"} — {unavailable.has(publicRole(item.role)) && (item.status === "Approved" || item.status === 1) ? "Unavailable" : statusLabel(item.status)}</strong>{item.decisionReason && <small>{item.decisionReason}</small>}</div></div>)}</div>
       </Section>}
-      <Section title="Add a profile" description="You can add another approved profile without creating another account.">
+      <Section title="Choose a profile">
         <div className="content-grid profile-choice-grid">
-          {!approved.has("Customer") && <button className="profile-choice" type="button" onClick={() => setRole("Customer")}><strong>Use as Customer</strong><span>Discover eligible offers and keep your cashback history separate.</span></button>}
-          {!approved.has("Creator") && <button className="profile-choice" type="button" onClick={() => setRole("Creator")}><strong>Become a Creator</strong><span>Submit your public creator details for Platform Admin review.</span></button>}
-          {!approved.has("Business") && <button className="profile-choice" type="button" onClick={() => setRole("Business")}><strong>Add a Business</strong><span>Submit a new Business profile. Weymela creates the Business after approval.</span></button>}
-          {approved.size === 3 && <p className="fine-print">All available profiles are active. Use “Switch profile” whenever you want to change workspace.</p>}
+          {!approved.has("Customer") && <button className="profile-choice role-customer" type="button" aria-label={pending.has("Customer") ? "Customer — Pending" : unavailable.has("Customer") ? "Customer — Unavailable" : "Use as Customer — Shop offers and use Weymela"} disabled={pending.has("Customer") || unavailable.has("Customer")} onClick={() => setRole("Customer")}><strong>Customer</strong><span>Shop offers and use Weymela</span><span className="profile-choice-action">{pending.has("Customer") ? "Pending" : unavailable.has("Customer") ? "Unavailable" : "Use as Customer"}</span></button>}
+          {!approved.has("Creator") && <button className="profile-choice role-creator" type="button" aria-label={pending.has("Creator") ? "Creator — Pending" : unavailable.has("Creator") ? "Creator — Unavailable" : "Become a Creator — Promote businesses and earn"} disabled={pending.has("Creator") || unavailable.has("Creator")} onClick={() => setRole("Creator")}><strong>Creator</strong><span>Promote businesses and earn</span><span className="profile-choice-action">{pending.has("Creator") ? "Pending" : unavailable.has("Creator") ? "Unavailable" : "Become a Creator"}</span></button>}
+          {!approved.has("Business") && <button className="profile-choice role-business" type="button" aria-label={pending.has("Business") ? "Business — Pending" : unavailable.has("Business") ? "Business — Unavailable" : "Add a Business — Create promotions with creators"} disabled={pending.has("Business") || unavailable.has("Business")} onClick={() => setRole("Business")}><strong>Business</strong><span>Create promotions with creators</span><span className="profile-choice-action">{pending.has("Business") ? "Pending" : unavailable.has("Business") ? "Unavailable" : "Add a Business"}</span></button>}
+          {approved.size === 3 && <p className="fine-print">All three profiles are active. Switch profile to use another one.</p>}
         </div>
         {role && <form className="form-grid onboarding-form" onSubmit={(event) => { event.preventDefault(); submit(); }}><h3>{role === "Creator" ? "Become a Creator" : role === "Business" ? "Add a Business" : "Use as Customer"}</h3>
           <Field label="Display name" wide><input required maxLength={120} value={form.displayName} onChange={(event) => set("displayName", event.target.value)} /></Field>
@@ -68,6 +77,6 @@ export function Onboarding() {
           {action.error && <Notice error>{action.error}</Notice>}<div className="form-footer"><Button type="button" variant="secondary" onClick={() => setRole(null)}>Cancel</Button><Button type="submit" disabled={action.busy}>{action.busy ? "Saving…" : role === "Customer" ? "Continue" : "Submit for review"}</Button></div>
         </form>}
       </Section>
-    </>}</Resource>
+    </>}}</Resource>
   </main>;
 }

@@ -40,9 +40,16 @@ public sealed class MultiRoleIdentityTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid(); var business = Guid.NewGuid(); var creator = Guid.NewGuid(); var customer = Guid.NewGuid();
         await SeedAsync(db, user, business, creator, customer);
-        db.CommercePermissions.Add(new CommercePermission(user, ActorRole.Business, Guid.NewGuid(), business, false, false));
+        var inactiveBusiness = Guid.NewGuid();
+        db.CommercePermissions.Add(new CommercePermission(user, ActorRole.Business, inactiveBusiness, inactiveBusiness, false, false));
         await db.SaveChangesAsync();
         var service = new TrustedIdentityService(db, new Verifier(), new Directory());
+
+        var available = await service.ProfilesForUserAsync(user, default);
+        Assert.Equal(3, available.Count);
+        Assert.DoesNotContain(available, profile => profile.Actor.BusinessId == inactiveBusiness);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.SignInAsync("token",
+            new ProfileSelection(ActorRole.Business, inactiveBusiness, inactiveBusiness), default));
 
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.SignInAsync("token",
             new ProfileSelection(ActorRole.Business, Guid.NewGuid(), business), default));

@@ -298,12 +298,16 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
   page.on("framenavigated", onNavigation);
   let stage = "selector-visible";
   try {
-    const select = page.getByLabel("Switch profile", { exact: true });
+    const select = page.locator("aside.sidebar").getByLabel("Switch profile", { exact: true });
     await expect(select).toBeVisible({ timeout: 5000 });
     const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value", { timeout: 3000 });
     expect(value).toBeTruthy();
-    const [role, subjectId, businessId] = value!.split(":");
-    expect(role).toBe(label);
+    const before = await page.context().request.get("/api/session", { timeout: 3000 });
+    expect(before.status()).toBe(200);
+    const available = await before.json() as SessionUser;
+    const selected = available.profiles?.[Number(value)];
+    expect(selected?.role).toBe(label);
+    const activeKey = `${selected!.role}:${selected!.subjectId}:${selected!.businessId ?? "-"}`;
     stage = "switch-response";
     // Register before the change event; selectOption does not await the async
     // React handler, the protected cookie, or the coordinated route transition.
@@ -312,17 +316,17 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
         && new URL(response.url()).pathname === "/api/session/switch-profile", { timeout: 7000 }),
       select.selectOption(value!, { timeout: 5000 }),
     ]);
-    expect(response.request().postDataJSON()).toEqual({ role: label, subjectId, businessId: businessId === "-" ? null : businessId });
+    expect(response.request().postDataJSON()).toEqual({ role: label, subjectId: selected!.subjectId, businessId: selected!.businessId });
     expect(response.status()).toBe(200);
     const switched = await response.json() as SessionUser;
-    expect(switched).toMatchObject({ role: label, activeProfileKey: value });
+    expect(switched).toMatchObject({ role: label, activeProfileKey: activeKey });
     stage = "session-refresh";
     await expect.poll(async () => {
       const sessionResponse = await page.context().request.get("/api/session", { timeout: 3000 });
       expect(sessionResponse.status()).toBe(200);
       const session = await sessionResponse.json() as SessionUser;
       return { role: session.role, activeProfileKey: session.activeProfileKey };
-    }, { timeout: 7000 }).toEqual({ role: label, activeProfileKey: value });
+    }, { timeout: 7000 }).toEqual({ role: label, activeProfileKey: activeKey });
     stage = "workspace-settled";
     const destination = { Customer: /\/customer\/offers(?:[/?#]|$)/, Creator: /\/creator(?:[/?#]|$)/, Business: /\/business(?:[/?#]|$)/ }[label];
     await expect(page).toHaveURL(destination, { timeout: 7000 });
@@ -341,8 +345,8 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
         stage, selectedRole: label, url: new URL(page.url()).pathname, paths,
         session: {
           status: response?.status() ?? "unavailable",
-          role: session?.role ?? "unavailable", activeProfileKey: session?.activeProfileKey ?? null,
-          profiles: session?.profiles?.map(profile => ({ role: profile.role, subjectId: profile.subjectId, businessId: profile.businessId })) ?? [],
+          role: session?.role ?? "unavailable", activeRole: session?.activeProfileKey?.split(":", 1)[0] ?? null,
+          profileRoles: session?.profiles?.map(profile => profile.role) ?? [],
         },
         signals, failure: redact(error instanceof Error ? error.message : String(error)),
       };
@@ -377,7 +381,7 @@ async function submitProfileFromPage(page: import("@playwright/test").Page, role
   await page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 });
   const response = await pending;
   expect(response.status()).toBe(200);
-  await expect(page.getByText(/Under review/)).toBeVisible();
+  await expect(page.getByText(/— Pending/)).toBeVisible();
   return `${role === "Creator" ? "CR" : "BUS"}-${suffix}`;
 }
 
@@ -574,7 +578,7 @@ test("customer-to-creator-enrollment", async ({ page, context }) => {
   const signals = installRuntimeSignals(page);
   const marker = await buildMarker(context);
   await open(page, "/onboarding");
-  await expect(page.locator("main h1")).toHaveText(/Choose how you want to use Weymela/);
+  await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Add a Business/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /^Use as Customer/ })).toHaveCount(0);
   await creatorChoiceDiagnostics(page, context, signals, marker);
@@ -584,6 +588,29 @@ test("customer-to-creator-enrollment", async ({ page, context }) => {
   await submitProfileFromPage(page, "Creator", account.suffix);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
   await open(page, "/customer/offers");
+});
+
+test("public role shell keeps mobile navigation and profile actions tappable", async ({ page, context }) => {
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, "/customer/offers");
+  const navigation = page.getByRole("navigation", { name: "Mobile navigation" });
+  await expect(navigation).toBeVisible();
+  const more = navigation.getByRole("button", { name: "More navigation and profiles" });
+  const target = await more.boundingBox();
+  expect(target?.height).toBeGreaterThanOrEqual(44);
+  await more.click();
+  const menu = page.getByRole("dialog", { name: "Workspace menu" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Add a profile" })).toBeVisible();
+  await expect(menu.getByLabel("Switch profile", { exact: true })).toBeVisible();
+  const session = await (await context.request.get("/api/session")).json() as SessionUser;
+  expect(await page.locator(".sidebar, .topbar, .nav-drawer, .mobile-role-nav").evaluateAll((elements, publicId) =>
+    elements.some((element) => element.textContent?.includes(publicId)), session.publicId)).toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("creator-admin-approval-and-switch", async ({ page, context }) => {
@@ -603,7 +630,7 @@ test("customer-to-business-enrollment", async ({ page, context }) => {
   const account = await createVerifiedAccount(context);
   await activateCustomer(context, account);
   await open(page, "/onboarding");
-  await expect(page.locator("main h1")).toHaveText(/Choose how you want to use Weymela/);
+  await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Become a Creator/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /^Use as Customer/ })).toHaveCount(0);
   const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
@@ -636,7 +663,7 @@ test("multi-role-switching", async ({ page, context }) => {
   await approveLatest(context, "Business", businessPublicId);
   await establishFirebaseSession(context, account.token, "Customer");
   await open(page, "/customer/offers");
-  const select = page.getByLabel("Switch profile", { exact: true });
+  const select = page.locator("aside.sidebar").getByLabel("Switch profile", { exact: true });
   await expect(select.locator("option")).toHaveCount(3);
   const beforeSwitch = await context.request.get("/api/session");
   expect(beforeSwitch.status()).toBe(200);
@@ -719,7 +746,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByLabel("Category", { exact: true }).fill("Food");
   await runStep(steps, "creator-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
-  await expect(page.getByText(/Under review/)).toBeVisible();
+  await expect(page.getByText(/— Pending/)).toBeVisible();
   await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator", `CR-${suffix}`), 15000);
   await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Customer"), 12000);
   await runStep(steps, "creator-profile-switch", () => open(page, "/customer/offers"), 15000);
@@ -733,7 +760,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByLabel("Category", { exact: true }).fill("Food");
   await runStep(steps, "business-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
-  await expect(page.getByText(/Under review/)).toBeVisible();
+  await expect(page.getByText(/— Pending/)).toBeVisible();
   await runStep(steps, "business-admin-review", () => approveLatest(context, "Business", `BUS-${suffix}`), 15000);
   await runStep(steps, "business-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
   await runStep(steps, "business-profile-switch", () => open(page, "/creator"), 15000);

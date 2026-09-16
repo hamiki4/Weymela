@@ -1,0 +1,27 @@
+{
+  "environment": "Pilot",
+  "classification": "PilotDraft",
+  "attorneyReviewed": false,
+  "productionApproved": false,
+  "automaticPublication": false,
+  "documents": [
+    {
+      "id": "a3878425-4127-41ba-8da5-81833ff8a184",
+      "type": "TermsOfService",
+      "version": "pilot-draft-2026-09-16.1",
+      "contentHash": "sha256:6b2ba370e35795c78624a7581addf4f8d4695c57013527f73c21abf764f0b5b7",
+      "effectiveFromUtc": "2026-09-16T00:00:00Z",
+      "viewPath": "/legal/terms-of-service",
+      "contentPath": "documents/pilot-terms-of-service-v1.txt"
+    },
+    {
+      "id": "6cc3f8a1-6e3e-40bf-add2-9d60dc1dd103",
+      "type": "PrivacyPolicy",
+      "version": "pilot-draft-2026-09-16.1",
+      "contentHash": "sha256:7e4ece2fb2e348827112acbeec458c6169228cd214729675fc88d228fd645a12",
+      "effectiveFromUtc": "2026-09-16T00:00:00Z",
+      "viewPath": "/legal/privacy-policy",
+      "contentPath": "documents/pilot-privacy-policy-v1.txt"
+    }
+  ]
+}

@@ -230,32 +230,39 @@ export function Onboarding() {
                               />
                             </Field>
                             <div className="legal-consent form-wide">
-                              <p>Review these documents before continuing.</p>
-                              <ul>
-                                {documents.documents.map((document) => (
-                                  <li key={document.kind}>
-                                    <a
-                                      href={document.viewPath}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      {document.title}
-                                    </a>{" "}
-                                    <small>Version {document.version}</small>
-                                  </li>
-                                ))}
-                              </ul>
-                              <label className="check-row">
+                              <div className="check-row">
                                 <input
+                                  id="customer-legal-accepted"
                                   type="checkbox"
                                   checked={legalAccepted}
                                   onChange={(event) => setLegalAccepted(event.target.checked)}
+                                  aria-label="I agree to the Terms of Service and acknowledge the Privacy Policy."
                                   required
                                 />
-                                <span>
-                                  I have read and accept the Terms of Service and Privacy Policy.
+                                <span id="customer-legal-consent-text">
+                                  <label htmlFor="customer-legal-accepted">
+                                    I agree to the{" "}
+                                  </label>
+                                  <a
+                                    href={documents.documents.find((document) => document.kind === "TermsOfService")!.viewPath}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Terms of Service
+                                  </a>
+                                  <label htmlFor="customer-legal-accepted">
+                                    {" "}and acknowledge the{" "}
+                                  </label>
+                                  <a
+                                    href={documents.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Privacy Policy
+                                  </a>
+                                  .
                                 </span>
-                              </label>
+                              </div>
                             </div>
                             {action.error && <Notice error>{action.error}</Notice>}
                             <div className="form-footer">

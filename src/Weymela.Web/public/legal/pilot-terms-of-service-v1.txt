@@ -1,0 +1,26 @@
+Weymela Pilot Terms of Service
+
+Pilot draft — Version pilot-draft-2026-09-16.1
+
+These short terms support testing in the isolated Weymela Pilot. They are not attorney-reviewed final Production terms and may change before Production use.
+
+1. Account and profile use
+Use one Weymela identity for your Customer, Creator, or Business profiles. Keep account and profile information accurate, protect your sign-in details, and use only profiles and Business workspaces you are authorized to manage.
+
+2. Responsibilities
+Customers must use offers and QR activity honestly. Creators must provide accurate profile and Promotion activity information. Businesses must provide accurate Business and Promotion information and meet their commitments to approved participants.
+
+3. Promotions
+Promotion eligibility, participation, approval, verification, rewards, and related activity are subject to Weymela's current product rules and the applicable Promotion details. Financial rates are set separately in Weymela's current published rates, not by these Pilot terms.
+
+4. Prohibited conduct
+Do not commit fraud, manipulate views or transactions, misuse QR activity, impersonate another person or Business, interfere with the service, or use Weymela for unlawful or abusive activity.
+
+5. Suspension and termination
+Weymela may restrict, suspend, or terminate access when reasonably necessary to protect users, investigate abuse, enforce these terms, or comply with legal obligations.
+
+6. Pilot service
+Pilot features may be incomplete, unavailable, changed, or removed. Test data and workflows may be reset only under an approved Pilot procedure. Do not rely on the Pilot as a Production service.
+
+7. Support
+For Pilot support, use the support channel provided by the Weymela Pilot owner or testing coordinator.

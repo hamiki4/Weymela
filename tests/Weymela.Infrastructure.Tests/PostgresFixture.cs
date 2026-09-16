@@ -35,6 +35,14 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         // Every test uses a fresh database inside this disposable container.
         var name = "v3_test_" + Guid.NewGuid().ToString("N");
+        return await CreateDatabaseAsync(name);
+    }
+
+    public Task<TestDatabase> CreatePilotLegalPublicationAsync()
+        => CreateDatabaseAsync("weymela_v3_pilot");
+
+    private async Task<TestDatabase> CreateDatabaseAsync(string name)
+    {
         await using var connection = new NpgsqlConnection(postgres.GetConnectionString());
         await connection.OpenAsync();
         await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{name}\"", connection);

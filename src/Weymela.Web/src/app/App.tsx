@@ -47,6 +47,7 @@ import { PinSetup } from "./PinSetup";
 import { LockScreen } from "./LockScreen";
 import { SecuritySetup } from "./SecuritySetup";
 import { AccountRedirect, accountEntryPath } from "./AccountEntry";
+import { LegalDocumentPage } from "./LegalDocumentPage";
 
 function Home() {
   const { user, loading } = useSession();
@@ -84,6 +85,14 @@ export function App() {
       <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route
+        path="/legal/terms-of-service"
+        element={<LegalDocumentPage kind="terms" />}
+      />
+      <Route
+        path="/legal/privacy-policy"
+        element={<LegalDocumentPage kind="privacy" />}
+      />
       <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin"]}><Shell /></RoleGate>}>
         <Route path="/notifications" element={<Inbox />} />
       </Route>

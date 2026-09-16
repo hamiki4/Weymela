@@ -392,10 +392,21 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   expect((await deviceEnrollment).status()).toBe(200);
   await expect(page).toHaveURL(/\/onboarding/);
   await page.getByRole("button", { name: /^Use as Customer/ }).click();
-  const consent = page.getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ });
+  const consent = page.getByRole("checkbox", { name: /I agree to the Terms of Service and acknowledge the Privacy Policy/ });
   await expect(consent).not.toBeChecked();
-  await expect(page.getByRole("link", { name: "Terms of Service" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Privacy Policy" })).toBeVisible();
+  for (const [name, heading, marker] of [
+    ["Terms of Service", "Terms of Service", "Weymela Pilot Terms of Service"],
+    ["Privacy Policy", "Privacy Policy", "Weymela Pilot Privacy Policy"],
+  ] as const) {
+    const link = page.getByRole("link", { name });
+    await expect(link).toBeVisible();
+    const [documentPage] = await Promise.all([page.waitForEvent("popup"), link.click()]);
+    await expect(documentPage.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(documentPage.getByText(marker, { exact: false })).toBeVisible();
+    await expect(documentPage.getByText(/Pilot draft — Version pilot-draft-2026-09-16\.1/)).toBeVisible();
+    await documentPage.close();
+    await expect(consent).not.toBeChecked();
+  }
   for (const width of [375, 390, 393, 430, 768, 1366]) {
     await page.setViewportSize({ width, height: width === 375 ? 667 : width < 700 ? 844 : 900 });
     await layout(page);
@@ -869,7 +880,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     await captureCustomerFormFailure(page, context, signals, marker, steps, error);
     throw error;
   }
-  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ }).check({ timeout: 7000 }), 8000);
+  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: /I agree to the Terms of Service and acknowledge the Privacy Policy/ }).check({ timeout: 7000 }), 8000);
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
       const url = new URL(response.url());
@@ -880,6 +891,13 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     expect(response.status()).toBe(200);
   }, 12000);
   await runStep(steps, "customer-session-refresh", async () => expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Customer" }), 12000);
+
+  await runStep(steps, "customer-sign-out", async () => {
+    const response = await context.request.post("/api/session/sign-out", {
+      headers: { "X-Weymela-Request": "1" },
+    });
+    expect(response.status()).toBe(204);
+  }, 10000);
 
   // Full sign-in uses the normalized phone plus password and sends no email.
   const phoneToken = await runStep(steps, "phone-signin", async () => {
@@ -892,6 +910,8 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   expect(phoneToken).toBe(token);
   await runStep(steps, "firebase-phone-session", () => establishFirebaseSession(context, phoneToken), 12000);
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: /Terms of Service/ })).toHaveCount(0);
   await creatorChoiceDiagnostics(page, context, signals, marker);
   await runStep(steps, "creator-choice", () => page.getByRole("button", { name: /^Become a Creator/ }).click({ timeout: 7000 }), 8000);
   await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();

@@ -109,6 +109,29 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Account_legal_acceptance_is_idempotent_and_current_for_the_same_effective_versions()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var confirmation = await SeedAccountLegalAsync(db);
+        var legal = new AccountLegalOnboardingService(db, TimeProvider.System);
+
+        await legal.AcceptCurrentAsync(user, confirmation, null, null, default);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        await legal.AcceptCurrentAsync(user, confirmation, null, null, default);
+        await db.SaveChangesAsync();
+
+        var status = await legal.StatusAsync(user, default);
+        Assert.True(status.Available);
+        Assert.True(status.Current);
+        Assert.All(status.Documents, document => Assert.True(document.Accepted));
+        Assert.Equal(2, await db.LegalAcceptances.CountAsync(x =>
+            x.UserId == user && x.Role == LegalRole.Account));
+    }
+
+    [Fact]
     public async Task Concurrent_customer_activation_never_creates_duplicate_profile_or_acceptance_evidence()
     {
         var database = await fixture.CreateAsync();

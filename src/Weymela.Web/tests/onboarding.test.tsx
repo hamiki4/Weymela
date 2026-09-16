@@ -174,11 +174,15 @@ describe("shared role-themed onboarding", () => {
       "href",
       "/legal/privacy-policy",
     );
+    expect(screen.getByText(/I agree to the/)).toBeVisible();
+    expect(screen.getByText(/and acknowledge the/)).toBeVisible();
+    expect(screen.queryByText(/Review these documents/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Version pilot-1/)).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Preferred name"), "Hana");
     await userEvent.click(
       screen.getByRole("checkbox", {
-        name: /Terms of Service and Privacy Policy/,
+        name: /I agree to the Terms of Service and acknowledge the Privacy Policy/,
       }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));

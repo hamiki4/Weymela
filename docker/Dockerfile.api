@@ -7,6 +7,7 @@ COPY src/Weymela.Domain/ src/Weymela.Domain/
 COPY src/Weymela.Application/ src/Weymela.Application/
 COPY src/Weymela.Infrastructure/ src/Weymela.Infrastructure/
 COPY src/Weymela.Api/ src/Weymela.Api/
+COPY src/Weymela.Web/public/legal/ src/Weymela.Web/public/legal/
 RUN dotnet publish src/Weymela.Api/Weymela.Api.csproj -c Release -o /out --nologo -p:UseAppHost=false
 
 FROM ${RUNTIME_IMAGE} AS runtime

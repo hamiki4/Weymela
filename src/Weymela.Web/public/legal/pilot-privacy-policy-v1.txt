@@ -1,0 +1,23 @@
+Weymela Pilot Privacy Policy
+
+Pilot draft — Version pilot-draft-2026-09-16.1
+
+This short notice supports testing in the isolated Weymela Pilot. It is not an attorney-reviewed final Production privacy policy and may change before Production use.
+
+1. Information Weymela may process
+Weymela may process information needed to create and operate an account and its Customer, Creator, and Business profiles. This can include contact information, profile details, and security and device information.
+
+2. Product activity
+Weymela may process Promotion participation, transaction and QR activity, and related operational records when those features are used. Location information is processed only when a location feature is used or location details are provided.
+
+3. Connected social information
+When a supported social account is connected, Weymela may process the account and activity information needed for the enabled connection and Promotion verification. The Pilot does not claim social integrations that are not enabled.
+
+4. Why information is used
+Weymela uses this information to operate profiles and product features, secure accounts, prevent fraud and abuse, provide support, maintain audit records, and operate and improve the platform.
+
+5. Sharing and protection
+Information is shared only as needed for authorized Weymela operations, service providers, legal obligations, or the profile and Promotion interactions the user chooses. Weymela applies access controls and security safeguards appropriate to the Pilot.
+
+6. Retention and choices
+Information is retained as needed for Pilot operation, security, audit, and legal obligations. Users may contact the Weymela Pilot owner or testing coordinator through the provided support channel with privacy questions or requests.

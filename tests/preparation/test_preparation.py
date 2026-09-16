@@ -36,6 +36,60 @@ class RepositoryGateTests(unittest.TestCase):
             (pathlib.Path(directory) / 'example.dump').write_bytes(b'not a real backup')
             self.assertTrue(safety.inventory(pathlib.Path(directory))['errors'])
 
+    def test_pilot_draft_legal_bundle_is_hash_bound_nonproduction_and_image_packaged(self):
+        bundle = ROOT / 'src/Weymela.Api/PilotLegal'
+        manifest = json.loads((bundle / 'publication.json').read_text())
+        self.assertEqual(manifest['environment'], 'Pilot')
+        self.assertEqual(manifest['classification'], 'PilotDraft')
+        self.assertFalse(manifest['attorneyReviewed'])
+        self.assertFalse(manifest['productionApproved'])
+        self.assertFalse(manifest['automaticPublication'])
+        self.assertEqual({item['type'] for item in manifest['documents']},
+                         {'TermsOfService', 'PrivacyPolicy'})
+        for item in manifest['documents']:
+            source = ROOT / 'src/Weymela.Web/public/legal' / pathlib.Path(item['contentPath']).name
+            self.assertTrue(source.is_file())
+            self.assertEqual(item['contentHash'], 'sha256:' + hashlib.sha256(source.read_bytes()).hexdigest())
+            text = source.read_text()
+            self.assertIn('Pilot draft', text)
+            self.assertRegex(text, r'not (?:an )?attorney-reviewed final Production')
+            self.assertEqual(item['version'], 'pilot-draft-2026-09-16.1')
+            self.assertTrue(item['viewPath'].startswith('/legal/'))
+
+        terms = (ROOT / 'src/Weymela.Web/public/legal/pilot-terms-of-service-v1.txt').read_text().lower()
+        for subject in ('account and profile use', 'Responsibilities', 'Prohibited conduct',
+                        'Promotions', 'Suspension and termination', 'Pilot service', 'Support'):
+            self.assertIn(subject.lower(), terms)
+        privacy = (ROOT / 'src/Weymela.Web/public/legal/pilot-privacy-policy-v1.txt').read_text().lower()
+        for subject in ('contact information', 'Customer, Creator, and Business profiles',
+                        'Promotion participation', 'transaction and QR activity',
+                        'Location information', 'social account', 'prevent fraud', 'operate and improve'):
+            self.assertIn(subject.lower(), privacy)
+
+        project = (ROOT / 'src/Weymela.Api/Weymela.Api.csproj').read_text()
+        dockerfile = (ROOT / 'docker/Dockerfile.api').read_text()
+        for filename in ('pilot-terms-of-service-v1.txt', 'pilot-privacy-policy-v1.txt'):
+            self.assertIn(filename, project)
+        self.assertIn('COPY src/Weymela.Web/public/legal/', dockerfile)
+
+    def test_pilot_legal_publication_is_explicit_target_guarded_and_scope_bounded(self):
+        bundle = ROOT / 'src/Weymela.Api/PilotLegal'
+        manifest = json.loads((bundle / 'publication.json').read_text())
+        sql = (bundle / 'publish.sql').read_text()
+        self.assertIn("current_database() <> 'weymela_v3_pilot'", sql)
+        self.assertIn('pg_advisory_xact_lock', sql)
+        self.assertIn('ON CONFLICT ("Type", "Version") DO NOTHING', sql)
+        self.assertIn('BEGIN;', sql)
+        self.assertIn('COMMIT;', sql)
+        for item in manifest['documents']:
+            self.assertIn(item['id'], sql)
+            self.assertIn(item['type'], sql)
+            self.assertIn(item['version'], sql)
+            self.assertIn(item['contentHash'], sql)
+        for forbidden_table in ('LegalAcceptances', 'CustomerProfiles', 'IdentityBindings',
+                                'FinancialConfigurationVersions'):
+            self.assertNotIn(f'v3."{forbidden_table}"', sql)
+
     def test_source_migration_order_is_exactly_approved_through_phase9a1(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))

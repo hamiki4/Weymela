@@ -15,6 +15,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CI = (ROOT/'.github/workflows/ci.yml').read_text()
 RELEASE = (ROOT/'.github/workflows/release.yml').read_text()
+VALIDATE = (ROOT/'tools/ci/validate.sh').read_text()
 REQUIRED = {'source-security', 'dotnet-unit', 'postgres', 'http-api', 'frontend', 'dotnet-checks', 'browser'}
 spec = importlib.util.spec_from_file_location('browser_host', ROOT/'tools/ci/browser-host.py')
 browser = importlib.util.module_from_spec(spec)
@@ -169,6 +170,13 @@ class DispatcherTests(unittest.TestCase):
         result, calls = self.run_suite('frontend')
         self.assertEqual(result.returncode, 0)
         self.assertEqual([c[3:] for c in calls], [['ci','--no-fund'],['audit','--audit-level=high'],['test'],['run','build']])
+
+    def test_browser_build_uses_only_isolated_public_firebase_metadata(self):
+        browser_build = VALIDATE.split('  browser-build)', 1)[1].split('    ;;', 1)[0]
+        for value in ('public-test-key', 'isolated-v3-test.firebaseapp.com',
+                      'isolated-v3-test', '1:test:web:test'):
+            self.assertIn(value, browser_build)
+        self.assertNotIn('weymela-pilot', browser_build)
 
     def test_release_ef_dependency_and_license_checks_are_retained(self):
         result, calls = self.run_suite('dotnet-checks')

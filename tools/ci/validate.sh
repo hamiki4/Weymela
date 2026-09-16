@@ -56,7 +56,15 @@ case "$suite" in
   browser-build)
     restore_build tests/Weymela.BrowserHost/Weymela.BrowserHost.csproj
     run_stage 'npm ci' npm --prefix src/Weymela.Web ci --no-fund
-    run_stage 'frontend production build for browser' npm --prefix src/Weymela.Web run build
+    # BrowserHost uses local test adapters, but the production Web bundle still
+    # initializes the Firebase Web SDK before exposing auth controls. Compile it
+    # with isolated, public test metadata so E2E never depends on Pilot config.
+    run_stage 'frontend production build for browser' env \
+      VITE_FIREBASE_API_KEY=public-test-key \
+      VITE_FIREBASE_AUTH_DOMAIN=isolated-v3-test.firebaseapp.com \
+      VITE_FIREBASE_PROJECT_ID=isolated-v3-test \
+      VITE_FIREBASE_APP_ID=1:test:web:test \
+      npm --prefix src/Weymela.Web run build
     ;;
   *) printf '%s\n' 'Unknown validation suite.' >&2; exit 2 ;;
 esac

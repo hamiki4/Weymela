@@ -47,6 +47,7 @@ function FirebaseSignIn({
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<SessionProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
+  const authBusy = busy || !adapter;
 
   useEffect(() => {
     try {
@@ -178,6 +179,7 @@ function FirebaseSignIn({
             <Button
               type="button"
               icon="arrow"
+              disabled={!adapter}
               onClick={() => changeView("create")}
             >
               Create account
@@ -186,6 +188,7 @@ function FirebaseSignIn({
             <button
               className="secondary-auth-button"
               type="button"
+              disabled={!adapter}
               onClick={() => changeView("signIn")}
             >
               Sign in
@@ -202,7 +205,7 @@ function FirebaseSignIn({
           setCode={setCode}
           codeSent={codeSent}
           verificationMessage="If this email can be used to create a Weymela account, you'll receive a verification code."
-          busy={busy}
+          busy={authBusy}
           onContinue={() => startAccountEmail("Signup")}
           onVerify={() => verifyAccountEmail("Signup")}
           onBack={() => changeView("landing")}
@@ -217,7 +220,7 @@ function FirebaseSignIn({
           setCode={setCode}
           codeSent={codeSent}
           verificationMessage="If this email is registered, you'll receive a verification code."
-          busy={busy}
+          busy={authBusy}
           onContinue={() => startAccountEmail("DeviceEnrollment")}
           onVerify={() => verifyAccountEmail("DeviceEnrollment")}
           onBack={() => changeView("signIn")}
@@ -238,7 +241,7 @@ function FirebaseSignIn({
               });
             }}
           >
-            <fieldset disabled={busy}>
+            <fieldset disabled={authBusy}>
               <Field label="Phone number">
                 <input
                   type="tel"
@@ -256,7 +259,7 @@ function FirebaseSignIn({
                 onChange={setPassword}
                 autoComplete="current-password"
               />
-              <Button type="submit" icon="arrow" disabled={busy}>
+              <Button type="submit" icon="arrow" disabled={authBusy}>
                 {busy ? "Signing in…" : "Sign in"}
               </Button>
             </fieldset>
@@ -294,7 +297,7 @@ function FirebaseSignIn({
           setCodeSent={setCodeSent}
           recoveryVerified={recoveryVerified}
           setRecoveryVerified={setRecoveryVerified}
-          busy={busy}
+          busy={authBusy}
           submit={submit}
           onDone={() => {
             changeView("signIn");

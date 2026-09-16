@@ -441,9 +441,10 @@ test("password recovery uses a server-bound browser transaction", async ({ conte
     await recoveryPage.goto("/sign-in?intent=sign-in");
     await recoveryPage.getByRole("button", { name: "Forgot password?" }).click();
     await recoveryPage.getByLabel("Email address").fill(account.email);
-    const recoveryStarted = recoveryPage.waitForResponse(response =>
-      response.request().method() === "POST"
+    const recoveryStarted = recoveryPage.waitForResponse(
+      response => response.request().method() === "POST"
         && new URL(response.url()).pathname === "/api/auth/email/start",
+      { timeout: 20_000 },
     );
     await recoveryPage.getByRole("button", { name: "Continue" }).click();
     expect((await recoveryStarted).status()).toBe(202);
@@ -454,9 +455,10 @@ test("password recovery uses a server-bound browser transaction", async ({ conte
     expect(codeResponse.status()).toBe(200);
     const { code } = await codeResponse.json() as { code: string };
     await recoveryPage.getByLabel("Verification code").fill(code);
-    const verificationResponse = recoveryPage.waitForResponse(response =>
-      response.request().method() === "POST"
+    const verificationResponse = recoveryPage.waitForResponse(
+      response => response.request().method() === "POST"
         && new URL(response.url()).pathname === "/api/auth/password/recovery/verify",
+      { timeout: 20_000 },
     );
     await recoveryPage.getByRole("button", { name: "Verify" }).click();
     const verification = await verificationResponse;
@@ -476,9 +478,10 @@ test("password recovery uses a server-bound browser transaction", async ({ conte
       await recoveryPage.getByLabel("Confirm new password", { exact: true }).fill(replacement);
     });
     const reset = await test.step("submit replacement password", async () => {
-      const resetResponse = recoveryPage.waitForResponse(response =>
-        response.request().method() === "POST"
+      const resetResponse = recoveryPage.waitForResponse(
+        response => response.request().method() === "POST"
           && new URL(response.url()).pathname === "/api/auth/password/reset",
+        { timeout: 20_000 },
       );
       await recoveryPage.getByRole("button", { name: "Reset password" }).click();
       return resetResponse;

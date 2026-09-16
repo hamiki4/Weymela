@@ -20,6 +20,10 @@ internal static class AuthEndpoints
     private sealed record EmailCodeStart(string Identifier, string? Phone, string Purpose);
     private sealed record EmailCodeVerify(string Identifier, string Purpose, string Code);
     private sealed record PhoneAliasInput(string Phone);
+    private sealed record PasswordSignInInput(string Phone, string Password);
+    private sealed record PasswordCredentialInput(string? Phone, string Password, string ConfirmPassword);
+    private sealed record PasswordRecoveryVerifyInput(string Email, string Code);
+    private sealed record PasswordResetInput(string Email, string RecoveryGrant, string NewPassword, string ConfirmPassword);
     public static void MapAuthEndpoints(this WebApplication app,bool development)
     {
         app.MapGet("/api/auth/mode",()=>Results.Ok(new{development,personas=development?new DevelopmentDirectory().Personas.Select(x=>new{x.Alias,x.Name,role=x.Actor.Role.ToString()}):null})).AllowAnonymous();
@@ -139,6 +143,35 @@ internal static class AuthEndpoints
             var result = await auth.VerifyAsync(input.Identifier, purpose, input.Code, ct);
             return Results.Ok(new { customToken = result.CustomToken, expiresAtUtc = result.ExpiresAtUtc });
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
+        app.MapPost("/api/auth/password/sign-in", async (PasswordSignInInput input,
+            PasswordCredentialService passwords, CancellationToken ct) =>
+        {
+            var result = await passwords.SignInAsync(input.Phone, input.Password, ct);
+            return result.Succeeded && result.Token is not null
+                ? Results.Ok(new { customToken = result.Token.CustomToken, expiresAtUtc = result.Token.ExpiresAtUtc })
+                : Results.Json(new { code = "InvalidCredentials", message = "Phone number or password is incorrect." }, statusCode: 401);
+        }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
+        app.MapPost("/api/auth/password/recovery/verify", async (PasswordRecoveryVerifyInput input,
+            EmailAuthService auth, CancellationToken ct) =>
+        {
+            var result = await auth.VerifyPasswordRecoveryAsync(input.Email, input.Code, ct);
+            return Results.Ok(new { recoveryGrant = result.RecoveryGrant, expiresAtUtc = result.ExpiresAtUtc });
+        }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
+        app.MapPost("/api/auth/password/reset", async (PasswordResetInput input,
+            PasswordCredentialService passwords, CancellationToken ct) =>
+        {
+            await passwords.ResetAsync(input.Email, input.RecoveryGrant, input.NewPassword, input.ConfirmPassword, ct);
+            return Results.NoContent();
+        }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
+        app.MapGet("/api/account/security", async (HttpContext c, PasswordCredentialService passwords,
+            CancellationToken ct) => Results.Ok(await passwords.StatusAsync(VerifiedIdentity(c).UserId, ct)))
+            .RequireAuthorization("VerifiedAccount");
+        app.MapPost("/api/account/password-credential", async (PasswordCredentialInput input, HttpContext c,
+            PasswordCredentialService passwords, CancellationToken ct) =>
+        {
+            await passwords.EnrollAsync(VerifiedIdentity(c), input.Phone, input.Password, input.ConfirmPassword, ct);
+            return Results.NoContent();
+        }).RequireAuthorization("VerifiedAccount").AddEndpointFilter<ValidatedInputFilter>();
         app.MapPost("/api/account/phone-alias", async (PhoneAliasInput input, HttpContext c,
             PhoneAliasService service, CancellationToken ct) =>
         {
@@ -169,4 +202,14 @@ internal static class AuthEndpoints
         ActorRole.Customer => actor.CustomerId ?? Guid.Empty,
         _ => actor.UserId
     };
+
+    private static DeviceSessionIdentity VerifiedIdentity(HttpContext context)
+    {
+        if (context.User.FindFirst("auth-strength")?.Value != "firebase-verified"
+            || !Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+            || !Guid.TryParse(context.User.FindFirst("identity-binding")?.Value, out var bindingId)
+            || !long.TryParse(context.User.FindFirst("identity-version")?.Value, out var bindingVersion))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Complete verified account sign-in first.");
+        return new(userId, bindingId, bindingVersion);
+    }
 }

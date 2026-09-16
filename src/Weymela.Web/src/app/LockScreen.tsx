@@ -5,9 +5,11 @@ import { PinInput } from "../ui/PinInput";
 import { useSession } from "./Session";
 import { Brand } from "./Shell";
 import { PinRecovery } from "./PinRecovery";
+import { useNavigate } from "react-router-dom";
 
 export function LockScreen() {
   const session = useSession();
+  const navigate = useNavigate();
   const state = session.deviceAccess?.state ?? "Locked";
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,8 +57,8 @@ export function LockScreen() {
           </fieldset>
         </form> : null}
         <div className="lock-actions">
-          {state !== "FullAuthenticationRequired" ? <button className="text-button" type="button" onClick={() => { setRecovering(true); setError(null); }}>Forgot PIN</button> : <span />}
-          <button className="text-button" type="button" onClick={() => void session.signOut()}>{state === "FullAuthenticationRequired" ? "Sign in" : "Sign out"}</button>
+          {state !== "FullAuthenticationRequired" ? <button className="text-button" type="button" onClick={() => { setRecovering(true); setError(null); }}>Forgot PIN?</button> : <span />}
+          <button className="text-button" type="button" onClick={() => void session.signOut().then(() => navigate("/sign-in?intent=sign-in", { replace: true }))}>Sign in</button>
         </div>
       </>}
     </section>

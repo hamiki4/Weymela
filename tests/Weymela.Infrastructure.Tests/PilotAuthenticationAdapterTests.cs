@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
@@ -32,6 +33,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
     [InlineData(EmailCodePurpose.Signup, "Your Weymela verification code")]
     [InlineData(EmailCodePurpose.DeviceEnrollment, "Your Weymela sign-in code")]
     [InlineData(EmailCodePurpose.PinRecovery, "Your Weymela recovery code")]
+    [InlineData(EmailCodePurpose.PasswordRecovery, "Your Weymela password reset code")]
     public async Task Resend_uses_fixed_https_endpoint_and_purpose_bound_messages(
         EmailCodePurpose purpose, string expectedSubject)
     {
@@ -96,7 +98,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Phone_alias_delivery_uses_only_the_registered_verified_email()
+    public async Task Email_challenges_reject_phone_alias_input_and_deliver_only_to_verified_email()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -112,7 +114,11 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         db.IdentityBindings.Add(binding); await db.SaveChangesAsync();
         await new PhoneAliasService(db, Options(), TimeProvider.System).RegisterAsync(
             new DeviceSessionIdentity(user, binding.Id, binding.Version), "+251900000000", default);
-        await service.StartAsync("+251900000000", null, EmailCodePurpose.DeviceEnrollment, default);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.StartAsync(
+            "+251900000000", null, EmailCodePurpose.DeviceEnrollment, default));
+        Assert.Single(handler.Requests);
+
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.DeviceEnrollment, default);
 
         using var payload = JsonDocument.Parse(handler.Requests[^1].Body);
         Assert.Equal("owner@example.com", payload.RootElement.GetProperty("to")[0].GetString());

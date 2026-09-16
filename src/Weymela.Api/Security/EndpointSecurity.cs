@@ -21,6 +21,7 @@ public static class EndpointSecurity
         // limiter. Its authenticated, privacy-safe status projection is an ordinary
         // account read so normal page loads do not consume sign-in attempt capacity.
         if (route.Contains("/session") || route.Contains("/auth/") || route == "/api/account/phone-alias"
+            || route == "/api/account/password-credential" || route == "/api/account/security"
             || route.Contains("/device/") && !HttpMethods.IsGet(c.Request.Method)) return "auth";
         if (route.Contains("/notifications")) return "notifications";
         if (route.Contains("/manual")) return "lookup";

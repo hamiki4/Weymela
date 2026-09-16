@@ -192,7 +192,7 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
   expect(reviewed.status()).toBe(200);
 }
 
-type AccountFixture = { suffix: string; email: string; phone: string; token: string; customerPublicId: string };
+type AccountFixture = { suffix: string; email: string; phone: string; password: string; token: string; customerPublicId: string };
 const enrollmentRoles = { Business: 1, Creator: 2, Customer: 3 } as const;
 const enrollmentStatuses = { Pending: 0, Approved: 1, Rejected: 2 } as const;
 
@@ -200,16 +200,17 @@ async function createVerifiedAccount(context: Parameters<typeof login>[0], enrol
   const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
   const email = `browser-${suffix}@example.com`;
   const phone = `+2519${suffix.slice(-8)}`;
+  const password = `Browser passphrase ${suffix}`;
   const token = await emailCode(context, email, "Signup");
   await establishFirebaseSession(context, token, "Customer");
+  const security = await context.request.post("/api/account/password-credential", {
+    headers: { "X-Weymela-Request": "1" }, data: { phone, password, confirmPassword: password },
+  });
+  expect(security.status()).toBe(204);
   if (enroll) {
     await enrollDevice(context, suffix);
-    const phoneRegistration = await context.request.post("/api/account/phone-alias", {
-      headers: { "X-Weymela-Request": "1" }, data: { phone },
-    });
-    expect(phoneRegistration.status()).toBe(204);
   }
-  return { suffix, email, phone, token };
+  return { suffix, email, phone, password, token };
 }
 
 async function activateCustomer(context: Parameters<typeof login>[0], account: Omit<AccountFixture, "customerPublicId">) {
@@ -487,7 +488,7 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await page.getByRole("button", { name: "Forgot PIN" }).click();
-    await expect(page.getByRole("heading", { name: "Recover your Weymela PIN" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Reset your PIN" })).toBeVisible();
     for (const width of [375, 390, 393, 430, 768, 1440]) {
       await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
       await layout(page);
@@ -496,14 +497,14 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
     await page.getByLabel("Email address").fill(account.email);
     const started = page.waitForResponse(response => response.request().method() === "POST"
       && new URL(response.url()).pathname === "/api/auth/email/start");
-    await page.getByRole("button", { name: "Send verification code" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
     expect((await started).status()).toBe(202);
     await expect(page.getByText(/If the account is eligible/)).toBeVisible();
     const codeResponse = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(account.email)}`);
     expect(codeResponse.status()).toBe(200);
     const { code } = await codeResponse.json() as { code: string };
 
-    await page.getByLabel("Email recovery code").fill("999999");
+    await page.getByLabel("Verification code").fill("999999");
     await fillPin(page, "New PIN", "56789");
     await fillPin(page, "Confirm new PIN", "56789");
     const invalid = page.waitForResponse(response => response.request().method() === "POST"
@@ -512,7 +513,7 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
     expect((await invalid).status()).toBe(400);
     await expect(page.getByRole("alert")).toHaveText(/invalid or expired/);
 
-    await page.getByLabel("Email recovery code").fill(code);
+    await page.getByLabel("Verification code").fill(code);
     const completed = page.waitForResponse(response => response.request().method() === "POST"
       && new URL(response.url()).pathname === "/api/device/pin-recovery/complete");
     await page.getByRole("button", { name: "Recover device" }).click();
@@ -556,11 +557,11 @@ test("recovery-required device can complete verified-email PIN recovery", async 
   await page.getByLabel("Email address").fill(account.email);
   const started = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/auth/email/start");
-  await page.getByRole("button", { name: "Send verification code" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   expect((await started).status()).toBe(202);
   const codeResponse = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(account.email)}`);
   const { code } = await codeResponse.json() as { code: string };
-  await page.getByLabel("Email recovery code").fill(code);
+  await page.getByLabel("Verification code").fill(code);
   await fillPin(page, "New PIN", "24680");
   await fillPin(page, "Confirm new PIN", "24680");
   const completed = page.waitForResponse(response => response.request().method() === "POST"
@@ -697,15 +698,16 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   const suffix = Date.now().toString();
   const email = `browser-${suffix}@example.com`;
   const phone = `+2519${suffix.slice(-8)}`;
+  const password = `Browser passphrase ${suffix}`;
   const token = await runStep(steps, "signup-verify", () => emailCode(context, email, "Signup"), 15000);
   await runStep(steps, "firebase-session", () => establishFirebaseSession(context, token, "Customer"), 12000);
-  await runStep(steps, "device-enrollment", () => enrollDevice(context, suffix), 15000);
-  await runStep(steps, "phone-registration", async () => {
-    const registered = await context.request.post("/api/account/phone-alias", {
-      headers: { "X-Weymela-Request": "1" }, data: { phone },
+  await runStep(steps, "account-security", async () => {
+    const secured = await context.request.post("/api/account/password-credential", {
+      headers: { "X-Weymela-Request": "1" }, data: { phone, password, confirmPassword: password },
     });
-    expect(registered.status()).toBe(204);
-  }, 12000);
+    expect(secured.status()).toBe(204);
+  }, 15000);
+  await runStep(steps, "device-enrollment", () => enrollDevice(context, suffix), 15000);
   await runStep(steps, "onboarding-session", async () => expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Onboarding" }), 12000);
 
   try {
@@ -733,9 +735,14 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   }, 12000);
   await runStep(steps, "customer-session-refresh", async () => expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Customer" }), 12000);
 
-  // The same verified account can resolve through its phone alias; only the
-  // server-stored email receives the code, and the custom-token subject stays stable.
-  const phoneToken = await runStep(steps, "phone-signin", () => emailCode(context, phone, "DeviceEnrollment", undefined, email), 15000);
+  // Full sign-in uses the normalized phone plus password and sends no email.
+  const phoneToken = await runStep(steps, "phone-signin", async () => {
+    const response = await context.request.post("/api/auth/password/sign-in", {
+      headers: { "X-Weymela-Request": "1" }, data: { phone: `0${phone.slice(4)}`, password },
+    });
+    expect(response.status()).toBe(200);
+    return (await response.json() as { customToken: string }).customToken;
+  }, 15000);
   expect(phoneToken).toBe(token);
   await runStep(steps, "firebase-phone-session", () => establishFirebaseSession(context, phoneToken), 12000);
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);

@@ -1330,20 +1330,23 @@ td .button {
 }
 .sign-in-story {
   background: #edf2e5;
-  padding: 34px 24px;
+  padding: max(18px, env(safe-area-inset-top)) 22px 20px;
   position: relative;
   overflow: hidden;
 }
 .sign-in-story .brand {
-  margin-bottom: 44px;
+  margin-bottom: 14px;
 }
 .sign-in-story h1 {
   font-family: Georgia, serif;
   font-weight: 400;
-  font-size: 3rem;
+  font-size: clamp(2rem, 10vw, 2.7rem);
   letter-spacing: -0.055em;
   line-height: 1.13;
 }
+.sign-in-story .eyebrow { margin-bottom: 7px; }
+.sign-in-story h1 { margin-bottom: 8px; }
+.sign-in-story > p:last-of-type { margin-bottom: 0; line-height: 1.45; }
 .sign-in-story > p:last-of-type {
   font-size: 0.9rem;
   max-width: 300px;
@@ -1353,7 +1356,7 @@ td .button {
   position: absolute;
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 10rem;
+  font-size: 6rem;
   right: 18px;
   bottom: -24px;
   color: #dae5ce;
@@ -1364,7 +1367,7 @@ td .button {
   z-index: 1;
 }
 .sign-in-form {
-  padding: 34px 24px;
+  padding: 26px 22px max(26px, env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1382,12 +1385,24 @@ td .button {
   margin-bottom: 13px;
 }
 .sign-in-form fieldset {
-  margin-top: 25px;
+  margin-top: 20px;
+  display: grid;
+  gap: 14px;
 }
 .sign-in-form .button {
   width: 100%;
   margin: 8px 0 15px;
 }
+.auth-primary-actions { display: grid; gap: 12px; margin-top: 24px; }
+.auth-primary-actions > p { margin: 7px 0 -3px; text-align: center; color: var(--muted); font-size: .85rem; }
+.secondary-auth-button { min-height: 46px; border: 1px solid var(--green); border-radius: 9px; background: #fff; color: var(--green); font-weight: 700; }
+.secondary-auth-button:hover { background: var(--tint); }
+.auth-link-stack { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 16px; margin-top: 6px; }
+.password-control { position: relative; }
+.password-control input { padding-right: 68px; }
+.password-toggle { position: absolute; inset-inline-end: 5px; top: 5px; min-height: 36px; padding: 5px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--green); font-size: .78rem; font-weight: 700; }
+.password-toggle:hover { background: var(--tint); }
+.security-ready { padding: 12px; margin: 0; border-radius: 9px; background: var(--tint); font-size: .86rem; }
 .sign-in-form .loading {
   width: 100%;
 }

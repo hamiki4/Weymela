@@ -35,6 +35,11 @@ export interface DeviceEnrollmentStatus {
   state: DeviceEnrollmentState;
   expiresAtUtc: string | null;
 }
+
+export interface AccountSecurityStatus {
+  passwordEnrolled: boolean;
+  phoneEnrolled: boolean;
+}
 export type DeviceAccessState =
   | "Unlocked"
   | "Locked"

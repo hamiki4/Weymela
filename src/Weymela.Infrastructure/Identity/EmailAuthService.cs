@@ -38,30 +38,25 @@ public sealed class EmailAuthService(
     private static readonly Regex Email = new("^[^@\\s]{1,96}@[^@\\s]{1,96}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ResendWindow = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan RecoveryGrantLifetime = TimeSpan.FromMinutes(10);
     private const int MaxAttempts = 5;
 
     public async Task<EmailCodeStartOutcome> StartAsync(string identifier, string? phone, EmailCodePurpose purpose, CancellationToken ct)
     {
-        var normalizedIdentifier = NormalizeIdentifier(identifier, out var identifierKind);
-        if ((purpose is EmailCodePurpose.Signup or EmailCodePurpose.PinRecovery) && identifierKind != AuthIdentifierKind.Email)
-            throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.");
+        var normalizedIdentifier = NormalizeEmail(identifier);
         if (!string.IsNullOrWhiteSpace(phone))
-            throw new ApplicationFailure(FailureKind.Validation, "Enter your email or phone in one field.");
+            throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.");
         EnsureConfigured();
 
         var identifierHash = HashIdentifier(normalizedIdentifier);
         var now = clock.GetUtcNow().UtcDateTime;
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-        var existingEmail = identifierKind == AuthIdentifierKind.Email
-            ? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == identifierHash, ct)
-            : null;
-        var existingPhone = identifierKind == AuthIdentifierKind.Phone
-            ? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone" && x.IdentifierHash == identifierHash, ct)
-            : null;
+        var existingEmail = await db.AuthIdentifiers.AsTracking()
+            .SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == identifierHash, ct);
 
         // Conflicting identifiers never overwrite or merge accounts. The public endpoint
         // returns the same generic response for this branch as for a normal request.
-        if (purpose == EmailCodePurpose.Signup && (existingEmail is not null || existingPhone is not null))
+        if (purpose == EmailCodePurpose.Signup && existingEmail is not null)
         {
             await tx.CommitAsync(ct);
             return new(false, now.Add(Lifetime), (int)ResendWindow.TotalSeconds);
@@ -71,7 +66,7 @@ public sealed class EmailAuthService(
         {
             deliveryEmail = null;
         }
-        else if (identifierKind == AuthIdentifierKind.Email)
+        else
         {
             deliveryEmail = existingEmail;
             if (deliveryEmail is null || !deliveryEmail.IsVerified)
@@ -80,25 +75,10 @@ public sealed class EmailAuthService(
                 return new(false, now.Add(Lifetime), (int)ResendWindow.TotalSeconds);
             }
         }
-        else
-        {
-            deliveryEmail = existingPhone is null
-                ? null
-                : await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.UserId == existingPhone.UserId && x.IsVerified, ct);
-            if (existingPhone is null || deliveryEmail is null || string.IsNullOrWhiteSpace(deliveryEmail.DeliveryAddress))
-            {
-                await tx.CommitAsync(ct);
-                return new(false, now.Add(Lifetime), (int)ResendWindow.TotalSeconds);
-            }
-        }
-        var emailHash = purpose == EmailCodePurpose.Signup
-            ? HashIdentifier(normalizedIdentifier)
-            : identifierKind == AuthIdentifierKind.Email ? identifierHash : HashIdentifier(deliveryEmail!.DeliveryAddress!);
-        var challengeKeyHash = purpose == EmailCodePurpose.Signup ? emailHash : identifierHash;
+        var emailHash = identifierHash;
+        var challengeKeyHash = identifierHash;
         var userId = purpose == EmailCodePurpose.Signup ? (Guid?)Guid.NewGuid() : deliveryEmail!.UserId;
-        var deliveryAddress = purpose == EmailCodePurpose.Signup
-            ? normalizedIdentifier
-            : identifierKind == AuthIdentifierKind.Email ? normalizedIdentifier : deliveryEmail!.DeliveryAddress!;
+        var deliveryAddress = purpose == EmailCodePurpose.Signup ? normalizedIdentifier : deliveryEmail!.DeliveryAddress!;
         if (purpose != EmailCodePurpose.Signup && deliveryEmail is null)
         {
             await tx.CommitAsync(ct);
@@ -119,7 +99,7 @@ public sealed class EmailAuthService(
             UserId = userId,
             IdentifierHash = challengeKeyHash,
             EmailIdentifierHash = emailHash,
-            PhoneIdentifierHash = identifierKind == AuthIdentifierKind.Phone ? identifierHash : null,
+            PhoneIdentifierHash = null,
             Purpose = purpose.ToString(),
             CodeHash = AuthCodeHashing.Hash(code, options.AuthCodeHashKey!),
             CreatedAtUtc = now,
@@ -137,8 +117,9 @@ public sealed class EmailAuthService(
     public async Task<FirebaseCustomTokenResult> VerifyAsync(string email, EmailCodePurpose purpose, string code, CancellationToken ct)
     {
         EnsureConfigured();
-        if (purpose == EmailCodePurpose.PinRecovery) throw new AuthChallengeUnavailableException("Secure PIN reset is not configured.");
-        var normalizedIdentifier = NormalizeIdentifier(email, out _);
+        if (purpose is EmailCodePurpose.PinRecovery or EmailCodePurpose.PasswordRecovery)
+            throw new AuthChallengeUnavailableException("Use the secure recovery completion flow.");
+        var normalizedIdentifier = NormalizeEmail(email);
         if (code.Length != 6 || code.Any(c => c is < '0' or > '9')) throw new AuthChallengeInvalidException();
         var hash = HashIdentifier(normalizedIdentifier);
         var now = clock.GetUtcNow().UtcDateTime;
@@ -168,11 +149,6 @@ public sealed class EmailAuthService(
         }
         else if (emailIdentifier is null || !emailIdentifier.IsVerified || emailIdentifier.UserId != userId)
             throw new AuthChallengeInvalidException();
-        else if (!string.IsNullOrWhiteSpace(challenge.PhoneIdentifierHash))
-        {
-            var phoneIdentifier = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone" && x.IdentifierHash == challenge.PhoneIdentifierHash, ct);
-            if (phoneIdentifier is null || phoneIdentifier.UserId != userId) throw new AuthChallengeInvalidException();
-        }
 
         challenge.ConsumedAtUtc = now;
         var result = await tokenIssuer.IssueAsync(userId, options.FirebaseProjectId, ct);
@@ -181,11 +157,52 @@ public sealed class EmailAuthService(
         return result;
     }
 
+    public async Task<PasswordRecoveryGrantResult> VerifyPasswordRecoveryAsync(
+        string email,
+        string code,
+        CancellationToken ct)
+    {
+        EnsureConfigured();
+        var normalizedEmail = NormalizeEmail(email);
+        if (code.Length != 6 || code.Any(c => c is < '0' or > '9')) throw new AuthChallengeInvalidException();
+        var identifierHash = HashIdentifier(normalizedEmail);
+        var now = clock.GetUtcNow().UtcDateTime;
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var challenge = await db.EmailAuthChallenges.AsTracking()
+            .Where(x => x.IdentifierHash == identifierHash
+                && x.Purpose == EmailCodePurpose.PasswordRecovery.ToString())
+            .OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(ct);
+        if (challenge is null || challenge.ConsumedAtUtc is not null || challenge.ExpiresAtUtc <= now
+            || challenge.AttemptCount >= challenge.MaxAttempts || challenge.UserId is null)
+            throw new AuthChallengeInvalidException();
+        challenge.AttemptCount++;
+        if (!AuthCodeHashing.Verify(code, challenge.CodeHash, options.AuthCodeHashKey!))
+        {
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            throw new AuthChallengeInvalidException();
+        }
+        var identifier = await db.AuthIdentifiers.AsNoTracking().SingleOrDefaultAsync(x => x.Kind == "Email"
+            && x.IdentifierHash == identifierHash && x.UserId == challenge.UserId && x.IsVerified, ct);
+        if (identifier is null) throw new AuthChallengeInvalidException();
+
+        var grant = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        challenge.ConsumedAtUtc = now;
+        challenge.RecoveryGrantHash = PasswordCredentialService.HashRecoveryGrant(grant);
+        challenge.RecoveryGrantExpiresAtUtc = now.Add(RecoveryGrantLifetime);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return new(grant, challenge.RecoveryGrantExpiresAtUtc.Value);
+    }
+
     private void EnsureConfigured()
     {
         if (!delivery.Enabled || !tokenIssuer.Enabled || string.IsNullOrWhiteSpace(options.AuthCodeHashKey))
             throw new AuthChallengeUnavailableException("Email authentication is temporarily unavailable.");
     }
+
+    internal static string NormalizeEmailAddress(string value) => NormalizeEmail(value);
 
     private static string NormalizeEmail(string value)
     {

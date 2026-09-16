@@ -39,6 +39,7 @@ VALUES
     ('api', 'public', '__EFMigrationsHistory', true, false, false),
     ('api', 'v3', 'AuthIdentifiers', true, true, true),
     ('api', 'v3', 'EmailAuthChallenges', true, true, true),
+    ('api', 'v3', 'PasswordCredentials', true, true, true),
     ('api', 'v3', 'IdentityBindings', true, true, false),
     ('api', 'v3', 'CommercePermissions', true, true, false),
     ('api', 'v3', 'PublicWorkspaceProfiles', true, true, false),

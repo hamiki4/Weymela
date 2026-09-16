@@ -47,6 +47,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."LegalDocumentVersions",
     v3."OfferQrSessions",
     v3."OutboxMessages",
+    v3."PasswordCredentials",
     v3."PayoutRecords",
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",
@@ -65,6 +66,7 @@ FROM :"api_role";
 
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."AuthIdentifiers" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."EmailAuthChallenges" TO :"api_role";
+GRANT SELECT, INSERT, UPDATE ON TABLE v3."PasswordCredentials" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."IdentityBindings" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."CommercePermissions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";

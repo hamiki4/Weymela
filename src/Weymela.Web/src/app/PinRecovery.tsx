@@ -68,11 +68,9 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
   };
 
   return <div className="pin-recovery" aria-live="polite">
-    <p className="eyebrow">Email recovery</p>
-    <h1 id="recovery-title">Recover your Weymela PIN</h1>
+    <h1 id="recovery-title">Reset your PIN</h1>
     {step === "identifier"
       ? <>
-          <p className="muted">We’ll send a code to your registered email.</p>
           {error ? <Notice error>{error}</Notice> : null}
           <form noValidate onSubmit={(event) => void start(event)}>
             <fieldset disabled={busy}>
@@ -80,7 +78,7 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
                 <input type="email" inputMode="email" autoComplete="email" value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)} required />
               </Field>
-              <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Sending…" : "Send verification code"}</Button>
+              <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Working…" : "Continue"}</Button>
             </fieldset>
           </form>
         </>
@@ -89,7 +87,9 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
           {error ? <Notice error>{error}</Notice> : null}
           <form noValidate onSubmit={(event) => void complete(event)}>
             <fieldset disabled={busy}>
-              <Field label="Email recovery code">
+              <h2>Check your email</h2>
+              <p className="muted">Enter the verification code we sent you.</p>
+              <Field label="Verification code">
                 <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}"
                   minLength={6} maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} required />
               </Field>

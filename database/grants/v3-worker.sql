@@ -45,6 +45,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."LegalDocumentVersions",
     v3."OfferQrSessions",
     v3."OutboxMessages",
+    v3."PasswordCredentials",
     v3."PayoutRecords",
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",

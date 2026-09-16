@@ -108,7 +108,7 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         var migrations=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation"},migrations);
+        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials"},migrations);
         Assert.False(db.Database.HasPendingModelChanges());
         foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint)})
         { var model=db.Model.FindEntityType(entity)!;Assert.True(model.FindProperty("xmin")!.IsConcurrencyToken);Assert.True(model.FindProperty("Version")!.IsConcurrencyToken); }

@@ -112,22 +112,67 @@ export class FirebaseWebAuthAdapter {
     return true;
   }
 
-  async startEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery"): Promise<void> {
-    const normalized = purpose === "DeviceEnrollment" ? normalizeLoginIdentifier(identifier) : normalizeEmail(identifier);
+  async startEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery" | "PasswordRecovery"): Promise<void> {
+    const normalized = normalizeEmail(identifier);
     const response = await fetch("/api/auth/email/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose }) });
     if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
-      : response.status === 400 ? purpose === "DeviceEnrollment" ? "Enter a valid email or phone number." : "Enter a valid email address."
+      : response.status === 400 ? "Enter a valid email address."
       : "Email verification is temporarily unavailable.");
   }
 
-  async verifyEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery", code: string): Promise<void> {
-    const normalized = purpose === "DeviceEnrollment" ? normalizeLoginIdentifier(identifier) : normalizeEmail(identifier);
+  async verifyEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment", code: string): Promise<void> {
+    const normalized = normalizeEmail(identifier);
     if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
     const response = await fetch("/api/auth/email/verify", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose, code: code.trim() }) });
     if (!response.ok) throw new Error("The code is invalid or expired.");
     const result = await response.json() as { customToken?: string };
     if (!result.customToken) throw new Error("The verification session is invalid.");
     await this.signInWithCustomToken(result.customToken);
+  }
+
+  async signInWithPassword(phone: string, password: string): Promise<void> {
+    const normalized = normalizePhone(phone);
+    if (!password || password.length > 128) throw new Error("Phone number or password is incorrect.");
+    const response = await fetch("/api/auth/password/sign-in", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },
+      body: JSON.stringify({ phone: normalized, password }),
+    });
+    if (!response.ok) throw new Error(response.status === 429
+      ? "Too many attempts. Please wait and try again."
+      : response.status === 400 ? "Enter a valid phone number."
+      : "Phone number or password is incorrect.");
+    const result = await response.json() as { customToken?: string };
+    if (!result.customToken) throw new Error("We could not sign you in. Please try again.");
+    await this.signInWithCustomToken(result.customToken);
+  }
+
+  async verifyPasswordRecovery(email: string, code: string): Promise<string> {
+    const normalized = normalizeEmail(email);
+    if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
+    const response = await fetch("/api/auth/password/recovery/verify", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },
+      body: JSON.stringify({ email: normalized, code: code.trim() }),
+    });
+    if (!response.ok) throw new Error("The code is invalid or expired.");
+    const result = await response.json() as { recoveryGrant?: string };
+    if (!result.recoveryGrant) throw new Error("The reset request has expired. Start again.");
+    return result.recoveryGrant;
+  }
+
+  async resetPassword(email: string, recoveryGrant: string, newPassword: string, confirmPassword: string): Promise<void> {
+    const normalized = normalizeEmail(email);
+    const response = await fetch("/api/auth/password/reset", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },
+      body: JSON.stringify({ email: normalized, recoveryGrant, newPassword, confirmPassword }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { message?: string } | null;
+      throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
+        : body?.message ?? "The reset request has expired. Start again.");
+    }
   }
 
   async signOut(): Promise<void> {
@@ -140,11 +185,10 @@ export class FirebaseWebAuthAdapter {
   }
 }
 
-function normalizeLoginIdentifier(identifier: string): string {
-  const normalized = identifier.trim();
-  if (normalized.includes("@")) return normalizeEmail(normalized);
-  if (/^[+0-9()\s-]{7,24}$/.test(normalized) && /[0-9]/.test(normalized)) return normalized;
-  throw new Error("Enter a valid email or phone number.");
+function normalizePhone(phone: string): string {
+  const normalized = phone.trim();
+  if (/^[+0-9()\s.-]{7,24}$/.test(normalized) && /[0-9]/.test(normalized)) return normalized;
+  throw new Error("Enter a valid phone number.");
 }
 
 function normalizeEmail(email: string): string {

@@ -39,7 +39,7 @@ class RepositoryGateTests(unittest.TestCase):
     def test_source_migration_order_is_exactly_approved_through_phase9a1(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):

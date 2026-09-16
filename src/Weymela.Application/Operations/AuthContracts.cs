@@ -1,7 +1,7 @@
 namespace Weymela.Application.Operations;
 
 public enum AuthIdentifierKind { Email, Phone }
-public enum EmailCodePurpose { Signup, DeviceEnrollment, PinRecovery }
+public enum EmailCodePurpose { Signup, DeviceEnrollment, PinRecovery, PasswordRecovery }
 public enum RoleEnrollmentStatus { Pending, Approved, Rejected }
 
 public sealed record EmailCodeStartRequest(
@@ -17,6 +17,7 @@ public sealed record EmailCodeVerificationRequest(
 
 public sealed record EmailCodeChallengeResult(bool Accepted, DateTime ExpiresAtUtc, int ResendAfterSeconds);
 public sealed record FirebaseCustomTokenResult(string CustomToken, DateTime ExpiresAtUtc);
+public sealed record PasswordRecoveryGrantResult(string RecoveryGrant, DateTime ExpiresAtUtc);
 
 /// <summary>Delivers a code without exposing it to application logs or API responses.</summary>
 public interface IEmailCodeDelivery

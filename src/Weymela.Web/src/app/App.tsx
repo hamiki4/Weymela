@@ -45,6 +45,7 @@ import { Inbox } from "../features/notifications/Inbox";
 import { Onboarding } from "./Onboarding";
 import { PinSetup } from "./PinSetup";
 import { LockScreen } from "./LockScreen";
+import { SecuritySetup } from "./SecuritySetup";
 
 function Home() {
   const { user, loading } = useSession();
@@ -61,6 +62,13 @@ export function App() {
       && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
     return <LockScreen />;
   if (!session.loading && session.user) {
+    if (session.accountSecurity && !session.accountSecurity.passwordEnrolled
+        && location.pathname !== "/security-setup")
+      return <Navigate to="/security-setup" replace />;
+    if (session.accountSecurity?.passwordEnrolled && location.pathname === "/security-setup") {
+      const enrollment = session.deviceEnrollment?.state ?? "Unavailable";
+      return <Navigate to={enrollment === "EnrollmentRequired" ? "/pin-setup" : roleHome[session.user.role]} replace />;
+    }
     const state = session.deviceEnrollment?.state ?? "Unavailable";
     const recognized = state === "Enrolled" || state === "NotRequired";
     if (!recognized && location.pathname !== "/pin-setup")
@@ -73,6 +81,7 @@ export function App() {
       <Route path="/" element={<Home />} />
       <Route path="/sign-in" element={<SignIn />} />
       <Route path="/pin-setup" element={<PinSetup />} />
+      <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin"]}><Shell /></RoleGate>}>
         <Route path="/notifications" element={<Inbox />} />

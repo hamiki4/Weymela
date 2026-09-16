@@ -14,7 +14,9 @@ internal static class DeviceSessionRequestPolicy
     {
         "/api/session",
         "/api/device/enrollment",
-        "/api/onboarding/legal"
+        "/api/onboarding/legal",
+        "/api/account/security",
+        "/api/account/password-credential"
     };
 
     private static readonly HashSet<string> LockedRoutes = new(StringComparer.Ordinal)

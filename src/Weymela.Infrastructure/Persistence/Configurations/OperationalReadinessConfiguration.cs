@@ -63,8 +63,21 @@ internal static class OperationalReadinessConfiguration
         challenge.Property(x => x.PhoneIdentifierHash).HasMaxLength(64);
         challenge.Property(x => x.Purpose).HasMaxLength(40);
         challenge.Property(x => x.CodeHash).HasMaxLength(128);
+        challenge.Property(x => x.RecoveryGrantHash).HasMaxLength(64);
         challenge.HasIndex(x => new { x.IdentifierHash, x.Purpose, x.CreatedAtUtc });
         challenge.HasIndex(x => new { x.ExpiresAtUtc, x.ConsumedAtUtc });
+        challenge.HasIndex(x => x.RecoveryGrantHash).IsUnique().HasFilter("\"RecoveryGrantHash\" IS NOT NULL");
+
+        var password = model.Entity<PasswordCredentialRecord>();
+        password.HasKey(x => x.UserId); password.ToTable("PasswordCredentials", t =>
+        {
+            t.HasCheckConstraint("CK_PasswordCredential_FailedAttempts", "\"FailedAttempts\" >= 0 AND \"FailedAttempts\" <= 10");
+            t.HasCheckConstraint("CK_PasswordCredential_Hash", "\"HashVersion\" > 0 AND \"WorkFactor\" >= 100000");
+        });
+        password.Property(x => x.PasswordHash).HasMaxLength(256);
+        password.Property(x => x.Algorithm).HasMaxLength(40);
+        password.HasIndex(x => x.LockedUntilUtc);
+        Mapping.Version(password);
 
         var device = model.Entity<AuthorizedDeviceRecord>();
         device.HasKey(x => x.Id); device.ToTable("AuthorizedDevices", t =>

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Weymela.Application;
@@ -241,7 +242,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(7, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(8, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -376,7 +377,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
     {
         foreach (var table in new[]
         {
-            "AuthIdentifiers", "EmailAuthChallenges", "IdentityBindings",
+            "AuthIdentifiers", "EmailAuthChallenges", "PasswordCredentials", "IdentityBindings",
             "AuthorizedDevices", "DeviceSessions", "RoleEnrollments", "LegalAcceptances"
         })
             await AssertInsufficientPrivilegeAsync(connectionString,
@@ -499,7 +500,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260913045523_AddAuthenticationRecovery",
             "20260913054814_AddRoleEnrollments",
             "20260913062900_AddPhoneLoginAliases",
-            "20260914022116_AddDevicePinSessionFoundation"
+            "20260914022116_AddDevicePinSessionFoundation",
+            "20260916042557_AddPasswordCredentials"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','v3') AND c.relkind='S'";
@@ -514,7 +516,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Assert.DoesNotContain("ALL TABLES", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER DEFAULT PRIVILEGES", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CREATE ROLE", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("PASSWORD", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Regex.IsMatch(sql, @"\bPASSWORD\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         Assert.DoesNotContain("GRANT DELETE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("BEGIN;", sql, StringComparison.Ordinal);
         Assert.Contains("COMMIT;", sql, StringComparison.Ordinal);
@@ -527,7 +529,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Assert.DoesNotContain("GRANT ALL", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALL TABLES", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CREATE ROLE", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("PASSWORD", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Regex.IsMatch(sql, @"\bPASSWORD\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         Assert.DoesNotContain("GRANT DELETE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("BEGIN;", sql, StringComparison.Ordinal);
         Assert.Contains("COMMIT;", sql, StringComparison.Ordinal);
@@ -596,7 +598,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(7L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(8L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;
@@ -697,7 +699,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Assert.True(dump.ExitCode == 0, "Backup-role pg_dump failed without disclosing archive data.");
         var listing = await fixture.ExecuteInContainerAsync("pg_restore", "--list", archive);
         Assert.Equal(0, listing.ExitCode);
-        foreach (var table in new[] { "AuthIdentifiers", "EmailAuthChallenges", "AuthorizedDevices",
+        foreach (var table in new[] { "AuthIdentifiers", "EmailAuthChallenges", "PasswordCredentials", "AuthorizedDevices",
                      "DeviceSessions", "LegalAcceptances", "FinancialJournals" })
             Assert.Contains($"TABLE DATA v3 {table}", listing.Stdout, StringComparison.Ordinal);
         var decoded = await fixture.ExecuteInContainerAsync("pg_restore", "--file=/dev/null", archive);

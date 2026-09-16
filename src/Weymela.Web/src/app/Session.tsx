@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { post, request } from "../api/client";
-import type { DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser } from "../api/types";
+import type { AccountSecurityStatus, DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
 export const roleHome: Record<Role, string> = {
@@ -25,8 +25,10 @@ interface SessionContextValue {
   loading: boolean;
   deviceEnrollment: DeviceEnrollmentStatus | null;
   deviceAccess: DeviceAccessStatus | null;
+  accountSecurity: AccountSecurityStatus | null;
   refresh: () => Promise<void>;
   enrollDevice: (pin: string, confirmPin: string) => Promise<void>;
+  enrollPassword: (phone: string | null, password: string, confirmPassword: string) => Promise<void>;
   unlockDevice: (pin: string) => Promise<void>;
   startPinRecovery: (identifier: string) => Promise<EmailCodeStartStatus>;
   completePinRecovery: (identifier: string, code: string, newPin: string, confirmPin: string) => Promise<void>;
@@ -39,6 +41,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [deviceEnrollment, setDeviceEnrollment] = useState<DeviceEnrollmentStatus | null>(null);
   const [deviceAccess, setDeviceAccess] = useState<DeviceAccessStatus | null>(null);
+  const [accountSecurity, setAccountSecurity] = useState<AccountSecurityStatus | null>(null);
   const accessState = useRef<DeviceAccessStatus["state"] | null>(null);
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
@@ -56,6 +59,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       if (!["Unlocked", "EnrollmentRequired"].includes(access.state)) return;
       const next = await request<SessionUser>("/session");
+      const security = next.developmentMode
+        ? { passwordEnrolled: true, phoneEnrolled: true }
+        : await request<AccountSecurityStatus>("/account/security");
       let enrollment: DeviceEnrollmentStatus;
       try {
         enrollment = await request<DeviceEnrollmentStatus>("/device/enrollment");
@@ -64,12 +70,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         enrollment = { state: "Unavailable", expiresAtUtc: null };
       }
       setUser(next);
+      setAccountSecurity(security);
       setDeviceEnrollment(enrollment);
       if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
     } catch {
       setUser(null);
       setDeviceEnrollment(null);
       setDeviceAccess(null);
+      setAccountSecurity(null);
       accessState.current = null;
       window.sessionStorage.removeItem("weymela.profile-key");
     } finally {
@@ -105,6 +113,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setDeviceEnrollment(null);
       setDeviceAccess(null);
+      setAccountSecurity(null);
       accessState.current = null;
       window.sessionStorage.removeItem("weymela.profile-key");
       if (typeof BroadcastChannel !== "undefined") {
@@ -118,6 +127,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const status = await post<DeviceEnrollmentStatus>("/device/enrollment", { pin, confirmPin });
     if (status.state !== "Enrolled") throw new Error("Secure device setup did not complete.");
     setDeviceEnrollment(status);
+    await refresh();
+  };
+  const enrollPassword = async (phone: string | null, password: string, confirmPassword: string) => {
+    await post<void>("/account/password-credential", { phone, password, confirmPassword });
     await refresh();
   };
   const unlockDevice = async (pin: string) => {
@@ -166,7 +179,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return next;
   };
   return (
-    <Context.Provider value={{ user, loading, deviceEnrollment, deviceAccess, refresh, enrollDevice, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
+    <Context.Provider value={{ user, loading, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

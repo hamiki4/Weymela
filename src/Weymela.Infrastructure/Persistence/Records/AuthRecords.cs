@@ -28,6 +28,24 @@ public sealed class EmailAuthChallengeRecord
     public DateTime? ConsumedAtUtc { get; set; }
     public int AttemptCount { get; set; }
     public int MaxAttempts { get; init; } = 5;
+    public string? RecoveryGrantHash { get; set; }
+    public DateTime? RecoveryGrantExpiresAtUtc { get; set; }
+    public DateTime? RecoveryGrantConsumedAtUtc { get; set; }
+}
+
+/// <summary>Private Internet sign-in credential for one existing V3 identity.</summary>
+public sealed class PasswordCredentialRecord
+{
+    public Guid UserId { get; init; }
+    public string PasswordHash { get; set; } = "";
+    public string Algorithm { get; set; } = "PBKDF2-SHA256";
+    public int HashVersion { get; set; } = 1;
+    public int WorkFactor { get; set; }
+    public DateTime CreatedAtUtc { get; init; }
+    public DateTime ChangedAtUtc { get; set; }
+    public int FailedAttempts { get; set; }
+    public DateTime? LockedUntilUtc { get; set; }
+    public long Version { get; set; }
 }
 
 public sealed class AuthorizedDeviceRecord

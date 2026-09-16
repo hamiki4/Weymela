@@ -37,7 +37,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Email_and_phone_login_resolve_to_the_same_user_and_firebase_identity()
+    public async Task Existing_account_email_verification_returns_to_the_same_firebase_identity()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var issuer = new TestIssuer();
@@ -56,13 +56,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         await service.VerifyAsync("owner@example.com", EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Code, default);
         var emailLoginUserId = issuer.IssuedUserIds[^1];
 
-        await service.StartAsync("0900000000", null, EmailCodePurpose.DeviceEnrollment, default);
-        Assert.Equal("owner@example.com", delivery.Codes[^1].Destination);
-        await service.VerifyAsync("900000000", EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Code, default);
-        var phoneLoginUserId = issuer.IssuedUserIds[^1];
-
         Assert.Equal(accountUserId, emailLoginUserId);
-        Assert.Equal(accountUserId, phoneLoginUserId);
         var aliases = await db.AuthIdentifiers.ToListAsync();
         Assert.Contains(aliases, x => x.Kind == "Phone" && !x.IsVerified && x.UserId == accountUserId);
     }
@@ -95,12 +89,12 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Unknown_phone_returns_generic_result_without_email_delivery_or_account_creation()
+    public async Task Device_enrollment_rejects_phone_input_without_email_delivery_or_account_creation()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System);
-        var result = await service.StartAsync("+251911111111", null, EmailCodePurpose.DeviceEnrollment, default);
-        Assert.False(result.Accepted);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.StartAsync(
+            "+251911111111", null, EmailCodePurpose.DeviceEnrollment, default));
         Assert.Empty(delivery.Codes);
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
     }

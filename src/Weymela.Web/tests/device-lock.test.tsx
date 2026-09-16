@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "../src/api/client";
+import { MemoryRouter } from "react-router-dom";
 
 const mocks = vi.hoisted(() => ({
   unlockDevice: vi.fn(),
@@ -27,6 +28,7 @@ import { LockScreen } from "../src/app/LockScreen";
 function pinCells(label: string) {
   return Array.from(screen.getByRole("group", { name: label }).querySelectorAll("input"));
 }
+function renderLock() { return render(<MemoryRouter><LockScreen /></MemoryRouter>); }
 
 beforeEach(() => {
   mocks.state = "Locked";
@@ -38,7 +40,7 @@ beforeEach(() => {
 
 describe("server-authoritative device lock", () => {
   it("renders a masked mobile PIN control and unlocks only with exactly five digits", async () => {
-    render(<LockScreen />);
+    renderLock();
     const inputs = pinCells("PIN");
     expect(inputs).toHaveLength(5);
     inputs.forEach(input => {
@@ -62,35 +64,35 @@ describe("server-authoritative device lock", () => {
     ["FullAuthenticationRequired", "Sign in again to continue"],
   ])("renders truthful %s state without a usable PIN form", (state, message) => {
     mocks.state = state;
-    render(<LockScreen />);
+    renderLock();
     expect(screen.getByRole("alert")).toHaveTextContent(message);
     expect(screen.queryByRole("group", { name: "PIN" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: state === "FullAuthenticationRequired" ? "Sign in" : "Sign out" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
   it("starts generic verified-email recovery from a recognized locked device", async () => {
-    render(<LockScreen />);
-    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
-    expect(screen.getByRole("heading", { name: "Recover your Weymela PIN" })).toBeVisible();
+    renderLock();
+    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN?" }));
+    expect(screen.getByRole("heading", { name: "Reset your PIN" })).toBeVisible();
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
-    await userEvent.click(screen.getByRole("button", { name: "Send verification code" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(mocks.startPinRecovery).toHaveBeenCalledWith("owner@example.test");
-    expect(await screen.findByLabelText("Email recovery code")).toHaveAttribute("inputmode", "numeric");
+    expect(await screen.findByLabelText("Verification code")).toHaveAttribute("inputmode", "numeric");
     expect(screen.getByText(/If the account is eligible/)).toBeVisible();
   });
 
   it("requires a six-digit code and matching masked five-digit PINs", async () => {
-    render(<LockScreen />);
-    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
+    renderLock();
+    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN?" }));
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
-    await userEvent.click(screen.getByRole("button", { name: "Send verification code" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     const newPin = pinCells("New PIN");
     const confirmation = pinCells("Confirm new PIN");
     expect(newPin).toHaveLength(5);
     expect(confirmation).toHaveLength(5);
     expect(newPin[0].type).toBe("password");
     expect(confirmation[0].type).toBe("password");
-    await userEvent.type(screen.getByLabelText("Email recovery code"), "246810");
+    await userEvent.type(screen.getByLabelText("Verification code"), "246810");
     await userEvent.type(newPin[0], "12345");
     await userEvent.type(confirmation[0], "54321");
     await userEvent.click(screen.getByRole("button", { name: "Recover device" }));
@@ -104,11 +106,11 @@ describe("server-authoritative device lock", () => {
 
   it("announces an invalid email code without falsely marking PIN cells invalid", async () => {
     mocks.completePinRecovery.mockRejectedValueOnce(new ApiError(400, "Invalid code", "InvalidCode"));
-    render(<LockScreen />);
-    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
+    renderLock();
+    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN?" }));
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
-    await userEvent.click(screen.getByRole("button", { name: "Send verification code" }));
-    await userEvent.type(screen.getByLabelText("Email recovery code"), "246810");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Verification code"), "246810");
     await userEvent.type(pinCells("New PIN")[0], "12345");
     await userEvent.type(pinCells("Confirm new PIN")[0], "12345");
     await userEvent.click(screen.getByRole("button", { name: "Recover device" }));
@@ -118,22 +120,22 @@ describe("server-authoritative device lock", () => {
 
   it.each(["Locked", "Cooldown", "RecoveryRequired"])("offers recovery in the %s state", async state => {
     mocks.state = state;
-    render(<LockScreen />);
-    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN" }));
+    renderLock();
+    await userEvent.click(screen.getByRole("button", { name: "Forgot PIN?" }));
     expect(screen.getByLabelText("Email address")).toBeVisible();
   });
 
   it("requires full sign-in rather than offering recovery from an expired device session", () => {
     mocks.state = "FullAuthenticationRequired";
-    render(<LockScreen />);
-    expect(screen.queryByRole("button", { name: "Forgot PIN" })).not.toBeInTheDocument();
+    renderLock();
+    expect(screen.queryByRole("button", { name: "Forgot PIN?" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
   it("preserves wrong-PIN response and server cooldown without bypassing attempts", async () => {
     mocks.unlockDevice.mockRejectedValueOnce(new ApiError(401, "Incorrect PIN.", "InvalidPin"))
       .mockRejectedValueOnce(new ApiError(429, "Too many attempts.", "PinCooldown"));
-    render(<LockScreen />);
+    renderLock();
     const inputs = pinCells("PIN");
     await userEvent.type(inputs[0], "99999");
     await userEvent.click(screen.getByRole("button", { name: "Unlock" }));

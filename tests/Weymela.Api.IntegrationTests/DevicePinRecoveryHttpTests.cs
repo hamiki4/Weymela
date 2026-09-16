@@ -303,6 +303,115 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         await AssertOldStateActive(host, seeded.UserId);
     }
 
+    [Fact]
+    public async Task Password_credential_enrollment_and_phone_sign_in_reuse_the_existing_identity_without_email()
+    {
+        const string password = "a correct horse battery staple";
+        var delivery = new CaptureDelivery();
+        await using var host = await Host(delivery);
+        var seeded = await SeedAsync(host);
+        var signedIn = await SignInAsync(host, seeded);
+        using var current = Client(host, signedIn.AllCookies);
+
+        var localPhone = "0" + seeded.Phone[4..];
+        var enrolled = await current.PostAsJsonAsync("/api/account/password-credential", new
+        {
+            phone = localPhone, password, confirmPassword = password
+        });
+        Assert.Equal(HttpStatusCode.NoContent, enrolled.StatusCode);
+        var status = await current.GetFromJsonAsync<JsonObject>("/api/account/security");
+        Assert.True(status!["passwordEnrolled"]!.GetValue<bool>());
+        Assert.True(status["phoneEnrolled"]!.GetValue<bool>());
+
+        using var anonymous = host.Anonymous();
+        foreach (var phone in new[] { localPhone, seeded.Phone[4..], seeded.Phone })
+        {
+            var response = await anonymous.PostAsJsonAsync("/api/auth/password/sign-in", new { phone, password });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+            Assert.Equal("unused-in-recovery-start", body!["customToken"]!.GetValue<string>());
+        }
+        Assert.Equal(0, delivery.Count);
+
+        await using var db = host.Database.Open();
+        var credential = Assert.Single(await db.PasswordCredentials.Where(x => x.UserId == seeded.UserId).ToListAsync());
+        Assert.DoesNotContain(password, credential.PasswordHash, StringComparison.Ordinal);
+        Assert.Single(await db.IdentityBindings.Where(x => x.UserId == seeded.UserId).ToListAsync());
+        Assert.Single(await db.AuthIdentifiers.Where(x => x.UserId == seeded.UserId && x.Kind == "Phone").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Wrong_and_unknown_password_sign_in_are_privacy_safe_and_password_reset_is_email_only()
+    {
+        const string oldPassword = "old correct horse battery staple";
+        const string newPassword = "new correct horse battery staple";
+        var delivery = new CaptureDelivery();
+        await using var host = await Host(delivery);
+        var seeded = await SeedAsync(host);
+        var signedIn = await SignInAsync(host, seeded);
+        using (var current = Client(host, signedIn.AllCookies))
+        {
+            var enrolled = await current.PostAsJsonAsync("/api/account/password-credential", new
+            {
+                phone = (string?)null, password = oldPassword, confirmPassword = oldPassword
+            });
+            Assert.Equal(HttpStatusCode.NoContent, enrolled.StatusCode);
+        }
+
+        using var anonymous = host.Anonymous();
+        var wrong = await anonymous.PostAsJsonAsync("/api/auth/password/sign-in",
+            new { phone = seeded.Phone, password = "wrong password value" });
+        var unknown = await anonymous.PostAsJsonAsync("/api/auth/password/sign-in",
+            new { phone = "+251922222222", password = "wrong password value" });
+        Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, unknown.StatusCode);
+        Assert.Equal(await wrong.Content.ReadAsStringAsync(), await unknown.Content.ReadAsStringAsync());
+
+        var phoneRecovery = await anonymous.PostAsJsonAsync("/api/auth/email/start", new
+        {
+            identifier = seeded.Phone, phone = (string?)null, purpose = "PasswordRecovery"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, phoneRecovery.StatusCode);
+
+        var start = await anonymous.PostAsJsonAsync("/api/auth/email/start", new
+        {
+            identifier = seeded.Email, phone = (string?)null, purpose = "PasswordRecovery"
+        });
+        Assert.Equal(HttpStatusCode.Accepted, start.StatusCode);
+        Assert.Equal(seeded.Email, delivery.SingleDestination);
+        Assert.Equal(EmailCodePurpose.PasswordRecovery, delivery.SinglePurpose);
+
+        var verified = await anonymous.PostAsJsonAsync("/api/auth/password/recovery/verify", new
+        {
+            email = seeded.Email, code = delivery.SingleCode
+        });
+        Assert.Equal(HttpStatusCode.OK, verified.StatusCode);
+        var recoveryGrant = (await verified.Content.ReadFromJsonAsync<JsonObject>())!["recoveryGrant"]!.GetValue<string>();
+        var reset = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
+        {
+            email = seeded.Email, recoveryGrant, newPassword, confirmPassword = newPassword
+        });
+        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await anonymous.PostAsJsonAsync("/api/auth/password/sign-in",
+                new { phone = seeded.Phone, password = oldPassword })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await anonymous.PostAsJsonAsync("/api/auth/password/sign-in",
+                new { phone = seeded.Phone, password = newPassword })).StatusCode);
+        Assert.NotEqual(HttpStatusCode.NoContent,
+            (await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
+            {
+                email = seeded.Email, recoveryGrant, newPassword, confirmPassword = newPassword
+            })).StatusCode);
+
+        await using var db = host.Database.Open();
+        Assert.All(await db.DeviceSessions.Where(x => x.UserId == seeded.UserId).ToListAsync(),
+            session => Assert.NotNull(session.RevokedAtUtc));
+        Assert.Single(await db.IdentityBindings.Where(x => x.UserId == seeded.UserId).ToListAsync());
+        Assert.Single(await db.CommercePermissions.Where(x => x.UserId == seeded.UserId).ToListAsync());
+    }
+
     private async Task<ApiFixture> Host(CaptureDelivery delivery) => await ApiFixture.CreateAsync(fixture, builder =>
     {
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -441,6 +550,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
     {
         private readonly List<(string Destination, string Code, EmailCodePurpose Purpose)> sent = [];
         public bool Enabled => true;
+        public int Count => sent.Count;
         public string SingleDestination => Assert.Single(sent).Destination;
         public string SingleCode => Assert.Single(sent).Code;
         public EmailCodePurpose SinglePurpose => Assert.Single(sent).Purpose;

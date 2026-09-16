@@ -46,6 +46,7 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
             EmailCodePurpose.Signup => "Your Weymela verification code",
             EmailCodePurpose.DeviceEnrollment => "Your Weymela sign-in code",
             EmailCodePurpose.PinRecovery => "Your Weymela recovery code",
+            EmailCodePurpose.PasswordRecovery => "Your Weymela password reset code",
             _ => throw Unavailable()
         };
         var purposeText = purpose switch
@@ -53,6 +54,7 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
             EmailCodePurpose.Signup => "verify your Weymela account",
             EmailCodePurpose.DeviceEnrollment => "sign in to Weymela",
             EmailCodePurpose.PinRecovery => "recover your Weymela PIN",
+            EmailCodePurpose.PasswordRecovery => "reset your Weymela password",
             _ => throw Unavailable()
         };
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);

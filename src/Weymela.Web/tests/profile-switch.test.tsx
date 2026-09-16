@@ -51,6 +51,8 @@ function sessionServer(switchStatus = 200) {
     if (input === "/api/device/access" && !init?.method)
       return Response.json(accessStatus);
     if (input === "/api/session" && !init?.method) return Response.json(current);
+    if (input === "/api/account/security" && !init?.method)
+      return Response.json({ passwordEnrolled: true, phoneEnrolled: true });
     if (input === "/api/device/enrollment" && !init?.method)
       return Response.json({ state: "Enrolled", expiresAtUtc: "2026-10-14T00:00:00Z" });
     if (input === "/api/session/switch-profile" && init?.method === "POST") {

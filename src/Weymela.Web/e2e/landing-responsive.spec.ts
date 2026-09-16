@@ -36,6 +36,12 @@ for (const viewport of [
       const hero = document.querySelector<HTMLElement>(".sign-in-story")!;
       const form = document.querySelector<HTMLElement>(".sign-in-form")!;
       const mark = document.querySelector<HTMLElement>(".story-mark")!;
+      const logo = document.querySelector<HTMLImageElement>(
+        ".sign-in-story .brand-wordmark",
+      )!;
+      const brandMark = document.querySelector<HTMLImageElement>(
+        ".sign-in-story .brand-mark",
+      )!;
       const createButton = Array.from(
         document.querySelectorAll<HTMLButtonElement>("button"),
       ).find((button) => button.textContent?.trim() === "Create account")!;
@@ -79,6 +85,11 @@ for (const viewport of [
         clipped,
         outsideHero,
         markIgnoresPointer: getComputedStyle(mark).pointerEvents === "none",
+        approvedLogoLoaded:
+          logo.currentSrc.endsWith("/brand/weymela-wordmark.png") &&
+          brandMark.currentSrc.endsWith("/brand/weymela-mark.png") &&
+          logo.naturalWidth > 0 &&
+          brandMark.naturalWidth > 0,
         brandedText: readable.map((element) => element.textContent?.trim()),
       };
     });
@@ -95,6 +106,7 @@ for (const viewport of [
     expect(measurements.clipped).toBe(false);
     expect(measurements.outsideHero).toBe(false);
     expect(measurements.markIgnoresPointer).toBe(true);
+    expect(measurements.approvedLogoLoaded).toBe(true);
     const branding = measurements.brandedText.join(" ").replace(/\s+/g, " ");
     expect(branding).toContain("Good stories. Real connections.");
     expect(branding.replaceAll(" ", "")).toContain("Aplacetogrowtogether.");
@@ -138,4 +150,52 @@ test("public landing preserves the desktop split presentation", async ({
   await expect(
     page.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeVisible();
+});
+
+test("production branding assets are transparent, compact, and replace the old icon", async ({
+  page,
+}) => {
+  await page.goto("/sign-in");
+  await expect(page.getByRole("img", { name: "Weymela" })).toBeVisible();
+  const head = await page.locator("head").innerHTML();
+  expect(head).toContain("/favicon-32.png");
+  expect(head).toContain("/favicon-16.png");
+  expect(head).not.toContain("/icon.svg");
+  const transparency = await page.evaluate(async () => {
+    const inspect = async (source: string) => {
+      const blob = await (await fetch(source)).blob();
+      const image = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const corners = [
+        context.getImageData(0, 0, 1, 1).data[3],
+        context.getImageData(image.width - 1, 0, 1, 1).data[3],
+        context.getImageData(0, image.height - 1, 1, 1).data[3],
+        context.getImageData(image.width - 1, image.height - 1, 1, 1).data[3],
+      ];
+      image.close();
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        corners: Array.from(corners),
+      };
+    };
+    return {
+      mark: await inspect("/brand/weymela-mark.png"),
+      favicon: await inspect("/favicon-32.png"),
+    };
+  });
+  expect(transparency.mark).toMatchObject({
+    width: 512,
+    height: 512,
+    corners: [0, 0, 0, 0],
+  });
+  expect(transparency.favicon).toMatchObject({
+    width: 32,
+    height: 32,
+    corners: [0, 0, 0, 0],
+  });
 });

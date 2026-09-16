@@ -58,11 +58,21 @@ const roles: Record<Role, string> = {
 };
 export function Brand() {
   return (
-    <span className="brand">
-      <img src="/icon.svg" width="34" height="34" alt="" />
-      <span>
-        weymela<span className="brand-dot">.</span>
-      </span>
+    <span className="brand" role="img" aria-label="Weymela">
+      <img
+        className="brand-mark"
+        src="/brand/weymela-mark.png"
+        width="38"
+        height="38"
+        alt=""
+      />
+      <img
+        className="brand-wordmark"
+        src="/brand/weymela-wordmark.png"
+        width="154"
+        height="36"
+        alt=""
+      />
     </span>
   );
 }
@@ -78,7 +88,10 @@ export function Shell() {
       ? [["/checkout", "Checkout", "qr"] as [string, string, string]]
       : []),
   ];
-  const isPublicProfile = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
+  const isPublicProfile =
+    user.role === "Customer" ||
+    user.role === "Creator" ||
+    user.role === "Business";
   const mobileItems = items.slice(0, 3);
   const nav = (
     <>
@@ -91,7 +104,11 @@ export function Shell() {
       </Link>
       <p className="nav-eyebrow">{roles[user.role]} workspace</p>
       {user.profiles && user.profiles.length > 0 && (
-        <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={switchProfile} />
+        <ProfileSwitcher
+          profiles={user.profiles}
+          activeKey={user.activeProfileKey}
+          onSwitch={switchProfile}
+        />
       )}
       <nav aria-label="Main navigation">
         {items.map(([to, label, icon]) => (
@@ -109,7 +126,16 @@ export function Shell() {
           </NavLink>
         ))}
       </nav>
-      {isPublicProfile && <Link className="nav-link add-profile-link" to="/onboarding" onClick={() => menu.current?.close()}><Icon name="people" />Add a profile</Link>}
+      {isPublicProfile && (
+        <Link
+          className="nav-link add-profile-link"
+          to="/onboarding"
+          onClick={() => menu.current?.close()}
+        >
+          <Icon name="people" />
+          Add a profile
+        </Link>
+      )}
       <div className="sidebar-bottom">
         <div className="person">
           <span className="avatar">{user.displayName.slice(0, 1)}</span>
@@ -161,7 +187,13 @@ export function Shell() {
             {roles[user.role]} <span className="muted">/ Weymela</span>
           </span>
           <div className="topbar-right">
-            <Link className="button button-quiet" to="/notifications" aria-label="Your notifications"><Icon name="bell" /></Link>
+            <Link
+              className="button button-quiet"
+              to="/notifications"
+              aria-label="Your notifications"
+            >
+              <Icon name="bell" />
+            </Link>
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
             )}
@@ -175,8 +207,28 @@ export function Shell() {
           <Outlet />
         </main>
         <nav className="mobile-role-nav" aria-label="Mobile navigation">
-          {mobileItems.map(([to, label, icon]) => <NavLink key={to} to={to} end className={({ isActive }) => `mobile-role-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`}><Icon name={icon} /><span>{label}</span></NavLink>)}
-          <button type="button" className="mobile-role-link" aria-label="More navigation and profiles" onClick={() => menu.current?.showModal()}><Icon name="menu" /><span>More</span></button>
+          {mobileItems.map(([to, label, icon]) => (
+            <NavLink
+              key={to}
+              to={to}
+              end
+              className={({ isActive }) =>
+                `mobile-role-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`
+              }
+            >
+              <Icon name={icon} />
+              <span>{label}</span>
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            className="mobile-role-link"
+            aria-label="More navigation and profiles"
+            onClick={() => menu.current?.showModal()}
+          >
+            <Icon name="menu" />
+            <span>More</span>
+          </button>
         </nav>
         <footer className="workspace-footer">
           <span>Grow together, with Weymela.</span>
@@ -203,22 +255,37 @@ export function ProfileSwitcher({
       <label htmlFor={id}>Switch profile</label>
       <select
         id={id}
-        value={String(profiles.findIndex((profile) => `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}` === activeKey))}
+        value={String(
+          profiles.findIndex(
+            (profile) =>
+              `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}` ===
+              activeKey,
+          ),
+        )}
         disabled={busy || profiles.length < 2}
         onChange={async (event) => {
           const profile = profiles[Number(event.target.value)];
           if (!profile) return;
-          setBusy(true); setError(null);
+          setBusy(true);
+          setError(null);
           try {
             await onSwitch(profile);
           } catch {
-            setError("That profile is no longer available. Refresh and try again.");
-          } finally { setBusy(false); }
+            setError(
+              "That profile is no longer available. Refresh and try again.",
+            );
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         {profiles.map((profile, index) => {
           const key = `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}`;
-          return <option key={key} value={index}>{profile.displayName} — {roles[profile.role]}</option>;
+          return (
+            <option key={key} value={index}>
+              {profile.displayName} — {roles[profile.role]}
+            </option>
+          );
         })}
       </select>
       {error && <small role="alert">{error}</small>}

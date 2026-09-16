@@ -38,6 +38,8 @@ releases/
 coverage/
 screenshots/
 reference-images/
+# Owner-provided branding masters remain outside the production bundle; only optimized Web derivatives are tracked.
+branding/weymela-logo-source.png
 .DS_Store
 __pycache__/
 .cache/

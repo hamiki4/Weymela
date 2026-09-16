@@ -27,7 +27,11 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
       await session.startPinRecovery(identifier.trim());
       setStep("code");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "PIN recovery is temporarily unavailable.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "PIN recovery is temporarily unavailable.",
+      );
     } finally {
       setBusy(false);
     }
@@ -54,53 +58,124 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
     setError(null);
     setPinError(null);
     try {
-      await session.completePinRecovery(identifier.trim(), code, newPin, confirmPin);
+      await session.completePinRecovery(
+        identifier.trim(),
+        code,
+        newPin,
+        confirmPin,
+      );
       setCode("");
       setNewPin("");
       setConfirmPin("");
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === "InvalidCode")
         setError("The code is invalid or expired.");
-      else setError(cause instanceof Error ? cause.message : "PIN recovery could not be completed.");
+      else
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "PIN recovery could not be completed.",
+        );
     } finally {
       setBusy(false);
     }
   };
 
-  return <div className="pin-recovery" aria-live="polite">
-    <h1 id="recovery-title">Reset your PIN</h1>
-    {step === "identifier"
-      ? <>
+  return (
+    <div className="pin-recovery" aria-live="polite">
+      <h1 id="recovery-title">Reset your PIN</h1>
+      {step === "identifier" ? (
+        <>
           {error ? <Notice error>{error}</Notice> : null}
           <form noValidate onSubmit={(event) => void start(event)}>
             <fieldset disabled={busy}>
               <Field label="Email address">
-                <input type="email" inputMode="email" autoComplete="email" value={identifier}
-                  onChange={(event) => setIdentifier(event.target.value)} required />
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
+                  required
+                />
               </Field>
-              <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Working…" : "Continue"}</Button>
+              <Button type="submit" icon="arrow" disabled={busy}>
+                {busy ? "Working…" : "Continue"}
+              </Button>
             </fieldset>
           </form>
         </>
-      : <>
-          <p className="muted">If the account is eligible, a code was sent to its registered verified email.</p>
+      ) : (
+        <>
+          <p className="muted">
+            If the account is eligible, a code was sent to its registered
+            verified email.
+          </p>
           {error ? <Notice error>{error}</Notice> : null}
           <form noValidate onSubmit={(event) => void complete(event)}>
             <fieldset disabled={busy}>
               <h2>Check your email</h2>
               <p className="muted">Enter the verification code we sent you.</p>
               <Field label="Verification code">
-                <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}"
-                  minLength={6} maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} required />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  minLength={6}
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  required
+                />
               </Field>
-              <PinInput label="New PIN" value={newPin} onChange={(value) => { setNewPin(value); setError(null); setPinError(null); }} error={pinError} />
-              <PinInput label="Confirm new PIN" value={confirmPin} onChange={(value) => { setConfirmPin(value); setError(null); setPinError(null); }} error={pinError} />
-              <Button type="submit" icon="lock" disabled={busy}>{busy ? "Recovering…" : "Recover device"}</Button>
+              <PinInput
+                label="New PIN"
+                value={newPin}
+                onChange={(value) => {
+                  setNewPin(value);
+                  setError(null);
+                  setPinError(null);
+                }}
+                error={pinError}
+              />
+              <PinInput
+                label="Confirm new PIN"
+                value={confirmPin}
+                onChange={(value) => {
+                  setConfirmPin(value);
+                  setError(null);
+                  setPinError(null);
+                }}
+                error={pinError}
+              />
+              <Button type="submit" icon="lock" disabled={busy}>
+                {busy ? "Recovering…" : "Recover device"}
+              </Button>
             </fieldset>
           </form>
-          <button className="text-button" type="button" disabled={busy}
-            onClick={() => { setStep("identifier"); setCode(""); setError(null); }}>Send another code</button>
-        </>}
-    <button className="text-button" type="button" disabled={busy} onClick={onCancel}>Back to lock screen</button>
-  </div>;
+          <button
+            className="auth-secondary-action"
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setStep("identifier");
+              setCode("");
+              setError(null);
+            }}
+          >
+            Send another code
+          </button>
+        </>
+      )}
+      <button
+        className="auth-secondary-action"
+        type="button"
+        disabled={busy}
+        onClick={onCancel}
+      >
+        Back to lock screen
+      </button>
+    </div>
+  );
 }

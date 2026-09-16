@@ -36,5 +36,8 @@ describe("public role accents", () => {
       expect(contrastOnWhite(rgb)).toBeGreaterThanOrEqual(4.5);
     expect(styles).toContain(".app-shell .nav-link.active");
     expect(styles).toContain(".mobile-role-link.active");
+    expect(styles).toContain(".role-onboarding-shell");
+    expect(styles).toContain(".role-onboarding-shell .button.primary");
+    expect(styles).toContain(".role-onboarding-shell :is(input, textarea, select):focus-visible");
   });
 });

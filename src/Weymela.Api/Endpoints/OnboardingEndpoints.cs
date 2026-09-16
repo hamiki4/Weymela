@@ -12,7 +12,7 @@ namespace Weymela.Api.Endpoints;
 
 internal static class OnboardingEndpoints
 {
-    private sealed record ProfileRequest(string Role, string DisplayName, string PublicId, string? Region,
+    private sealed record ProfileRequest(string Role, string DisplayName, string? PublicId, string? Region,
         string? Category, string? Submission, Guid? ProposedBusinessId = null,
         AccountLegalConfirmation? AccountLegal = null);
     private sealed record ReviewRequest(bool Approve, string? Reason, long ExpectedVersion);

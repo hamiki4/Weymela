@@ -33,6 +33,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorPromotionParticipations",
     v3."CustomerCashbackAccounts",
     v3."CustomerCashbackEntries",
+    v3."CustomerProfiles",
     v3."DepositRequests",
     v3."DeviceSessions",
     v3."EmailAuthChallenges",
@@ -73,6 +74,7 @@ GRANT SELECT, INSERT ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."RoleEnrollments" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."BusinessWallets" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."CustomerCashbackAccounts" TO :"api_role";
+GRANT SELECT, INSERT ON TABLE v3."CustomerProfiles" TO :"api_role";
 GRANT SELECT ON TABLE v3."LegalDocumentVersions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."LegalAcceptances" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."AuthorizedDevices" TO :"api_role";

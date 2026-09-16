@@ -7,7 +7,7 @@ namespace Weymela.Infrastructure.Identity;
 
 public sealed record AccountLegalDocument(Guid DocumentId, string Kind, string Title, string Version,
     string ContentHash, DateTime EffectiveFromUtc, string ViewPath, bool Accepted);
-public sealed record AccountLegalStatus(bool Current, IReadOnlyList<AccountLegalDocument> Documents);
+public sealed record AccountLegalStatus(bool Available, bool Current, IReadOnlyList<AccountLegalDocument> Documents);
 public sealed record AccountLegalDocumentConfirmation(Guid DocumentId, string ContentHash, bool Accepted);
 public sealed record AccountLegalConfirmation(AccountLegalDocumentConfirmation? TermsOfService,
     AccountLegalDocumentConfirmation? PrivacyPolicy);
@@ -20,7 +20,9 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
     public async Task<AccountLegalStatus> StatusAsync(Guid userId, CancellationToken ct)
     {
         if (userId == Guid.Empty) throw new ApplicationFailure(FailureKind.Forbidden, "Sign in to your account.");
-        var documents = await CurrentDocumentsAsync(ct);
+        var documents = await EffectiveDocumentsAsync(ct);
+        if (documents is null)
+            return new(false, false, []);
         var ids = documents.Select(x => x.Id).ToArray();
         var accepted = await db.LegalAcceptances.AsNoTracking()
             .Where(x => x.UserId == userId && x.Role == LegalRole.Account && ids.Contains(x.DocumentVersionId))
@@ -28,7 +30,7 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
         var acceptedIds = accepted.ToHashSet();
         var result = documents.Select(x => new AccountLegalDocument(x.Id, x.Type.ToString(), Title(x.Type),
             x.Version, x.ContentHash, x.EffectiveFromUtc, ViewPath(x.Type), acceptedIds.Contains(x.Id))).ToList();
-        return new(result.All(x => x.Accepted), result);
+        return new(true, result.All(x => x.Accepted), result);
     }
 
     public async Task AcceptCurrentAsync(Guid userId, AccountLegalConfirmation? confirmation,
@@ -55,6 +57,10 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
     }
 
     private async Task<IReadOnlyList<LegalDocumentVersion>> CurrentDocumentsAsync(CancellationToken ct)
+        => await EffectiveDocumentsAsync(ct)
+            ?? throw new ApplicationFailure(FailureKind.Validation, "Current legal documents are unavailable.");
+
+    private async Task<IReadOnlyList<LegalDocumentVersion>?> EffectiveDocumentsAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow().UtcDateTime;
         var effective = await db.LegalDocumentVersions.AsNoTracking()
@@ -63,7 +69,7 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
             .ToListAsync(ct);
         var current = Required.Select(type => effective.FirstOrDefault(x => x.Type == type)).ToList();
         if (current.Any(x => x is null || string.IsNullOrWhiteSpace(x.ContentHash)))
-            throw new ApplicationFailure(FailureKind.Validation, "Current legal documents are unavailable.");
+            return null;
         return current.Cast<LegalDocumentVersion>().ToList();
     }
 

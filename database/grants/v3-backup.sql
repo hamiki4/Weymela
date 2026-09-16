@@ -15,7 +15,7 @@ GRANT USAGE ON SCHEMA public, v3 TO :"backup_role";
 REVOKE ALL PRIVILEGES ON TABLE public."__EFMigrationsHistory" FROM :"backup_role";
 GRANT SELECT ON TABLE public."__EFMigrationsHistory" TO :"backup_role";
 
--- Explicit inventory of all persisted tables in the eight approved migrations.
+-- Explicit inventory of all persisted tables in the nine approved migrations.
 -- A complete disaster-recovery archive must include auth, device, legal and finance.
 REVOKE ALL PRIVILEGES ON TABLE
     v3."AuditEvents",
@@ -30,6 +30,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorPromotionParticipations",
     v3."CustomerCashbackAccounts",
     v3."CustomerCashbackEntries",
+    v3."CustomerProfiles",
     v3."DepositRequests",
     v3."DeviceSessions",
     v3."EmailAuthChallenges",
@@ -74,6 +75,7 @@ GRANT SELECT ON TABLE
     v3."CreatorPromotionParticipations",
     v3."CustomerCashbackAccounts",
     v3."CustomerCashbackEntries",
+    v3."CustomerProfiles",
     v3."DepositRequests",
     v3."DeviceSessions",
     v3."EmailAuthChallenges",

@@ -1535,6 +1535,10 @@ td .button {
 .profile-choice-grid .profile-choice:focus-visible {
   border-color: var(--role-accent);
 }
+.profile-choice-grid .profile-choice.selected {
+  border-color: var(--role-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--role-accent) 18%, transparent);
+}
 .app-shell {
   --role-accent: var(--green);
   --role-soft: #e6eddf;
@@ -1638,6 +1642,75 @@ td .button {
 .onboarding-form {
   width: min(100%, 52rem);
 }
+.role-onboarding-shell {
+  width: min(100%, 52rem);
+  margin-top: 1.25rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--role-border);
+  border-block-start: 4px solid var(--role-accent);
+  border-radius: 16px;
+  background: #fff;
+}
+.role-onboarding-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-bottom: 1.2rem;
+}
+.role-onboarding-heading h3 {
+  margin: 0 0 0.25rem;
+  color: var(--role-accent);
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
+}
+.role-onboarding-heading p,
+.onboarding-coming-soon p {
+  margin: 0;
+  color: var(--muted);
+}
+.role-onboarding-label {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--role-border);
+  border-radius: 999px;
+  background: var(--role-soft);
+  color: var(--role-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.role-onboarding-shell .button.primary {
+  background: var(--role-accent);
+}
+.role-onboarding-shell .button.primary:hover {
+  background: color-mix(in srgb, var(--role-accent) 85%, #000);
+}
+.role-onboarding-shell :is(input, textarea, select):focus-visible,
+.role-onboarding-shell a:focus-visible,
+.role-onboarding-shell button:focus-visible {
+  outline-color: var(--role-accent);
+}
+.role-onboarding-shell :is(input, textarea, select):focus {
+  border-color: var(--role-accent);
+}
+.customer-onboarding-form {
+  margin: 0;
+}
+.onboarding-coming-soon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 5rem;
+  padding: 1rem;
+  border-radius: 12px;
+  background: var(--role-soft);
+}
+.onboarding-unavailable .empty-state {
+  margin: 0;
+  border-color: var(--role-border);
+}
 .legal-consent {
   grid-column: 1 / -1;
   border: 1px solid var(--line);
@@ -1660,6 +1733,20 @@ td .button {
   block-size: 1.15rem;
   margin-top: 0.15rem;
   flex: 0 0 auto;
+}
+@media (max-width: 520px) {
+  .role-onboarding-heading {
+    display: grid;
+  }
+  .role-onboarding-label {
+    width: fit-content;
+  }
+  .role-onboarding-shell {
+    padding: 1rem;
+  }
+  .onboarding-coming-soon .button {
+    width: 100%;
+  }
 }
 .sign-in-secure h1 {
   font-family: Georgia, serif;

@@ -21,17 +21,24 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var legal = await SeedAccountLegalAsync(db);
 
         var first = await service.SubmitAsync(new Actor(user, ActorRole.Customer),
-            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null, AccountLegal: legal), "customer-1", default);
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "USER-CONTROLLED", null, null, null, AccountLegal: legal), "customer-1", default);
         var replay = await service.SubmitAsync(new Actor(user, ActorRole.Customer),
-            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-1", null, null, null, AccountLegal: legal), "customer-1", default);
+            new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "A-DIFFERENT-IGNORED-VALUE", null, null, null, AccountLegal: legal), "customer-1", default);
 
         Assert.Equal(RoleEnrollmentStatus.Approved, first.Status);
         Assert.Equal(first.Id, replay.Id);
+        Assert.Equal(first.PublicId, replay.PublicId);
+        Assert.StartsWith("CU-", first.PublicId, StringComparison.Ordinal);
+        Assert.DoesNotContain("USER-CONTROLLED", first.PublicId, StringComparison.Ordinal);
         Assert.Single(await db.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Customer).ToListAsync());
         Assert.Empty(await service.PendingAsync(default));
         var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Customer);
         Assert.True(permission.IsActive);
-        Assert.True(await db.PublicWorkspaceProfiles.AnyAsync(x => x.SubjectId == permission.SubjectId && x.Role == ActorRole.Customer));
+        var projected = await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == permission.SubjectId && x.Role == ActorRole.Customer);
+        Assert.Equal(first.PublicId, projected.PublicId);
+        var profile = await db.CustomerProfiles.SingleAsync(x => x.CustomerId == permission.SubjectId);
+        Assert.Equal(user, profile.UserId);
+        Assert.Equal("Hana", profile.PreferredName);
         var cashback = await db.CustomerCashbackAccounts.SingleAsync(x => x.CustomerId == permission.SubjectId);
         Assert.Equal(0m, cashback.AvailableCashback.Amount);
         Assert.Contains(await db.AuditEvents.Where(x => x.ActorId == user).ToListAsync(), x => x.EventType == "CustomerProfileActivated");
@@ -53,14 +60,14 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var legal = await SeedAccountLegalAsync(db);
 
         var enrollment = new RoleEnrollmentService(db, TimeProvider.System);
-        await enrollment.SubmitAsync(new Actor(user, ActorRole.Customer),
+        var created = await enrollment.SubmitAsync(new Actor(user, ActorRole.Customer),
             new RoleEnrollmentRequest(ActorRole.Customer, "Hana", "CU-REFRESH", null, null, null, AccountLegal: legal), "customer-refresh", default);
 
         var result = await new TrustedIdentityService(db, new Verifier(), new PersistentWorkspaceDirectory(db)).SignInAsync("token", default);
         Assert.Equal(ActorRole.Customer, result.Actor.Role);
         Assert.NotEqual(Guid.Empty, result.Actor.CustomerId);
         Assert.Single(result.Profiles);
-        Assert.Equal("CU-REFRESH", result.PublicId);
+        Assert.Equal(created.PublicId, result.PublicId);
     }
 
     [Fact]
@@ -96,6 +103,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.TermsOfService, "fixture-2", "fixture-terms-hash-2", DateTime.UtcNow));
         await db.SaveChangesAsync();
         var status = await new AccountLegalOnboardingService(db, TimeProvider.System).StatusAsync(user, default);
+        Assert.True(status.Available);
         Assert.False(status.Current);
         Assert.Equal(oldCount, await db.LegalAcceptances.CountAsync(x => x.UserId == user));
     }
@@ -109,23 +117,63 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var user = Guid.NewGuid();
         await using var firstDb = database.Open();
         await using var secondDb = database.Open();
-        async Task<bool> Attempt(Weymela.Infrastructure.Persistence.WeymelaDbContext db)
+        async Task<bool> Attempt(Weymela.Infrastructure.Persistence.WeymelaDbContext db, string key)
         {
             try
             {
                 await new RoleEnrollmentService(db, TimeProvider.System).SubmitAsync(new Actor(user, ActorRole.Customer),
                     new RoleEnrollmentRequest(ActorRole.Customer, "Concurrent", "CU-CONCURRENT", null, null, null,
-                        AccountLegal: legal), "concurrent-customer", default);
+                        AccountLegal: legal), key, default);
                 return true;
             }
             catch (Exception) { return false; }
         }
-        var outcomes = await Task.WhenAll(Attempt(firstDb), Attempt(secondDb));
+        var outcomes = await Task.WhenAll(Attempt(firstDb, "concurrent-customer-a"), Attempt(secondDb, "concurrent-customer-b"));
         Assert.Contains(true, outcomes);
         await using var verify = database.Open();
         Assert.Single(await verify.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Customer).ToListAsync());
         Assert.Single(await verify.CommercePermissions.Where(x => x.UserId == user && x.Role == ActorRole.Customer).ToListAsync());
+        Assert.Single(await verify.CustomerProfiles.Where(x => x.UserId == user).ToListAsync());
         Assert.Equal(2, await verify.LegalAcceptances.CountAsync(x => x.UserId == user && x.Role == LegalRole.Account));
+    }
+
+    [Fact]
+    public async Task Missing_account_legal_documents_return_a_clean_unavailable_status()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+
+        var status = await new AccountLegalOnboardingService(db, TimeProvider.System)
+            .StatusAsync(Guid.NewGuid(), default);
+
+        Assert.False(status.Available);
+        Assert.False(status.Current);
+        Assert.Empty(status.Documents);
+    }
+
+    [Fact]
+    public async Task Customer_identifiers_are_unique_and_identity_data_is_not_stored_in_profiles()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var legal = await SeedAccountLegalAsync(db);
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var firstUser = Guid.NewGuid();
+        var secondUser = Guid.NewGuid();
+
+        var first = await service.SubmitAsync(new Actor(firstUser, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "First", null, null, null, null, AccountLegal: legal),
+            "first-customer", default);
+        var second = await service.SubmitAsync(new Actor(secondUser, ActorRole.Customer),
+            new RoleEnrollmentRequest(ActorRole.Customer, "Second", null, null, null, null, AccountLegal: legal),
+            "second-customer", default);
+
+        Assert.NotEqual(first.PublicId, second.PublicId);
+        Assert.Equal(2, await db.CustomerProfiles.CountAsync());
+        var names = typeof(CustomerProfileRecord).GetProperties().Select(x => x.Name).ToArray();
+        Assert.DoesNotContain(names, x => x.Contains("Email", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, x => x.Contains("Phone", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, x => x.Contains("Password", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<AccountLegalConfirmation> SeedAccountLegalAsync(Weymela.Infrastructure.Persistence.WeymelaDbContext db)

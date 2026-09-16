@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,8 @@ namespace Weymela.Api.IntegrationTests;
 [Collection("V3 HTTP PostgreSQL")]
 public sealed class OnboardingHttpTests(PostgresFixture fixture)
 {
+    private static readonly string PinPepper = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
     [Fact]
     public async Task Development_firebase_session_projects_all_persisted_active_profiles()
     {
@@ -109,6 +112,81 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
         Assert.NotEqual(HttpStatusCode.OK, workspace.StatusCode);
     }
 
+    [Fact]
+    public async Task Customer_onboarding_generates_the_identifier_and_persists_one_typed_profile()
+    {
+        var userId = Guid.NewGuid();
+        await using var host = await ApiFixture.CreateAsync(fixture, builder =>
+        {
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["V3:Auth:FirebaseProjectId"] = "isolated-v3-test",
+                ["V3:Auth:PinPepper"] = PinPepper
+            });
+            builder.Services.AddSingleton<IIdentityTokenVerifier>(new CustomerOnboardingIdentity());
+            builder.Services.AddScoped<IWorkspaceDirectory, PersistentWorkspaceDirectory>();
+        });
+        await using (var db = host.Database.Open())
+        {
+            db.IdentityBindings.Add(new IdentityBinding
+            {
+                Provider = "Firebase", ProjectId = "isolated-v3-test", ExternalSubject = "customer-onboarding-id",
+                UserId = userId, IsActive = true, ValidAfterUtc = DateTime.UtcNow.AddMinutes(-1), Version = 1
+            });
+            db.AuthIdentifiers.Add(new AuthIdentifierRecord
+            {
+                UserId = userId,
+                Kind = "Email",
+                IdentifierHash = Guid.NewGuid().ToString("N"),
+                IsVerified = true,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = host.Anonymous();
+        var signIn = await client.PostAsJsonAsync("/api/auth/firebase/session", new { idToken = "customer-onboarding-token" });
+        Assert.Equal(HttpStatusCode.NoContent, signIn.StatusCode);
+        var authCookie = signIn.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+        client.DefaultRequestHeaders.Add("Cookie", authCookie);
+        var enrolled = await client.Post("/api/device/enrollment",
+            new { pin = "01234", confirmPin = "01234" }, "customer-device-enrollment");
+        Assert.Equal(HttpStatusCode.OK, enrolled.StatusCode);
+        var deviceCookies = enrolled.Headers.GetValues("Set-Cookie")
+            .Select(value => value.Split(';')[0]).ToArray();
+        Assert.Equal(2, deviceCookies.Length);
+        client.DefaultRequestHeaders.Remove("Cookie");
+        client.DefaultRequestHeaders.Add("Cookie", string.Join("; ", new[] { authCookie }.Concat(deviceCookies)));
+        var legal = await client.GetFromJsonAsync<JsonObject>("/api/onboarding/legal");
+        Assert.True(legal!["available"]!.GetValue<bool>());
+        var terms = legal["documents"]!.AsArray().Single(x => x!["kind"]!.GetValue<string>() == "TermsOfService")!;
+        var privacy = legal["documents"]!.AsArray().Single(x => x!["kind"]!.GetValue<string>() == "PrivacyPolicy")!;
+
+        var response = await client.Post("/api/onboarding/profile", new
+        {
+            role = "Customer",
+            displayName = "Hana",
+            publicId = "CLIENT-CONTROLLED",
+            accountLegal = new
+            {
+                termsOfService = new { documentId = terms["documentId"]!.GetValue<Guid>(), contentHash = terms["contentHash"]!.GetValue<string>(), accepted = true },
+                privacyPolicy = new { documentId = privacy["documentId"]!.GetValue<Guid>(), contentHash = privacy["contentHash"]!.GetValue<string>(), accepted = true }
+            }
+        }, "customer-http-idempotency");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+        var generated = body!["publicId"]!.GetValue<string>();
+        Assert.StartsWith("CU-", generated, StringComparison.Ordinal);
+        Assert.NotEqual("CLIENT-CONTROLLED", generated);
+
+        await using var verify = host.Database.Open();
+        var profile = await verify.CustomerProfiles.SingleAsync(x => x.UserId == userId);
+        var projection = await verify.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == profile.CustomerId);
+        Assert.Equal("Hana", profile.PreferredName);
+        Assert.Equal(generated, projection.PublicId);
+        Assert.Single(await verify.CommercePermissions.Where(x => x.UserId == userId && x.Role == ActorRole.Customer).ToListAsync());
+    }
+
     private sealed class FakeIdentity : IIdentityTokenVerifier
     {
         public Task<VerifiedIdentity> VerifyAsync(string _, CancellationToken __)
@@ -119,5 +197,11 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
     {
         public Task<VerifiedIdentity> VerifyAsync(string _, CancellationToken __)
             => Task.FromResult(new VerifiedIdentity("Firebase", "isolated-v3-test", "multi-profile-id", DateTime.UtcNow, DateTime.UtcNow.AddMinutes(30)));
+    }
+
+    private sealed class CustomerOnboardingIdentity : IIdentityTokenVerifier
+    {
+        public Task<VerifiedIdentity> VerifyAsync(string _, CancellationToken __)
+            => Task.FromResult(new VerifiedIdentity("Firebase", "isolated-v3-test", "customer-onboarding-id", DateTime.UtcNow, DateTime.UtcNow.AddMinutes(30)));
     }
 }

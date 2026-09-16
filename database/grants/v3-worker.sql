@@ -31,6 +31,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorPromotionParticipations",
     v3."CustomerCashbackAccounts",
     v3."CustomerCashbackEntries",
+    v3."CustomerProfiles",
     v3."DepositRequests",
     v3."DeviceSessions",
     v3."EmailAuthChallenges",

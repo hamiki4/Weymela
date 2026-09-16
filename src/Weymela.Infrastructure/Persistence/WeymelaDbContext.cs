@@ -20,6 +20,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<CreatorEarningEntry> CreatorEarningEntries => Set<CreatorEarningEntry>();
     public DbSet<CustomerCashbackAccount> CustomerCashbackAccounts => Set<CustomerCashbackAccount>();
     public DbSet<CustomerCashbackEntry> CustomerCashbackEntries => Set<CustomerCashbackEntry>();
+    public DbSet<CustomerProfileRecord> CustomerProfiles => Set<CustomerProfileRecord>();
     public DbSet<PlatformRevenueEntry> PlatformRevenueEntries => Set<PlatformRevenueEntry>();
     public DbSet<PlatformSettlement> PlatformSettlements => Set<PlatformSettlement>();
     public DbSet<FinancialConfiguration> FinancialConfigurations => Set<FinancialConfiguration>();

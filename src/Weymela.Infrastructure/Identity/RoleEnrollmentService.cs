@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Data;
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Operations;
@@ -9,7 +10,7 @@ using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Infrastructure.Identity;
 
-public sealed record RoleEnrollmentRequest(ActorRole Role, string DisplayName, string PublicId, string? Region,
+public sealed record RoleEnrollmentRequest(ActorRole Role, string DisplayName, string? PublicId, string? Region,
     string? Category, string? Submission, Guid? ProposedBusinessId = null,
     AccountLegalConfirmation? AccountLegal = null, string? IpReference = null, string? UserAgentReference = null);
 public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollmentStatus Status, string DisplayName,
@@ -28,7 +29,8 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         if (existing is not null)
         {
             var prior = JsonSerializer.Deserialize<EnrollmentDetails>(existing.SubmissionJson);
-            if (existing.RequestedRole != request.Role || prior is null || prior.DisplayName != request.DisplayName.Trim() || prior.PublicId != request.PublicId.Trim())
+            if (existing.RequestedRole != request.Role || prior is null || prior.DisplayName != request.DisplayName.Trim()
+                || (request.Role != ActorRole.Customer && prior.PublicId != request.PublicId?.Trim()))
                 throw new ApplicationFailure(FailureKind.IdempotencyConflict, "This request reference was already used for another profile request.");
             return Summary(existing);
         }
@@ -38,10 +40,27 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
         var now = clock.GetUtcNow().UtcDateTime;
+        var publicId = request.Role == ActorRole.Customer
+            ? await NewCustomerPublicIdAsync(ct)
+            : request.PublicId!.Trim();
         if (request.Role == ActorRole.Customer)
             await new AccountLegalOnboardingService(db, clock).AcceptCurrentAsync(actor.UserId,
                 request.AccountLegal, request.IpReference, request.UserAgentReference, ct);
-        var row = new RoleEnrollmentRecord { UserId = actor.UserId, RequestedRole = request.Role, SubmissionJson = JsonSerializer.Serialize(new { request.DisplayName, request.PublicId, request.Region, request.Category, request.Submission }), SubmittedAtUtc = now, IdempotencyKey = idempotencyKey };
+        var row = new RoleEnrollmentRecord
+        {
+            UserId = actor.UserId,
+            RequestedRole = request.Role,
+            SubmissionJson = JsonSerializer.Serialize(new
+            {
+                DisplayName = request.DisplayName.Trim(),
+                PublicId = publicId,
+                Region = request.Role == ActorRole.Customer ? null : request.Region?.Trim(),
+                Category = request.Role == ActorRole.Customer ? null : request.Category?.Trim(),
+                Submission = request.Role == ActorRole.Customer ? null : request.Submission?.Trim()
+            }),
+            SubmittedAtUtc = now,
+            IdempotencyKey = idempotencyKey
+        };
         db.RoleEnrollments.Add(row);
         if (request.Role == ActorRole.Customer)
         {
@@ -51,7 +70,15 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             row.DecisionReason = "Customer profile activated by the account holder.";
             db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile
             {
-                SubjectId = subject, Role = ActorRole.Customer, DisplayName = request.DisplayName.Trim(), PublicId = request.PublicId.Trim()
+                SubjectId = subject, Role = ActorRole.Customer, DisplayName = request.DisplayName.Trim(), PublicId = publicId
+            });
+            db.CustomerProfiles.Add(new CustomerProfileRecord
+            {
+                CustomerId = subject,
+                UserId = actor.UserId,
+                PreferredName = request.DisplayName.Trim(),
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
             });
             db.CommercePermissions.Add(new CommercePermission(actor.UserId, ActorRole.Customer, subject, null, true, false));
             db.CustomerCashbackAccounts.Add(new CustomerCashbackAccount(subject));
@@ -102,9 +129,23 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     }
     private static void Validate(RoleEnrollmentRequest x, string key)
     {
-        if (string.IsNullOrWhiteSpace(key) || key.Length > 200 || string.IsNullOrWhiteSpace(x.DisplayName) || x.DisplayName.Length > 120 || string.IsNullOrWhiteSpace(x.PublicId) || x.PublicId.Length > 80)
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 200 || string.IsNullOrWhiteSpace(x.DisplayName)
+            || x.DisplayName.Trim().Length > 120
+            || (x.Role != ActorRole.Customer && (string.IsNullOrWhiteSpace(x.PublicId) || x.PublicId.Trim().Length > 80)))
             throw new ApplicationFailure(FailureKind.Validation, "Complete the required profile details.");
         if ((x.Region?.Length ?? 0) > 80 || (x.Category?.Length ?? 0) > 80 || (x.Submission?.Length ?? 0) > 3000) throw new ApplicationFailure(FailureKind.Validation, "Keep profile details concise.");
+    }
+
+    private async Task<string> NewCustomerPublicIdAsync(CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var candidate = $"CU-{Convert.ToHexString(RandomNumberGenerator.GetBytes(16))}";
+            if (!await db.PublicWorkspaceProfiles.AsNoTracking()
+                    .AnyAsync(x => x.Role == ActorRole.Customer && x.PublicId == candidate, ct))
+                return candidate;
+        }
+        throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "We couldn't create the Customer profile. Try again.");
     }
     private static ApplicationFailure Denied() => new(FailureKind.Forbidden, "This profile action is not available.");
     private sealed record EnrollmentDetails(string DisplayName, string PublicId, string? Region, string? Category, string? Submission);

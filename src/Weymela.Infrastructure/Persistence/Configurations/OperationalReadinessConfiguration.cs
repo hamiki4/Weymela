@@ -20,6 +20,14 @@ internal static class OperationalReadinessConfiguration
         profile.Property(x => x.PortfolioUrl).HasMaxLength(500); profile.Property(x => x.DirectionsUrl).HasMaxLength(500);
         profile.HasIndex(x => new { x.Role, x.PublicId }).IsUnique();
 
+        var customer = model.Entity<CustomerProfileRecord>(); Mapping.Scalars(customer);
+        customer.HasKey(x => x.CustomerId);
+        customer.ToTable("CustomerProfiles", t => t.HasCheckConstraint("CK_CustomerProfile_PreferredName",
+            "char_length(btrim(\"PreferredName\")) BETWEEN 1 AND 120"));
+        customer.Property(x => x.PreferredName).HasMaxLength(120);
+        customer.HasIndex(x => x.UserId).IsUnique();
+        Mapping.Version(customer);
+
         var deposit = model.Entity<DepositRequest>(); Mapping.Scalars(deposit); deposit.HasKey(x => x.Id);
         deposit.ToTable("DepositRequests", t =>
         {

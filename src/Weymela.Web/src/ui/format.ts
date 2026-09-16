@@ -3,6 +3,21 @@ export const amount = (value: number) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);
+export type MoneyDisplayContext = "compact" | "explicit";
+export const money = (
+  value: number,
+  context: MoneyDisplayContext = "compact",
+  currency = "ETB",
+) =>
+  context === "compact"
+    ? amount(value)
+    : new Intl.NumberFormat("en-ET", {
+        style: "currency",
+        currency,
+        currencyDisplay: "code",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(value);
 export const count = (value: number) =>
   new Intl.NumberFormat("en-ET").format(value);
 export const date = (value: string | null) =>

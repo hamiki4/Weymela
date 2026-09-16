@@ -69,6 +69,7 @@ export interface AccountLegalDocument {
   accepted: boolean;
 }
 export interface AccountLegalStatus {
+  available: boolean;
   current: boolean;
   documents: AccountLegalDocument[];
 }

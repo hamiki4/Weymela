@@ -46,6 +46,7 @@ VALUES
     ('api', 'v3', 'RoleEnrollments', true, true, true),
     ('api', 'v3', 'BusinessWallets', true, true, false),
     ('api', 'v3', 'CustomerCashbackAccounts', true, true, false),
+    ('api', 'v3', 'CustomerProfiles', true, true, false),
     ('api', 'v3', 'LegalDocumentVersions', true, false, false),
     ('api', 'v3', 'LegalAcceptances', true, true, false),
     ('api', 'v3', 'AuthorizedDevices', true, true, true),

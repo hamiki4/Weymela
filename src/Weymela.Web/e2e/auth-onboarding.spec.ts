@@ -99,7 +99,7 @@ async function captureCustomerFormFailure(page: import("@playwright/test").Page,
     const main = await page.locator("main").innerHTML({ timeout: 1000 }).catch(() => unavailable);
     const selectors = {
       useAsCustomer: page.getByRole("button", { name: /^Use as Customer/ }),
-      displayName: page.getByLabel("Display name", { exact: true }),
+      preferredName: page.getByLabel("Preferred name", { exact: true }),
       publicId: page.getByLabel("Public ID", { exact: true }),
       continue: page.getByRole("button", { name: "Continue", exact: true }),
     };
@@ -214,7 +214,6 @@ async function createVerifiedAccount(context: Parameters<typeof login>[0], enrol
 }
 
 async function activateCustomer(context: Parameters<typeof login>[0], account: Omit<AccountFixture, "customerPublicId">) {
-  const customerPublicId = `CU-${account.suffix}`;
   const legalResponse = await context.request.get("/api/onboarding/legal");
   expect(legalResponse.status()).toBe(200);
   const legal = await legalResponse.json() as { documents: { kind: string; documentId: string; contentHash: string }[] };
@@ -222,13 +221,15 @@ async function activateCustomer(context: Parameters<typeof login>[0], account: O
   const privacy = legal.documents.find(document => document.kind === "PrivacyPolicy")!;
   const response = await context.request.post("/api/onboarding/profile", {
     headers: { "X-Weymela-Request": "1", "Idempotency-Key": `customer-${account.suffix}` },
-    data: { role: "Customer", displayName: `Customer ${account.suffix}`, publicId: customerPublicId,
+    data: { role: "Customer", displayName: `Customer ${account.suffix}`,
       accountLegal: {
         termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
         privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true }
       } },
   });
   expect(response.status()).toBe(200);
+  const customerPublicId = (await response.json() as { publicId: string }).publicId;
+  expect(customerPublicId).toMatch(/^CU-[A-F0-9]{32}$/);
   await expect((await context.request.get("/api/session", { timeout: 10000 })).json()).resolves.toMatchObject({ role: "Customer" });
   return { ...account, customerPublicId };
 }
@@ -370,22 +371,6 @@ async function buildMarker(context: Parameters<typeof login>[0]) {
   return marker;
 }
 
-async function submitProfileFromPage(page: import("@playwright/test").Page, role: "Creator" | "Business", suffix: string) {
-  await page.getByLabel("Display name", { exact: true }).fill(`${role} ${suffix}`);
-  await page.getByLabel("Public ID", { exact: true }).fill(`${role === "Creator" ? "CR" : "BUS"}-${suffix}`);
-  await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
-  await page.getByLabel("Category", { exact: true }).fill("Food");
-  const pending = page.waitForResponse(response => {
-    const url = new URL(response.url());
-    return response.request().method() === "POST" && url.pathname === "/api/onboarding/profile";
-  }, { timeout: 7000 });
-  await page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 });
-  const response = await pending;
-  expect(response.status()).toBe(200);
-  await expect(page.getByText(/— Pending/)).toBeVisible();
-  return `${role === "Creator" ? "CR" : "BUS"}-${suffix}`;
-}
-
 test("account-signup-and-customer-activation", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context, false);
@@ -393,7 +378,7 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect(page).toHaveURL(/\/pin-setup/);
   await expect(page.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
   for (const width of [375, 390, 393, 430, 768, 1366]) {
-    await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+    await page.setViewportSize({ width, height: width === 375 ? 667 : width < 700 ? 844 : 900 });
     await layout(page);
     await pinTapTargets(page);
   }
@@ -412,11 +397,11 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect(page.getByRole("link", { name: "Terms of Service" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Privacy Policy" })).toBeVisible();
   for (const width of [375, 390, 393, 430, 768, 1366]) {
-    await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+    await page.setViewportSize({ width, height: width === 375 ? 667 : width < 700 ? 844 : 900 });
     await layout(page);
   }
-  await page.getByLabel("Display name", { exact: true }).fill(`Customer ${account.suffix}`);
-  await page.getByLabel("Public ID", { exact: true }).fill(`CU-${account.suffix}`);
+  await page.getByLabel("Preferred name", { exact: true }).fill(`Customer ${account.suffix}`);
+  await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
   await consent.check();
   const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/profile", { timeout: 7000 });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -720,7 +705,7 @@ test("recovery-required device can complete verified-email PIN recovery", async 
   await expect(page.getByRole("heading", { name: /Offers/ })).toBeVisible();
 });
 
-test("customer-to-creator-enrollment", async ({ page, context }) => {
+test("customer-to-creator choice uses a phase-safe purple shell", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context);
   await activateCustomer(context, account);
@@ -734,7 +719,14 @@ test("customer-to-creator-enrollment", async ({ page, context }) => {
   const creatorChoice = page.getByRole("button", { name: /^Become a Creator/ });
   await expect(creatorChoice).toHaveCount(1);
   await creatorChoice.click();
-  await submitProfileFromPage(page, "Creator", account.suffix);
+  await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
+  await expect(page.locator('[data-role-theme="creator"]')).toBeVisible();
+  await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await layout(page);
+  }
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
   await open(page, "/customer/offers");
 });
@@ -774,7 +766,7 @@ test("creator-admin-approval-and-switch", async ({ page, context }) => {
   await expect(page).toHaveURL(/\/creator/);
 });
 
-test("customer-to-business-enrollment", async ({ page, context }) => {
+test("customer-to-business choice uses a phase-safe blue shell", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context);
   await activateCustomer(context, account);
@@ -785,7 +777,14 @@ test("customer-to-business-enrollment", async ({ page, context }) => {
   const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
   await expect(businessChoice).toHaveCount(1);
   await businessChoice.click();
-  await submitProfileFromPage(page, "Business", account.suffix);
+  await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
+  await expect(page.locator('[data-role-theme="business"]')).toBeVisible();
+  await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await layout(page);
+  }
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
   await open(page, "/customer/offers");
 });
@@ -862,15 +861,14 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     await runStep(steps, "onboarding-open", () => open(page, "/onboarding"), 15000);
     await runStep(steps, "customer-choice", () => page.getByRole("button", { name: /^Use as Customer/ }).click({ timeout: 7000 }), 8000);
     await runStep(steps, "customer-form-visible", async () => {
-      await expect(page.getByLabel("Display name", { exact: true })).toBeVisible({ timeout: 7000 });
-      await expect(page.getByLabel("Public ID", { exact: true })).toBeVisible({ timeout: 7000 });
+      await expect(page.getByLabel("Preferred name", { exact: true })).toBeVisible({ timeout: 7000 });
+      await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
     }, 8000);
-    await runStep(steps, "customer-form-fill", () => page.getByLabel("Display name", { exact: true }).fill(`Customer ${suffix}`, { timeout: 7000 }), 8000);
+    await runStep(steps, "customer-form-fill", () => page.getByLabel("Preferred name", { exact: true }).fill(`Customer ${suffix}`, { timeout: 7000 }), 8000);
   } catch (error) {
     await captureCustomerFormFailure(page, context, signals, marker, steps, error);
     throw error;
   }
-  await runStep(steps, "customer-form-fill-public-id", () => page.getByLabel("Public ID", { exact: true }).fill(`CU-${suffix}`, { timeout: 7000 }), 8000);
   await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: /Terms of Service and Privacy Policy/ }).check({ timeout: 7000 }), 8000);
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
@@ -896,31 +894,14 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);
   await creatorChoiceDiagnostics(page, context, signals, marker);
   await runStep(steps, "creator-choice", () => page.getByRole("button", { name: /^Become a Creator/ }).click({ timeout: 7000 }), 8000);
-  await page.getByLabel("Display name", { exact: true }).fill(`Creator ${suffix}`);
-  await page.getByLabel("Public ID", { exact: true }).fill(`CR-${suffix}`);
-  await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
-  await page.getByLabel("Category", { exact: true }).fill("Food");
-  await runStep(steps, "creator-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
-  await expect(page.getByText(/— Pending/)).toBeVisible();
-  await runStep(steps, "creator-admin-review", () => approveLatest(context, "Creator", `CR-${suffix}`), 15000);
-  await runStep(steps, "creator-session", () => establishFirebaseSession(context, token, "Customer"), 12000);
-  await runStep(steps, "creator-profile-switch", () => open(page, "/customer/offers"), 15000);
-  await chooseProfile(page, "Creator");
-  await expect(page).toHaveURL(/\/creator/);
-
-  await runStep(steps, "business-onboarding-open", () => open(page, "/onboarding"), 15000);
+  await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
+  await expect(page.locator('[data-role-theme="creator"]')).toBeVisible();
+  await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await page.getByRole("button", { name: /^Add a Business/ }).click();
-  await page.getByLabel("Display name", { exact: true }).fill(`Business ${suffix}`);
-  await page.getByLabel("Public ID", { exact: true }).fill(`BUS-${suffix}`);
-  await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
-  await page.getByLabel("Category", { exact: true }).fill("Food");
-  await runStep(steps, "business-request", () => page.getByRole("button", { name: "Submit for review", exact: true }).click({ timeout: 7000 }), 8000);
-  await expect(page.getByText(/— Pending/)).toBeVisible();
-  await runStep(steps, "business-admin-review", () => approveLatest(context, "Business", `BUS-${suffix}`), 15000);
-  await runStep(steps, "business-session", () => establishFirebaseSession(context, token, "Creator"), 12000);
-  await runStep(steps, "business-profile-switch", () => open(page, "/creator"), 15000);
-  await chooseProfile(page, "Business");
-  await expect(page).toHaveURL(/\/business/);
+  await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
+  await expect(page.locator('[data-role-theme="business"]')).toBeVisible();
+  await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
   await layout(page);
-  await screenshot(page, "auth-multi-role-approved-profiles");
+  await screenshot(page, "phase4a-role-themed-onboarding");
 });

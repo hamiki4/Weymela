@@ -25,6 +25,7 @@ public sealed class PhoneAliasServiceTests(PostgresFixture fixture)
         var alias = Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Phone").ToListAsync());
         Assert.Equal(identity.UserId, alias.UserId);
         Assert.Equal(EmailAuthService.HashIdentifier("+251911111111"), alias.IdentifierHash);
+        Assert.Equal("+251911111111", alias.DeliveryAddress);
         Assert.False(alias.IsVerified);
         Assert.Single(await db.AuditEvents.Where(x => x.EventType == "PhoneAliasUpdated").ToListAsync());
     }

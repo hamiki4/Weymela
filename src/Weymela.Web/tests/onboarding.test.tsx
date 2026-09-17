@@ -177,6 +177,7 @@ describe("shared role-themed onboarding", () => {
     expect(shell).toHaveAttribute("data-role-theme", "creator");
     expect(within(shell!).getByText(/existing Weymela profile setup/)).toBeVisible();
     expect(within(shell!).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(shell!).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
     expect(screen.queryByText("Public ID")).not.toBeInTheDocument();
   });
 
@@ -188,6 +189,7 @@ describe("shared role-themed onboarding", () => {
     expect(shell).toHaveAttribute("data-role-theme", "business");
     expect(within(shell!).getByText(/existing Weymela profile setup/)).toBeVisible();
     expect(within(shell!).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(shell!).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
   it("accepts current legal versions then starts Customer product onboarding without collecting identity data", async () => {

@@ -55,9 +55,13 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
         var identity = await SeedIdentity(db, user, "phone@example.test");
         var issuer = new TestIssuer(); var service = Service(db, issuer);
         await service.EnrollAsync(identity, "0911111111", Password, Password, default);
+        var existingPhone = await db.AuthIdentifiers.SingleAsync(x => x.Kind == "Phone");
+        existingPhone.DeliveryAddress = null;
+        await db.SaveChangesAsync();
         var result = await service.SignInAsync(signInPhone, Password, default);
         Assert.True(result.Succeeded); Assert.Equal(user, issuer.LastUserId);
-        Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Phone").ToListAsync());
+        var phone = Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Phone").ToListAsync());
+        Assert.Equal("+251911111111", phone.DeliveryAddress);
         Assert.Single(await db.IdentityBindings.ToListAsync());
     }
 

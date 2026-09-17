@@ -6,9 +6,9 @@ public sealed class AuthIdentifierRecord
     public Guid UserId { get; init; }
     public string Kind { get; init; } = "Email";
     public string IdentifierHash { get; init; } = "";
-    // Only the server-side email delivery adapter reads this value. It is never
-    // included in role projections or client responses.
-    public string? DeliveryAddress { get; init; }
+    // Server-owned canonical identity value. It is exposed only to the signed-in
+    // account and the authenticated product handoff; role projections omit it.
+    public string? DeliveryAddress { get; set; }
     public bool IsVerified { get; set; }
     public DateTime CreatedAtUtc { get; init; }
 }

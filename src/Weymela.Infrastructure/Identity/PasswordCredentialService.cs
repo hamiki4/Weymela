@@ -62,7 +62,7 @@ public sealed class PasswordCredentialService(
                 throw new ApplicationFailure(FailureKind.Validation, "Use the phone number already registered to this account.");
             if (phoneHash is not null)
             {
-                var claimed = await db.AuthIdentifiers.AsNoTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
+                var claimed = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
                     && x.IdentifierHash == phoneHash, ct);
                 if (claimed is not null && claimed.UserId != identity.UserId) throw PhoneCollision();
                 if (phones.Count == 0)
@@ -71,9 +71,12 @@ public sealed class PasswordCredentialService(
                         UserId = identity.UserId,
                         Kind = "Phone",
                         IdentifierHash = phoneHash,
+                        DeliveryAddress = canonicalPhone,
                         IsVerified = false,
                         CreatedAtUtc = now
                     });
+                else if (claimed is not null)
+                    claimed.DeliveryAddress = canonicalPhone;
             }
 
             var existing = await db.PasswordCredentials.AsTracking()
@@ -124,7 +127,7 @@ public sealed class PasswordCredentialService(
         try
         {
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            var identifier = await db.AuthIdentifiers.AsNoTracking()
+            var identifier = await db.AuthIdentifiers.AsTracking()
                     .SingleOrDefaultAsync(x => x.Kind == "Phone" && x.IdentifierHash == phoneHash, ct);
             PasswordCredentialRecord? credential = null;
             if (identifier is not null)
@@ -153,6 +156,7 @@ public sealed class PasswordCredentialService(
                 userId = credential.UserId;
                 if (succeeded && await HasAuthoritativeIdentity(credential.UserId, ct))
                 {
+                    identifier!.DeliveryAddress = canonical;
                     credential.FailedAttempts = 0;
                     credential.LockedUntilUtc = null;
                     db.AuditEvents.Add(Audit("PasswordSignInSucceeded", credential.UserId, now));

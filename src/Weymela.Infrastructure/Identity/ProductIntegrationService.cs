@@ -25,7 +25,7 @@ public sealed record ProductHandoffIssueResult(string Code, string State, string
 public sealed record ProductIdentityAssertion(string Issuer, string Environment, string Audience, Guid UserId,
     Guid IdentityBindingId, long IdentityBindingVersion, DateTime AuthenticatedAtUtc, string Purpose,
     string Role, Guid? ProfileSubjectId, Guid? BusinessId, string DisplayName, string AuthorityStatus, string DeviceAssurance,
-    DateTime IssuedAtUtc, DateTime ExpiresAtUtc);
+    string AccountEmail, string? AccountPhone, DateTime IssuedAtUtc, DateTime ExpiresAtUtc);
 public sealed record ProductAuthorityRequest(Guid UserId, Guid IdentityBindingId, long IdentityBindingVersion,
     string Role, Guid? ProfileSubjectId, Guid? BusinessId, string Purpose);
 public sealed record ProductAuthorityResult(bool Active, string Status, long IdentityBindingVersion);
@@ -176,19 +176,25 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
                 await transaction.CommitAsync(ct);
                 throw Denied();
             }
+            var displayName = row.ProfileSubjectId is Guid profileId
+                ? await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.SubjectId == profileId
+                    && x.Role == row.Role).Select(x => x.DisplayName).SingleOrDefaultAsync(ct) ?? "Weymela profile"
+                : row.Role == ActorRole.PlatformAdmin ? "Weymela Admin" : "Account setup";
+            var accountEmail = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == row.UserId
+                    && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null)
+                .Select(x => x.DeliveryAddress!).SingleOrDefaultAsync(ct) ?? throw Denied();
+            var accountPhone = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == row.UserId
+                    && x.Kind == "Phone" && x.DeliveryAddress != null)
+                .Select(x => x.DeliveryAddress).SingleOrDefaultAsync(ct);
             row.ConsumedAtUtc = now;
             Audit("ProductHandoffRedeemed", row.UserId, row.CorrelationId,
                 $"role={row.Role};purpose={row.Purpose};transaction={row.Id:D}", now);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-            var displayName = row.ProfileSubjectId is Guid profileId
-                ? await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.SubjectId == profileId
-                    && x.Role == row.Role).Select(x => x.DisplayName).SingleOrDefaultAsync(ct) ?? "Weymela profile"
-                : row.Role == ActorRole.PlatformAdmin ? "Weymela Admin" : "Account setup";
             return new(options.Issuer, options.Environment, options.Audience, row.UserId,
                 row.IdentityBindingId, row.IdentityBindingVersion, row.AuthenticatedAtUtc, row.Purpose,
                 row.Role.ToString(), row.ProfileSubjectId, row.BusinessId, displayName, authority.Status, "V3_DEVICE_UNLOCKED",
-                now, now.AddMinutes(5));
+                accountEmail, accountPhone, now, now.AddMinutes(5));
         }
         catch (Exception exception) when (IsSerializationFailure(exception))
         {

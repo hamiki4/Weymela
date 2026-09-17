@@ -33,13 +33,18 @@ public sealed class PhoneAliasService(WeymelaDbContext db, RuntimeOptions option
                 && x.Kind == "Phone").ToListAsync(ct);
             if (claimed is not null && existing.Count == 1 && existing[0].Id == claimed.Id)
             {
+                claimed.DeliveryAddress = canonical;
+                await db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
                 return;
             }
             db.AuthIdentifiers.RemoveRange(existing.Where(x => claimed is null || x.Id != claimed.Id));
             if (claimed is null)
                 db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = identity.UserId, Kind = "Phone",
-                    IdentifierHash = hash, IsVerified = false, CreatedAtUtc = clock.GetUtcNow().UtcDateTime });
+                    IdentifierHash = hash, DeliveryAddress = canonical, IsVerified = false,
+                    CreatedAtUtc = clock.GetUtcNow().UtcDateTime });
+            else
+                claimed.DeliveryAddress = canonical;
             db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "PhoneAliasUpdated", identity.UserId,
                 null, null, null, Guid.NewGuid(), clock.GetUtcNow().UtcDateTime, "authenticated-phone-lookup-alias"));
             await db.SaveChangesAsync(ct);

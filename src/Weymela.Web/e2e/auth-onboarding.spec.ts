@@ -917,11 +917,12 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="creator"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Back", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /^Add a Business/ }).click();
   await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="business"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Back", exact: true })).toHaveCount(0);
   await layout(page);
   await screenshot(page, "phase4a-role-themed-onboarding");
 });

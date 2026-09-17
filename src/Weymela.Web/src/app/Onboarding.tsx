@@ -85,8 +85,8 @@ function IntegratedOnboarding() {
               <span>I agree to the <a href={documents.documents.find((item) => item.kind === "TermsOfService")?.viewPath} target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href={documents.documents.find((item) => item.kind === "PrivacyPolicy")?.viewPath} target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
             </label></div>}
             {action.error && <Notice error>{action.error}</Notice>}
-            <div className="form-footer"><Button variant="secondary" onClick={() => setRole(null)}>Back</Button><Button disabled={action.busy} onClick={() => begin(role)}>{action.busy ? "Opening…" : "Continue"}</Button></div>
-          </div> : <Empty icon="lock" title="Profile setup isn't available yet." message="Required terms and privacy information have not been published." action={<Button variant="secondary" onClick={() => setRole(null)}>Back</Button>} />}</Resource>
+            <div className="form-footer">{role === "Customer" && <Button variant="secondary" onClick={() => setRole(null)}>Back</Button>}<Button disabled={action.busy} onClick={() => begin(role)}>{action.busy ? "Opening…" : "Continue"}</Button></div>
+          </div> : <Empty icon="lock" title="Profile setup isn't available yet." message="Required terms and privacy information have not been published." action={role === "Customer" ? <Button variant="secondary" onClick={() => setRole(null)}>Back</Button> : undefined} />}</Resource>
         </RoleOnboardingShell>}
       </Section>;
     }}</Resource>
@@ -203,8 +203,7 @@ function LegacyOnboarding() {
             title={role === "Creator" ? "Creator setup" : "Business setup"}
             description={role === "Creator" ? "Your Creator profile setup will be available soon."
               : "Your Business profile setup will be available soon."}>
-            <div className="onboarding-coming-soon" role="status"><p>There’s nothing you need to enter yet.</p>
-              <Button variant="secondary" onClick={cancel}>Back</Button></div>
+            <div className="onboarding-coming-soon" role="status"><p>There’s nothing you need to enter yet.</p></div>
           </RoleOnboardingShell>}
         </Section>
       </>;

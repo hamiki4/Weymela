@@ -73,6 +73,8 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
                 Assert.Equal(seeded.UserId, assertion.UserId);
                 Assert.Equal("V3_DEVICE_UNLOCKED", assertion.DeviceAssurance);
                 Assert.Equal(ProductHandoffPurposes.ProfileOnboarding, assertion.Purpose);
+                Assert.Equal("owner@example.test", assertion.AccountEmail);
+                Assert.Equal("+251911111111", assertion.AccountPhone);
                 return true;
             }
             catch (ApplicationFailure) { return false; }
@@ -318,6 +320,19 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
             UserId = user, IsActive = true, ValidAfterUtc = Start.AddMinutes(-1), Version = 1
         };
         db.IdentityBindings.Add(binding);
+        db.AuthIdentifiers.AddRange(
+            new AuthIdentifierRecord
+            {
+                UserId = user, Kind = "Email",
+                IdentifierHash = EmailAuthService.HashIdentifier("owner@example.test"),
+                DeliveryAddress = "owner@example.test", IsVerified = true, CreatedAtUtc = Start
+            },
+            new AuthIdentifierRecord
+            {
+                UserId = user, Kind = "Phone",
+                IdentifierHash = EmailAuthService.HashIdentifier("+251911111111"),
+                DeliveryAddress = "+251911111111", IsVerified = false, CreatedAtUtc = Start
+            });
         if (acceptLegal)
         {
             var terms = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.TermsOfService,

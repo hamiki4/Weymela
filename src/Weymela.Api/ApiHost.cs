@@ -28,8 +28,10 @@ public static class ApiHost
     {
         var builder=WebApplication.CreateBuilder(args);configure?.Invoke(builder);
         var options=RuntimeOptions.Load(builder.Configuration,builder.Environment.EnvironmentName);
+        var productIntegration=ProductIntegrationOptions.Load(builder.Configuration,options);
         var development=options.DevelopmentIdentity;
         builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton(productIntegration);
         builder.WebHost.ConfigureKestrel(o=>{o.Limits.MaxRequestBodySize=RuntimeOptions.RequestBytes;o.Limits.MaxRequestHeaderCount=40;o.Limits.MaxRequestHeadersTotalSize=16384;o.Limits.RequestHeadersTimeout=TimeSpan.FromSeconds(15);});
         builder.Logging.AddFilter("Microsoft.AspNetCore",LogLevel.Error).AddFilter("Microsoft.EntityFrameworkCore",LogLevel.Error);
         builder.Logging.AddJsonConsole(o=>{o.IncludeScopes=true;o.TimestampFormat="yyyy-MM-ddTHH:mm:ss.fffZ";o.UseUtcTimestamp=true;});
@@ -39,6 +41,7 @@ public static class ApiHost
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();builder.Services.AddScoped<DeviceAccessService>();builder.Services.AddScoped<DevicePinRecoveryService>();
+        builder.Services.AddScoped<ProductIntegrationService>();
         builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();
         builder.Services.TryAddSingleton<INotificationPushProvider,DisabledPushProvider>();
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());
@@ -86,7 +89,7 @@ public static class ApiHost
         app.UseRouting();
         app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

@@ -13,7 +13,7 @@ import hashlib,json,pathlib,subprocess
 root=pathlib.Path('.artifacts/migrations')
 files=sorted(pathlib.Path('src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs'))
 ids=[x.stem for x in files if not x.name.endswith('.Designer.cs')]
-assert ids==['20260911225904_InitialV3Schema','20260911233032_AddViewRewardsQrAndPayouts','20260912011149_AddOperationalSecurityAndNotifications','20260913045523_AddAuthenticationRecovery','20260913054814_AddRoleEnrollments','20260913062900_AddPhoneLoginAliases','20260914022116_AddDevicePinSessionFoundation','20260916042557_AddPasswordCredentials','20260916202055_AddCustomerProfiles'], 'Migration set changed: review required'
+assert ids==['20260911225904_InitialV3Schema','20260911233032_AddViewRewardsQrAndPayouts','20260912011149_AddOperationalSecurityAndNotifications','20260913045523_AddAuthenticationRecovery','20260913054814_AddRoleEnrollments','20260913062900_AddPhoneLoginAliases','20260914022116_AddDevicePinSessionFoundation','20260916042557_AddPasswordCredentials','20260916202055_AddCustomerProfiles','20260917020034_AddProductHandoffTransactions'], 'Migration set changed: review required'
 metadata={'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'database':'weymela_v3_pilot','migrationOrder':ids,'files':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in root.iterdir() if p.is_file()}}
 (root/'migration-manifest.json').write_text(json.dumps(metadata,indent=2)+'\n')
 PY

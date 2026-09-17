@@ -127,5 +127,26 @@ internal static class OperationalReadinessConfiguration
         enrollment.HasIndex(x => new { x.UserId, x.RequestedRole, x.Status });
         enrollment.HasIndex(x => new { x.UserId, x.IdempotencyKey }).IsUnique();
         Mapping.Version(enrollment);
+
+        var handoff = model.Entity<ProductHandoffTransaction>();
+        Mapping.Scalars(handoff);
+        handoff.HasKey(x => x.Id);
+        handoff.ToTable("ProductHandoffTransactions", t =>
+        {
+            t.HasCheckConstraint("CK_ProductHandoff_Lifetime",
+                "\"ExpiresAtUtc\" > \"IssuedAtUtc\" AND \"ExpiresAtUtc\" <= \"IssuedAtUtc\" + INTERVAL '60 seconds'");
+            t.HasCheckConstraint("CK_ProductHandoff_Purpose",
+                "\"Purpose\" IN ('PROFILE_ONBOARDING','EXISTING_WORKSPACE')");
+        });
+        handoff.Property(x => x.CodeHash).HasMaxLength(64);
+        handoff.Property(x => x.Purpose).HasMaxLength(40);
+        handoff.Property(x => x.Audience).HasMaxLength(100);
+        handoff.Property(x => x.Environment).HasMaxLength(40);
+        handoff.Property(x => x.CallbackId).HasMaxLength(80);
+        handoff.HasIndex(x => x.CodeHash).IsUnique();
+        handoff.HasIndex(x => new { x.ExpiresAtUtc, x.ConsumedAtUtc });
+        handoff.HasOne<IdentityBinding>().WithMany().HasForeignKey(x => x.IdentityBindingId)
+            .OnDelete(DeleteBehavior.Restrict);
+        Mapping.Version(handoff);
     }
 }

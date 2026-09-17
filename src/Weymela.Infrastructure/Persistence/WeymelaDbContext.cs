@@ -48,6 +48,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<AuthorizedDeviceRecord> AuthorizedDevices => Set<AuthorizedDeviceRecord>();
     public DbSet<DeviceSessionRecord> DeviceSessions => Set<DeviceSessionRecord>();
     public DbSet<RoleEnrollmentRecord> RoleEnrollments => Set<RoleEnrollmentRecord>();
+    public DbSet<ProductHandoffTransaction> ProductHandoffTransactions => Set<ProductHandoffTransaction>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {

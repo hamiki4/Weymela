@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn().mockResolvedValue({ id: "enrollment-1" }),
   reload: vi.fn(),
   refresh: vi.fn().mockResolvedValue(undefined),
+  switchProfile: vi.fn().mockResolvedValue(undefined),
+  handoff: vi.fn().mockResolvedValue(undefined),
   legalStatus: null as AccountLegalStatus | null,
   statusProfiles: [] as Array<{
     id: string;
@@ -75,7 +77,17 @@ vi.mock("../src/app/Session", () => ({
     },
     loading: false,
     refresh: mocks.refresh,
+    switchProfile: mocks.switchProfile,
     signOut: vi.fn(),
+  }),
+}));
+vi.mock("../src/app/ProductIntegration", () => ({
+  beginProductHandoff: mocks.handoff,
+  useProductIntegrationConfiguration: () => ({
+    data: { enabled: true, beginUrl: "https://product.test/begin", callbackId: "test" },
+    loading: false,
+    error: null,
+    reload: vi.fn(),
   }),
 }));
 
@@ -94,6 +106,8 @@ describe("shared role-themed onboarding", () => {
     mocks.post.mockClear();
     mocks.reload.mockClear();
     mocks.refresh.mockClear();
+    mocks.switchProfile.mockClear();
+    mocks.handoff.mockClear();
     mocks.statusProfiles = [];
     mocks.activeProfiles = [];
     mocks.legalStatus = effectiveLegal;
@@ -124,48 +138,48 @@ describe("shared role-themed onboarding", () => {
       },
     ];
     renderOnboarding();
-    expect(screen.getByText("Bella — Pending")).toBeVisible();
     expect(screen.getByRole("button", { name: /Creator.*Pending/ })).toBeDisabled();
     expect(screen.queryByText("CR-INTERNAL")).not.toBeInTheDocument();
   });
 
-  it("keeps one identity and marks an active Customer as already added", () => {
-    mocks.activeProfiles = [{ role: "Customer" }];
+  it("keeps one identity and opens an already-added Customer through authoritative profile selection", async () => {
+    const profile = { role: "Customer" };
+    mocks.activeProfiles = [profile];
     renderOnboarding();
-    expect(screen.getByRole("button", { name: /Customer.*Already added/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /Customer.*Already added/ }));
+    expect(mocks.switchProfile).toHaveBeenCalledWith(profile);
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
   });
 
-  it("uses a purple Creator shell without exposing the old generic form", async () => {
+  it("uses a purple Creator handoff shell without exposing a replacement product form", async () => {
     renderOnboarding();
     await userEvent.click(screen.getByRole("button", { name: /Become a Creator/ }));
     const shell = screen.getByRole("heading", { name: "Creator setup" }).closest("section");
     expect(shell).toHaveClass("role-creator");
     expect(shell).toHaveAttribute("data-role-theme", "creator");
-    expect(within(shell!).getByText(/available soon/)).toBeVisible();
+    expect(within(shell!).getByText(/existing Weymela profile setup/)).toBeVisible();
     expect(within(shell!).queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Public ID")).not.toBeInTheDocument();
   });
 
-  it("uses a blue Business shell without exposing the old generic form", async () => {
+  it("uses a blue Business handoff shell without exposing the old generic form", async () => {
     renderOnboarding();
     await userEvent.click(screen.getByRole("button", { name: /Add a Business/ }));
     const shell = screen.getByRole("heading", { name: "Business setup" }).closest("section");
     expect(shell).toHaveClass("role-business");
     expect(shell).toHaveAttribute("data-role-theme", "business");
-    expect(within(shell!).getByText(/available soon/)).toBeVisible();
+    expect(within(shell!).getByText(/existing Weymela profile setup/)).toBeVisible();
     expect(within(shell!).queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("renders a minimal green Customer form and sends no user-controlled identifier", async () => {
+  it("accepts current legal versions then starts Customer product onboarding without collecting identity data", async () => {
     renderOnboarding();
     await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
     const shell = screen.getByRole("heading", { name: "Use as Customer" }).closest("section");
     expect(shell).toHaveClass("role-customer");
     expect(shell).toHaveAttribute("data-role-theme", "customer");
-    expect(screen.getByLabelText("Preferred name")).toBeVisible();
-    expect(screen.queryByLabelText(/Email|Phone|Password|PIN|Public ID/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Preferred name|Email|Phone|Password|PIN|Public ID/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute(
       "href",
       "/legal/terms-of-service",
@@ -179,7 +193,6 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByText(/Review these documents/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Version pilot-1/)).not.toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText("Preferred name"), "Hana");
     await userEvent.click(
       screen.getByRole("checkbox", {
         name: /I agree to the Terms of Service and acknowledge the Privacy Policy/,
@@ -188,11 +201,8 @@ describe("shared role-themed onboarding", () => {
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(mocks.post).toHaveBeenCalledWith(
-      "/onboarding/profile",
-      {
-        role: "Customer",
-        displayName: "Hana",
-        accountLegal: {
+      "/integration/product/legal-acceptance",
+      { confirmation: {
           termsOfService: {
             documentId: "terms-id",
             contentHash: "terms-hash",
@@ -203,13 +213,9 @@ describe("shared role-themed onboarding", () => {
             contentHash: "privacy-hash",
             accepted: true,
           },
-        },
-      },
-      "enroll-key",
+        } },
     );
-    const payload = mocks.post.mock.calls[0][1] as Record<string, unknown>;
-    expect(payload).not.toHaveProperty("publicId");
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.handoff).toHaveBeenCalledWith("Customer", "PROFILE_ONBOARDING");
   });
 
   it("fails closed with a clear Customer state when legal documents are unavailable", async () => {
@@ -217,7 +223,7 @@ describe("shared role-themed onboarding", () => {
     renderOnboarding();
     await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
     expect(
-      screen.getByRole("heading", { name: "Customer setup isn't available yet." }),
+      screen.getByRole("heading", { name: "Profile setup isn't available yet." }),
     ).toBeVisible();
     expect(
       screen.getByText("Required terms and privacy information have not been published."),

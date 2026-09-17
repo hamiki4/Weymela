@@ -51,6 +51,7 @@ VALUES
     ('api', 'v3', 'LegalAcceptances', true, true, false),
     ('api', 'v3', 'AuthorizedDevices', true, true, true),
     ('api', 'v3', 'DeviceSessions', true, true, true),
+    ('api', 'v3', 'ProductHandoffTransactions', true, true, true),
     ('api', 'v3', 'IdempotencyRecords', true, true, false),
     ('api', 'v3', 'AuditEvents', false, true, false),
     ('api', 'v3', 'OutboxMessages', true, true, false),

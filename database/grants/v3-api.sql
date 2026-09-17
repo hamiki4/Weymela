@@ -53,6 +53,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",
     v3."PricingSnapshots",
+    v3."ProductHandoffTransactions",
     v3."PromotionBudgetEntries",
     v3."PromotionReservations",
     v3."PromotionViewVerifications",
@@ -79,6 +80,7 @@ GRANT SELECT ON TABLE v3."LegalDocumentVersions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."LegalAcceptances" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."AuthorizedDevices" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."DeviceSessions" TO :"api_role";
+GRANT SELECT, INSERT, UPDATE ON TABLE v3."ProductHandoffTransactions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."IdempotencyRecords" TO :"api_role";
 GRANT INSERT ON TABLE v3."AuditEvents" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."OutboxMessages" TO :"api_role";

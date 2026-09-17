@@ -48,6 +48,7 @@ import { LockScreen } from "./LockScreen";
 import { SecuritySetup } from "./SecuritySetup";
 import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 import { LegalDocumentPage } from "./LegalDocumentPage";
+import { ProductHandoffCallback, ProductSignOut, ProductWorkspaceEntry } from "./ProductIntegration";
 
 function Home() {
   const { user, loading } = useSession();
@@ -85,6 +86,8 @@ export function App() {
       <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/product-handoff" element={<ProductHandoffCallback />} />
+      <Route path="/integration/sign-out" element={<ProductSignOut />} />
       <Route
         path="/legal/terms-of-service"
         element={<LegalDocumentPage kind="terms" />}
@@ -118,7 +121,7 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/business" element={<BusinessDashboard />} />
+        <Route path="/business" element={<ProductWorkspaceEntry role="Business" fallback={<BusinessDashboard />} />} />
         <Route path="/business/wallet" element={<BusinessWallet />} />
         <Route path="/business/campaigns" element={<BusinessCampaigns />} />
         <Route path="/business/campaigns/new" element={<CreateCampaign />} />
@@ -136,7 +139,7 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/creator" element={<CreatorDashboard />} />
+        <Route path="/creator" element={<ProductWorkspaceEntry role="Creator" fallback={<CreatorDashboard />} />} />
         <Route path="/creator/discover" element={<CreatorDiscovery />} />
         <Route path="/creator/discover/:id" element={<CreatorOpportunity />} />
         <Route path="/creator/campaigns" element={<CreatorActiveCampaigns />} />
@@ -156,7 +159,7 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin" element={<ProductWorkspaceEntry role="PlatformAdmin" fallback={<AdminDashboard />} />} />
         <Route path="/admin/campaigns" element={<AdminCampaigns />} />
         <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
         <Route path="/admin/businesses" element={<AdminBusinesses />} />
@@ -182,7 +185,7 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/customer/offers" element={<CustomerOffers />} />
+        <Route path="/customer/offers" element={<ProductWorkspaceEntry role="Customer" fallback={<CustomerOffers />} />} />
         <Route path="/customer/offers/:id" element={<CustomerOfferQr />} />
         <Route path="/customer/history" element={<CustomerHistory />} />
       </Route>

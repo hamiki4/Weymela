@@ -108,9 +108,13 @@ public sealed class RuntimeOptions
                     "Pilot cookie protection must use the approved mounted paths.");
                 Require(IsProtectedPassword(config["V3:Auth:CookieCertificatePassword"]),
                     "A protected cookie certificate password is required.");
-                Require(web == "https://v3-pilot.weymela.com" && api == "https://api-v3-pilot.weymela.com"
+                var legacyOrigins = web == "https://v3-pilot.weymela.com"
+                    && api == "https://api-v3-pilot.weymela.com";
+                var singleOrigin = web == "https://pilot.weymela.com"
+                    && api == "https://pilot.weymela.com";
+                Require((legacyOrigins || singleOrigin)
                     && origins.SequenceEqual([web], StringComparer.Ordinal),
-                    "Pilot Web/API origins must match the approved endpoints.");
+                    "Pilot Web/API origins must match an approved endpoint set.");
             }
         }
         var deposits = config["V3:Deposits:Mode"] ?? "Disabled";

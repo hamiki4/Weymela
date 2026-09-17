@@ -43,6 +43,27 @@ public sealed class AdapterSecurityTests
         Assert.Equal(20, new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString).MaxPoolSize);
         Assert.False(new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString).IncludeErrorDetail);
     }
+    [Fact] public void Pilot_accepts_the_approved_single_origin_without_weakening_other_runtime_guards()
+    {
+        var config = Config();
+        config["V3:AllowedOrigins:0"] = "https://pilot.weymela.com";
+        config["V3:PublicWebUrl"] = "https://pilot.weymela.com";
+        config["V3:PublicApiUrl"] = "https://pilot.weymela.com";
+        var options = RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
+        Assert.Equal(["https://pilot.weymela.com"], options.AllowedOrigins);
+        Assert.Equal("https://pilot.weymela.com", options.PublicWebUrl);
+        Assert.Equal("https://pilot.weymela.com", options.PublicApiUrl);
+        Assert.False(options.FinancialWritesEnabled);
+    }
+    [Fact] public void Pilot_rejects_mixed_legacy_and_single_origin_endpoints()
+    {
+        var config = Config();
+        config["V3:AllowedOrigins:0"] = "https://pilot.weymela.com";
+        config["V3:PublicWebUrl"] = "https://pilot.weymela.com";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+    }
     [Fact] public void Pilot_modes_replace_only_the_disabled_adapter_registrations()
     {
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");

@@ -46,8 +46,9 @@ Use images `ghcr.io/<owner>/weymela-v3-{api,worker,web}:v3-<full-commit>-run<run
 
 ## Proposed URLs and TLS edge (NOT configured)
 
-- Web: `https://v3-pilot.weymela.com`
-- API identity: `https://api-v3-pilot.weymela.com`
+- Canonical Web/API browser origin: `https://pilot.weymela.com`
+- Transition-only V3 entry: `https://v3-pilot.weymela.com` redirects to the canonical origin.
+- Server-side V3 API identity may remain `https://api-v3-pilot.weymela.com` while private service networking is prepared; browsers use same-origin `/api`.
 
 The browser uses same-origin `/api`, proxied by V3 Web to API. Do **not** change it to direct cross-origin API calls: app cookies are `__Host-`, Secure/HttpOnly/SameSite=Strict. Separate API hostname can route `/api` and health through the same loopback V3 Web proxy if later needed; it does not provide an authenticated browser session automatically. No `VITE_API_URL` is needed by the current relative-URL Web application.
 

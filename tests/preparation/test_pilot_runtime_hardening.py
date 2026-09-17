@@ -45,9 +45,9 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
             'V3__Auth__FirebaseProjectId': 'weymela-pilot',
             'V3__Auth__CookieKeyDirectory': '/run/weymela-v3/keys',
             'V3__Auth__CookieCertificatePath': '/run/secrets/v3-cookie-protection.pfx',
-            'V3__AllowedOrigins__0': 'https://v3-pilot.weymela.com',
-            'V3__PublicWebUrl': 'https://v3-pilot.weymela.com',
-            'V3__PublicApiUrl': 'https://api-v3-pilot.weymela.com',
+            'V3__AllowedOrigins__0': 'https://pilot.weymela.com',
+            'V3__PublicWebUrl': 'https://pilot.weymela.com',
+            'V3__PublicApiUrl': 'https://pilot.weymela.com',
             'V3__Security__CameraPolicy': 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()',
             'V3__Security__TlsEdgeConfirmed': 'true',
             'V3__FinancialWritesEnabled': 'false',
@@ -113,7 +113,7 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
         self.base_values['V3__PublicApiUrl'] = public_api
         self.write_inputs()
         with self.base.open('a') as stream:
-            stream.write('V3__PublicApiUrl=https://api-v3-pilot.weymela.com\n')
+            stream.write('V3__PublicApiUrl=https://pilot.weymela.com\n')
         with self.assertRaises(runtime.ContractError):
             runtime.assemble(self.base, self.auth)
         self.write_inputs()

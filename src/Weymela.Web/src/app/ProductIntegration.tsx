@@ -78,7 +78,14 @@ export function ProductHandoffCallback() {
       submitForm(result.callbackUrl, { code: result.code, state: result.state, callbackId: configuration.callbackId });
     })().catch((reason) => setError(reason instanceof Error ? reason.message : "We couldn't open your workspace."));
   }, [purpose, role, state]);
-  return <main className="loading product-handoff-state" role="status">{error ? <><Notice error>{error}</Notice><Button onClick={() => location.assign("/onboarding")}>Back to profiles</Button></> : <p>Opening your Weymela workspace…</p>}</main>;
+  const recovery = productHandoffFailureRecovery(role);
+  return <main className="loading product-handoff-state" role="status">{error ? <><Notice error>{error}</Notice><Button onClick={() => location.assign(recovery.path)}>{recovery.label}</Button></> : <p>Opening your Weymela workspace…</p>}</main>;
+}
+
+export function productHandoffFailureRecovery(role: string) {
+  return role === "PlatformAdmin"
+    ? { label: "Retry Admin workspace", path: "/admin" }
+    : { label: "Back to profiles", path: "/onboarding" };
 }
 
 export function ProductSignOut() {

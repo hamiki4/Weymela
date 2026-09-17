@@ -183,11 +183,11 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Platform_admin_handoff_requires_existing_V3_authority_and_cannot_be_used_for_onboarding()
+    public async Task Platform_admin_handoff_requires_existing_V3_authority_bypasses_public_legal_and_cannot_be_used_for_onboarding()
     {
         var database = await fixture.CreateAsync();
         var clock = new ManualClock(Start);
-        var seeded = await SeedIdentityAsync(database, clock, acceptLegal: true);
+        var seeded = await SeedIdentityAsync(database, clock, acceptLegal: false);
         ProductHandoffIssueResult issued;
         await using (var db = database.Open())
         {
@@ -203,6 +203,7 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
                 ActorRole.PlatformAdmin, ProductHandoffPurposes.ExistingWorkspace,
                 "v2-pilot-callback", seeded.UserId, null, Guid.NewGuid()),
                 new string('a', 43), default);
+            Assert.Empty(await db.LegalAcceptances.ToListAsync());
         }
 
         await using var redeem = database.Open();

@@ -59,10 +59,8 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             var effective=input.EffectiveFromUtc??Now;
             if(effective.Kind!=DateTimeKind.Utc||input.EffectiveFromUtc is not null&&effective<Now)throw new ApplicationFailure(FailureKind.Validation,"Choose a future effective date or Effective Now.");
             var id=Guid.NewGuid();
-            PricingSnapshot Price(PromotionType type,ViewPriceInput p)=>new(type,p.ViewsPerReward,Amount(p.BusinessPays),NonNegative(p.CreatorEarns),NonNegative(p.PlatformKeeps),
-                input.CreatorCommissionPercent,input.CustomerCashbackPercent,input.PlatformPercent,effective,id,p.MinimumCampaignBudget is {} min?Amount(min):null);
-            var version=new FinancialConfigurationVersion(id,latest.ConfigurationId,latest.Version+1,actor.UserId,effective,
-                Price(PromotionType.ViewOnly,input.ViewOnly),Price(PromotionType.ViewPlusCommission,input.ViewPlusCommission),Amount(input.CreatorThreshold),Amount(input.CustomerThreshold));
+            var version=FinancialConfigurationVersionFactory.Create(id,latest.ConfigurationId,
+                latest.Version+1,actor.UserId,effective,input);
             db.FinancialConfigurationVersions.Add(version);op.Remember(actor,"FinancialSettings",key,fingerprint,id.ToString(),Now);
             op.Audit(actor,"FinancialConfigurationChanged",Guid.NewGuid(),Now);op.Event("FinancialConfigurationChanged",new{VersionId=id,EffectiveFromUtc=effective},Now);return id;
         },ct);

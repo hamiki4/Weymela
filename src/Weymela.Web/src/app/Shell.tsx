@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -76,7 +76,7 @@ export function Brand() {
     </span>
   );
 }
-export function Shell() {
+export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
   const menu = useRef<HTMLDialogElement>(null);
   const navigate = useNavigate();
@@ -204,7 +204,7 @@ export function Shell() {
         </header>
         <main id="main-content" className="main-content" tabIndex={-1}>
           <ConnectionStatus />
-          <Outlet />
+          {children ?? <Outlet />}
         </main>
         <nav className="mobile-role-nav" aria-label="Mobile navigation">
           {mobileItems.map(([to, label, icon]) => (

@@ -88,6 +88,18 @@ export function App() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/product-handoff" element={<ProductHandoffCallback />} />
       <Route path="/integration/sign-out" element={<ProductSignOut />} />
+      <Route path="/business" element={<RoleGate roles={["Business"]}>
+        <ProductWorkspaceEntry role="Business" fallback={<Shell><BusinessDashboard /></Shell>} />
+      </RoleGate>} />
+      <Route path="/creator" element={<RoleGate roles={["Creator"]}>
+        <ProductWorkspaceEntry role="Creator" fallback={<Shell><CreatorDashboard /></Shell>} />
+      </RoleGate>} />
+      <Route path="/admin" element={<RoleGate roles={["PlatformAdmin"]}>
+        <ProductWorkspaceEntry role="PlatformAdmin" fallback={<Shell><AdminDashboard /></Shell>} />
+      </RoleGate>} />
+      <Route path="/customer/offers" element={<RoleGate roles={["Customer"]}>
+        <ProductWorkspaceEntry role="Customer" fallback={<Shell><CustomerOffers /></Shell>} />
+      </RoleGate>} />
       <Route
         path="/legal/terms-of-service"
         element={<LegalDocumentPage kind="terms" />}
@@ -121,7 +133,6 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/business" element={<ProductWorkspaceEntry role="Business" fallback={<BusinessDashboard />} />} />
         <Route path="/business/wallet" element={<BusinessWallet />} />
         <Route path="/business/campaigns" element={<BusinessCampaigns />} />
         <Route path="/business/campaigns/new" element={<CreateCampaign />} />
@@ -139,7 +150,6 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/creator" element={<ProductWorkspaceEntry role="Creator" fallback={<CreatorDashboard />} />} />
         <Route path="/creator/discover" element={<CreatorDiscovery />} />
         <Route path="/creator/discover/:id" element={<CreatorOpportunity />} />
         <Route path="/creator/campaigns" element={<CreatorActiveCampaigns />} />
@@ -159,7 +169,6 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/admin" element={<ProductWorkspaceEntry role="PlatformAdmin" fallback={<AdminDashboard />} />} />
         <Route path="/admin/campaigns" element={<AdminCampaigns />} />
         <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
         <Route path="/admin/businesses" element={<AdminBusinesses />} />
@@ -185,7 +194,6 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/customer/offers" element={<ProductWorkspaceEntry role="Customer" fallback={<CustomerOffers />} />} />
         <Route path="/customer/offers/:id" element={<CustomerOfferQr />} />
         <Route path="/customer/history" element={<CustomerHistory />} />
       </Route>

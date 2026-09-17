@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { productHandoffFailureRecovery } from "../src/app/ProductIntegration";
+
+const source = readFileSync(resolve("src/app/ProductIntegration.tsx"), "utf8");
+const routes = readFileSync(resolve("src/app/App.tsx"), "utf8");
 
 describe("product handoff recovery", () => {
   it("keeps Platform Admin failures on the privileged Admin path", () => {
@@ -18,4 +23,19 @@ describe("product handoff recovery", () => {
       });
     },
   );
+
+  it("keeps the authorization-code exchange in fetches and replaces only the final route", () => {
+    expect(source).toContain('"X-Weymela-Product-Request": "1"');
+    expect(source).toContain('credentials: "same-origin"');
+    expect(source).toContain('redirect: "error"');
+    expect(source).toContain("location.replace(expected)");
+    expect(source).not.toContain("form.submit()");
+    expect(source).not.toContain("Opening your Weymela workspace");
+  });
+
+  it("renders product entry routes outside the legacy V3 workspace shell", () => {
+    for (const path of ["/customer/offers", "/creator", "/business", "/admin"])
+      expect(routes).toContain(`<Route path="${path}" element={<RoleGate`);
+    expect(routes).not.toMatch(/<Route path="\/admin" element={<ProductWorkspaceEntry/);
+  });
 });

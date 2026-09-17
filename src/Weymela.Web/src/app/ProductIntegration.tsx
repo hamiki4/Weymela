@@ -42,7 +42,7 @@ function expectedDestination(role: PublicRole, purpose: Purpose) {
 }
 
 async function completeProductHandoff(role: PublicRole, purpose: Purpose, state: string,
-    configuration: ProductIntegrationConfiguration) {
+    configuration: ProductIntegrationConfiguration, preserveProfileSelection = false) {
   const result = await post<Handoff>("/integration/product/handoff", {
     role, purpose, callbackId: configuration.callbackId, state,
   });
@@ -52,7 +52,10 @@ async function completeProductHandoff(role: PublicRole, purpose: Purpose, state:
   const expected = expectedDestination(role, purpose);
   if (completion.destination !== expected)
     throw new Error("The product workspace destination is not valid.");
-  location.replace(expected);
+  if (purpose === "PROFILE_ONBOARDING" && preserveProfileSelection)
+    location.assign(expected);
+  else
+    location.replace(expected);
 }
 
 export async function beginProductHandoff(role: PublicRole, purpose: Purpose,
@@ -61,7 +64,7 @@ export async function beginProductHandoff(role: PublicRole, purpose: Purpose,
     ?? await request<ProductIntegrationConfiguration>("/integration/product/configuration");
   if (!configuration.enabled) throw new Error("The product workspace integration is not enabled.");
   const started = await postHandoffForm<HandoffBegin>(configuration.beginUrl, { role, purpose });
-  await completeProductHandoff(role, purpose, started.state, configuration);
+  await completeProductHandoff(role, purpose, started.state, configuration, true);
 }
 
 export function useProductIntegrationConfiguration() {

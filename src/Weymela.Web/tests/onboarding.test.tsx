@@ -142,6 +142,23 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByText("CR-INTERNAL")).not.toBeInTheDocument();
   });
 
+  it("shows a rejected profile as an existing lifecycle state instead of another Add action", () => {
+    mocks.statusProfiles = [
+      {
+        id: "request-2",
+        role: "Creator",
+        status: "Rejected",
+        displayName: "Bella",
+        publicId: "CR-INTERNAL",
+        submittedAtUtc: "2026-09-01T00:00:00Z",
+        decisionReason: "Not approved",
+      },
+    ];
+    renderOnboarding();
+    expect(screen.getByRole("button", { name: /Creator.*Not approved.*contact support/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Become a Creator/ })).not.toBeInTheDocument();
+  });
+
   it("keeps one identity and opens an already-added Customer through authoritative profile selection", async () => {
     const profile = { role: "Customer" };
     mocks.activeProfiles = [profile];

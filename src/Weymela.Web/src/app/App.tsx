@@ -88,12 +88,12 @@ export function App() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/product-handoff" element={<ProductHandoffCallback />} />
       <Route path="/integration/sign-out" element={<ProductSignOut />} />
-      <Route path="/business" element={<RoleGate roles={["Business"]}>
+      <Route path="/business" element={
         <ProductWorkspaceEntry role="Business" fallback={<Shell><BusinessDashboard /></Shell>} />
-      </RoleGate>} />
-      <Route path="/creator" element={<RoleGate roles={["Creator"]}>
+      } />
+      <Route path="/creator" element={
         <ProductWorkspaceEntry role="Creator" fallback={<Shell><CreatorDashboard /></Shell>} />
-      </RoleGate>} />
+      } />
       <Route path="/admin" element={<RoleGate roles={["PlatformAdmin"]}>
         <ProductWorkspaceEntry role="PlatformAdmin" fallback={<Shell><AdminDashboard /></Shell>} />
       </RoleGate>} />

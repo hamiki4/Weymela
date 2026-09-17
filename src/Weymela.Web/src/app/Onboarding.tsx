@@ -62,13 +62,16 @@ function IntegratedOnboarding() {
     <PageHeader eyebrow="Your Weymela account" title="How do you want to use Weymela?" action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
     <Resource resource={status}>{(data) => {
       const pending = new Set(data.profiles.filter((item) => item.status === "Pending" || item.status === 0).map((item) => publicRole(item.role)));
+      const rejected = new Set(data.profiles.filter((item) => item.status === "Rejected" || item.status === 2).map((item) => publicRole(item.role)));
       return <Section title="Choose a profile">
         <div className="content-grid profile-choice-grid">
           {choices.map(([choice, description, label, className]) => {
             const existing = active.get(choice);
-            const state = existing ? "Already added" : pending.has(choice) ? "Pending" : label;
+            const state = existing ? "Already added" : pending.has(choice) ? "Pending"
+              : rejected.has(choice) ? "Not approved — contact support" : label;
+            const unavailable = !existing && (pending.has(choice) || rejected.has(choice));
             return <button key={choice} className={`profile-choice ${className}${role === choice ? " selected" : ""}`} type="button"
-              aria-label={`${choice} — ${state}`} aria-pressed={role === choice} disabled={pending.has(choice)}
+              aria-label={`${choice} — ${state}`} aria-pressed={role === choice} disabled={unavailable}
               onClick={() => existing ? openExisting(existing) : (setRole(choice), setAccepted(false))}>
               <strong>{choice}</strong><span>{description}</span><span className="profile-choice-action">{state}</span>
             </button>;

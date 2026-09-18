@@ -90,7 +90,7 @@ services:
     mem_limit: 256m
     cpus: 0.25
     healthcheck:
-      test: [CMD, dotnet, Weymela.Worker.dll, --check-health]
+      test: [CMD, /bin/sh, /app/worker-healthcheck.sh]
       interval: 30s
       timeout: 8s
       retries: 3

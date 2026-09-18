@@ -141,6 +141,35 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertNotIn('firebase-admin', worker.lower())
         self.assertNotIn('resend', worker.lower())
 
+    def test_worker_healthcheck_uses_only_the_atomic_freshness_signal(self):
+        dockerfile = (ROOT / 'docker/Dockerfile.worker').read_text()
+        health_line = next(line for line in dockerfile.splitlines() if line.startswith('HEALTHCHECK '))
+        self.assertIn('CMD ["/bin/sh", "/app/worker-healthcheck.sh"]', health_line)
+        self.assertIn('--timeout=8s', health_line)
+        self.assertNotIn('dotnet', health_line.lower())
+        self.assertNotIn('--check-health', health_line)
+
+        script = (ROOT / 'src/Weymela.Worker/worker-healthcheck.sh').read_text()
+        self.assertIn('/tmp/weymela-worker/healthy', script)
+        self.assertIn('stat -c %Y', script)
+        self.assertIn('interval * 4', script)
+        self.assertIn('freshness" -lt 60', script)
+        self.assertNotIn('dotnet', script.lower())
+        self.assertNotIn('connectionstring', script.lower())
+
+        program = (ROOT / 'src/Weymela.Worker/Program.cs').read_text()
+        self.assertNotIn('--check-health', program)
+        self.assertIn('healthSignal.MarkSuccessfulCycle()', program)
+        self.assertIn('healthSignal.MarkFailedCycle()', program)
+
+        compose = (ROOT / 'docker/compose.v3-pilot.yml').read_text()
+        worker = compose.split('  weymela-v3-pilot-worker:', 1)[1].split('  weymela-v3-pilot-web:', 1)[0]
+        self.assertIn('cpus: 0.25', worker)
+        self.assertIn('mem_limit: 256m', worker)
+        self.assertIn('timeout: 8s', worker)
+        self.assertIn('test: [CMD, /bin/sh, /app/worker-healthcheck.sh]', worker)
+        self.assertNotIn('Weymela.Worker.dll', worker)
+
 class ComposeIsolationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

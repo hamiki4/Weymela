@@ -10,9 +10,12 @@ RUN dotnet publish src/Weymela.Worker/Weymela.Worker.csproj -c Release -o /out -
 
 # Worker currently references Microsoft.AspNetCore.App; runtime-only is insufficient.
 FROM ${RUNTIME_IMAGE} AS runtime
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build --chown=1654:1654 /out/ ./
 ENV DOTNET_EnableDiagnostics=0
 USER 1654:1654
-HEALTHCHECK --interval=30s --timeout=8s --start-period=60s --retries=3 CMD ["dotnet", "Weymela.Worker.dll", "--check-health"]
+HEALTHCHECK --interval=30s --timeout=8s --start-period=60s --retries=3 CMD ["/bin/sh", "/app/worker-healthcheck.sh"]
 ENTRYPOINT ["dotnet", "Weymela.Worker.dll"]

@@ -32,6 +32,7 @@ internal static class EarningsConfiguration
         revenue.ToTable("PlatformRevenueEntries", t => t.HasCheckConstraint("CK_Revenue_Positive", "\"Amount\" > 0"));
         revenue.HasOne<Promotion>().WithMany().HasForeignKey(x => x.PromotionId).OnDelete(DeleteBehavior.Restrict);
         revenue.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        revenue.HasOne<UgcCustomerOfferSale>().WithMany().HasForeignKey(x => x.UgcCustomerOfferSaleId).OnDelete(DeleteBehavior.Restrict);
         revenue.HasIndex(x => new { x.Source, x.CreatedAtUtc });
         JournalLink<PlatformRevenueEntry>(model);
         var settlement = model.Entity<PlatformSettlement>(); Mapping.Scalars(settlement); settlement.HasKey(x => x.Id);

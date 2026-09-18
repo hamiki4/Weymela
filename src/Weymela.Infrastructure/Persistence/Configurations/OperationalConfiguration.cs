@@ -41,12 +41,27 @@ internal static class OperationalConfiguration
         ugcBudget.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
         ugcBudget.HasIndex(x => new { x.UgcOpportunityId, x.CreatedAtUtc });
 
+        var offerReservation = model.Entity<UgcCustomerOfferReservation>(); Mapping.Scalars(offerReservation);
+        offerReservation.ToTable("UgcCustomerOfferReservations", t => t.HasCheckConstraint("CK_UgcCustomerOfferReservation_Positive", "\"OriginalAmount\" > 0"));
+        offerReservation.HasKey(x => x.UgcCustomerOfferId);
+        offerReservation.HasOne<UgcCustomerOffer>().WithOne().HasForeignKey<UgcCustomerOfferReservation>(x => x.UgcCustomerOfferId).OnDelete(DeleteBehavior.Restrict);
+        offerReservation.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        offerReservation.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
+
+        var offerBudget = model.Entity<UgcCustomerOfferBudgetEntry>(); Mapping.Scalars(offerBudget); offerBudget.HasKey(x => x.Id);
+        offerBudget.ToTable("UgcCustomerOfferBudgetEntries", t => t.HasCheckConstraint("CK_UgcCustomerOfferBudgetEntry_Positive", "\"Amount\" > 0"));
+        offerBudget.HasOne<UgcCustomerOffer>().WithMany().HasForeignKey(x => x.UgcCustomerOfferId).OnDelete(DeleteBehavior.Restrict);
+        offerBudget.HasOne<UgcCustomerOfferSale>().WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
+        offerBudget.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
+        offerBudget.HasIndex(x => new { x.UgcCustomerOfferId, x.CreatedAtUtc });
+
         var idem = model.Entity<StoredIdempotencyRecord>(); Mapping.Scalars(idem); idem.ToTable("IdempotencyRecords");
         idem.HasKey(x => new { x.ActorId, x.OperationType, x.Key });
         idem.Property(x => x.Key).HasMaxLength(200); idem.Property(x => x.OperationType).HasMaxLength(100);
         var audit = model.Entity<AuditEvent>(); Mapping.Scalars(audit); audit.HasKey(x => x.Id); audit.ToTable("AuditEvents");
         audit.HasIndex(x => x.CorrelationId); audit.HasIndex(x => new { x.PromotionId, x.OccurredAtUtc });
         audit.HasIndex(x => new { x.UgcOpportunityId, x.OccurredAtUtc });
+        audit.HasIndex(x => new { x.UgcCustomerOfferId, x.OccurredAtUtc });
         var outbox = model.Entity<OutboxMessage>(); Mapping.Scalars(outbox); outbox.HasKey(x => x.Id); outbox.ToTable("OutboxMessages");
         outbox.Property(x => x.Payload).HasColumnType("jsonb");
         outbox.HasIndex(x => x.OccurredAtUtc).HasFilter("\"ProcessedAtUtc\" IS NULL");

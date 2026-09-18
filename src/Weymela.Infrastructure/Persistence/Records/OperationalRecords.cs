@@ -7,9 +7,13 @@ public sealed record PromotionReservation(Guid PromotionId, Guid BusinessId, Mon
 public sealed record PromotionBudgetEntry(Guid Id, Guid PromotionId, Guid? AllocationId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc);
 public sealed record UgcReservation(Guid UgcOpportunityId, Guid BusinessId, Money OriginalAmount, Guid JournalId, DateTime CreatedAtUtc);
 public sealed record UgcBudgetEntry(Guid Id, Guid UgcOpportunityId, Guid? AssignmentId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc);
-public sealed record WalletEntry(Guid Id, Guid BusinessId, Guid? PromotionId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc, Guid? UgcOpportunityId = null);
+public sealed record UgcCustomerOfferReservation(Guid UgcCustomerOfferId, Guid BusinessId, Money OriginalAmount, Guid JournalId, DateTime CreatedAtUtc);
+public sealed record UgcCustomerOfferBudgetEntry(Guid Id, Guid UgcCustomerOfferId, Guid? SaleId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc);
+public sealed record WalletEntry(Guid Id, Guid BusinessId, Guid? PromotionId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc,
+    Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null);
 public sealed record StoredIdempotencyRecord(Guid ActorId, string OperationType, string Key, string RequestFingerprint, string ResultReference, DateTime CreatedAtUtc);
-public sealed record AuditEvent(Guid Id, string EventType, Guid ActorId, Guid? BusinessId, Guid? PromotionId, Guid? CreatorId, Guid CorrelationId, DateTime OccurredAtUtc, string Detail, Guid? UgcOpportunityId = null);
+public sealed record AuditEvent(Guid Id, string EventType, Guid ActorId, Guid? BusinessId, Guid? PromotionId, Guid? CreatorId, Guid CorrelationId, DateTime OccurredAtUtc, string Detail,
+    Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null);
 public sealed class OutboxMessage
 {
     public Guid Id { get; init; } = Guid.NewGuid();

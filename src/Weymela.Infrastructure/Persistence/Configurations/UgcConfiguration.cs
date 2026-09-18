@@ -22,11 +22,49 @@ internal sealed class UgcOpportunityConfiguration : IEntityTypeConfiguration<Ugc
             p.Ignore(x => x.IsValid); Mapping.Money(p.Property(x => x.MinimumCreatorPayment));
             p.Property(x => x.PlatformFeePercent).HasPrecision(9, 4);
             Mapping.Money(p.Property(x => x.MinimumUgcBudget), true);
+            p.Property(x => x.CustomerOfferPlatformSalePercent).HasPrecision(9, 4);
             p.Property(x => x.EffectiveFromUtc); p.Property(x => x.ConfigurationVersionId);
         });
         b.HasMany(x => x.PlatformRequirements).WithOne().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
         b.Navigation(x => x.PlatformRequirements).HasField("platformRequirements").UsePropertyAccessMode(PropertyAccessMode.Field);
         Mapping.Version(b);
+    }
+}
+
+internal sealed class UgcCustomerOfferConfiguration : IEntityTypeConfiguration<UgcCustomerOffer>
+{
+    public void Configure(EntityTypeBuilder<UgcCustomerOffer> b)
+    {
+        b.ToTable("UgcCustomerOffers", t =>
+        {
+            t.HasCheckConstraint("CK_UgcCustomerOffer_Percent", "\"CustomerDiscountPercent\" > 0 AND \"CustomerDiscountPercent\" <= 100");
+            t.HasCheckConstraint("CK_UgcCustomerOffer_Funding", "\"FundedLimit\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"FundedLimit\"");
+            t.HasCheckConstraint("CK_UgcCustomerOffer_Dates", "\"EndsAtUtc\" > \"StartsAtUtc\"");
+        });
+        Mapping.Scalars(b, "RemainingFunding"); b.HasKey(x => x.Id);
+        b.HasIndex(x => x.UgcOpportunityId).IsUnique(); b.HasIndex(x => new { x.BusinessId, x.Status });
+        b.HasOne<UgcOpportunity>().WithOne().HasForeignKey<UgcCustomerOffer>(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        b.OwnsOne(x => x.PricingSnapshot, p =>
+        {
+            p.Ignore(x => x.IsValid); p.Property(x => x.PlatformSalePercent).HasPrecision(9, 4);
+            p.Property(x => x.EffectiveFromUtc); p.Property(x => x.ConfigurationVersionId);
+        });
+        Mapping.Version(b);
+    }
+}
+
+internal sealed class UgcCustomerOfferSaleConfiguration : IEntityTypeConfiguration<UgcCustomerOfferSale>
+{
+    public void Configure(EntityTypeBuilder<UgcCustomerOfferSale> b)
+    {
+        b.ToTable("UgcCustomerOfferSales", t => t.HasCheckConstraint("CK_UgcCustomerOfferSale_Amounts",
+            "\"PurchaseAmount\" > 0 AND \"CustomerDiscountAmount\" > 0 AND \"CustomerPaysAmount\" >= 0 AND \"PlatformRevenueAmount\" >= 0 AND \"CustomerPaysAmount\" + \"CustomerDiscountAmount\" = \"PurchaseAmount\" AND \"TotalOfferCharge\" = \"CustomerDiscountAmount\" + \"PlatformRevenueAmount\""));
+        Mapping.Scalars(b); b.HasKey(x => x.Id);
+        b.HasOne<UgcCustomerOffer>().WithMany().HasForeignKey(x => x.UgcCustomerOfferId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<UgcOpportunity>().WithMany().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.BusinessId, x.IdempotencyKey }).IsUnique();
+        b.Property<Guid>("JournalId"); b.HasOne<FinancialJournal>().WithMany().HasForeignKey("JournalId").OnDelete(DeleteBehavior.Restrict);
     }
 }
 

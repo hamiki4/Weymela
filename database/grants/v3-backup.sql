@@ -15,7 +15,7 @@ GRANT USAGE ON SCHEMA public, v3 TO :"backup_role";
 REVOKE ALL PRIVILEGES ON TABLE public."__EFMigrationsHistory" FROM :"backup_role";
 GRANT SELECT ON TABLE public."__EFMigrationsHistory" TO :"backup_role";
 
--- Explicit inventory of all persisted tables in the nine approved migrations.
+-- Explicit inventory of all persisted tables in the approved migrations.
 -- A complete disaster-recovery archive must include auth, device, legal and finance.
 REVOKE ALL PRIVILEGES ON TABLE
     v3."AuditEvents",
@@ -62,6 +62,10 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."RoleEnrollments",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
+    v3."UgcCustomerOfferBudgetEntries",
+    v3."UgcCustomerOfferReservations",
+    v3."UgcCustomerOfferSales",
+    v3."UgcCustomerOffers",
     v3."UgcCreatorRequests",
     v3."UgcOpportunities",
     v3."UgcPlatformRequirements",
@@ -119,6 +123,10 @@ GRANT SELECT ON TABLE
     v3."RoleEnrollments",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
+    v3."UgcCustomerOfferBudgetEntries",
+    v3."UgcCustomerOfferReservations",
+    v3."UgcCustomerOfferSales",
+    v3."UgcCustomerOffers",
     v3."UgcCreatorRequests",
     v3."UgcOpportunities",
     v3."UgcPlatformRequirements",

@@ -13,17 +13,19 @@ public sealed partial class WorkspaceQueries
         await DemandBusiness(actor,ct);
         var wallet=await db.BusinessWallets.AsNoTracking().SingleAsync(x=>x.BusinessId==actor.BusinessId,ct);
         var history=(await db.WalletEntries.AsNoTracking().Where(x=>x.BusinessId==actor.BusinessId).OrderByDescending(x=>x.CreatedAtUtc).Take(100).ToListAsync(ct))
-            .Select(x=>new WalletMovement(x.Id,x.Movement switch {"Deposit"=>"Funds added","Reserve"=>"Promotion funded","Consumed"=>"Promotion activity","UgcReserve"=>"UGC funded","UgcConsumed"=>"UGC approved","UgcReleased"=>"UGC funds released",_=>"Funds movement"},x.Amount.Amount,x.CreatedAtUtc,x.JournalId.ToString())).ToArray();
+            .Select(x=>new WalletMovement(x.Id,x.Movement switch {"Deposit"=>"Funds added","Reserve"=>"Promotion funded","Consumed"=>"Promotion activity","UgcReserve"=>"UGC funded","UgcConsumed"=>"UGC approved","UgcReleased"=>"UGC funds released","UgcCustomerOfferReserve"=>"Customer Offer funded","UgcCustomerOfferConsumed"=>"Customer Offer Sale","UgcCustomerOfferReleased"=>"Customer Offer funds released",_=>"Funds movement"},x.Amount.Amount,x.CreatedAtUtc,x.JournalId.ToString())).ToArray();
         return new(wallet.TotalBalance.Amount,wallet.AvailableBalance.Amount,wallet.ReservedBalance.Amount,wallet.Version,history);
     }
     public async Task<BusinessHome> BusinessHomeAsync(Actor actor,CancellationToken ct)
     {
         var wallet=await WalletAsync(actor,ct);
         var ids=await db.Promotions.Where(x=>x.BusinessId==actor.BusinessId).Select(x=>x.Id).ToListAsync(ct);
+        var sales=await db.VerifiedSales.CountAsync(x=>x.BusinessId==actor.BusinessId,ct)
+            +await db.UgcCustomerOfferSales.CountAsync(x=>x.BusinessId==actor.BusinessId,ct);
         return new(await directory.BusinessCardAsync(actor.BusinessId!.Value,ct),wallet,
             await db.Promotions.CountAsync(x=>x.BusinessId==actor.BusinessId && x.Status==PromotionStatus.Active,ct),
             await db.CreatorApplications.CountAsync(x=>ids.Contains(x.PromotionId)&&x.Status==CreatorApplicationStatus.Pending,ct),
-            await db.VerifiedSales.CountAsync(x=>x.BusinessId==actor.BusinessId,ct));
+            sales);
     }
     public async Task<BusinessPricing> BusinessPricingAsync(Actor actor,CancellationToken ct)
     {
@@ -34,7 +36,8 @@ public sealed partial class WorkspaceQueries
     {
         await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
         var ugc=v.Ugc??throw new InvalidOperationException("The effective financial configuration does not include UGC settings.");
-        return new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,v.Version,v.EffectiveFromUtc);
+        return new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,
+            ugc.CustomerOfferPlatformSalePercent,v.Version,v.EffectiveFromUtc);
     }
     public async Task<IReadOnlyList<CampaignRow>> BusinessCampaignsAsync(Actor actor,CancellationToken ct)
     {

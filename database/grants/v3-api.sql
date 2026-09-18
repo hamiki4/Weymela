@@ -65,6 +65,10 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."RoleEnrollments",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
+    v3."UgcCustomerOfferBudgetEntries",
+    v3."UgcCustomerOfferReservations",
+    v3."UgcCustomerOfferSales",
+    v3."UgcCustomerOffers",
     v3."UgcCreatorRequests",
     v3."UgcOpportunities",
     v3."UgcPlatformRequirements",
@@ -110,6 +114,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."PromotionPlatforms",
     v3."Promotions",
     v3."UgcAssignments",
+    v3."UgcCustomerOffers",
     v3."UgcCreatorRequests",
     v3."UgcOpportunities",
     v3."UgcSubmissions"
@@ -130,10 +135,15 @@ GRANT SELECT, INSERT ON TABLE
     v3."ViewRewardReceipts",
     v3."WalletEntries",
     v3."UgcBudgetEntries",
+    v3."UgcCustomerOfferBudgetEntries",
+    v3."UgcCustomerOfferReservations",
+    v3."UgcCustomerOfferSales",
     v3."UgcPlatformRequirements",
     v3."UgcReservations",
     v3."UgcRevisions"
 TO :"api_role";
+
+GRANT SELECT, INSERT, UPDATE ON TABLE v3."OfferQrSessions" TO :"api_role";
 
 GRANT SELECT ON TABLE
     v3."WorkerCheckpoints"
@@ -161,6 +171,9 @@ REVOKE EXECUTE ON FUNCTION v3.guard_deposit_review() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_approved_deposit_journal() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_notification_identity() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_outbox_envelope() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"api_role";
 
 GRANT EXECUTE ON FUNCTION v3.check_wallet_journal() TO :"api_role";
 GRANT EXECUTE ON FUNCTION v3.check_earned_account() TO :"api_role";

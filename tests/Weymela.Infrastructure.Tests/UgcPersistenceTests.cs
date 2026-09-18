@@ -3,10 +3,12 @@ using Weymela.Application;
 using Weymela.Application.Web;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
+using Weymela.Infrastructure.Web;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -42,6 +44,126 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(50m, fee.Amount.Amount);
         Assert.Equal(2, await db.FinancialJournals.CountAsync(x => EF.Property<Guid?>(x, "UgcOpportunityId") == opportunityId));
         Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == opportunityId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Ugc_customer_offer_sale_uses_separate_fund_discount_and_platform_fee_with_zero_creator_share()
+    {
+        var state = await Setup();
+        var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
+        IssuedOfferQr qr;
+        await using (var db = state.Database.Open())
+        {
+            db.CommercePermissions.AddRange(
+                new CommercePermission(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
+                new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
+            await db.SaveChangesAsync();
+            var ugc = new UgcService(db, new FixedTime(Now));
+            var id = await ugc.CreateAsync(state.Business, Input() with
+            {
+                CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
+                CustomerOfferFundedAllocation = 5600m, CustomerFacingSlogan = "Save on your next visit",
+                CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
+            }, "offer-create", default);
+            await ugc.PublishAsync(state.Business, id, 0, "offer-publish", default);
+            var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
+            qr = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
+                .IssueUgcAsync(new(customer, offerId, "offer-qr"), default);
+        }
+        SaleResult result;
+        await using (var db = state.Database.Open())
+            result = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
+                .RedeemAsync(new(cashier, qr.Token!, new Money(1000), "offer-sale"), default);
+        Assert.Equal("UGC_CUSTOMER_OFFER", result.Source); Assert.Equal(950m, result.CustomerPays!.Value.Amount);
+        Assert.Equal(50m, result.CustomerDiscount!.Value.Amount); Assert.Equal(80m, result.TotalBusinessCharge.Amount);
+
+        await using var verify = state.Database.Open();
+        var sale = await verify.UgcCustomerOfferSales.SingleAsync();
+        Assert.Equal(50m, sale.CustomerDiscountAmount.Amount); Assert.Equal(30m, sale.PlatformRevenueAmount.Amount);
+        Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
+        Assert.Empty(await verify.CustomerCashbackEntries.ToListAsync());
+        Assert.Single(await verify.PlatformRevenueEntries.Where(x => x.Source == PlatformRevenueSource.UgcCustomerOfferSaleFee).ToListAsync());
+        Assert.Equal(5520m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
+        Assert.Equal(7170m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
+        Assert.Equal(OfferQrStatus.Used, (await verify.OfferQrSessions.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Insufficient_ugc_customer_offer_fund_rejects_before_qr_or_financial_mutation()
+    {
+        var state = await Setup();
+        var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
+        IssuedOfferQr qr;
+        await using (var db = state.Database.Open())
+        {
+            db.CommercePermissions.AddRange(
+                new CommercePermission(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
+                new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
+            await db.SaveChangesAsync();
+            var ugc = new UgcService(db, new FixedTime(Now));
+            var id = await ugc.CreateAsync(state.Business, Input() with
+            {
+                CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
+                CustomerOfferFundedAllocation = 79m, CustomerOfferStartsAtUtc = Now,
+                CustomerOfferEndsAtUtc = Now.AddDays(7)
+            }, "small-offer-create", default);
+            await ugc.PublishAsync(state.Business, id, 0, "small-offer-publish", default);
+            var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
+            qr = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
+                .IssueUgcAsync(new(customer, offerId, "small-offer-qr"), default);
+        }
+        await using (var db = state.Database.Open())
+        {
+            var failure = await Assert.ThrowsAsync<ApplicationFailure>(() =>
+                new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
+                    .RedeemAsync(new(cashier, qr.Token!, new Money(1000), "small-offer-sale"), default));
+            Assert.Equal(FailureKind.InsufficientFunds, failure.Kind); Assert.Equal("Offer no longer available.", failure.Message);
+        }
+        await using var verify = state.Database.Open();
+        Assert.Empty(await verify.UgcCustomerOfferSales.ToListAsync());
+        Assert.Equal(OfferQrStatus.Issued, (await verify.OfferQrSessions.SingleAsync()).Status);
+        var offer = await verify.UgcCustomerOffers.SingleAsync();
+        Assert.Equal(0m, offer.UsedFunding.Amount); Assert.Equal(79m, offer.ReservedFunding.Amount);
+        Assert.Empty(await verify.FinancialJournals.Where(x => x.SourceType == JournalSourceType.UgcCustomerOfferSale).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Customer_discovery_returns_only_the_safe_customer_offer_and_never_the_ugc_job()
+    {
+        var state = await Setup();
+        var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        await using var db = state.Database.Open();
+        db.CommercePermissions.Add(new CommercePermission(customer.UserId, ActorRole.Customer,
+            customer.CustomerId!.Value, null, true, false));
+        await db.SaveChangesAsync();
+        var ugc = new UgcService(db, new FixedTime(Now));
+        var hidden = await ugc.CreateAsync(state.Business, Input() with { Title = "Internal hidden brief" }, "hidden-create", default);
+        await ugc.PublishAsync(state.Business, hidden, 0, "hidden-publish", default);
+        var visible = await ugc.CreateAsync(state.Business, Input() with
+        {
+            Title = "Internal customer must never see this title",
+            CustomerOfferEnabled = true,
+            CustomerDiscountPercent = 5m,
+            CustomerOfferFundedAllocation = 5600m,
+            CustomerFacingSlogan = "Save on your next visit",
+            CustomerOfferStartsAtUtc = Now,
+            CustomerOfferEndsAtUtc = Now.AddDays(7)
+        }, "visible-create", default);
+        await ugc.PublishAsync(state.Business, visible, 0, "visible-publish", default);
+
+        var cards = await new WorkspaceQueries(db, new PersistentWorkspaceDirectory(db), new FixedTime(Now))
+            .OffersAsync(customer, default);
+
+        var card = Assert.Single(cards);
+        Assert.Equal("UGC_CUSTOMER_OFFER", card.Source);
+        Assert.Equal("Save on your next visit", card.Offer);
+        Assert.Equal("Bella Beauty", card.Business.DisplayName);
+        Assert.Equal(5m, card.BenefitPercent);
+        Assert.Null(card.Creator);
+        Assert.Null(card.WatchUrl);
+        Assert.DoesNotContain("Internal", card.Offer, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -233,7 +355,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.FinancialConfigurations.Add(new(configurationId, "PlatformPricing"));
         db.FinancialConfigurationVersions.Add(new(versionId, configurationId, 1, Guid.NewGuid(), Now,
             Scenario.Price(PromotionType.ViewOnly, versionId), Scenario.Price(PromotionType.ViewPlusCommission, versionId),
-            new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId)));
+            new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId, 3m)));
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         await new FinancialCommands(db, new FixedTime(Now)).CreditDepositAsync(new(business, new Money(deposit), "ugc-seed-deposit", Now), 0);
         return new(database, business, creator);

@@ -62,8 +62,8 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [Fact] public async Task Other_business_cannot_open_or_approve_campaign_applicants()
     {await using var f=await ApiFixture.CreateAsync(postgres);using var own=await f.Login("business");var id=(await own.GetJson("/api/business/campaigns"))[0]!["id"]!.GetValue<string>();var details=await own.GetJson($"/api/business/campaigns/{id}");using var other=await f.Login("other-business");Assert.Equal(HttpStatusCode.Forbidden,(await other.GetAsync($"/api/business/campaigns/{id}")).StatusCode);var applicant=details["applicants"]![0]!["id"]!.GetValue<string>();Assert.Equal(HttpStatusCode.Forbidden,(await other.Post($"/api/business/applicants/{applicant}/approve",new{amount=100,version=details["campaign"]!["version"]!.GetValue<long>()})).StatusCode);}
 
-    [Fact] public async Task Customer_offers_are_hybrid_only_and_have_no_internal_finances()
-    {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");var offers=await c.GetJson("/api/customer/offers");Assert.Single(offers.AsArray());Assert.Equal(4,offers[0]!["cashbackPercent"]!.GetValue<decimal>());foreach(var forbidden in new[]{"budget","earning","platformRevenue","wallet"})Assert.DoesNotContain(forbidden,offers.ToJsonString());}
+    [Fact] public async Task Customer_offers_are_eligible_customer_facing_only_and_have_no_internal_finances()
+    {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");var offers=await c.GetJson("/api/customer/offers");Assert.Single(offers.AsArray());Assert.Equal("VIEW_AND_SALE_PROMOTION",offers[0]!["source"]!.GetValue<string>());Assert.Equal(4,offers[0]!["benefitPercent"]!.GetValue<decimal>());foreach(var forbidden in new[]{"budget","earning","platformRevenue","wallet","creatorPayment","creatorsNeeded","instructions","resources"})Assert.DoesNotContain(forbidden,offers.ToJsonString());}
 
     [Fact] public async Task Operations_admin_can_use_operational_areas_but_not_platform_configuration()
     {

@@ -19,10 +19,10 @@ public enum CreatorAllocationStatus { Active, Exhausted, Completed, Cancelled }
 public enum VerifiedSaleStatus { Recorded, Reversed }
 public enum EarningSource { ViewReward, SaleCommission, Ugc, AuthorizedAdjustment }
 public enum CashbackSource { VerifiedSale, AuthorizedAdjustment }
-public enum PlatformRevenueSource { ViewRewardPlatformShare, SalePlatformShare, UgcFee, AuthorizedAdjustment }
+public enum PlatformRevenueSource { ViewRewardPlatformShare, SalePlatformShare, UgcFee, UgcCustomerOfferSaleFee, AuthorizedAdjustment }
 public enum RevenueStatus { Accrued, Settled }
 public enum JournalLineType { Debit, Credit }
-public enum JournalSourceType { Deposit, PromotionReservation, UgcReservation, Allocation, UgcApproval, ViewReward, VerifiedSale, Payout, Adjustment, Settlement }
+public enum JournalSourceType { Deposit, PromotionReservation, UgcReservation, UgcCustomerOfferReservation, Allocation, UgcApproval, ViewReward, VerifiedSale, UgcCustomerOfferSale, Payout, Adjustment, Settlement }
 public enum LegalRole { Account, Business, Creator }
 public enum LegalDocumentType { TermsOfService, BusinessAgreement, CreatorAgreement, AntiCircumventionAgreement, PrivacyPolicy }
 
@@ -211,7 +211,7 @@ public sealed class CustomerCashbackAccount
     public void Earn(Money amount, Guid saleId, DateTime at, Guid correlation) { if (amount.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount)); AvailableCashback = AvailableCashback.Add(amount); Entries.Add(new(Guid.NewGuid(), CustomerId, saleId, CashbackSource.VerifiedSale, amount, at, correlation)); }
 }
 public sealed record CustomerCashbackEntry(Guid Id, Guid CustomerId, Guid? VerifiedSaleId, CashbackSource Source, Money Amount, DateTime CreatedAtUtc, Guid CorrelationId);
-public sealed record PlatformRevenueEntry(Guid Id, Guid? PromotionId, PlatformRevenueSource Source, Money Amount, RevenueStatus Status, DateTime CreatedAtUtc, Guid CorrelationId, Guid? UgcAssignmentId = null);
+public sealed record PlatformRevenueEntry(Guid Id, Guid? PromotionId, PlatformRevenueSource Source, Money Amount, RevenueStatus Status, DateTime CreatedAtUtc, Guid CorrelationId, Guid? UgcAssignmentId = null, Guid? UgcCustomerOfferSaleId = null);
 public sealed class PlatformSettlement { private PlatformSettlement() { Reference = null!; } public Guid Id { get; } = Guid.NewGuid(); public Money Amount { get; } public DateTime SettledAtUtc { get; } public string Reference { get; } public PlatformSettlement(Money amount, string reference, DateTime at) { if (amount.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount)); Amount = amount; Reference = reference; SettledAtUtc = at; } }
 public sealed record FinancialJournalLine(JournalLineType Type, Money Amount, string Account);
 public sealed class FinancialJournal

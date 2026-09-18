@@ -63,6 +63,10 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."RoleEnrollments",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
+    v3."UgcCustomerOfferBudgetEntries",
+    v3."UgcCustomerOfferReservations",
+    v3."UgcCustomerOfferSales",
+    v3."UgcCustomerOffers",
     v3."UgcCreatorRequests",
     v3."UgcOpportunities",
     v3."UgcPlatformRequirements",
@@ -115,6 +119,9 @@ REVOKE EXECUTE ON FUNCTION v3.guard_deposit_review() FROM PUBLIC, :"worker_role"
 REVOKE EXECUTE ON FUNCTION v3.check_approved_deposit_journal() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_notification_identity() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_outbox_envelope() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"worker_role";
 
 GRANT EXECUTE ON FUNCTION v3.guard_outbox_envelope() TO :"worker_role";
 GRANT EXECUTE ON FUNCTION v3.guard_notification_identity() TO :"worker_role";

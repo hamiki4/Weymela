@@ -20,6 +20,7 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
             PlatformRevenueSource.ViewRewardPlatformShare => "View rewards",
             PlatformRevenueSource.SalePlatformShare => "Sales",
             PlatformRevenueSource.UgcFee => "UGC fees",
+            PlatformRevenueSource.UgcCustomerOfferSaleFee => "UGC Customer Offer Sales",
             _ => "Authorized adjustments"
         };
         var breakdown = sourceRows.GroupBy(x => x.Source)
@@ -84,8 +85,25 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
             foreach(var a in p.Allocations.Where(x => x.Status == CreatorAllocationStatus.Active && x.ActivatedAtUtc != null && x.RemainingAmount.Amount > 0))
             {
                 if (!await db.CreatorPromotionParticipations.AnyAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active,ct)) continue;
-                result.Add(new(a.Id,p.Title,await directory.BusinessAsync(p.BusinessId,ct),await directory.CreatorAsync(a.CreatorId,ct),p.PricingSnapshot.CustomerCashbackPercent));
+                result.Add(new(a.Id,"VIEW_AND_SALE_PROMOTION",p.Title,await directory.BusinessAsync(p.BusinessId,ct),
+                    await directory.CreatorAsync(a.CreatorId,ct),p.PricingSnapshot.CustomerCashbackPercent,p.Slogan,p.Location));
             }
+        }
+        var ugcOffers = await db.UgcCustomerOffers.AsNoTracking()
+            .Where(x => x.Status == UgcCustomerOfferStatus.Active && x.StartsAtUtc <= now && x.EndsAtUtc > now)
+            .ToListAsync(ct);
+        ugcOffers = ugcOffers.Where(x => x.ReservedFunding.Amount > 0).ToList();
+        var opportunityIds = ugcOffers.Select(x => x.UgcOpportunityId).Distinct().ToArray();
+        var opportunities = await db.UgcOpportunities.AsNoTracking().Where(x => opportunityIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
+        foreach (var offer in ugcOffers)
+        {
+            if (!opportunities.TryGetValue(offer.UgcOpportunityId, out var ugc)
+                || !await db.CommercePermissions.AnyAsync(x => x.Role == ActorRole.Business
+                    && x.SubjectId == offer.BusinessId && x.IsActive, ct)) continue;
+            result.Add(new(offer.Id,"UGC_CUSTOMER_OFFER",offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off",
+                await directory.BusinessAsync(offer.BusinessId,ct),null,offer.CustomerDiscountPercent,
+                offer.CustomerFacingSlogan,ugc.Location));
         }
         return result;
     }

@@ -12,7 +12,12 @@ public sealed record BusinessCampaignFinance(Guid PromotionId, string Campaign, 
     decimal TotalSaleCostPercent, IReadOnlyList<BusinessCreatorBudget> Creators);
 public sealed record CreatorCampaignFinance(Guid PromotionId, string Campaign, PromotionType Type, Money YourBudget, Money BudgetRemaining,
     long VerifiedViews, Money ViewEarnings, Money SaleCommissionEarnings, string Status);
-public sealed record CustomerOffer(Guid AllocationId, string Campaign, PublicBusiness Business, PublicCreator Creator, decimal CashbackPercent);
+public sealed record CustomerOffer(Guid OfferId, string Source, string Offer, PublicBusiness Business,
+    PublicCreator? Creator, decimal BenefitPercent, string? Slogan = null, string? Location = null)
+{
+    // Compatibility for the existing View & Sale projection. UGC Customer Offers expose BenefitPercent.
+    public decimal CashbackPercent => BenefitPercent;
+}
 public sealed record CustomerPurchase(Guid SaleId, string Campaign, PublicBusiness Business, PublicCreator Creator,
     Money PurchaseAmount, Money Cashback, DateTime PurchasedAtUtc);
 public interface IAdminFinancialQueries { Task<AdminCampaignFinance> CampaignAsync(Actor actor, Guid campaignId, CancellationToken ct); }

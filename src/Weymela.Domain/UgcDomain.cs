@@ -6,10 +6,12 @@ public enum UgcRequestStatus { Pending, Approved, Rejected, Withdrawn }
 public enum UgcAssignmentStatus { InProgress, Submitted, ChangesRequested, Approved, Rejected }
 
 public sealed record UgcPricingSnapshot(Money MinimumCreatorPayment, decimal PlatformFeePercent,
-    Money? MinimumUgcBudget, DateTime EffectiveFromUtc, Guid ConfigurationVersionId)
+    Money? MinimumUgcBudget, DateTime EffectiveFromUtc, Guid ConfigurationVersionId,
+    decimal? CustomerOfferPlatformSalePercent = null)
 {
     public bool IsValid => MinimumCreatorPayment.Amount > 0 && PlatformFeePercent is >= 0 and <= 100
-        && (MinimumUgcBudget is null || MinimumUgcBudget.Value.Amount > 0);
+        && (MinimumUgcBudget is null || MinimumUgcBudget.Value.Amount > 0)
+        && (CustomerOfferPlatformSalePercent is null or >= 0 and <= 100);
 }
 
 public sealed class UgcOpportunity

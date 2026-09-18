@@ -28,7 +28,8 @@ public sealed record BusinessPrice(string Type, int Views, decimal BusinessPays,
 public sealed record CreatorPrice(string Type, int Views, decimal YouEarn, decimal SaleCommissionPercent);
 public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime EffectiveFromUtc);
 public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
-    decimal? MinimumUgcBudget, int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
+    decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent,
+    int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
 public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal MinimumToCashOut, DateTime EffectiveFromUtc);
 public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available);
 public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
@@ -70,7 +71,8 @@ public sealed record AdminCreatorRow(CreatorCard Creator, decimal CreatorBudget,
 public sealed record AdminCampaign(CampaignRow Campaign, IReadOnlyList<AdminCreatorRow> Creators, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> History, int FinancialConfigurationVersion);
 public sealed record ViewPriceInput(int ViewsPerReward, decimal BusinessPays, decimal CreatorEarns, decimal PlatformKeeps, decimal? MinimumCampaignBudget);
-public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal PlatformFeePercent, decimal? MinimumUgcBudget);
+public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
+    decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null);
 public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceInput ViewPlusCommission, decimal CreatorCommissionPercent,
     decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold,
     DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null);
@@ -80,9 +82,15 @@ public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name,
     DateTime? EligibleSinceUtc, string Status);
 public sealed record PayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers,
     decimal PlatformAccrued, decimal PlatformSettled, decimal PlatformUnsettled, IReadOnlyList<PayoutItem> History);
-public sealed record CustomerOfferCard(Guid Id, Guid CampaignId, string Campaign, BusinessCard Business, CreatorCard Creator, decimal CashbackPercent, string? WatchUrl);
+public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl);
+public sealed record CustomerOfferCreator(string DisplayName);
+public sealed record CustomerOfferCard(Guid Id, string Source, string Offer, CustomerOfferBusiness Business,
+    CustomerOfferCreator? Creator, decimal BenefitPercent, string? WatchUrl, string? Slogan = null, string? Location = null);
 public sealed record QrResponse(Guid Id, string? Token, DateTime ExpiresAtUtc, bool Replayed);
-public sealed record CheckoutOffer(Guid SessionId, string Campaign, PublicBusiness Business, PublicCreator Creator, string Customer, DateTime ExpiresAtUtc);
+public sealed record CheckoutOffer(Guid SessionId, string Offer, CustomerOfferBusiness Business, CustomerOfferCreator? Creator,
+    string Customer, DateTime ExpiresAtUtc, string Source, decimal? CustomerDiscountPercent);
+public sealed record CheckoutSaleRow(Guid Id, string Offer, string Source, decimal PurchaseAmount,
+    decimal CustomerDiscount, decimal CustomerPays, decimal PlatformFee, DateTime CreatedAtUtc);
 
 public sealed record PromotionPlatformInput(string Platform, int Capacity);
 public sealed record CreateCampaignInput(string Title, string Description, string Type, decimal CampaignBudget, string? Requirements,
@@ -106,19 +114,29 @@ public sealed record UgcPlatformRequirementInput(string Platform, string Format,
 public sealed record CreateUgcInput(string Title, string? Slogan, string ContentType, string Instructions,
     IReadOnlyList<string>? Resources, string? Location, DateTime DueDateUtc, bool ProductProvided,
     bool CreatorMustPurchase, string? UsageRights, decimal CreatorPayment, int CreatorsNeeded,
-    IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements);
+    IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements,
+    bool CustomerOfferEnabled = false, decimal? CustomerDiscountPercent = null,
+    decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
+    DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null);
 public sealed record UgcReviewInput(string? Reason);
 public sealed record UgcSubmissionInput(string SubmissionUrl);
 public sealed record UgcRevisionInput(string? Slogan, string Instructions, IReadOnlyList<string>? Resources,
     string? Location, string? UsageRights, bool IsMaterial, string? Title = null,
     string? ContentType = null, DateTime? DueDateUtc = null, bool? ProductProvided = null,
     bool? CreatorMustPurchase = null, decimal? CreatorPayment = null, int? CreatorsNeeded = null,
-    IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements = null);
+    IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements = null,
+    bool? CustomerOfferEnabled = null, decimal? CustomerDiscountPercent = null,
+    decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
+    DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null);
 public sealed record UgcPlatformRequirementView(string Platform, string Format, long? MinimumAudience);
 public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string Title, string? Slogan,
     string ContentType, string Status, decimal CreatorPayment, int CreatorsNeeded, int ApprovedCreators,
     decimal RequiredFunding, decimal ReservedFunding, decimal UsedFunding, DateTime DueDateUtc,
-    string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements, string? RequestStatus, long Version);
+    string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements, string? RequestStatus, long Version,
+    bool CustomerOfferEnabled = false, decimal? CustomerDiscountPercent = null,
+    decimal? CustomerOfferFundedAllocation = null, decimal? CustomerOfferRemaining = null,
+    string? CustomerOfferStatus = null, string? CustomerFacingSlogan = null,
+    decimal PlatformFeePercent = 0, decimal PlatformFee = 0);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason);
 public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,

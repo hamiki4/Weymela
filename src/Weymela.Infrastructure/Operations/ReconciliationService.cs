@@ -13,13 +13,13 @@ public sealed class ReconciliationService(WeymelaDbContext db)
         if (actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden, "Admin reconciliation access is required.");
         return await db.Database.SqlQueryRaw<ReconciliationIssue>("""
             WITH entries AS (
-              SELECT j."BusinessId", j."PromotionId", j."UgcOpportunityId", j."CreatorId", j."CustomerId", l."Account", l."Type", l."Amount"
+              SELECT j."BusinessId", j."PromotionId", j."UgcOpportunityId", j."UgcCustomerOfferId", j."CreatorId", j."CustomerId", l."Account", l."Type", l."Amount"
               FROM v3."FinancialJournalLines" l JOIN v3."FinancialJournals" j ON j."Id"=l."JournalId"
             ), balances AS (
               SELECT 'BusinessAvailable' AS "Account", w."BusinessId" AS "SubjectId",
                 coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."BusinessId"=w."BusinessId" AND e."Account"='BusinessAvailable'),0) AS "Expected", w."AvailableBalance" AS "Actual" FROM v3."BusinessWallets" w
               UNION ALL SELECT 'BusinessReserved', w."BusinessId",
-                coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."BusinessId"=w."BusinessId" AND e."Account" IN ('CampaignUnallocatedReserve','CreatorAllocatedReserve','UgcAllocatedReserve')),0), w."ReservedBalance" FROM v3."BusinessWallets" w
+                coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."BusinessId"=w."BusinessId" AND e."Account" IN ('CampaignUnallocatedReserve','CreatorAllocatedReserve','UgcAllocatedReserve','UgcCustomerOfferReserve')),0), w."ReservedBalance" FROM v3."BusinessWallets" w
               UNION ALL SELECT 'CampaignReserve', p."Id",
                 coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."PromotionId"=p."Id" AND e."Account" IN ('CampaignUnallocatedReserve','CreatorAllocatedReserve')),0), p."ReservedBudget" FROM v3."Promotions" p
               UNION ALL SELECT 'CreatorBudgetReserve', a."Id",
@@ -27,6 +27,8 @@ public sealed class ReconciliationService(WeymelaDbContext db)
                 CASE WHEN a."Status" IN ('Completed','Cancelled') THEN 0 ELSE a."OriginalAllocation"-a."UsedAmount" END FROM v3."CreatorAllocations" a
               UNION ALL SELECT 'UgcReserve', u."Id",
                 coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."UgcOpportunityId"=u."Id" AND e."Account"='UgcAllocatedReserve'),0), u."ReservedFunding" FROM v3."UgcOpportunities" u
+              UNION ALL SELECT 'UgcCustomerOfferReserve', o."Id",
+                coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."UgcCustomerOfferId"=o."Id" AND e."Account"='UgcCustomerOfferReserve'),0), o."ReservedFunding" FROM v3."UgcCustomerOffers" o
               UNION ALL SELECT 'CreatorPayable', c."CreatorId",
                 coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."CreatorId"=c."CreatorId" AND e."Account"='CreatorPayable'),0), c."AvailableEarnings" FROM v3."CreatorEarningsAccounts" c
               UNION ALL SELECT 'CustomerCashbackPayable', c."CustomerId",

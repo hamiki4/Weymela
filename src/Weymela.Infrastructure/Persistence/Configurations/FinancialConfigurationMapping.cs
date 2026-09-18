@@ -20,6 +20,7 @@ internal sealed class FinancialConfigurationMapping : IEntityTypeConfiguration<F
             Mapping.Money(ugc.Property(x => x.MinimumCreatorPayment));
             ugc.Property(x => x.PlatformFeePercent).HasPrecision(9, 4);
             Mapping.Money(ugc.Property(x => x.MinimumUgcBudget), true);
+            ugc.Property(x => x.CustomerOfferPlatformSalePercent).HasPrecision(9, 4);
             ugc.Property(x => x.EffectiveFromUtc);
             ugc.Property(x => x.ConfigurationVersionId);
         });

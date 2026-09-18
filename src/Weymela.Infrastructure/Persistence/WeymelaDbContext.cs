@@ -21,6 +21,10 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<PromotionBudgetEntry> PromotionBudgetEntries => Set<PromotionBudgetEntry>();
     public DbSet<UgcReservation> UgcReservations => Set<UgcReservation>();
     public DbSet<UgcBudgetEntry> UgcBudgetEntries => Set<UgcBudgetEntry>();
+    public DbSet<UgcCustomerOffer> UgcCustomerOffers => Set<UgcCustomerOffer>();
+    public DbSet<UgcCustomerOfferSale> UgcCustomerOfferSales => Set<UgcCustomerOfferSale>();
+    public DbSet<UgcCustomerOfferReservation> UgcCustomerOfferReservations => Set<UgcCustomerOfferReservation>();
+    public DbSet<UgcCustomerOfferBudgetEntry> UgcCustomerOfferBudgetEntries => Set<UgcCustomerOfferBudgetEntry>();
     public DbSet<CreatorApplication> CreatorApplications => Set<CreatorApplication>();
     public DbSet<CreatorAllocation> CreatorAllocations => Set<CreatorAllocation>();
     public DbSet<PromotionViewVerification> PromotionViewVerifications => Set<PromotionViewVerification>();
@@ -116,7 +120,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     }
 
     private static bool IsImmutable(object entity) => entity is FinancialJournal or FinancialJournalLine or
-        WalletEntry or PromotionReservation or PromotionBudgetEntry or UgcReservation or UgcBudgetEntry or UgcRevision or StoredIdempotencyRecord or AuditEvent or
+        WalletEntry or PromotionReservation or PromotionBudgetEntry or UgcReservation or UgcBudgetEntry or UgcCustomerOfferReservation or UgcCustomerOfferBudgetEntry or UgcRevision or StoredIdempotencyRecord or AuditEvent or
         PricingSnapshot or FinancialConfigurationVersion or LegalDocumentVersion or LegalAcceptance or
-        CreatorEarningEntry or CustomerCashbackEntry or PlatformRevenueEntry or PlatformSettlement or VerifiedSale or PromotionViewVerification or ViewRewardReceipt;
+        CreatorEarningEntry or CustomerCashbackEntry or PlatformRevenueEntry or PlatformSettlement or VerifiedSale or UgcCustomerOfferSale or PromotionViewVerification or ViewRewardReceipt;
 }

@@ -83,6 +83,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var apiConnection = RuntimeConnection(database.ConnectionString, apiRole, apiPassword);
         var workerConnection = RuntimeConnection(database.ConnectionString, workerRole, workerPassword);
         var backupConnection = RuntimeConnection(database.ConnectionString, backupRole, backupPassword);
+        await AssertApiCanReadAuditEventsAsync(apiConnection);
         var account = await ExerciseApiFlowsAsync(apiConnection, adminUserId);
         var workerSeed = await SeedWorkerFlowAsync(database, account.CreatorId, account.CreatorUserId);
         await ExerciseWorkerFlowsAsync(workerConnection, workerSeed);
@@ -351,6 +352,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "DROP TABLE v3.\"AuthIdentifiers\"",
             "TRUNCATE TABLE v3.\"AuditEvents\"",
             "DELETE FROM v3.\"AuditEvents\"",
+            "UPDATE v3.\"AuditEvents\" SET \"Detail\"=\"Detail\"",
             "ALTER TABLE v3.\"AuthIdentifiers\" DISABLE TRIGGER ALL",
             "CREATE EXTENSION hstore",
             $"SET ROLE {QuoteIdentifier(workerRole)}",
@@ -370,6 +372,15 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             workerConnectionString,
             "SELECT * FROM v3.\"AuthIdentifiers\"",
             $"API role {apiRole} unexpectedly changed grants for {workerRole}");
+    }
+
+    private static async Task AssertApiCanReadAuditEventsAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM v3.\"AuditEvents\"";
+        Assert.True((long)(await command.ExecuteScalarAsync())! >= 0);
     }
 
     private static async Task AssertWorkerDenialsAsync(

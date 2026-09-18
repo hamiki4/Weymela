@@ -87,7 +87,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     public async Task Normal_profiles_cannot_access_new_admin_product_endpoints(string persona)
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login(persona);
-        foreach(var path in new[]{"/api/admin/promotions","/api/admin/ugc","/api/admin/accounts","/api/admin/financial-settings"})
+        foreach(var path in new[]{"/api/admin/home","/api/admin/audit","/api/admin/promotions","/api/admin/ugc","/api/admin/accounts","/api/admin/financial-settings"})
             Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync(path)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts",new{email="verified@example.com",role="OperationsAdmin"})).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/financial-settings",new{})).StatusCode);

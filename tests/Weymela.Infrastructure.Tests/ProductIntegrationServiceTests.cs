@@ -5,6 +5,7 @@ using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -143,9 +144,32 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
             x.UserId == seeded.UserId && x.RequestedRole == ActorRole.Creator)).Status);
 
         await service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,
+            "Creator", creator, null, "Mimi Creates", "CORRECTION_REQUESTED", "v2-creator-once"), default);
+        Assert.Equal(RoleEnrollmentStatus.Pending, (await db.RoleEnrollments.SingleAsync(x =>
+            x.UserId == seeded.UserId && x.RequestedRole == ActorRole.Creator)).Status);
+        Assert.Contains(await db.OutboxMessages.ToListAsync(), x => x.EventType == "CreatorProfileCorrectionRequested");
+
+        await service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,
             "Creator", creator, null, "Mimi Creates", "ACTIVE", "v2-creator-once"), default);
         Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == seeded.UserId
             && x.Role == ActorRole.Creator && x.SubjectId == creator && x.IsActive));
+
+        var business = Guid.NewGuid();
+        await service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,
+            "Business", business, business, "Mimi Studio", "PENDING", "v2-business-once"), default);
+        await service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,
+            "Business", business, business, "Mimi Studio", "CORRECTION_REQUESTED", "v2-business-once"), default);
+        await service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,
+            "Business", business, business, "Mimi Studio", "ACTIVE", "v2-business-once"), default);
+
+        var processor = new OutboxProcessor(db, new RuntimeOptions { WorkerBatchSize = 100, RecipientBatchSize = 100 },
+            new DisabledPushProvider(), clock);
+        for (var i = 0; i < 10 && await processor.ProcessAsync(default) > 0; i++) { }
+        foreach (var eventType in new[] { "CreatorProfileCorrectionRequested", "CreatorProfileApproved",
+                     "BusinessProfileCorrectionRequested", "BusinessProfileApproved" })
+            Assert.Single(await db.InAppNotifications.Where(x => x.UserId == seeded.UserId && x.EventType == eventType).ToListAsync());
+        var unread = await new NotificationService(db, clock).GetAsync(new(seeded.UserId, ActorRole.Customer, CustomerId: customer), default);
+        Assert.True(unread.UnreadCount >= 2);
     }
 
     [Fact]

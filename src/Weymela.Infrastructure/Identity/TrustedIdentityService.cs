@@ -67,10 +67,34 @@ public sealed class TrustedIdentityService(WeymelaDbContext db, IIdentityTokenVe
                 case ActorRole.Customer:
                     var u = await directory.CustomerCardAsync(membership.SubjectId, ct); name = u.DisplayName; publicId = u.PublicId; break;
                 case ActorRole.Cashier: name = "Cashier"; publicId = "Checkout"; break;
+                case ActorRole.PlatformAdmin:
+                case ActorRole.OperationsAdmin:
+                    name = await AdminDisplayName(userId, ct);
+                    publicId = membership.Role == ActorRole.PlatformAdmin ? "Platform Admin" : "Operations Admin";
+                    break;
             }
             profiles.Add(new(WorkspaceProfileKey(actor), actor, name, publicId, membership.CanCheckout));
         }
         return profiles;
+    }
+
+    private async Task<string> AdminDisplayName(Guid userId, CancellationToken ct)
+    {
+        var grantedName = await db.AdminGrants.AsNoTracking().Where(x => x.UserId == userId && x.IsActive)
+            .OrderByDescending(x => x.GrantedAtUtc).Select(x => x.DisplayName).FirstOrDefaultAsync(ct);
+        if (!string.IsNullOrWhiteSpace(grantedName)) return grantedName;
+        var profileName = await (from permission in db.CommercePermissions.AsNoTracking()
+            join profile in db.PublicWorkspaceProfiles.AsNoTracking()
+                on new { permission.SubjectId, permission.Role } equals new { profile.SubjectId, profile.Role }
+            where permission.UserId == userId && permission.IsActive
+                && (permission.Role == ActorRole.Customer || permission.Role == ActorRole.Creator)
+            orderby permission.Role == ActorRole.Customer ? 0 : 1
+            select profile.DisplayName).FirstOrDefaultAsync(ct);
+        if (!string.IsNullOrWhiteSpace(profileName)) return profileName;
+        var email = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == userId
+                && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null)
+            .Select(x => x.DeliveryAddress).FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(email) ? "Weymela Admin" : email.Split('@')[0];
     }
 
     public async Task<TrustedWorkspaceIdentity> SelectAsync(Guid userId, Guid bindingId, long bindingVersion,

@@ -14,5 +14,15 @@ internal sealed class FinancialConfigurationMapping : IEntityTypeConfiguration<F
         b.HasIndex(x => new { x.EffectiveFromUtc, x.Version });
         b.OwnsOne(x => x.ViewOnly, Mapping.Pricing);
         b.OwnsOne(x => x.ViewPlusCommission, Mapping.Pricing);
+        b.OwnsOne(x => x.Ugc, ugc =>
+        {
+            ugc.Ignore(x => x.IsValid);
+            Mapping.Money(ugc.Property(x => x.MinimumCreatorPayment));
+            ugc.Property(x => x.PlatformFeePercent).HasPrecision(9, 4);
+            Mapping.Money(ugc.Property(x => x.MinimumUgcBudget), true);
+            ugc.Property(x => x.EffectiveFromUtc);
+            ugc.Property(x => x.ConfigurationVersionId);
+        });
+        b.Navigation(x => x.Ugc).IsRequired(false);
     }
 }

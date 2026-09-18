@@ -35,7 +35,7 @@ public sealed class OperationalPolicyTests(PostgresFixture fixture)
         await new FinancialCommands(db,s.Clock).IncreaseCreatorAllocationAsync(new(s.Seed.Business,s.AllocationId,new Money(50),version,s.Clock.Now),"topup");
         await new OutboxProcessor(db,new RuntimeOptions { WorkerBatchSize=50 },new DisabledPushProvider(),s.Clock).ProcessAsync(default);
         var notice=await db.InAppNotifications.SingleAsync(x=>x.EventType=="CreatorBudgetIncreasedAudit");
-        Assert.Equal(s.Creator.UserId,notice.UserId); Assert.Equal("/creator/campaigns/"+s.AllocationId,notice.Route);
+        Assert.Equal(s.Creator.UserId,notice.UserId); Assert.Equal("/creator/promotions/"+s.AllocationId,notice.Route);
     }
     [Fact] public async Task Payout_eligibility_and_paid_events_target_only_the_beneficiary_and_reconcile_after_settlement()
     {

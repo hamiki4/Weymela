@@ -19,15 +19,20 @@ public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDire
             throw new ApplicationFailure(FailureKind.Forbidden,"This Business workspace is not available to you.");
     }
     private static void DemandAdmin(Actor actor)
-    { if(actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden,"Admin access is required."); }
+    { if(actor.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) throw new ApplicationFailure(FailureKind.Forbidden,"Admin access is required."); }
+    private static void DemandPlatformAdmin(Actor actor)
+    { if(actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden,"Platform Admin access is required."); }
     private Task DemandCreator(Actor actor, CancellationToken ct) => Access.EnsureCreatorAsync(actor, actor.CreatorId ?? Guid.Empty,ct);
-    internal static BusinessPrice BusinessPrice(PricingSnapshot p) => new(p.PromotionType.ToString(),p.ViewsPerReward,p.BusinessCharge.Amount,
+    internal static string PromotionTypeLabel(PromotionType value)=>value==PromotionType.ViewOnly?"View Only":"View & Sale";
+    internal static string PromotionStatusLabel(PromotionStatus value)=>value switch{PromotionStatus.Published=>"Open",PromotionStatus.BudgetExhausted=>"Ended",_=>value.ToString()};
+    internal static BusinessPrice BusinessPrice(PricingSnapshot p) => new(PromotionTypeLabel(p.PromotionType),p.ViewsPerReward,p.BusinessCharge.Amount,
         p.PromotionType == PromotionType.ViewPlusCommission ? SnapshotPricing.TotalSalePercent(p) : 0,p.MinimumPromotionBudget?.Amount);
-    internal static CreatorPrice CreatorPrice(PricingSnapshot p) => new(p.PromotionType.ToString(),p.ViewsPerReward,p.CreatorEarning.Amount,
+    internal static CreatorPrice CreatorPrice(PricingSnapshot p) => new(PromotionTypeLabel(p.PromotionType),p.ViewsPerReward,p.CreatorEarning.Amount,
         p.PromotionType == PromotionType.ViewPlusCommission ? p.CreatorCommissionPercent : 0);
     private async Task<CampaignRow> Row(Promotion p,CancellationToken ct) => new(p.Id,p.PublicPromotionId,p.BusinessId,
-        (await directory.BusinessCardAsync(p.BusinessId,ct)).DisplayName,p.Title,p.PromotionType.ToString(),p.TotalBudget.Amount,p.AllocatedBudget.Amount,
-        p.UnallocatedBudget.Amount,p.UsedBudget.Amount,p.RemainingBudget.Amount,p.Allocations.Count,p.StartDateUtc,p.EndDateUtc,p.Status.ToString(),p.Version);
+        (await directory.BusinessCardAsync(p.BusinessId,ct)).DisplayName,p.Title,PromotionTypeLabel(p.PromotionType),p.TotalBudget.Amount,p.AllocatedBudget.Amount,
+        p.UnallocatedBudget.Amount,p.UsedBudget.Amount,p.RemainingBudget.Amount,p.Allocations.Count,p.StartDateUtc,p.EndDateUtc,PromotionStatusLabel(p.Status),p.Version,
+        p.Slogan,p.Location,p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available)).ToArray());
     private async Task<IReadOnlyList<ActivityItem>> History(Guid? campaign,CancellationToken ct)
     {
         var query=db.AuditEvents.AsNoTracking();if(campaign is not null) query=query.Where(x=>x.PromotionId==campaign);
@@ -36,8 +41,8 @@ public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDire
     }
     internal static string EventLabel(string value) => value switch
     {
-        "PromotionCreated"=>"Campaign created", "PromotionFunded"=>"Campaign funded", "PromotionPublished"=>"Campaign published",
-        "PromotionActivated"=>"Campaign started", "PromotionCompleted"=>"Campaign completed", "CreatorApplied"=>"New Creator request",
+        "PromotionCreated"=>"Promotion created", "PromotionFunded"=>"Promotion funded", "PromotionPublished"=>"Promotion published",
+        "PromotionActivated"=>"Promotion started", "PromotionCompleted"=>"Promotion completed", "CreatorApplied"=>"New Promotion request",
         "CreatorApproved"=>"Creator approved", "CreatorRejected"=>"Creator request declined", "CreatorBudgetAssigned"=>"Creator Budget assigned",
         "CreatorBudgetIncreased"=>"Creator Budget increased", "CreatorParticipationCompleted"=>"Creator participation completed",
         "BusinessWalletCredited"=>"Funds added", "FinancialConfigurationChanged"=>"Financial settings updated", "ViewReward" or "ViewRewardEarned"=>"View Reward earned",
@@ -46,9 +51,12 @@ public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDire
         "CustomerPayoutEligible"=>"Customer eligible for payout", "CreatorBudgetExhausted"=>"Creator Budget needs funding",
         "OfferQrIssued"=>"Offer QR created", "CreatorParticipationActivated"=>"Creator content is live", "VerifiedViewsRecorded"=>"Views verified",
         "VerifiedViewAnomaly"=>"View verification needs review", "ParticipationPaused"=>"Creator participation paused",
-        "ParticipationResumed"=>"Creator participation resumed", "CreatorCommissionEarned"=>"Sale Commission earned",
-        "CustomerCashbackEarned"=>"Customer cashback earned", "PlatformRevenueEarned"=>"Platform revenue earned", _=>"Account activity recorded"
+        "ParticipationResumed"=>"Creator participation resumed", "CreatorCommissionEarned"=>"Sale Earnings recorded",
+        "CustomerCashbackEarned"=>"Customer cashback earned", "PlatformRevenueEarned"=>"Platform revenue earned",
+        "UgcCreated"=>"UGC created", "UgcPublished"=>"UGC published", "UgcRequestReceived"=>"New UGC request",
+        "UgcRequestApproved"=>"UGC request approved", "UgcContentSubmitted"=>"UGC content submitted",
+        "UgcChangesRequested"=>"UGC changes requested", "UgcContentApproved"=>"UGC content approved", _=>"Account activity recorded"
     };
-    private async Task<Promotion> Campaign(Guid id,CancellationToken ct) => await db.Promotions.AsNoTracking().Include(x=>x.Allocations).SingleOrDefaultAsync(x=>x.Id==id,ct)
-        ??throw new ApplicationFailure(FailureKind.NotFound,"Campaign not found.");
+    private async Task<Promotion> Campaign(Guid id,CancellationToken ct) => await db.Promotions.AsNoTracking().Include(x=>x.Allocations).Include(x=>x.Platforms).SingleOrDefaultAsync(x=>x.Id==id,ct)
+        ??throw new ApplicationFailure(FailureKind.NotFound,"Promotion not found.");
 }

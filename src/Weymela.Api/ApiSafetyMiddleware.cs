@@ -81,6 +81,6 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
     }
     private static async Task Error(HttpContext c,int status,string code,string message)
     {if(c.Response.HasStarted)return;c.Response.StatusCode=status;await c.Response.WriteAsJsonAsync(new{code,message});}
-    private static string UserLanguage(string message)=>DomainWords().Replace(message,m=>m.Value.ToLowerInvariant() switch{"promotion"=>"Campaign","promotions"=>"Campaigns","allocation"=>"Creator Budget","allocations"=>"Creator Budgets",_=>m.Value});
-    [GeneratedRegex(@"\b(promotions?|allocations?)\b",RegexOptions.IgnoreCase)] private static partial Regex DomainWords();
+    private static string UserLanguage(string message)=>DomainWords().Replace(message,m=>m.Value.ToLowerInvariant() switch{"allocation"=>"Creator Budget","allocations"=>"Creator Budgets",_=>m.Value});
+    [GeneratedRegex(@"\b(allocations?)\b",RegexOptions.IgnoreCase)] private static partial Regex DomainWords();
 }

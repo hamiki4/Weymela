@@ -23,10 +23,14 @@ public sealed class EfUnitOfWork(WeymelaDbContext db, IsolationLevel isolation =
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            // PostgreSQL may already have completed the transaction after a deferred
+            // constraint fails during COMMIT. Never replace that useful invariant
+            // exception with Npgsql's "transaction has completed" rollback error.
+            try { await transaction.RollbackAsync(CancellationToken.None); }
+            catch (InvalidOperationException) { }
             db.ChangeTracker.Clear(); // never reuse mutated entities after a failed unit of work
             if (ex is DbUpdateConcurrencyException || IsSerializationConflict(ex))
-                throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "Concurrent financial change detected; reload and resubmit explicitly.");
+                throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "Concurrent financial change detected; reload and resubmit explicitly.", ex);
             if (ex is PostgresException { SqlState: "23514" or "23503" })
                 throw new ApplicationFailure(FailureKind.Validation, "The transaction violates a deferred financial invariant.", ex);
             if (ex is DbUpdateException { InnerException: PostgresException pg })

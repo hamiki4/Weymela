@@ -78,7 +78,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
     public Task<Guid> SettlePlatformAsync(Actor actor, Money amount, string reference, string key, CancellationToken ct = default) =>
         new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
-            DemandAdmin(actor);
+            DemandPlatformAdmin(actor);
             if (amount.Amount <= 0 || string.IsNullOrWhiteSpace(reference) || reference.Length > 200)
                 throw new ApplicationFailure(FailureKind.Validation, "A positive settlement amount and confirmation reference are required.");
             var op = new FinancialOperation(db); var fp = RequestFingerprint.Create(RequestFingerprint.Amount(amount), reference.Trim());
@@ -100,11 +100,13 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
 
     internal static void DemandAdmin(Actor actor)
     {
-        if (actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin permission is required.");
+        if (actor.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) throw new ApplicationFailure(FailureKind.Forbidden, "Admin permission is required.");
     }
+    internal static void DemandPlatformAdmin(Actor actor)
+    { if (actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin permission is required."); }
     private static void DemandOwnerOrAdmin(Actor actor, PayoutBeneficiary kind, Guid subject)
     {
-        if (actor.Role == ActorRole.PlatformAdmin) return;
+        if (actor.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin) return;
         if ((kind == PayoutBeneficiary.Creator && actor.Role == ActorRole.Creator && actor.CreatorId == subject) ||
             (kind == PayoutBeneficiary.Customer && actor.Role == ActorRole.Customer && actor.CustomerId == subject)) return;
         throw new ApplicationFailure(FailureKind.Forbidden, "Payout account belongs to another role or user.");
@@ -112,7 +114,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
     private async Task DemandBeneficiaryAsync(Actor actor, PayoutBeneficiary kind, Guid subject, CancellationToken ct)
     {
         DemandOwnerOrAdmin(actor, kind, subject);
-        if (actor.Role == ActorRole.PlatformAdmin) return;
+        if (actor.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin) return;
         var access = new CommerceAccessPolicy(db);
         if (kind == PayoutBeneficiary.Creator) await access.EnsureCreatorAsync(actor, subject, ct);
         else await access.EnsureCustomerAsync(actor, ct);

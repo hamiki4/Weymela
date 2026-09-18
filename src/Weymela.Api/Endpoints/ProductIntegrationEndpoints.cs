@@ -87,7 +87,7 @@ internal static class ProductIntegrationEndpoints
         ActorRole.Business => actor.BusinessId ?? Guid.Empty,
         ActorRole.Creator => actor.CreatorId ?? Guid.Empty,
         ActorRole.Customer => actor.CustomerId ?? Guid.Empty,
-        ActorRole.PlatformAdmin => actor.UserId,
+        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => actor.UserId,
         _ => Guid.Empty
     };
 }

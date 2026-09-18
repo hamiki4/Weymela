@@ -31,7 +31,9 @@ public sealed record ProductAuthorityRequest(Guid UserId, Guid IdentityBindingId
 public sealed record ProductAuthorityResult(bool Active, string Status, long IdentityBindingVersion);
 public sealed record ProductProfileSynchronizationRequest(Guid UserId, Guid IdentityBindingId,
     long IdentityBindingVersion, string Role, Guid ExternalSubjectId, Guid? BusinessId, string DisplayName,
-    string Lifecycle, string IdempotencyKey);
+    string Lifecycle, string IdempotencyKey, IReadOnlyList<ProductCreatorSocialProfileSynchronization>? SocialProfiles = null);
+public sealed record ProductCreatorSocialProfileSynchronization(string Platform, string ProfileUrl, long AudienceCount,
+    string VerificationStatus = "Unverified", long? VerifiedAudience = null);
 public sealed record ProductProfileSynchronizationResult(Guid V3ProfileSubjectId, string Lifecycle, bool Created);
 
 public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegrationOptions options, TimeProvider clock)
@@ -82,7 +84,7 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
             var permission = await db.CommercePermissions.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.UserId == request.UserId && x.Role == request.Role && x.SubjectId == subject && x.IsActive, ct);
             if (permission is null || request.Role == ActorRole.Business && permission.BusinessId != subject
-                || request.Role == ActorRole.PlatformAdmin && subject != request.UserId)
+                || (request.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin) && subject != request.UserId)
             {
                 Audit("ProductHandoffProfileRejected", request.UserId, request.CorrelationId,
                     $"role={request.Role};purpose={purpose}", now);
@@ -179,10 +181,17 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
             var displayName = row.ProfileSubjectId is Guid profileId
                 ? await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.SubjectId == profileId
                     && x.Role == row.Role).Select(x => x.DisplayName).SingleOrDefaultAsync(ct) ?? "Weymela profile"
-                : row.Role == ActorRole.PlatformAdmin ? "Weymela Admin" : "Account setup";
+                : row.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin
+                    ? await db.AdminGrants.AsNoTracking().Where(x => x.UserId == row.UserId && x.IsActive)
+                        .OrderByDescending(x => x.GrantedAtUtc).Select(x => x.DisplayName).FirstOrDefaultAsync(ct) ?? "Weymela Admin"
+                    : "Account setup";
             var accountEmail = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == row.UserId
                     && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null)
                 .Select(x => x.DeliveryAddress!).SingleOrDefaultAsync(ct) ?? throw Denied();
+            if (row.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin && displayName == "Weymela Admin")
+                displayName = await db.CustomerProfiles.AsNoTracking().Where(x => x.UserId == row.UserId)
+                    .Select(x => x.PreferredName).SingleOrDefaultAsync(ct)
+                    ?? accountEmail.Split('@')[0].Replace('.', ' ').Replace('_', ' ');
             var accountPhone = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == row.UserId
                     && x.Kind == "Phone" && x.DeliveryAddress != null)
                 .Select(x => x.DeliveryAddress).SingleOrDefaultAsync(ct);
@@ -250,13 +259,16 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
             ?? throw Denied();
         _ = binding;
         var lifecycle = request.Lifecycle.Trim().ToUpperInvariant();
-        if (lifecycle is not ("PENDING" or "ACTIVE" or "REJECTED"))
+        if (lifecycle is not ("PENDING" or "ACTIVE" or "REJECTED" or "CORRECTION_REQUESTED"))
             throw new ApplicationFailure(FailureKind.Validation, "The product profile lifecycle is invalid.");
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var current = await db.CommercePermissions.SingleOrDefaultAsync(x => x.UserId == request.UserId
             && x.Role == role && x.SubjectId == request.ExternalSubjectId && x.IsActive, ct);
         if (current is not null)
         {
+            if (role == ActorRole.Creator && request.SocialProfiles is not null)
+                await SynchronizeCreatorSocialProfilesAsync(request.ExternalSubjectId, request.SocialProfiles, clock.GetUtcNow().UtcDateTime, ct);
+            await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return new(current.SubjectId, "ACTIVE", false);
         }
@@ -266,6 +278,9 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
                 && x.Role == role && x.IsActive, ct);
             if (other is not null)
             {
+                if (role == ActorRole.Creator && request.SocialProfiles is not null)
+                    await SynchronizeCreatorSocialProfilesAsync(other.SubjectId, request.SocialProfiles, clock.GetUtcNow().UtcDateTime, ct);
+                await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
                 return new(other.SubjectId, "ACTIVE", false);
             }
@@ -332,11 +347,89 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
             enrollment.ReviewedAtUtc = now;
             enrollment.DecisionReason = "Rejected by the integrated product lifecycle.";
         }
+        else if (lifecycle == "CORRECTION_REQUESTED")
+        {
+            enrollment.Status = RoleEnrollmentStatus.Pending;
+            enrollment.ReviewedAtUtc = now;
+            enrollment.DecisionReason = "Corrections requested by the integrated product lifecycle.";
+        }
+        if (role == ActorRole.Creator && request.SocialProfiles is not null)
+            await SynchronizeCreatorSocialProfilesAsync(request.ExternalSubjectId, request.SocialProfiles, now, ct);
+        if (lifecycle is "ACTIVE" or "REJECTED" or "CORRECTION_REQUESTED")
+            db.OutboxMessages.Add(new OutboxMessage
+            {
+                EventType = role == ActorRole.Creator
+                    ? lifecycle == "ACTIVE" ? "CreatorProfileApproved" : lifecycle == "CORRECTION_REQUESTED" ? "CreatorProfileCorrectionRequested" : "CreatorProfileRejected"
+                    : role == ActorRole.Business
+                        ? lifecycle == "ACTIVE" ? "BusinessProfileApproved" : lifecycle == "CORRECTION_REQUESTED" ? "BusinessProfileCorrectionRequested" : "BusinessProfileRejected"
+                        : "CustomerProfileActivated",
+                Payload = JsonSerializer.Serialize(new { request.UserId, ProfileSubjectId = request.ExternalSubjectId, Role = role.ToString(), Lifecycle = lifecycle }),
+                OccurredAtUtc = now
+            });
         Audit("ProductProfileSynchronized", request.UserId, Guid.NewGuid(),
             $"role={role};lifecycle={lifecycle};externalSubject={request.ExternalSubjectId:D}", now);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return new(request.ExternalSubjectId, lifecycle, created);
+    }
+
+    private async Task SynchronizeCreatorSocialProfilesAsync(Guid creatorId,
+        IReadOnlyList<ProductCreatorSocialProfileSynchronization> input, DateTime now, CancellationToken ct)
+    {
+        if (input.Count == 0 || input.Count > 4)
+            throw new ApplicationFailure(FailureKind.Validation, "At least one supported Creator social profile is required.");
+        var normalized = new List<(CreatorPlatform Platform, string Url, long Audience, string Status, long? Verified)>();
+        foreach (var row in input)
+        {
+            if (!Enum.TryParse<CreatorPlatform>(row.Platform, true, out var platform) || !Enum.IsDefined(platform)
+                || row.AudienceCount < 0 || row.VerifiedAudience < 0)
+                throw new ApplicationFailure(FailureKind.Validation, "Creator social profile data is invalid.");
+            normalized.Add((platform, SocialUrl(platform, row.ProfileUrl), row.AudienceCount,
+                string.IsNullOrWhiteSpace(row.VerificationStatus) ? "Unverified" : row.VerificationStatus.Trim(), row.VerifiedAudience));
+        }
+        if (normalized.GroupBy(x => x.Platform).Any(x => x.Count() > 1))
+            throw new ApplicationFailure(FailureKind.Validation, "Each Creator social platform may be registered once.");
+        var existing = await db.CreatorSocialProfiles.Where(x => x.CreatorId == creatorId).ToListAsync(ct);
+        foreach (var row in existing) row.IsActive = false;
+        foreach (var social in normalized)
+        {
+            var row = existing.SingleOrDefault(x => x.Platform == social.Platform);
+            if (row is null)
+            {
+                db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord
+                {
+                    CreatorId = creatorId, Platform = social.Platform, ProfileUrl = social.Url,
+                    SelfReportedAudience = social.Audience, VerificationStatus = social.Status,
+                    VerifiedAudience = social.Verified, IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now
+                });
+            }
+            else
+            {
+                row.ProfileUrl = social.Url; row.SelfReportedAudience = social.Audience;
+                row.VerificationStatus = social.Status; row.VerifiedAudience = social.Verified;
+                row.IsActive = true; row.UpdatedAtUtc = now;
+            }
+        }
+    }
+
+    private static string SocialUrl(CreatorPlatform platform, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 1000
+            || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo))
+            throw new ApplicationFailure(FailureKind.Validation, "Creator social profile URLs must use secure HTTPS links.");
+        var host = uri.IdnHost.ToLowerInvariant();
+        if (host.StartsWith("www.", StringComparison.Ordinal)) host = host[4..];
+        var allowed = platform switch
+        {
+            CreatorPlatform.TikTok => host is "tiktok.com" or "m.tiktok.com",
+            CreatorPlatform.Instagram => host == "instagram.com",
+            CreatorPlatform.YouTube => host is "youtube.com" or "m.youtube.com" or "youtu.be",
+            CreatorPlatform.Facebook => host is "facebook.com" or "m.facebook.com" or "fb.com",
+            _ => false
+        };
+        if (!allowed) throw new ApplicationFailure(FailureKind.Validation, "The social profile URL does not match the selected platform.");
+        return uri.AbsoluteUri;
     }
 
     private void Audit(string type, Guid actor, Guid correlation, string detail, DateTime now) =>

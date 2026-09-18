@@ -10,8 +10,17 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<BusinessWallet> BusinessWallets => Set<BusinessWallet>();
     public DbSet<WalletEntry> WalletEntries => Set<WalletEntry>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
+    public DbSet<PromotionPlatform> PromotionPlatforms => Set<PromotionPlatform>();
+    public DbSet<UgcOpportunity> UgcOpportunities => Set<UgcOpportunity>();
+    public DbSet<UgcPlatformRequirement> UgcPlatformRequirements => Set<UgcPlatformRequirement>();
+    public DbSet<UgcRevision> UgcRevisions => Set<UgcRevision>();
+    public DbSet<UgcCreatorRequest> UgcCreatorRequests => Set<UgcCreatorRequest>();
+    public DbSet<UgcAssignment> UgcAssignments => Set<UgcAssignment>();
+    public DbSet<UgcSubmission> UgcSubmissions => Set<UgcSubmission>();
     public DbSet<PromotionReservation> PromotionReservations => Set<PromotionReservation>();
     public DbSet<PromotionBudgetEntry> PromotionBudgetEntries => Set<PromotionBudgetEntry>();
+    public DbSet<UgcReservation> UgcReservations => Set<UgcReservation>();
+    public DbSet<UgcBudgetEntry> UgcBudgetEntries => Set<UgcBudgetEntry>();
     public DbSet<CreatorApplication> CreatorApplications => Set<CreatorApplication>();
     public DbSet<CreatorAllocation> CreatorAllocations => Set<CreatorAllocation>();
     public DbSet<PromotionViewVerification> PromotionViewVerifications => Set<PromotionViewVerification>();
@@ -49,6 +58,8 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<DeviceSessionRecord> DeviceSessions => Set<DeviceSessionRecord>();
     public DbSet<RoleEnrollmentRecord> RoleEnrollments => Set<RoleEnrollmentRecord>();
     public DbSet<ProductHandoffTransaction> ProductHandoffTransactions => Set<ProductHandoffTransaction>();
+    public DbSet<CreatorSocialProfileRecord> CreatorSocialProfiles => Set<CreatorSocialProfileRecord>();
+    public DbSet<AdminGrantRecord> AdminGrants => Set<AdminGrantRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -105,7 +116,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     }
 
     private static bool IsImmutable(object entity) => entity is FinancialJournal or FinancialJournalLine or
-        WalletEntry or PromotionReservation or PromotionBudgetEntry or StoredIdempotencyRecord or AuditEvent or
+        WalletEntry or PromotionReservation or PromotionBudgetEntry or UgcReservation or UgcBudgetEntry or UgcRevision or StoredIdempotencyRecord or AuditEvent or
         PricingSnapshot or FinancialConfigurationVersion or LegalDocumentVersion or LegalAcceptance or
         CreatorEarningEntry or CustomerCashbackEntry or PlatformRevenueEntry or PlatformSettlement or VerifiedSale or PromotionViewVerification or ViewRewardReceipt;
 }

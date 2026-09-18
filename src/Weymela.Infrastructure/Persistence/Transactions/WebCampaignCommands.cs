@@ -10,7 +10,8 @@ public sealed partial class FinancialCommands
     public Task<Guid> CreateCampaignOnceAsync(CreatePromotionCommand c, string key, CancellationToken ct = default) => Uow.ExecuteAsync(async token =>
     {
         DemandBusiness(c.Actor); var fp = RequestFingerprint.Create(c.Actor.BusinessId.ToString()!, c.Title, c.Description, c.Type.ToString(), RequestFingerprint.Amount(c.TotalBudget),
-            c.Eligibility.Category ?? "", c.Eligibility.Market ?? "", c.Eligibility.MinimumVerifiedFollowers?.ToString() ?? "", c.Eligibility.Requirements ?? "", c.StartDateUtc.ToString("O"), c.EndDateUtc.ToString("O"));
+            c.Eligibility.Category ?? "", c.Eligibility.Market ?? "", c.Eligibility.MinimumVerifiedFollowers?.ToString() ?? "", c.Eligibility.Requirements ?? "", c.StartDateUtc.ToString("O"), c.EndDateUtc.ToString("O"),
+            c.Slogan??"",c.Location??"",c.ResourcesJson??"",string.Join(',',c.Platforms?.OrderBy(x=>x.Platform).Select(x=>$"{x.Platform}:{x.Capacity}")??[]));
         var prior = await Replay(c.Actor, "CreateCampaign", key, fp, token); if (prior is not null) return prior.Value;
         var p = await Promotions.CreateAsync(c, token);
         await Idempotency.SaveAsync(new(key, "CreateCampaign", c.Actor.UserId, fp, p.Id, c.Now), token);
@@ -21,13 +22,13 @@ public sealed partial class FinancialCommands
     {
         DemandBusiness(c.Actor); var op = activateOnly ? "StartCampaign" : "PublishCampaign"; var fp = RequestFingerprint.Create(c.PromotionId.ToString());
         var prior = await Replay(c.Actor, op, key, fp, token); if (prior is not null) return prior.Value;
-        var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Campaign not found.");
-        if (p.BusinessId != c.Actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Campaign belongs to another Business.");
-        if (c.Now >= p.EndDateUtc) throw new ApplicationFailure(FailureKind.Validation, "This Campaign's end date has passed.");
+        var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
+        if (p.BusinessId != c.Actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Promotion belongs to another Business.");
+        if (c.Now >= p.EndDateUtc) throw new ApplicationFailure(FailureKind.Validation, "This Promotion's end date has passed.");
         await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Business,
             [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
         if (!activateOnly) { await Promotions.PublishAsync(c, token); Audit(c.Actor, "PromotionPublished", c.Now, Guid.NewGuid(), p.Id); }
-        if (activateOnly && c.Now < p.StartDateUtc) throw new ApplicationFailure(FailureKind.Validation, "This Campaign cannot start before its start date.");
+        if (activateOnly && c.Now < p.StartDateUtc) throw new ApplicationFailure(FailureKind.Validation, "This Promotion cannot start before its start date.");
         if (c.Now >= p.StartDateUtc)
         {
             // Both changes belong to this same loaded aggregate/version and commit together.
@@ -43,8 +44,8 @@ public sealed partial class FinancialCommands
             DemandBusiness(actor); var fp = RequestFingerprint.Create(applicationId.ToString(), RequestFingerprint.Amount(amount));
             var prior = await Replay(actor, "ApproveAndSetBudget", key, fp, token); if (prior is not null) return prior.Value;
             var app = await db.CreatorApplications.SingleOrDefaultAsync(x => x.Id == applicationId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Creator request not found.");
-            var p = await new PromotionRepository(db).GetAsync(app.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Campaign not found.");
-            if (p.BusinessId != actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Campaign belongs to another Business.");
+            var p = await new PromotionRepository(db).GetAsync(app.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
+            if (p.BusinessId != actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Promotion belongs to another Business.");
             await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
                 [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             if (app.Status == CreatorApplicationStatus.Pending) app.Approve(actor.UserId, now);
@@ -60,13 +61,15 @@ public sealed partial class FinancialCommands
     public Task<Guid> JoinCampaignOnceAsync(ApplyToPromotionCommand c, string key, CancellationToken ct = default) => Uow.ExecuteAsync(async token =>
     {
         if (c.Actor.Role != ActorRole.Creator || c.Actor.CreatorId is null) throw new ApplicationFailure(FailureKind.Forbidden, "Only Creators can request to join.");
-        var fp = RequestFingerprint.Create(c.PromotionId.ToString(), c.Message ?? "", c.ContentConcept ?? "");
+        var fp = RequestFingerprint.Create(c.PromotionId.ToString(), c.Message ?? "", c.ContentConcept ?? "",c.Platform?.ToString()??"",c.CreatorSocialProfileId?.ToString()??"");
         var prior = await Replay(c.Actor, "JoinCampaign", key, fp, token); if (prior is not null) return prior.Value;
-        var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Campaign not found.");
+        var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
         if (p.ReservedBudget.Amount <= 0 || p.UnallocatedBudget.Amount <= 0 || p.EndDateUtc <= c.Now || !new CreatorEligibility().IsEligible(c.Actor.CreatorId.Value, p.Eligibility, c.Profile))
-            throw new ApplicationFailure(FailureKind.Validation, "This Campaign does not match your current verified profile or has no available Creator Budget.");
+            throw new ApplicationFailure(FailureKind.Validation, "This Promotion does not match your current profile or has no available Creator capacity.");
         if (!await db.CommercePermissions.AnyAsync(x => x.SubjectId == p.BusinessId && x.Role == ActorRole.Business && x.IsActive, token))
-            throw new ApplicationFailure(FailureKind.Validation, "This Campaign is not accepting requests.");
+            throw new ApplicationFailure(FailureKind.Validation, "This Promotion is not accepting requests.");
+        if(c.Platform is {} platform && (c.CreatorSocialProfileId is not {} profileId || !await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==c.Actor.CreatorId&&x.Platform==platform&&x.IsActive,token)))
+            throw new ApplicationFailure(FailureKind.Forbidden,"The selected Creator social profile is not available.");
         await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Creator,
             [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
         var app = await Participation.ApplyAsync(c, token);

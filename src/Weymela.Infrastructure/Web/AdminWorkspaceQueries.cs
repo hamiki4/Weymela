@@ -28,7 +28,8 @@ public sealed partial class WorkspaceQueries
         foreach(var a in details.Creators)creators.Add(new(await directory.CreatorCardAsync(a.CreatorId,ct),a.StartingBudget.Amount,a.Used.Amount,
             a.ParticipationStatus is "Completed" or "Cancelled"?0:a.Remaining.Amount,a.BaselineViews,a.LatestVerifiedViews,a.CampaignVerifiedViews,a.RewardedViews,
             a.ViewEarnings.Amount,a.VerifiedSales,a.SaleCommission.Amount,a.CustomerCashback.Amount,a.PlatformRevenue.Amount,a.ParticipationStatus));
-        return new(await Row(p,ct),creators,creators.Sum(x=>x.ViewEarnings+x.SaleCommission),creators.Sum(x=>x.CustomerCashback),creators.Sum(x=>x.PlatformRevenue),await History(id,ct));
+        var version=await db.FinancialConfigurationVersions.AsNoTracking().Where(x=>x.Id==p.PricingSnapshot.ConfigurationVersionId).Select(x=>x.Version).SingleAsync(ct);
+        return new(await Row(p,ct),creators,creators.Sum(x=>x.ViewEarnings+x.SaleCommission),creators.Sum(x=>x.CustomerCashback),creators.Sum(x=>x.PlatformRevenue),await History(id,ct),version);
     }
     public async Task<IReadOnlyList<BusinessOversight>> BusinessesAsync(Actor actor,CancellationToken ct)
     {
@@ -53,13 +54,15 @@ public sealed partial class WorkspaceQueries
     }
     public async Task<FinancialSettingsWorkspace> SettingsAsync(Actor actor,CancellationToken ct)
     {
-        DemandAdmin(actor);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
+        DemandPlatformAdmin(actor);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
         ViewPriceInput Input(PricingSnapshot p)=>new(p.ViewsPerReward,p.BusinessCharge.Amount,p.CreatorEarning.Amount,p.PlatformEarning.Amount,p.MinimumPromotionBudget?.Amount);
         var saved=await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).ToListAsync(ct);
-        FinancialSettingsInput Settings(FinancialConfigurationVersion x)=>new(Input(x.ViewOnly),Input(x.ViewPlusCommission),x.ViewPlusCommission.CreatorCommissionPercent,x.ViewPlusCommission.CustomerCashbackPercent,x.ViewPlusCommission.PlatformPercent,x.CreatorPayoutThreshold.Amount,x.CustomerPayoutThreshold.Amount,x.EffectiveFromUtc);
+        FinancialSettingsInput Settings(FinancialConfigurationVersion x)=>new(Input(x.ViewOnly),Input(x.ViewPlusCommission),x.ViewPlusCommission.CreatorCommissionPercent,x.ViewPlusCommission.CustomerCashbackPercent,x.ViewPlusCommission.PlatformPercent,x.CreatorPayoutThreshold.Amount,x.CustomerPayoutThreshold.Amount,x.EffectiveFromUtc,
+            x.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount) : null);
         var versions=saved.Select(x=>new FinancialVersionInfo(x.Id,x.Version,x.EffectiveFromUtc,x.ChangedBy,Settings(x))).ToArray();
         return new(new(Input(v.ViewOnly),Input(v.ViewPlusCommission),v.ViewPlusCommission.CreatorCommissionPercent,v.ViewPlusCommission.CustomerCashbackPercent,
-            v.ViewPlusCommission.PlatformPercent,v.CreatorPayoutThreshold.Amount,v.CustomerPayoutThreshold.Amount,v.EffectiveFromUtc),v.Version,versions);
+            v.ViewPlusCommission.PlatformPercent,v.CreatorPayoutThreshold.Amount,v.CustomerPayoutThreshold.Amount,v.EffectiveFromUtc,
+            v.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount) : null),v.Version,versions);
     }
     public async Task<PayoutWorkspace> PayoutsAsync(Actor actor,CancellationToken ct)
     {
@@ -97,7 +100,7 @@ public sealed partial class WorkspaceQueries
         foreach(var m in credits.OrderBy(x=>x.At)) { var before=balance;balance+=m.Amount;if(balance<threshold)since=null;else if(before<threshold)since=m.At>effective?m.At:effective; }
         return since;
     }
-    public Task<IReadOnlyList<ActivityItem>> AuditAsync(Actor actor,CancellationToken ct) { DemandAdmin(actor);return History(null,ct); }
+    public Task<IReadOnlyList<ActivityItem>> AuditAsync(Actor actor,CancellationToken ct) { DemandPlatformAdmin(actor);return History(null,ct); }
     public async Task<IReadOnlyList<ActivityItem>> NotificationsAsync(Actor actor,CancellationToken ct)
     {
         DemandAdmin(actor);

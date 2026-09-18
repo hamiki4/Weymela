@@ -13,7 +13,7 @@ public sealed partial class WorkspaceQueries
         await DemandBusiness(actor,ct);
         var wallet=await db.BusinessWallets.AsNoTracking().SingleAsync(x=>x.BusinessId==actor.BusinessId,ct);
         var history=(await db.WalletEntries.AsNoTracking().Where(x=>x.BusinessId==actor.BusinessId).OrderByDescending(x=>x.CreatedAtUtc).Take(100).ToListAsync(ct))
-            .Select(x=>new WalletMovement(x.Id,x.Movement switch {"Deposit"=>"Funds added","Reserve"=>"Campaign funded","Consumed"=>"Campaign activity",_=>"Funds movement"},x.Amount.Amount,x.CreatedAtUtc,x.JournalId.ToString())).ToArray();
+            .Select(x=>new WalletMovement(x.Id,x.Movement switch {"Deposit"=>"Funds added","Reserve"=>"Promotion funded","Consumed"=>"Promotion activity","UgcReserve"=>"UGC funded","UgcConsumed"=>"UGC approved","UgcReleased"=>"UGC funds released",_=>"Funds movement"},x.Amount.Amount,x.CreatedAtUtc,x.JournalId.ToString())).ToArray();
         return new(wallet.TotalBalance.Amount,wallet.AvailableBalance.Amount,wallet.ReservedBalance.Amount,wallet.Version,history);
     }
     public async Task<BusinessHome> BusinessHomeAsync(Actor actor,CancellationToken ct)
@@ -30,17 +30,23 @@ public sealed partial class WorkspaceQueries
         await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
         return new([BusinessPrice(v.ViewOnly),BusinessPrice(v.ViewPlusCommission)],v.EffectiveFromUtc);
     }
+    public async Task<UgcPricing> UgcPricingAsync(Actor actor,CancellationToken ct)
+    {
+        await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
+        var ugc=v.Ugc??throw new InvalidOperationException("The effective financial configuration does not include UGC settings.");
+        return new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,v.Version,v.EffectiveFromUtc);
+    }
     public async Task<IReadOnlyList<CampaignRow>> BusinessCampaignsAsync(Actor actor,CancellationToken ct)
     {
-        await DemandBusiness(actor,ct);var list=await db.Promotions.AsNoTracking().Include(x=>x.Allocations).Where(x=>x.BusinessId==actor.BusinessId).OrderByDescending(x=>x.CreatedAtUtc).ToListAsync(ct);
+        await DemandBusiness(actor,ct);var list=await db.Promotions.AsNoTracking().Include(x=>x.Allocations).Include(x=>x.Platforms).Where(x=>x.BusinessId==actor.BusinessId).OrderByDescending(x=>x.CreatedAtUtc).ToListAsync(ct);
         var result=new List<CampaignRow>();foreach(var p in list) result.Add(await Row(p,ct));return result;
     }
     public async Task<BusinessCampaign> BusinessCampaignAsync(Actor actor,Guid id,CancellationToken ct)
     {
         await DemandBusiness(actor,ct);var p=await Campaign(id,ct);
-        if(p.BusinessId!=actor.BusinessId)throw new ApplicationFailure(FailureKind.Forbidden,"This Campaign belongs to another Business.");
+        if(p.BusinessId!=actor.BusinessId)throw new ApplicationFailure(FailureKind.Forbidden,"This Promotion belongs to another Business.");
         var applications=await db.CreatorApplications.AsNoTracking().Where(x=>x.PromotionId==id).OrderBy(x=>x.AppliedAtUtc).ToListAsync(ct);
-        var applicants=new List<ApplicantCard>();foreach(var a in applications)applicants.Add(new(a.Id,await directory.CreatorCardAsync(a.CreatorId,ct),a.Message,a.ContentConcept,a.Status.ToString(),a.AppliedAtUtc));
+        var applicants=new List<ApplicantCard>();foreach(var a in applications)applicants.Add(new(a.Id,await directory.CreatorCardAsync(a.CreatorId,ct),a.Message,a.ContentConcept,a.Status.ToString(),a.AppliedAtUtc,a.Platform?.ToString()));
         var creators=new List<CreatorBudgetCard>();
         foreach(var a in p.Allocations)
         {

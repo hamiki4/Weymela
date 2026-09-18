@@ -24,7 +24,7 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
             var fp = RequestFingerprint.Create(c.AllocationId.ToString(), c.Provider, c.ExternalContentId);
             var replay = await op.Replay(c.Actor, "GoLive", c.IdempotencyKey, fp, token);
             if (replay is not null) return Guid.Parse(replay);
-            var p = await new PromotionRepository(db).GetAsync(allocation.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Campaign not found.");
+            var p = await new PromotionRepository(db).GetAsync(allocation.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
             var a = p.Allocations.Single(x => x.Id == c.AllocationId);
             await access.EnsureCreatorAsync(c.Actor, a.CreatorId, token);
             await access.EnsureBusinessAsync(p.BusinessId, token);
@@ -123,7 +123,7 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
     internal static void EnsureCampaignActive(Promotion p, DateTime now)
     {
         if (p.Status != PromotionStatus.Active || now < p.StartDateUtc || now >= p.EndDateUtc)
-            throw new ApplicationFailure(FailureKind.Validation, "Campaign is not active.");
+            throw new ApplicationFailure(FailureKind.Validation, "Promotion is not active.");
     }
     private void ValidateProvider(VerifiedViewResult result, string providerName, string contentId)
     {

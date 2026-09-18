@@ -27,11 +27,26 @@ internal static class OperationalConfiguration
         budget.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
         budget.HasIndex(x => new { x.PromotionId, x.CreatedAtUtc });
 
+        var ugcReservation = model.Entity<UgcReservation>(); Mapping.Scalars(ugcReservation);
+        ugcReservation.ToTable("UgcReservations", t => t.HasCheckConstraint("CK_UgcReservation_Positive", "\"OriginalAmount\" > 0"));
+        ugcReservation.HasKey(x => x.UgcOpportunityId);
+        ugcReservation.HasOne<UgcOpportunity>().WithOne().HasForeignKey<UgcReservation>(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        ugcReservation.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        ugcReservation.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
+
+        var ugcBudget = model.Entity<UgcBudgetEntry>(); Mapping.Scalars(ugcBudget); ugcBudget.HasKey(x => x.Id);
+        ugcBudget.ToTable("UgcBudgetEntries", t => t.HasCheckConstraint("CK_UgcBudgetEntry_Positive", "\"Amount\" > 0"));
+        ugcBudget.HasOne<UgcOpportunity>().WithMany().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        ugcBudget.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.AssignmentId).OnDelete(DeleteBehavior.Restrict);
+        ugcBudget.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
+        ugcBudget.HasIndex(x => new { x.UgcOpportunityId, x.CreatedAtUtc });
+
         var idem = model.Entity<StoredIdempotencyRecord>(); Mapping.Scalars(idem); idem.ToTable("IdempotencyRecords");
         idem.HasKey(x => new { x.ActorId, x.OperationType, x.Key });
         idem.Property(x => x.Key).HasMaxLength(200); idem.Property(x => x.OperationType).HasMaxLength(100);
         var audit = model.Entity<AuditEvent>(); Mapping.Scalars(audit); audit.HasKey(x => x.Id); audit.ToTable("AuditEvents");
         audit.HasIndex(x => x.CorrelationId); audit.HasIndex(x => new { x.PromotionId, x.OccurredAtUtc });
+        audit.HasIndex(x => new { x.UgcOpportunityId, x.OccurredAtUtc });
         var outbox = model.Entity<OutboxMessage>(); Mapping.Scalars(outbox); outbox.HasKey(x => x.Id); outbox.ToTable("OutboxMessages");
         outbox.Property(x => x.Payload).HasColumnType("jsonb");
         outbox.HasIndex(x => x.OccurredAtUtc).HasFilter("\"ProcessedAtUtc\" IS NULL");

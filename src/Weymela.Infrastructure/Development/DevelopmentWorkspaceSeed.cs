@@ -25,8 +25,9 @@ public static class DevelopmentWorkspaceSeed
         }
         var config=Guid.NewGuid();var version=Guid.NewGuid();db.FinancialConfigurations.Add(new(config,"PlatformPricing"));
         db.FinancialConfigurationVersions.Add(new(version,config,1,admin.UserId,now.AddDays(-1),
-            new(PromotionType.ViewOnly,3000,new Money(300),new Money(200),new Money(100),4.5m,2,3.5m,now.AddDays(-1),version),
-            new(PromotionType.ViewPlusCommission,3000,new Money(300),new Money(200),new Money(100),4.5m,2,3.5m,now.AddDays(-1),version),new Money(500),new Money(100)));
+            new(PromotionType.ViewOnly,3000,new Money(300),new Money(200),new Money(100),3m,4m,3m,now.AddDays(-1),version),
+            new(PromotionType.ViewPlusCommission,3000,new Money(150),new Money(100),new Money(50),3m,4m,3m,now.AddDays(-1),version),new Money(3000),new Money(4000),
+            new(new Money(200),10m,null,now.AddDays(-1),version)));
         foreach(var type in new[]{LegalDocumentType.TermsOfService,LegalDocumentType.PrivacyPolicy,LegalDocumentType.BusinessAgreement,LegalDocumentType.CreatorAgreement,LegalDocumentType.AntiCircumventionAgreement})
         {
             var id=Guid.NewGuid();db.LegalDocumentVersions.Add(new(id,type,"fixture-1","development-fixture-not-legal-wording",now.AddDays(-1)));

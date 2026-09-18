@@ -17,4 +17,6 @@ public sealed record CustomerPurchase(Guid SaleId, string Campaign, PublicBusine
     Money PurchaseAmount, Money Cashback, DateTime PurchasedAtUtc);
 public interface IAdminFinancialQueries { Task<AdminCampaignFinance> CampaignAsync(Actor actor, Guid campaignId, CancellationToken ct); }
 public sealed record PlatformSettlementInfo(Guid Id, Money Amount, string Reference, DateTime SettledAtUtc, Guid? SettledBy);
-public sealed record PlatformSettlementSummary(Money Accrued, Money Settled, Money Unsettled, IReadOnlyList<PlatformSettlementInfo> History);
+public sealed record PlatformRevenueBreakdown(string Source, Money Accrued);
+public sealed record PlatformSettlementSummary(Money Accrued, Money Settled, Money Unsettled,
+    IReadOnlyList<PlatformSettlementInfo> History, IReadOnlyList<PlatformRevenueBreakdown> Breakdown);

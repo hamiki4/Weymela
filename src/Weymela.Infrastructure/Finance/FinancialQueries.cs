@@ -14,7 +14,18 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
         var summary = await new PlatformRevenueRepository(db).SummaryAsync(ct);
         var history = await db.PlatformSettlements.AsNoTracking().OrderByDescending(x => x.SettledAtUtc)
             .Select(x => new PlatformSettlementInfo(x.Id, x.Amount, x.Reference, x.SettledAtUtc, EF.Property<Guid?>(x, "SettledBy"))).ToListAsync(ct);
-        return new(summary.Accrued, summary.Settled, summary.Unsettled, history);
+        var sourceRows = await db.PlatformRevenueEntries.AsNoTracking().Select(x => new { x.Source, x.Amount }).ToListAsync(ct);
+        string SourceLabel(PlatformRevenueSource source) => source switch
+        {
+            PlatformRevenueSource.ViewRewardPlatformShare => "View rewards",
+            PlatformRevenueSource.SalePlatformShare => "Sales",
+            PlatformRevenueSource.UgcFee => "UGC fees",
+            _ => "Authorized adjustments"
+        };
+        var breakdown = sourceRows.GroupBy(x => x.Source)
+            .Select(x => new PlatformRevenueBreakdown(SourceLabel(x.Key), new Money(x.Sum(row => row.Amount.Amount))))
+            .OrderBy(x => x.Source).ToArray();
+        return new(summary.Accrued, summary.Settled, summary.Unsettled, history, breakdown);
     }
     public async Task<AdminCampaignFinance> CampaignAsync(Actor actor, Guid campaignId, CancellationToken ct = default)
     {

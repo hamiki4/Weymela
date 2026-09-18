@@ -242,7 +242,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(10, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(11, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -378,7 +378,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         foreach (var table in new[]
         {
             "AuthIdentifiers", "EmailAuthChallenges", "PasswordCredentials", "IdentityBindings",
-            "AuthorizedDevices", "DeviceSessions", "ProductHandoffTransactions", "RoleEnrollments", "LegalAcceptances", "CustomerProfiles"
+            "AuthorizedDevices", "DeviceSessions", "ProductHandoffTransactions", "LegalAcceptances", "CustomerProfiles"
         })
             await AssertInsufficientPrivilegeAsync(connectionString,
                 $"SELECT * FROM v3.{QuoteIdentifier(table)}",
@@ -503,7 +503,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260914022116_AddDevicePinSessionFoundation",
             "20260916042557_AddPasswordCredentials",
             "20260916202055_AddCustomerProfiles",
-            "20260917020034_AddProductHandoffTransactions"
+            "20260917020034_AddProductHandoffTransactions",
+            "20260917233008_AddBusinessLedPromotionAndUgc"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','v3') AND c.relkind='S'";
@@ -600,7 +601,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(10L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(11L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

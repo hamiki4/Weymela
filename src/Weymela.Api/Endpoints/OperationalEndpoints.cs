@@ -30,9 +30,9 @@ internal static class OperationalEndpoints
         business.MapGet("/deposit-method",(RuntimeOptions options)=>Results.Ok(new{mode=options.DevelopmentIdentity?"Development":options.DepositMode}));
         business.MapGet("/deposit-requests",(HttpContext c,DepositService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
         business.MapPost("/deposit-requests",(DepositSubmission input,HttpContext c,DepositService service,CancellationToken ct)=>service.SubmitAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct));
-        var admin=app.MapGroup("/api/admin").RequireAuthorization("PlatformAdmin").AddEndpointFilter<ValidatedInputFilter>();
+        var admin=app.MapGroup("/api/admin").RequireAuthorization("AdminOperations").AddEndpointFilter<ValidatedInputFilter>();
         admin.MapGet("/operations",(OperationalHealth health,CancellationToken ct)=>health.DetailsAsync(ct));
-        admin.MapGet("/reconciliation",(HttpContext c,ReconciliationService service,CancellationToken ct)=>service.CheckAsync(EndpointSupport.Actor(c),ct));
+        admin.MapGet("/reconciliation",(HttpContext c,ReconciliationService service,CancellationToken ct)=>service.CheckAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         admin.MapGet("/deposit-requests",async(WeymelaDbContext db,CancellationToken ct)=>
             await db.DepositRequests.AsNoTracking().OrderBy(x=>x.Status).ThenBy(x=>x.SubmittedAtUtc).Take(100)
                 .Select(x=>new{x.Id,x.BusinessId,amount=x.Amount.Amount,status=x.Status.ToString(),x.Provider,x.ExternalReference,x.ProofReference,x.SubmittedAtUtc,x.ReviewedAtUtc,x.Version}).ToListAsync(ct));

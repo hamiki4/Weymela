@@ -35,12 +35,18 @@ public sealed class OutboxProcessor(WeymelaDbContext db, RuntimeOptions options,
             var plan = await new NotificationRouter(db).ResolveAsync(row, token);
             row.AttemptCount++;
             if (plan is null || plan.Audiences.Count == 0) { row.ProcessedAtUtc = now; return true; }
-            var global = plan.Audiences.Where(x => x.SubjectId is null).Select(x => x.Role).ToArray();
+            var global = plan.Audiences.Where(x => x.SubjectId is null && x.UserId is null).Select(x => x.Role).ToArray();
             Guid[] Subjects(ActorRole role) => plan.Audiences.Where(x => x.Role == role && x.SubjectId is not null).Select(x => x.SubjectId!.Value).ToArray();
             var businesses = Subjects(ActorRole.Business); var creators = Subjects(ActorRole.Creator); var customers = Subjects(ActorRole.Customer);
+            Guid[] Users(ActorRole role) => plan.Audiences.Where(x => x.Role == role && x.UserId is not null).Select(x => x.UserId!.Value).ToArray();
+            var businessUsers=Users(ActorRole.Business);var creatorUsers=Users(ActorRole.Creator);var customerUsers=Users(ActorRole.Customer);
+            var platformUsers=Users(ActorRole.PlatformAdmin);var operationsUsers=Users(ActorRole.OperationsAdmin);
             var memberships = db.CommercePermissions.AsNoTracking().Where(x => x.IsActive && (global.Contains(x.Role)
                 || x.Role == ActorRole.Business && businesses.Contains(x.SubjectId) || x.Role == ActorRole.Creator && creators.Contains(x.SubjectId)
-                || x.Role == ActorRole.Customer && customers.Contains(x.SubjectId)));
+                || x.Role == ActorRole.Customer && customers.Contains(x.SubjectId)
+                || x.Role == ActorRole.Business && businessUsers.Contains(x.UserId) || x.Role == ActorRole.Creator && creatorUsers.Contains(x.UserId)
+                || x.Role == ActorRole.Customer && customerUsers.Contains(x.UserId) || x.Role == ActorRole.PlatformAdmin && platformUsers.Contains(x.UserId)
+                || x.Role == ActorRole.OperationsAdmin && operationsUsers.Contains(x.UserId)));
             var cursor = row.RecipientCursor;
             var users = await memberships.Where(x => cursor == null || x.UserId.CompareTo(cursor.Value) > 0).Select(x => x.UserId).Distinct()
                 .OrderBy(x => x).Take(options.RecipientBatchSize).ToListAsync(token);

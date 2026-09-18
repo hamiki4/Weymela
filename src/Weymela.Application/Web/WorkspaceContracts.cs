@@ -27,11 +27,18 @@ public sealed record BusinessHome(BusinessCard Business, WalletWorkspace Wallet,
 public sealed record BusinessPrice(string Type, int Views, decimal BusinessPays, decimal SaleCostPercent, decimal? MinimumCampaignBudget);
 public sealed record CreatorPrice(string Type, int Views, decimal YouEarn, decimal SaleCommissionPercent);
 public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime EffectiveFromUtc);
+public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
+    decimal? MinimumUgcBudget, int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
 public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal MinimumToCashOut, DateTime EffectiveFromUtc);
+public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available);
+public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
+    string VerificationStatus, long? VerifiedAudience);
 public sealed record CampaignRow(Guid Id, string PublicId, Guid BusinessId, string Business, string Title, string Type,
     decimal CampaignBudget, decimal AssignedToCreators, decimal AvailableCampaignBudget, decimal Used, decimal Remaining,
-    int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version);
-public sealed record ApplicantCard(Guid Id, CreatorCard Creator, string Message, string? ContentConcept, string Status, DateTime AppliedAtUtc);
+    int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version, string? Slogan = null,
+    string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null);
+public sealed record ApplicantCard(Guid Id, CreatorCard Creator, string Message, string? ContentConcept, string Status, DateTime AppliedAtUtc,
+    string? Platform = null);
 public sealed record CreatorBudgetCard(Guid Id, CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining,
     long Views, int Sales, string Status, long Version, bool CanIncrease);
 public sealed record BusinessCampaign(CampaignRow Campaign, string Description, string? Requirements, string? Category, string? Region,
@@ -39,7 +46,9 @@ public sealed record BusinessCampaign(CampaignRow Campaign, string Description, 
     IReadOnlyList<CreatorBudgetCard> Creators, IReadOnlyList<ActivityItem> History);
 public sealed record CampaignOpportunity(Guid Id, string PublicId, BusinessCard Business, string Title, string Description, string Type,
     string? Requirements, string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime StartUtc, DateTime EndUtc,
-    CreatorPrice Earnings, string? RequestStatus, string Eligibility);
+    CreatorPrice Earnings, string? RequestStatus, string Eligibility, string? Slogan = null, string? Location = null,
+    IReadOnlyList<PromotionPlatformView>? Platforms = null, IReadOnlyList<CreatorSocialProfileView>? EligibleSocialProfiles = null,
+    decimal Budget = 0, int ApprovedCreators = 0, int CreatorCapacity = 0);
 public sealed record CreatorCampaignCard(Guid Id, Guid BudgetId, Guid? ParticipationId, string Title, BusinessCard Business, string Type,
     decimal YourBudget, decimal BudgetRemaining, long VerifiedViews, long RewardedViews, decimal ViewEarnings, decimal SaleCommissionEarnings,
     string Status, string ContentStatus, string? Provider, string? ExternalContentId, DateTime StartUtc, DateTime EndUtc);
@@ -47,7 +56,8 @@ public sealed record EarningItem(Guid Id, string Campaign, string Source, decima
 public sealed record PayoutItem(Guid Id, string Kind, string Name, decimal Amount, decimal Threshold, string Status,
     DateTime EligibleAtUtc, DateTime? PaidAtUtc, string? Reference);
 public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal MinimumToCashOut, decimal AmountNeeded, decimal EligibleAmount,
-    IReadOnlyList<EarningItem> History, IReadOnlyList<PayoutItem> PayoutHistory);
+    IReadOnlyList<EarningItem> History, IReadOnlyList<PayoutItem> PayoutHistory, decimal ViewEarnings = 0,
+    decimal SaleEarnings = 0, decimal UgcEarnings = 0);
 public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCampaigns, EarningsWorkspace Earnings);
 public sealed record AdminHome(int Businesses, int Creators, int ActiveCampaigns, decimal CampaignSpend, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> Activity);
@@ -58,10 +68,12 @@ public sealed record AdminCreatorRow(CreatorCard Creator, decimal CreatorBudget,
     long LatestVerifiedViews, long VerifiedViews, long RewardedViews, decimal ViewEarnings, int VerifiedSales, decimal SaleCommission,
     decimal CustomerCashback, decimal PlatformRevenue, string Status);
 public sealed record AdminCampaign(CampaignRow Campaign, IReadOnlyList<AdminCreatorRow> Creators, decimal CreatorEarnings,
-    decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> History);
+    decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> History, int FinancialConfigurationVersion);
 public sealed record ViewPriceInput(int ViewsPerReward, decimal BusinessPays, decimal CreatorEarns, decimal PlatformKeeps, decimal? MinimumCampaignBudget);
+public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal PlatformFeePercent, decimal? MinimumUgcBudget);
 public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceInput ViewPlusCommission, decimal CreatorCommissionPercent,
-    decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold, DateTime? EffectiveFromUtc);
+    decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold,
+    DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null);
 public sealed record FinancialVersionInfo(Guid Id, int Version, DateTime EffectiveFromUtc, Guid ChangedBy, FinancialSettingsInput Settings);
 public sealed record FinancialSettingsWorkspace(FinancialSettingsInput Current, int Version, IReadOnlyList<FinancialVersionInfo> Versions);
 public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name, decimal Available, decimal Threshold, decimal PayAmount,
@@ -72,15 +84,52 @@ public sealed record CustomerOfferCard(Guid Id, Guid CampaignId, string Campaign
 public sealed record QrResponse(Guid Id, string? Token, DateTime ExpiresAtUtc, bool Replayed);
 public sealed record CheckoutOffer(Guid SessionId, string Campaign, PublicBusiness Business, PublicCreator Creator, string Customer, DateTime ExpiresAtUtc);
 
+public sealed record PromotionPlatformInput(string Platform, int Capacity);
 public sealed record CreateCampaignInput(string Title, string Description, string Type, decimal CampaignBudget, string? Requirements,
-    string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime StartUtc, DateTime EndUtc);
+    string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime StartUtc, DateTime EndUtc,
+    string? Slogan = null, string? Location = null, IReadOnlyList<string>? Resources = null,
+    IReadOnlyList<PromotionPlatformInput>? Platforms = null);
 public sealed record DepositInput(decimal Amount, long ExpectedVersion);
 public sealed record FundingInput(long CampaignVersion, long WalletVersion);
 public sealed record VersionInput(long Version);
+public sealed record PromotionPresentationInput(string Description, string? Slogan, string? Location,
+    IReadOnlyList<string>? Resources, long Version);
 public sealed record BudgetInput(decimal Amount, long Version);
-public sealed record JoinInput(string? Message, string? ContentConcept);
+public sealed record JoinInput(string? Message, string? ContentConcept, string? Platform = null, Guid? CreatorSocialProfileId = null);
 public sealed record ContentInput(string Provider, string ExternalContentId);
 public sealed record TokenInput(string Token);
 public sealed record CheckoutInput(string Token, decimal PurchaseAmount);
 public sealed record ConfirmPaymentInput(string Reference);
 public sealed record SettlementInput(decimal Amount, string Reference);
+
+public sealed record UgcPlatformRequirementInput(string Platform, string Format, long? MinimumAudience);
+public sealed record CreateUgcInput(string Title, string? Slogan, string ContentType, string Instructions,
+    IReadOnlyList<string>? Resources, string? Location, DateTime DueDateUtc, bool ProductProvided,
+    bool CreatorMustPurchase, string? UsageRights, decimal CreatorPayment, int CreatorsNeeded,
+    IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements);
+public sealed record UgcReviewInput(string? Reason);
+public sealed record UgcSubmissionInput(string SubmissionUrl);
+public sealed record UgcRevisionInput(string? Slogan, string Instructions, IReadOnlyList<string>? Resources,
+    string? Location, string? UsageRights, bool IsMaterial, string? Title = null,
+    string? ContentType = null, DateTime? DueDateUtc = null, bool? ProductProvided = null,
+    bool? CreatorMustPurchase = null, decimal? CreatorPayment = null, int? CreatorsNeeded = null,
+    IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements = null);
+public sealed record UgcPlatformRequirementView(string Platform, string Format, long? MinimumAudience);
+public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string Title, string? Slogan,
+    string ContentType, string Status, decimal CreatorPayment, int CreatorsNeeded, int ApprovedCreators,
+    decimal RequiredFunding, decimal ReservedFunding, decimal UsedFunding, DateTime DueDateUtc,
+    string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements, string? RequestStatus, long Version);
+public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
+    string Status, DateTime RequestedAtUtc, string? RejectionReason);
+public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,
+    string Business, Guid CreatorId, string Creator, decimal CreatorPayment, string Status,
+    int AcceptedRevision, bool RevisionAcceptanceRequired, DateTime DueDateUtc, string Instructions,
+    IReadOnlyList<string> Resources, string? Location, string? Feedback, string? SubmissionUrl);
+public sealed record UgcRevisionView(int RevisionNumber, bool IsMaterial, DateTime CreatedAtUtc, string SnapshotJson);
+public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOnlyList<string> Resources,
+    bool ProductProvided, bool CreatorMustPurchase, string? UsageRights, int CurrentRevision,
+    IReadOnlyList<UgcRequestView> Requests, IReadOnlyList<UgcAssignmentView> Assignments,
+    IReadOnlyList<UgcRevisionView> Revisions);
+public sealed record AdminGrantInput(string Email, string Role, string? DisplayName = null);
+public sealed record AdminAccountView(Guid UserId, string Name, string Email, string Role, string Status,
+    DateTime? GrantedAtUtc, DateTime? LastActivityAtUtc);

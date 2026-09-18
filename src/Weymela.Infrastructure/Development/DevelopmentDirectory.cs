@@ -19,7 +19,8 @@ public sealed class DevelopmentDirectory : IWorkspaceDirectory
         new("customer","Hana","CU-100",new(Id(7),ActorRole.Customer,CustomerId:Id(600))),
         new("other-customer","Teddy","CU-200",new(Id(8),ActorRole.Customer,CustomerId:Id(700))),
         new("cashier","Abc Checkout","POS-100",new(Id(9),ActorRole.Cashier,Id(100))),
-        new("other-cashier","Bole Checkout","POS-200",new(Id(10),ActorRole.Cashier,Id(200)))
+        new("other-cashier","Bole Checkout","POS-200",new(Id(10),ActorRole.Cashier,Id(200))),
+        new("operations-admin","Weymela Operations","ADMIN-02",new(Id(11),ActorRole.OperationsAdmin))
     ];
     public Persona Get(string alias)=>Personas.Single(x=>x.Alias==alias);
     public Task<BusinessCard> BusinessCardAsync(Guid id,CancellationToken ct)=>Task.FromResult(id==Id(100)

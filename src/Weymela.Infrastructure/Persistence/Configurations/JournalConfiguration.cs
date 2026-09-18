@@ -13,7 +13,7 @@ internal sealed class JournalConfiguration : IEntityTypeConfiguration<FinancialJ
         b.HasIndex(x => x.Reference).IsUnique();
         b.HasIndex(x => x.CorrelationId); b.HasIndex(x => x.SourceType); b.HasIndex(x => x.CreatedAtUtc);
         b.HasIndex(x => x.IdempotencyReference);
-        foreach (var name in new[] { "BusinessId", "PromotionId", "CreatorId", "CustomerId" })
+        foreach (var name in new[] { "BusinessId", "PromotionId", "CreatorId", "CustomerId", "UgcOpportunityId", "UgcAssignmentId" })
         {
             b.Property<Guid?>(name); b.HasIndex(name);
         }

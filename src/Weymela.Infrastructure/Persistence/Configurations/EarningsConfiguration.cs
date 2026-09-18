@@ -15,6 +15,7 @@ internal static class EarningsConfiguration
         var ce = model.Entity<CreatorEarningEntry>(); Mapping.Scalars(ce); ce.HasKey(x => x.Id);
         ce.ToTable("CreatorEarningEntries", t => t.HasCheckConstraint("CK_CreatorEarning_Positive", "\"Amount\" > 0"));
         ce.HasOne<Promotion>().WithMany().HasForeignKey(x => x.PromotionId).OnDelete(DeleteBehavior.Restrict);
+        ce.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
         JournalLink<CreatorEarningEntry>(model);
 
         var customers = model.Entity<CustomerCashbackAccount>();
@@ -30,6 +31,7 @@ internal static class EarningsConfiguration
         var revenue = model.Entity<PlatformRevenueEntry>(); Mapping.Scalars(revenue); revenue.HasKey(x => x.Id);
         revenue.ToTable("PlatformRevenueEntries", t => t.HasCheckConstraint("CK_Revenue_Positive", "\"Amount\" > 0"));
         revenue.HasOne<Promotion>().WithMany().HasForeignKey(x => x.PromotionId).OnDelete(DeleteBehavior.Restrict);
+        revenue.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
         revenue.HasIndex(x => new { x.Source, x.CreatedAtUtc });
         JournalLink<PlatformRevenueEntry>(model);
         var settlement = model.Entity<PlatformSettlement>(); Mapping.Scalars(settlement); settlement.HasKey(x => x.Id);

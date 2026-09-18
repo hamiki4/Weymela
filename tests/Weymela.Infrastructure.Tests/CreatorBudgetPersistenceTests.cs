@@ -127,7 +127,9 @@ public sealed class CreatorBudgetPersistenceTests(PostgresFixture fixture)
         await new FinancialCommands(first).AssignCreatorAllocationAsync(new(s.Business, p.Id, creatorA, new Money(3000), p.Version, Scenario.Now), "first");
         var ex = await Assert.ThrowsAsync<ApplicationFailure>(() => new FinancialCommands(second)
             .AssignCreatorAllocationAsync(new(s.Business, p.Id, creatorB, new Money(4000), p.Version, Scenario.Now), "second"));
-        Assert.Equal(FailureKind.ConcurrencyConflict, ex.Kind);
+        // Either optimistic concurrency or the deferred aggregate invariant may win
+        // the race; both reject the stale second assignment before any commit.
+        Assert.Contains(ex.Kind, new[] { FailureKind.ConcurrencyConflict, FailureKind.Validation });
         await using var read = s.Database.Open();
         Assert.Single(await read.CreatorAllocations.ToListAsync());
         Assert.False(await read.IdempotencyRecords.AnyAsync(x => x.Key == "second"));

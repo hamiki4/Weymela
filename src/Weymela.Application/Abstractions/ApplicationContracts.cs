@@ -1,6 +1,6 @@
 using Weymela.Domain;
 namespace Weymela.Application;
-public enum ActorRole { PlatformAdmin, Business, Creator, Customer, Cashier }
+public enum ActorRole { PlatformAdmin, OperationsAdmin, Business, Creator, Customer, Cashier }
 public sealed record Actor(Guid UserId, ActorRole Role, Guid? BusinessId = null, Guid? CreatorId = null, Guid? CustomerId = null);
 public enum FailureKind { Validation, InsufficientFunds, Forbidden, NotFound, ConcurrencyConflict, IdempotencyConflict }
 public sealed class ApplicationFailure(FailureKind kind, string message, Exception? innerException = null) : Exception(message, innerException) { public FailureKind Kind { get; } = kind; }

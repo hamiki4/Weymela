@@ -28,14 +28,15 @@ public sealed class PromotionRepository(WeymelaDbContext db) : IPromotionReposit
         // Preserve the loaded aggregate snapshot. Re-querying only its children can mix
         // current allocations with stale parent totals/version and misclassify a race.
         var local = db.Promotions.Local.SingleOrDefault(x => x.Id == id);
-        if (local is not null && db.Entry(local).Collection(x => x.Allocations).IsLoaded)
+        if (local is not null && db.Entry(local).Collection(x => x.Allocations).IsLoaded
+            && db.Entry(local).Collection(x => x.Platforms).IsLoaded)
             return Task.FromResult<Promotion?>(local);
-        return db.Promotions.Include(x => x.Allocations).SingleOrDefaultAsync(x => x.Id == id, ct);
+        return db.Promotions.Include(x => x.Allocations).Include(x => x.Platforms).SingleOrDefaultAsync(x => x.Id == id, ct);
     }
     public Task AddAsync(Promotion p, CancellationToken ct) { db.Promotions.Add(p); return Task.CompletedTask; }
     public Task SaveAsync(Promotion p, long expectedVersion, CancellationToken ct)
     { ExpectedVersion.Check(db, p, expectedVersion); return Task.CompletedTask; }
-    public async Task<IReadOnlyList<Promotion>> QueryAsync(CancellationToken ct) => await db.Promotions.Include(x => x.Allocations).ToListAsync(ct);
+    public async Task<IReadOnlyList<Promotion>> QueryAsync(CancellationToken ct) => await db.Promotions.Include(x => x.Allocations).Include(x => x.Platforms).ToListAsync(ct);
 }
 
 public sealed class CreatorApplicationRepository(WeymelaDbContext db) : ICreatorApplicationRepository

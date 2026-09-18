@@ -15,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Deposits;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Providers;
@@ -39,9 +40,11 @@ public static class ApiHost
         builder.Services.AddWeymelaPersistence(options.ConnectionString);
         builder.Services.AddPilotAuthenticationAdapters(options);
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();
+        builder.Services.AddScoped<UgcService>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();builder.Services.AddScoped<DeviceAccessService>();builder.Services.AddScoped<DevicePinRecoveryService>();
         builder.Services.AddScoped<ProductIntegrationService>();
+        builder.Services.AddScoped<AdminAccountService>();
         builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();
         builder.Services.TryAddSingleton<INotificationPushProvider,DisabledPushProvider>();
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());
@@ -64,6 +67,9 @@ public static class ApiHost
         {
             foreach(var role in Enum.GetValues<ActorRole>())o.AddPolicy(role.ToString(),p=>p.RequireAuthenticatedUser().RequireRole(role.ToString()).AddRequirements(new ActiveWorkspaceRequirement()));
             o.AddPolicy("Workspace",p=>p.RequireAuthenticatedUser().AddRequirements(new ActiveWorkspaceRequirement()));
+            o.AddPolicy("AdminOperations",p=>p.RequireAuthenticatedUser()
+                .RequireRole(ActorRole.PlatformAdmin.ToString(),ActorRole.OperationsAdmin.ToString())
+                .AddRequirements(new ActiveWorkspaceRequirement()));
             o.AddPolicy("VerifiedAccount", p => p.RequireAuthenticatedUser());
             o.AddPolicy("Checkout",p=>p.RequireAuthenticatedUser().RequireRole(ActorRole.Business.ToString(),ActorRole.Cashier.ToString()).AddRequirements(new ActiveWorkspaceRequirement(checkout:true)));
         });

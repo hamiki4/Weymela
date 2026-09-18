@@ -98,7 +98,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
 
     public async Task<RoleEnrollmentSummary> ReviewAsync(Actor admin, Guid id, bool approve, string? reason, long expectedVersion, string idempotencyKey, CancellationToken ct)
     {
-        if (admin.Role != ActorRole.PlatformAdmin) throw Denied();
+        if (admin.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) throw Denied();
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 200) throw new ApplicationFailure(FailureKind.Validation, "A request reference is required.");
         await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
         var row = await db.RoleEnrollments.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new ApplicationFailure(FailureKind.NotFound, "Profile request not found.");

@@ -14,12 +14,14 @@ public sealed class FinancialConfigurationVersion
     public DateTime EffectiveFromUtc { get; private set; }
     public PricingSnapshot ViewOnly { get; private set; }
     public PricingSnapshot ViewPlusCommission { get; private set; }
+    // Versions created before UGC was introduced remain valid immutable history.
+    public UgcPricingSnapshot? Ugc { get; private set; }
     public Money CreatorPayoutThreshold { get; private set; }
     public Money CustomerPayoutThreshold { get; private set; }
 
     public FinancialConfigurationVersion(Guid id, Guid configurationId, int version, Guid changedBy,
         DateTime effectiveFromUtc, PricingSnapshot viewOnly, PricingSnapshot hybrid,
-        Money creatorThreshold, Money customerThreshold)
+        Money creatorThreshold, Money customerThreshold, UgcPricingSnapshot? ugc = null)
     {
         if (version <= 0 || creatorThreshold.Amount <= 0 || customerThreshold.Amount <= 0)
             throw new ArgumentException("Version and payout thresholds must be positive.");
@@ -29,6 +31,9 @@ public sealed class FinancialConfigurationVersion
         EffectiveFromUtc = effectiveFromUtc;
         ViewOnly = viewOnly with { ConfigurationVersionId = id, EffectiveFromUtc = effectiveFromUtc };
         ViewPlusCommission = hybrid with { ConfigurationVersionId = id, EffectiveFromUtc = effectiveFromUtc };
+        Ugc = (ugc ?? new(new Money(200), 10m, null, effectiveFromUtc, id)) with
+            { ConfigurationVersionId = id, EffectiveFromUtc = effectiveFromUtc };
+        if (!Ugc.IsValid) throw new ArgumentException("Invalid UGC financial configuration.");
         CreatorPayoutThreshold = creatorThreshold; CustomerPayoutThreshold = customerThreshold;
     }
 

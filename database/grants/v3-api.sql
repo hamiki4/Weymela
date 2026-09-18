@@ -24,6 +24,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."AuditEvents",
     v3."AuthIdentifiers",
     v3."AuthorizedDevices",
+    v3."AdminGrants",
     v3."BusinessWallets",
     v3."CommercePermissions",
     v3."CreatorAllocations",
@@ -31,6 +32,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorEarningEntries",
     v3."CreatorEarningsAccounts",
     v3."CreatorPromotionParticipations",
+    v3."CreatorSocialProfiles",
     v3."CustomerCashbackAccounts",
     v3."CustomerCashbackEntries",
     v3."CustomerProfiles",
@@ -56,10 +58,19 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."ProductHandoffTransactions",
     v3."PromotionBudgetEntries",
     v3."PromotionReservations",
+    v3."PromotionPlatforms",
     v3."PromotionViewVerifications",
     v3."Promotions",
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
+    v3."UgcAssignments",
+    v3."UgcBudgetEntries",
+    v3."UgcCreatorRequests",
+    v3."UgcOpportunities",
+    v3."UgcPlatformRequirements",
+    v3."UgcReservations",
+    v3."UgcRevisions",
+    v3."UgcSubmissions",
     v3."VerifiedSales",
     v3."ViewRewardReceipts",
     v3."WalletEntries",
@@ -70,11 +81,11 @@ GRANT SELECT, INSERT, UPDATE ON TABLE v3."AuthIdentifiers" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."EmailAuthChallenges" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."PasswordCredentials" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."IdentityBindings" TO :"api_role";
-GRANT SELECT, INSERT ON TABLE v3."CommercePermissions" TO :"api_role";
+GRANT SELECT, INSERT, UPDATE ON TABLE v3."CommercePermissions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."RoleEnrollments" TO :"api_role";
-GRANT SELECT, INSERT ON TABLE v3."BusinessWallets" TO :"api_role";
-GRANT SELECT, INSERT ON TABLE v3."CustomerCashbackAccounts" TO :"api_role";
+GRANT SELECT, INSERT, UPDATE ON TABLE v3."BusinessWallets" TO :"api_role";
+GRANT SELECT, INSERT, UPDATE ON TABLE v3."CustomerCashbackAccounts" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."CustomerProfiles" TO :"api_role";
 GRANT SELECT ON TABLE v3."LegalDocumentVersions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."LegalAcceptances" TO :"api_role";
@@ -87,17 +98,45 @@ GRANT SELECT, INSERT ON TABLE v3."OutboxMessages" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."InAppNotifications" TO :"api_role";
 GRANT UPDATE ("ReadAtUtc", "Version") ON TABLE v3."InAppNotifications" TO :"api_role";
 
-GRANT SELECT ON TABLE
-    v3."WorkerCheckpoints",
+GRANT SELECT, INSERT, UPDATE ON TABLE
+    v3."AdminGrants",
+    v3."CreatorApplications",
+    v3."CreatorAllocations",
+    v3."CreatorEarningsAccounts",
+    v3."CreatorPromotionParticipations",
+    v3."CreatorSocialProfiles",
+    v3."DepositRequests",
+    v3."PayoutRecords",
+    v3."PromotionPlatforms",
+    v3."Promotions",
+    v3."UgcAssignments",
+    v3."UgcCreatorRequests",
+    v3."UgcOpportunities",
+    v3."UgcSubmissions"
+TO :"api_role";
+
+GRANT SELECT, INSERT ON TABLE
+    v3."CreatorEarningEntries",
+    v3."CustomerCashbackEntries",
     v3."FinancialConfigurationVersions",
     v3."FinancialJournals",
     v3."FinancialJournalLines",
-    v3."CustomerCashbackEntries",
-    v3."PayoutRecords",
-    v3."Promotions",
+    v3."PlatformRevenueEntries",
+    v3."PlatformSettlements",
     v3."PricingSnapshots",
-    v3."CreatorAllocations",
-    v3."CreatorPromotionParticipations"
+    v3."PromotionBudgetEntries",
+    v3."PromotionReservations",
+    v3."VerifiedSales",
+    v3."ViewRewardReceipts",
+    v3."WalletEntries",
+    v3."UgcBudgetEntries",
+    v3."UgcPlatformRequirements",
+    v3."UgcReservations",
+    v3."UgcRevisions"
+TO :"api_role";
+
+GRANT SELECT ON TABLE
+    v3."WorkerCheckpoints"
 TO :"api_role";
 
 -- Migration-created routines default to PUBLIC EXECUTE in PostgreSQL. Remove that

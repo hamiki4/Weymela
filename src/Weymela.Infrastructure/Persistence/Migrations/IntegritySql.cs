@@ -107,7 +107,7 @@ internal static class IntegritySql
           IF bid IS NULL THEN RETURN NULL; END IF;
           SELECT coalesce(sum(CASE WHEN l."Account"='BusinessAvailable' THEN
             CASE WHEN l."Type"='Credit' THEN l."Amount" ELSE -l."Amount" END ELSE 0 END),0),
-            coalesce(sum(CASE WHEN l."Account" IN ('CampaignUnallocatedReserve','CreatorAllocatedReserve') THEN
+            coalesce(sum(CASE WHEN l."Account" IN ('CampaignUnallocatedReserve','CreatorAllocatedReserve','UgcAllocatedReserve') THEN
             CASE WHEN l."Type"='Credit' THEN l."Amount" ELSE -l."Amount" END ELSE 0 END),0)
           INTO available, reserved FROM v3."FinancialJournalLines" l JOIN v3."FinancialJournals" j ON j."Id"=l."JournalId"
           WHERE j."BusinessId"=bid;

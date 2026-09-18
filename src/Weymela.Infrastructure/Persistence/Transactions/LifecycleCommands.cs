@@ -16,7 +16,7 @@ public sealed partial class FinancialCommands
             var prior = await Replay(c.Actor, "CompletePromotion", key, fp, token);
             if (prior is not null) return prior.Value;
             var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token)
-                ?? throw new ApplicationFailure(FailureKind.NotFound, "Campaign not found.");
+                ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
             var unused = p.Allocations.Where(x => x.Status == CreatorAllocationStatus.Active && x.RemainingAmount.Amount > 0)
                 .Select(x => new { x.Id, x.CreatorId, Amount = x.RemainingAmount }).ToArray();
             await Promotions.CompleteAsync(c, token);
@@ -83,7 +83,7 @@ public sealed partial class FinancialCommands
             var application = await db.CreatorApplications.SingleOrDefaultAsync(x => x.Id == applicationId, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Application not found.");
             var p = await db.Promotions.SingleAsync(x => x.Id == application.PromotionId, token);
-            if (p.BusinessId != actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Campaign belongs to another Business.");
+            if (p.BusinessId != actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Promotion belongs to another Business.");
             if (approve)
             {
                 await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,

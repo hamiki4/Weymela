@@ -16,10 +16,15 @@ public static class FinancialConfigurationVersionFactory
             input.CustomerCashbackPercent, input.PlatformPercent, effectiveFromUtc, id,
             price.MinimumCampaignBudget is { } minimum ? Amount(minimum) : null);
 
+        var ugcInput = input.Ugc ?? new UgcSettingsInput(200m, 10m, null);
+        if (ugcInput.PlatformFeePercent is < 0 or > 100 || decimal.Round(ugcInput.PlatformFeePercent, 4) != ugcInput.PlatformFeePercent)
+            throw new ApplicationFailure(FailureKind.Validation, "Enter a valid UGC Platform fee percentage.");
+        var ugc = new UgcPricingSnapshot(Amount(ugcInput.MinimumCreatorPayment), ugcInput.PlatformFeePercent,
+            ugcInput.MinimumUgcBudget is { } minimumUgc ? Amount(minimumUgc) : null, effectiveFromUtc, id);
         return new FinancialConfigurationVersion(id, configurationId, version, changedBy,
             effectiveFromUtc, Price(PromotionType.ViewOnly, input.ViewOnly),
             Price(PromotionType.ViewPlusCommission, input.ViewPlusCommission),
-            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold));
+            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold), ugc);
     }
 
     private static Money Amount(decimal value)

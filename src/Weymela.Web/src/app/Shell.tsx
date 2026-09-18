@@ -41,6 +41,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/notifications", "Notifications", "bell"],
     ["/admin/audit", "Audit", "document"],
   ],
+  OperationsAdmin: [],
   Customer: [
     ["/customer/offers", "Offers for you", "sparkle"],
     ["/customer/history", "Your Cashback", "wallet"],
@@ -52,6 +53,7 @@ const roles: Record<Role, string> = {
   Business: "Business",
   Creator: "Creator",
   PlatformAdmin: "Platform Admin",
+  OperationsAdmin: "Operations Admin",
   Customer: "Customer",
   Cashier: "Cashier",
   Onboarding: "Account setup",

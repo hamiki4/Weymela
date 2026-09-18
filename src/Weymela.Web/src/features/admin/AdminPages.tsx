@@ -26,7 +26,13 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, campaignType, count, date } from "../../ui/format";
+import {
+  amount,
+  campaignType,
+  count,
+  date,
+  promotionTypeCode,
+} from "../../ui/format";
 import { CampaignTable } from "../business/BusinessPages";
 
 export function AdminRoleEnrollments() {
@@ -125,7 +131,7 @@ export function AdminCampaigns() {
               `${r.title} ${r.publicId}`
                 .toLowerCase()
                 .includes(filters.campaign.toLowerCase()) &&
-              (!filters.type || r.type === filters.type) &&
+              (!filters.type || promotionTypeCode(r.type) === filters.type) &&
               (!filters.status || r.status === filters.status) &&
               (!filters.start || r.startUtc.slice(0, 10) >= filters.start) &&
               (!filters.end || r.startUtc.slice(0, 10) <= filters.end),
@@ -161,7 +167,7 @@ export function AdminCampaigns() {
                     <option value="">All types</option>
                     <option value="ViewOnly">View Only</option>
                     <option value="ViewPlusCommission">
-                      View + Commission
+                      View &amp; Sale
                     </option>
                   </select>
                 </Field>

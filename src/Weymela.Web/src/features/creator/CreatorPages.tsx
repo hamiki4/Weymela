@@ -22,7 +22,14 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, campaignType, count, date } from "../../ui/format";
+import {
+  amount,
+  campaignType,
+  count,
+  date,
+  isViewAndSale,
+  isViewOnly,
+} from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 
 export function CreatorDashboard() {
@@ -128,7 +135,7 @@ function OpportunityCard({ row }: { row: Opportunity }) {
           {amount(row.earnings.youEarn)} ETB per {count(row.earnings.views)}{" "}
           verified views
         </strong>
-        {row.type === "ViewPlusCommission" && (
+        {isViewAndSale(row.type) && (
           <small>
             Plus {amount(row.earnings.saleCommissionPercent)}% per verified
             sale.
@@ -232,7 +239,7 @@ export function CreatorOpportunity() {
                   <strong>{amount(p.earnings.youEarn)}</strong>
                   <span>per {count(p.earnings.views)} verified views</span>
                 </div>
-                {p.type === "ViewPlusCommission" && (
+                {isViewAndSale(p.type) && (
                   <p>
                     Plus {amount(p.earnings.saleCommissionPercent)}% per
                     verified sale.
@@ -332,7 +339,7 @@ export function CreatorHowYouEarn() {
                     <td data-label="Verified views">{count(r.views)}</td>
                     <td data-label="You Earn">{amount(r.youEarn)}</td>
                     <td data-label="Sales">
-                      {r.type === "ViewOnly"
+                      {isViewOnly(r.type)
                         ? "—"
                         : `${amount(r.saleCommissionPercent)}% per verified sale`}
                     </td>

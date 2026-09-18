@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { actorRoleWireValues } from "../src/api/actorRoleContract";
 import type { AccountLegalStatus } from "../src/api/types";
 
 const effectiveLegal: AccountLegalStatus = {
@@ -129,7 +130,7 @@ describe("shared role-themed onboarding", () => {
     mocks.statusProfiles = [
       {
         id: "request-1",
-        role: 2,
+        role: actorRoleWireValues.Creator,
         status: 0,
         displayName: "Bella",
         publicId: "CR-INTERNAL",

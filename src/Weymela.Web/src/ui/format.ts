@@ -37,8 +37,24 @@ export const dateTime = (value: string) =>
   }).format(new Date(value));
 export const daysLeft = (end: string) =>
   Math.max(0, Math.ceil((new Date(end).getTime() - Date.now()) / 86400000));
-export const campaignType = (type: string) =>
-  type === "ViewOnly" ? "View Only" : "View + Commission";
+export const promotionTypeCode = (type: string) =>
+  type === "ViewOnly" || type === "View Only"
+    ? "ViewOnly"
+    : type === "ViewPlusCommission" || type === "View & Sale"
+      ? "ViewPlusCommission"
+      : null;
+export const isViewOnly = (type: string) =>
+  promotionTypeCode(type) === "ViewOnly";
+export const isViewAndSale = (type: string) =>
+  promotionTypeCode(type) === "ViewPlusCommission";
+export const campaignType = (type: string) => {
+  const code = promotionTypeCode(type);
+  return code === "ViewOnly"
+    ? "View Only"
+    : code === "ViewPlusCommission"
+      ? "View & Sale"
+      : type;
+};
 export const statusLabel = (status: string) =>
   ({
     AwaitingContent: "Ready for content",
@@ -50,7 +66,7 @@ export const statusLabel = (status: string) =>
     Approved: "Approved",
     Rejected: "Not approved",
     ViewOnly: "View Only",
-    ViewPlusCommission: "View + Commission",
+    ViewPlusCommission: "View & Sale",
   })[status] ?? status.replace(/([a-z])([A-Z])/g, "$1 $2");
 export const safeExternal = (value: string | null | undefined) => {
   try {

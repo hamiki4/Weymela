@@ -23,7 +23,14 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, campaignType, count, date, daysLeft } from "../../ui/format";
+import {
+  amount,
+  campaignType,
+  count,
+  date,
+  daysLeft,
+  isViewOnly,
+} from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 import { DepositSubmission } from "./DepositSubmission";
@@ -331,7 +338,7 @@ export function BusinessPricingPage() {
                       {amount(row.businessPays)}
                     </td>
                     <td data-label="Sale Cost">
-                      {row.type === "ViewOnly"
+                      {isViewOnly(row.type)
                         ? "—"
                         : `${amount(row.saleCostPercent)}% per verified sale`}
                     </td>

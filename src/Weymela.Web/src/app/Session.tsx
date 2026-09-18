@@ -16,6 +16,7 @@ export const roleHome: Record<Role, string> = {
   Business: "/business",
   Creator: "/creator",
   PlatformAdmin: "/admin",
+  OperationsAdmin: "/unauthorized",
   Customer: "/customer/offers",
   Cashier: "/checkout",
   Onboarding: "/onboarding",

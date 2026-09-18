@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { productHandoffFailureRecovery } from "../src/app/ProductIntegration";
+import {
+  productHandoffFailureRecovery,
+  productWorkspaceMismatchPath,
+} from "../src/app/ProductIntegration";
 
 const source = readFileSync(resolve("src/app/ProductIntegration.tsx"), "utf8");
 const routes = readFileSync(resolve("src/app/App.tsx"), "utf8");
@@ -43,5 +46,21 @@ describe("product handoff recovery", () => {
     expect(routes).not.toContain('<Route path="/creator" element={<RoleGate');
     expect(routes).not.toContain('<Route path="/business" element={<RoleGate');
     expect(routes).not.toMatch(/<Route path="\/admin" element={<ProductWorkspaceEntry/);
+  });
+
+  it("separates profile onboarding from unauthorized workspace access", () => {
+    expect(productWorkspaceMismatchPath(undefined, "Business")).toBe("/sign-in");
+    expect(productWorkspaceMismatchPath("Customer", "Creator")).toBe(
+      "/onboarding",
+    );
+    expect(productWorkspaceMismatchPath("Business", "Creator")).toBe(
+      "/onboarding",
+    );
+    expect(productWorkspaceMismatchPath("Cashier", "Business")).toBe(
+      "/unauthorized",
+    );
+    expect(productWorkspaceMismatchPath("OperationsAdmin", "Business")).toBe(
+      "/unauthorized",
+    );
   });
 });

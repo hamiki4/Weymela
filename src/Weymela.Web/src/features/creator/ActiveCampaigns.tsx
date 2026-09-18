@@ -15,7 +15,13 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { campaignType, count, date, daysLeft } from "../../ui/format";
+import {
+  campaignType,
+  count,
+  date,
+  daysLeft,
+  isViewAndSale,
+} from "../../ui/format";
 
 export function contentUrl(provider: string | null, id: string | null) {
   if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return undefined;
@@ -229,7 +235,7 @@ export function CreatorActiveDetail() {
                       ["Your Budget", r.yourBudget],
                       ["Budget Remaining", r.budgetRemaining],
                       ["View Earnings", r.viewEarnings],
-                      ...(r.type === "ViewPlusCommission"
+                      ...(isViewAndSale(r.type)
                         ? [
                             [
                               "Sale Commission Earnings",

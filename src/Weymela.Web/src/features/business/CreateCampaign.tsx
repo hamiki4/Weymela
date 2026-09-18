@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
-import type { BusinessPricing, CampaignType } from "../../api/types";
+import type { BusinessPricing, CampaignTypeCode } from "../../api/types";
 import {
   Button,
   Field,
@@ -11,14 +11,20 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, campaignType, count } from "../../ui/format";
+import {
+  amount,
+  campaignType,
+  count,
+  isViewAndSale,
+  promotionTypeCode,
+} from "../../ui/format";
 
 export function CreateCampaign() {
   const pricing = useResource<BusinessPricing>("/business/pricing");
   const action = useAction();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [type, setType] = useState<CampaignType>("ViewOnly");
+  const [type, setType] = useState<CampaignTypeCode>("ViewOnly");
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -41,7 +47,11 @@ export function CreateCampaign() {
       />
       <Resource resource={pricing}>
         {(data) => {
-          const price = data.rows.find((row) => row.type === type)!;
+          const price = data.rows.find(
+            (row) => promotionTypeCode(row.type) === type,
+          );
+          if (!price)
+            return <Notice error>Promotion pricing is unavailable.</Notice>;
           return (
             <div className="content-grid form-layout">
               <Section
@@ -119,12 +129,12 @@ export function CreateCampaign() {
                           <select
                             value={type}
                             onChange={(e) =>
-                              setType(e.target.value as CampaignType)
+                              setType(e.target.value as CampaignTypeCode)
                             }
                           >
                             <option value="ViewOnly">View Only</option>
                             <option value="ViewPlusCommission">
-                              View + Commission
+                              View &amp; Sale
                             </option>
                           </select>
                         </Field>
@@ -264,7 +274,7 @@ export function CreateCampaign() {
                     </strong>
                     <span>per {count(price.views)} verified views</span>
                   </div>
-                  {type === "ViewPlusCommission" && (
+                  {isViewAndSale(type) && (
                     <p>
                       Plus {amount(price.saleCostPercent)}% per verified sale.
                     </p>

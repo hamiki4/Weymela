@@ -88,14 +88,30 @@ export function ProductWorkspaceEntry({ role, fallback }: { role: PublicRole; fa
     if (!configuration.loading && configuration.data?.enabled && !session.loading
         && session.user?.role === role && !started.current) begin();
   }, [configuration.data, configuration.loading, role, session.loading, session.user]);
-  if (!session.loading && (!session.user || session.user.role !== role))
-    return <Navigate to="/onboarding" replace />;
+  if (!session.loading && session.user?.role !== role)
+    return <Navigate to={productWorkspaceMismatchPath(session.user?.role, role)} replace />;
   if (!configuration.loading && configuration.data && !configuration.data.enabled) return <>{fallback}</>;
   if (configuration.error)
     return <main className="loading product-handoff-state" role="status"><p>We couldn't verify the product workspace integration.</p></main>;
   return error
     ? <main className="loading product-handoff-state" role="status"><p>{error}</p><Button onClick={begin}>Try again</Button></main>
     : <main className="loading product-handoff-state" aria-busy="true" />;
+}
+
+export function productWorkspaceMismatchPath(
+  currentRole: Role | undefined,
+  requestedRole: PublicRole,
+) {
+  if (!currentRole) return "/sign-in";
+  const profileOnboardingRole =
+    currentRole === "Customer" ||
+    currentRole === "Creator" ||
+    currentRole === "Business";
+  const requestableRole =
+    requestedRole === "Creator" || requestedRole === "Business";
+  return profileOnboardingRole && requestableRole
+    ? "/onboarding"
+    : "/unauthorized";
 }
 
 export function ProductHandoffCallback() {

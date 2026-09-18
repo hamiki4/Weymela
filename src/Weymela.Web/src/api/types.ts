@@ -1,11 +1,13 @@
 export type Role =
   | "PlatformAdmin"
+  | "OperationsAdmin"
   | "Business"
   | "Creator"
   | "Customer"
   | "Cashier"
   | "Onboarding";
-export type CampaignType = "ViewOnly" | "ViewPlusCommission";
+export type CampaignTypeCode = "ViewOnly" | "ViewPlusCommission";
+export type CampaignType = CampaignTypeCode | "View Only" | "View & Sale";
 export interface SessionUser {
   role: Role;
   displayName: string;

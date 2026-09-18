@@ -27,7 +27,14 @@ import {
   Section,
   Tabs,
 } from "../../ui/components";
-import { amount, campaignType, count, date, daysLeft } from "../../ui/format";
+import {
+  amount,
+  campaignType,
+  count,
+  date,
+  daysLeft,
+  isViewAndSale,
+} from "../../ui/format";
 
 export function BusinessCampaignDetail() {
   const { id } = useParams();
@@ -174,7 +181,7 @@ export function BusinessCampaignDetail() {
                     <p>
                       {amount(data.pricing.businessPays)} ETB per{" "}
                       {count(data.pricing.views)} verified views
-                      {c.type === "ViewPlusCommission" &&
+                      {isViewAndSale(c.type) &&
                         ` · ${amount(data.pricing.saleCostPercent)}% per verified sale`}
                     </p>
                   </div>

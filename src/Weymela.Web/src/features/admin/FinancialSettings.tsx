@@ -107,7 +107,7 @@ function SettingsForm({
               {(["viewOnly", "viewPlusCommission"] as const).map((mode) => (
                 <tr key={mode}>
                   <th scope="row">
-                    {mode === "viewOnly" ? "View Only" : "View + Commission"}
+                    {mode === "viewOnly" ? "View Only" : "View & Sale"}
                   </th>
                   {(
                     [
@@ -120,7 +120,7 @@ function SettingsForm({
                   ).map(([field, label]) => (
                     <td key={field} data-label={label}>
                       <input
-                        aria-label={`${mode === "viewOnly" ? "View Only" : "View + Commission"} ${label}`}
+                        aria-label={`${mode === "viewOnly" ? "View Only" : "View & Sale"} ${label}`}
                         type="number"
                         inputMode={
                           field === "viewsPerReward" ? "numeric" : "decimal"
@@ -154,7 +154,7 @@ function SettingsForm({
         <div className="two-column">
           <Section
             title="Verified Sale Split"
-            description="Only View + Commission Campaigns. Rates are saved with each Campaign."
+            description="Only View & Sale Promotions. Rates are saved with each Promotion."
           >
             <div className="settings-splits">
               {(
@@ -319,7 +319,7 @@ export function AdminFinancialSettings() {
                       {amount(v.settings.viewOnly.platformKeeps)} ETB
                     </p>
                     <p>
-                      View + Commission:{" "}
+                      View &amp; Sale:{" "}
                       {v.settings.viewPlusCommission.viewsPerReward.toLocaleString()}{" "}
                       views · Business{" "}
                       {amount(v.settings.viewPlusCommission.businessPays)} /
@@ -341,7 +341,7 @@ export function AdminFinancialSettings() {
                       Minimum Campaign Budgets: View Only{" "}
                       {v.settings.viewOnly.minimumCampaignBudget ??
                         "Not configured"}{" "}
-                      / View + Commission{" "}
+                      / View &amp; Sale{" "}
                       {v.settings.viewPlusCommission.minimumCampaignBudget ??
                         "Not configured"}
                     </p>

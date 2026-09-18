@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
+import { actorRoleNameFromWire } from "../api/actorRoleContract";
 import type { AccountLegalStatus, SessionProfile } from "../api/types";
 import { Button, Empty, Field, Notice, PageHeader, Resource, Section } from "../ui/components";
 import { beginProductHandoff, useProductIntegrationConfiguration } from "./ProductIntegration";
@@ -22,7 +23,8 @@ const choices = [
   ["Business", "Create promotions with creators", "Add a Business", "role-business"],
 ] as const;
 function publicRole(role: Enrollment["role"]): OnboardingRole | null {
-  return role === 3 || role === "Customer" ? "Customer" : role === 2 || role === "Creator" ? "Creator" : role === 1 || role === "Business" ? "Business" : null;
+  const name = actorRoleNameFromWire(role);
+  return name === "Customer" || name === "Creator" || name === "Business" ? name : null;
 }
 
 export function Onboarding() {

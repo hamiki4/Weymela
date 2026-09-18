@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { actorRoleWireValues } from "../src/api/actorRoleContract";
 import type { SessionUser } from "../src/api/types";
 
 async function fillPin(page: import("@playwright/test").Page, label: string, pin: string) {
@@ -178,7 +179,7 @@ async function enrollDevice(context: Parameters<typeof login>[0], suffix: string
 
 async function approveLatest(context: Parameters<typeof login>[0], role: "Customer" | "Creator" | "Business", publicId?: string) {
   await login(context, "admin");
-  const roleValue = enrollmentRoles[role];
+  const roleValue = actorRoleWireValues[role];
   const pending = await (await context.request.get("/api/admin/role-enrollments")).json() as { id: string; role: number; version: number; publicId?: string }[];
   const row = pending.find((item) => item.role === roleValue && (!publicId || item.publicId === publicId));
   expect(row, `pending ${role} request`).toBeTruthy();
@@ -193,7 +194,6 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
 }
 
 type AccountFixture = { suffix: string; email: string; phone: string; password: string; token: string; customerPublicId: string };
-const enrollmentRoles = { Business: 1, Creator: 2, Customer: 3 } as const;
 const enrollmentStatuses = { Pending: 0, Approved: 1, Rejected: 2 } as const;
 
 async function createVerifiedAccount(context: Parameters<typeof login>[0], enroll = true): Promise<Omit<AccountFixture, "customerPublicId">> {
@@ -245,7 +245,7 @@ async function submitAdditionalProfile(context: Parameters<typeof login>[0], acc
   expect(status.status()).toBe(200);
   const body = await status.json() as { profiles: { role: number; status: number; publicId: string }[] };
   expect(body.profiles).toEqual(expect.arrayContaining([
-    expect.objectContaining({ role: enrollmentRoles[role], status: enrollmentStatuses.Pending, publicId }),
+    expect.objectContaining({ role: actorRoleWireValues[role], status: enrollmentStatuses.Pending, publicId }),
   ]));
   return publicId;
 }
@@ -810,6 +810,18 @@ test("business-admin-approval-and-switch", async ({ page, context }) => {
   await open(page, "/customer/offers");
   await chooseProfile(page, "Business");
   await expect(page).toHaveURL(/\/business/);
+});
+
+test("Platform and Operations Admin sessions keep their distinct authority", async ({ context }) => {
+  await login(context, "admin");
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "PlatformAdmin" });
+  expect((await context.request.get("/api/admin/operations")).status()).toBe(200);
+  expect((await context.request.get("/api/admin/financial-settings")).status()).toBe(200);
+
+  await login(context, "operations-admin");
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "OperationsAdmin" });
+  expect((await context.request.get("/api/admin/operations")).status()).toBe(200);
+  expect((await context.request.get("/api/admin/financial-settings")).status()).toBe(403);
 });
 
 test("multi-role-switching", async ({ page, context }) => {

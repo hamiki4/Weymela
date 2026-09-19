@@ -16,6 +16,15 @@ public partial class AddUgcCustomerDiscountLimit : Migration
             precision: 9,
             scale: 4,
             nullable: true);
+
+        migrationBuilder.AddColumn<decimal>(
+            name: "PricingSnapshot_MaximumCustomerDiscountPercent",
+            schema: "v3",
+            table: "UgcOpportunities",
+            type: "numeric(9,4)",
+            precision: 9,
+            scale: 4,
+            nullable: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
@@ -24,5 +33,10 @@ public partial class AddUgcCustomerDiscountLimit : Migration
             name: "Ugc_MaximumCustomerDiscountPercent",
             schema: "v3",
             table: "FinancialConfigurationVersions");
+
+        migrationBuilder.DropColumn(
+            name: "PricingSnapshot_MaximumCustomerDiscountPercent",
+            schema: "v3",
+            table: "UgcOpportunities");
     }
 }

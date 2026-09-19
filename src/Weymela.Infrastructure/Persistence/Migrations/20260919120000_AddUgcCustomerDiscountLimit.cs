@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Weymela.Infrastructure.Persistence.Migrations;
 
+[Migration("20260919120000_AddUgcCustomerDiscountLimit")]
 public partial class AddUgcCustomerDiscountLimit : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

@@ -65,17 +65,7 @@ for (const viewport of viewports)
     for (const [role, paths] of screens) {
       await login(context, role);
       for (const path of paths) {
-        const pricingResponse = path.endsWith("/pricing")
-          ? page.waitForResponse((response) => {
-              const url = new URL(response.url());
-              return (
-                response.request().method() === "GET" &&
-                url.pathname === `/api/${role}/pricing`
-              );
-            })
-          : null;
         await open(page, path);
-        if (pricingResponse) expect((await pricingResponse).ok()).toBe(true);
         await layout(page);
         await screenshot(
           page,
@@ -90,6 +80,10 @@ for (const viewport of viewports)
           await expect(page.locator("main")).not.toContainText("Allocation");
         }
         if (path.endsWith("/pricing")) {
+          await expect(
+            page.getByRole("status", { name: "Loading workspace" }),
+          ).toHaveCount(0);
+          await expect(page.locator("main .empty-state")).toHaveCount(0);
           await expect(page.locator("main .pricing-card-grid")).toHaveCount(1);
           await expect(page.locator("main .pricing-card")).toHaveCount(2);
           await expect(page.locator("main")).not.toContainText(

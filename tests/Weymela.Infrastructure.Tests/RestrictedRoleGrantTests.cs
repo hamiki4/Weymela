@@ -516,7 +516,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260916202055_AddCustomerProfiles",
             "20260917020034_AddProductHandoffTransactions",
             "20260917233008_AddBusinessLedPromotionAndUgc",
-            "20260918144832_AddUgcCustomerOffers"
+            "20260918144832_AddUgcCustomerOffers",
+            "20260919120000_AddUgcCustomerDiscountLimit"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','v3') AND c.relkind='S'";

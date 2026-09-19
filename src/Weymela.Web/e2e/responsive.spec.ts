@@ -87,8 +87,21 @@ for (const viewport of viewports)
           );
         }
         if (path === "/admin/payouts") {
+          if (viewport.width <= 430) {
+            await open(page, "/admin");
+            await page.getByRole("button", { name: "More navigation and profiles" }).click();
+            const menu = page.getByRole("dialog", { name: "Workspace menu" });
+            await expect(menu).toBeVisible();
+            await menu.getByRole("link", { name: "Payouts", exact: true }).click();
+            await expect(page).toHaveURL(/\/admin\/payouts$/);
+            await expect(menu).not.toBeVisible();
+          }
           for (const tab of ["Customers", "Platform", "History"]) {
-            await page.getByRole("tab", { name: tab, exact: true }).click();
+            const payoutTab = page
+              .locator("main")
+              .getByRole("tab", { name: tab, exact: true });
+            await expect(payoutTab).toBeVisible();
+            await payoutTab.click();
             await layout(page);
             await screenshot(
               page,

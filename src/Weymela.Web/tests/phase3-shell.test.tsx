@@ -36,7 +36,11 @@ describe("Phase 3 multi-profile shell", () => {
     expect(document.querySelector(".workspace-label")).toHaveTextContent(`${role} / Weymela`);
     expect(screen.queryByText("INTERNAL-ID")).not.toBeInTheDocument();
     expect(screen.queryByText("subject-secret")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
+    if (role === "Business") {
+      expect(screen.getByRole("link", { name: "Profile", exact: true })).toHaveAttribute("href", "/onboarding");
+    } else {
+      expect(screen.getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
+    }
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
     expect(within(mobile).getByRole("button", { name: "More navigation and profiles" })).toBeInTheDocument();
   });

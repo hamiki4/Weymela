@@ -85,7 +85,9 @@ for (const viewport of viewports)
           ).toHaveCount(0);
           await expect(page.locator("main .empty-state")).toHaveCount(0);
           await expect(page.locator("main .pricing-card-grid")).toHaveCount(1);
-          await expect(page.locator("main .pricing-card")).toHaveCount(2);
+          await expect(page.locator("main .pricing-card")).toHaveCount(
+            role === "business" ? 3 : 2,
+          );
           await expect(page.locator("main")).not.toContainText(
             /Customer Cashback|Platform Keeps|Platform revenue/,
           );

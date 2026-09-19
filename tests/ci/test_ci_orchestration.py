@@ -205,8 +205,26 @@ class DispatcherTests(unittest.TestCase):
     def test_browser_supervisor_runs_all_e2e_and_shuts_down_sigint_ignoring_host(self):
         result = self.browser_run()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('Browser cleanup:', result.stdout)
-        self.assertIn(['npm','run','e2e'], [json.loads(x) for x in self.calls.read_text().splitlines()])
+        cleanup_labels = [
+            'nonresponsive',
+            '360x800', '375x812', '390x844', '393x852', '430x932',
+            '768x1024', '1366x768', '1440x900', '1920x1080',
+        ]
+        for label in cleanup_labels:
+            self.assertIn(f'Browser cleanup[{label}]:', result.stdout)
+        self.assertEqual(result.stdout.count('Browser cleanup['), len(cleanup_labels))
+
+        calls = [json.loads(x) for x in self.calls.read_text().splitlines()]
+        npm_calls = [call for call in calls if call and call[0] == 'npm']
+        self.assertIn(
+            ['npm', 'run', 'e2e', '--', '--grep-invert', 'rendered role workspaces at'],
+            npm_calls,
+        )
+        for viewport in cleanup_labels[1:]:
+            self.assertIn(
+                ['npm', 'run', 'e2e', '--', '--grep', f'rendered role workspaces at {viewport}'],
+                npm_calls,
+            )
 
     def test_browser_supervisor_preserves_e2e_failure(self):
         result = self.browser_run(failure=True)

@@ -127,7 +127,7 @@ export function Metric({
   );
 }
 export function Currency() {
-  return <span className="currency">ETB</span>;
+  return null;
 }
 export function Badge({ status }: { status: string }) {
   return (

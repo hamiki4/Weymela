@@ -12,6 +12,7 @@ import {
 } from "../features/business/BusinessPages";
 import { CreateCampaign } from "../features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
+import { BusinessUgcPage, CreatorUgcPage } from "../features/business/UgcPages";
 import {
   CreatorDashboard,
   CreatorDiscovery,
@@ -142,6 +143,7 @@ export function App() {
         />
         <Route path="/business/requests" element={<BusinessRequests />} />
         <Route path="/business/pricing" element={<BusinessPricingPage />} />
+        <Route path="/business/ugc" element={<BusinessUgcPage />} />
       </Route>
       <Route
         element={
@@ -159,6 +161,7 @@ export function App() {
         />
         <Route path="/creator/requests" element={<CreatorRequests />} />
         <Route path="/creator/pricing" element={<CreatorHowYouEarn />} />
+        <Route path="/creator/ugc" element={<CreatorUgcPage />} />
         <Route path="/creator/earnings" element={<CreatorEarnings />} />
         <Route path="/creator/payouts" element={<CreatorEarnings payout />} />
       </Route>

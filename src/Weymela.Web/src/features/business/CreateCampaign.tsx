@@ -214,7 +214,7 @@ export function CreateCampaign() {
                     {step === 2 && (
                       <>
                         <Field
-                          label="Campaign Budget (ETB)"
+                          label="Campaign Budget"
                           help="The total funds you will commit to this Campaign."
                         >
                           <MoneyInput
@@ -270,7 +270,7 @@ export function CreateCampaign() {
                   <p className="eyebrow">{campaignType(type)}</p>
                   <div className="price-feature">
                     <strong>
-                      {amount(price.businessPays)} <small>ETB</small>
+                      {amount(price.businessPays)}
                     </strong>
                     <span>per {count(price.views)} verified views</span>
                   </div>
@@ -282,7 +282,7 @@ export function CreateCampaign() {
                   {price.minimumCampaignBudget !== null && (
                     <p>
                       Minimum Campaign Budget:{" "}
-                      {amount(price.minimumCampaignBudget)} ETB
+                      {amount(price.minimumCampaignBudget)}
                     </p>
                   )}
                   <p className="fine-print">

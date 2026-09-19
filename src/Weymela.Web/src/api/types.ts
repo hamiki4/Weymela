@@ -324,6 +324,7 @@ export interface FinancialSettings {
   creatorThreshold: number;
   customerThreshold: number;
   effectiveFromUtc: string | null;
+  ugc: UgcSettings | null;
 }
 export interface SettingsWorkspace {
   current: FinancialSettings;
@@ -335,6 +336,96 @@ export interface SettingsWorkspace {
     changedBy: string;
     settings: FinancialSettings;
   }[];
+}
+export interface UgcPricing {
+  minimumCreatorPayment: number;
+  platformFeePercent: number;
+  minimumUgcBudget: number | null;
+  customerOfferPlatformSalePercent: number | null;
+  maximumCustomerDiscountPercent: number | null;
+  financialConfigurationVersion: number;
+  effectiveFromUtc: string;
+}
+export interface UgcSettings {
+  minimumCreatorPayment: number;
+  platformFeePercent: number;
+  minimumUgcBudget: number | null;
+  customerOfferPlatformSalePercent: number | null;
+  maximumCustomerDiscountPercent: number | null;
+}
+export interface UgcPlatformRequirement {
+  platform: string;
+  format: string;
+  minimumAudience: number | null;
+}
+export interface UgcCard {
+  id: string;
+  businessId: string;
+  business: string;
+  title: string;
+  slogan: string | null;
+  contentType: string;
+  status: string;
+  creatorPayment: number;
+  creatorsNeeded: number;
+  approvedCreators: number;
+  requiredFunding?: number;
+  reservedFunding?: number;
+  usedFunding?: number;
+  dueDateUtc: string;
+  location: string | null;
+  platformRequirements: UgcPlatformRequirement[];
+  requestStatus: string | null;
+  version: number;
+  customerOfferEnabled?: boolean;
+  customerDiscountPercent?: number;
+  customerOfferFundedAllocation?: number;
+  customerOfferRemaining?: number;
+  customerOfferStatus?: string;
+  customerFacingSlogan?: string;
+  platformFeePercent?: number;
+  platformFee?: number;
+}
+export interface UgcAssignment {
+  id: string;
+  opportunityId: string;
+  opportunity: string;
+  businessId: string;
+  business: string;
+  creatorId: string;
+  creator: string;
+  creatorPayment: number;
+  status: string;
+  acceptedRevision: number;
+  revisionAcceptanceRequired: boolean;
+  dueDateUtc: string;
+  instructions: string;
+  resources: string[];
+  location: string | null;
+  platformRequirements: UgcPlatformRequirement[];
+  feedback: string | null;
+  submissionUrl: string | null;
+}
+export interface UgcRequest {
+  id: string;
+  opportunityId: string;
+  creatorId: string;
+  creator: string;
+  status: string;
+  requestedAtUtc: string;
+  rejectionReason: string | null;
+}
+export interface UgcDetail {
+  opportunity: UgcCard;
+  instructions: string;
+  resources: string[];
+  productProvided: boolean;
+  creatorMustPurchase: boolean;
+  usageRights: string | null;
+  currentRevision: number;
+  requests: UgcRequest[];
+  assignments: UgcAssignment[];
+  revisions: { revisionNumber: number; isMaterial: boolean; createdAtUtc: string; snapshotJson: string }[];
 }
 export interface QueueRow {
   subjectId: string;

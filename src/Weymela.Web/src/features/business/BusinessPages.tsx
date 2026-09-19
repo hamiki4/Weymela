@@ -41,7 +41,7 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
       <Metric
         label="Total Balance"
         value={amount(wallet.totalBalance)}
-        note="Your advertising funds · ETB"
+        note="Your advertising funds"
         icon="wallet"
         emphasis
       />
@@ -99,8 +99,8 @@ export function BusinessDashboard() {
             </Link>
             <Link className="quick-card" to="/business/pricing">
               <Icon name="settings" />
-              <strong>Campaign Pricing</strong>
-              <span>Know your costs before you start.</span>
+              <strong>Promotion Pricing</strong>
+              <span>View rates &amp; fees</span>
               <Icon name="arrow" />
             </Link>
           </div>
@@ -193,7 +193,7 @@ export function BusinessWallet() {
                 >
                   <fieldset disabled={action.busy || !user?.developmentMode}>
                     <Field
-                      label="Amount (ETB)"
+                      label="Amount"
                       help="Enter the amount you want to add."
                     >
                       <MoneyInput
@@ -309,59 +309,56 @@ export function BusinessPricingPage() {
     <>
       <PageHeader
         eyebrow="Know your costs"
-        title="Campaign Pricing"
-        description="Clear, Platform-set pricing. Choose the Campaign Type that fits your goals."
+        title="Promotion Pricing"
+        description="See current rates and how promotion costs are calculated."
       />
       <Resource resource={resource}>
         {(pricing) => (
           <Section
             title="A simple cost for verified activity"
-            description="All amounts in ETB. Your Campaign’s saved pricing applies to its activity."
+            description="Existing Promotions keep their saved pricing."
             action={<Currency />}
           >
-            <table className="pricing-table">
-              <caption className="sr-only">Business Campaign Pricing</caption>
-              <thead>
-                <tr>
-                  <th>Campaign Type</th>
-                  <th>Views</th>
-                  <th>Business Pays</th>
-                  <th>Sale Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pricing.rows.map((row) => (
-                  <tr key={row.type}>
-                    <td data-label="Campaign Type">{campaignType(row.type)}</td>
-                    <td data-label="Verified views">{count(row.views)}</td>
-                    <td data-label="Business Pays">
-                      {amount(row.businessPays)}
-                    </td>
-                    <td data-label="Sale Cost">
-                      {isViewOnly(row.type)
-                        ? "—"
-                        : `${amount(row.saleCostPercent)}% per verified sale`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {pricing.rows.some((r) => r.minimumCampaignBudget !== null) && (
-              <div className="balance-banner">
-                <strong>Campaign Budget guidance</strong>
-                {pricing.rows
-                  .filter((r) => r.minimumCampaignBudget !== null)
-                  .map((r) => (
-                    <p key={r.type}>
-                      {campaignType(r.type)}: minimum Campaign Budget{" "}
-                      {amount(r.minimumCampaignBudget!)} ETB.
+            <div
+              className="pricing-card-grid"
+              role="region"
+              aria-label="Promotion pricing options"
+            >
+              {pricing.rows.map((row) => (
+                <article className="pricing-card" key={row.type}>
+                  <div className="pricing-card-heading">
+                    <span className="pricing-card-kicker">Promotion type</span>
+                    <h3>{campaignType(row.type)}</h3>
+                  </div>
+                  <dl className="pricing-card-details">
+                    <div>
+                      <dt>Verified views</dt>
+                      <dd>{count(row.views)}</dd>
+                    </div>
+                    <div>
+                      <dt>Business funds</dt>
+                      <dd>{amount(row.businessPays)}</dd>
+                    </div>
+                    <div>
+                      <dt>{isViewOnly(row.type) ? "Sale" : "Sale cost"}</dt>
+                      <dd>
+                        {isViewOnly(row.type)
+                          ? "Not included"
+                          : `${amount(row.saleCostPercent)}% per verified sale`}
+                      </dd>
+                    </div>
+                  </dl>
+                  {row.minimumCampaignBudget !== null && (
+                    <p className="pricing-card-note">
+                      Minimum Promotion Budget: {amount(row.minimumCampaignBudget)}
                     </p>
-                  ))}
-              </div>
-            )}
+                  )}
+                </article>
+              ))}
+            </div>
             <p className="fine-print section-kicker-space">
               Effective {date(pricing.effectiveFromUtc)}. You control your
-              Campaign Budget; Weymela sets activity pricing.
+              Promotion Budget; Weymela sets activity pricing.
             </p>
           </Section>
         )}

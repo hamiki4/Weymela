@@ -68,12 +68,17 @@ describe("Business workspace", () => {
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
     expect(screen.getByText("6,000")).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Promotion Pricing.*View rates & fees/,
+      }),
+    ).toBeVisible();
   });
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
-    await screen.findByLabelText("Amount (ETB)");
-    await userEvent.type(screen.getByLabelText("Amount (ETB)"), "12.34");
+    await screen.findByLabelText("Amount");
+    await userEvent.type(screen.getByLabelText("Amount"), "12.34");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
     await waitFor(() =>
       expect(api.writes[0]?.body).toEqual({
@@ -85,16 +90,18 @@ describe("Business workspace", () => {
   it("rejects a zero deposit in the rendered form", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
-    const input = await screen.findByLabelText("Amount (ETB)");
+    const input = await screen.findByLabelText("Amount");
     await userEvent.type(input, "0");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
     expect(input).toBeInvalid();
     expect(api.writes).toHaveLength(0);
   });
-  it("shows one pricing table and no internal split", async () => {
+  it("shows compact pricing cards and no internal split", async () => {
     mount(<BusinessPricingPage />);
-    await screen.findByRole("table");
-    expect(screen.getAllByRole("table")).toHaveLength(1);
+    expect(
+      await screen.findByRole("region", { name: "Promotion pricing options" }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(screen.getByText("10% per verified sale")).toBeVisible();
     expect(
       screen.queryByText(/Creator:|Customer Cashback|Platform Keeps/),
@@ -121,7 +128,7 @@ describe("Business workspace", () => {
     await userEvent.type(screen.getByLabelText("Creator category"), "Food");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     await userEvent.type(
-      screen.getByLabelText("Campaign Budget (ETB)"),
+      screen.getByLabelText("Campaign Budget"),
       "1000",
     );
     await userEvent.click(screen.getByRole("button", { name: "Create Draft" }));
@@ -193,7 +200,7 @@ describe("Business workspace", () => {
     );
     const d = screen.getByRole("dialog", { name: "Approve Bella" });
     await userEvent.type(
-      within(d).getByLabelText("Creator Budget (ETB)"),
+      within(d).getByLabelText("Creator Budget"),
       "1500",
     );
     await userEvent.click(
@@ -213,7 +220,7 @@ describe("Business workspace", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Approve" }),
     );
-    await userEvent.type(screen.getByLabelText("Creator Budget (ETB)"), "5000");
+    await userEvent.type(screen.getByLabelText("Creator Budget"), "5000");
     expect(
       screen.getByRole("button", { name: "Approve & Set Budget" }),
     ).toBeDisabled();
@@ -230,7 +237,7 @@ describe("Business workspace", () => {
     );
     const d = screen.getByRole("dialog", { name: "Increase Bella’s Budget" });
     await userEvent.type(
-      within(d).getByLabelText("Amount to add (ETB)"),
+      within(d).getByLabelText("Amount to add"),
       "100",
     );
     await userEvent.click(
@@ -319,11 +326,13 @@ describe("Creator workspace", () => {
       ),
     );
   });
-  it("has one How You Earn table without other role finances", async () => {
+  it("has compact earning cards without other role finances", async () => {
     mount(<CreatorHowYouEarn />);
-    await screen.findByRole("table");
-    expect(screen.getAllByRole("table")).toHaveLength(1);
-    expect(screen.getByText("Minimum to cash out: 5,000 ETB")).toBeVisible();
+    expect(
+      await screen.findByRole("region", { name: "Creator earning options" }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(screen.getByText("Minimum to cash out: 5,000")).toBeVisible();
     expect(
       screen.queryByText(/Business Pays|Platform Keeps|Customer Cashback/),
     ).not.toBeInTheDocument();
@@ -338,7 +347,7 @@ describe("Creator workspace", () => {
   it("shows threshold eligibility without payout calendar dates", async () => {
     mount(<CreatorEarnings payout />);
     expect(
-      await screen.findByText("Eligible for payout · 5,000 ETB"),
+      await screen.findByText("Eligible for payout · 5,000"),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Request Payout" }),
@@ -354,7 +363,7 @@ describe("Creator workspace", () => {
       },
     });
     mount(<CreatorEarnings payout />);
-    expect(await screen.findByText("4,600 ETB more needed")).toBeVisible();
+    expect(await screen.findByText("4,600 more needed")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Request Payout" }),
     ).toBeDisabled();
@@ -481,10 +490,10 @@ describe("Accepted commerce compatibility", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Resolve Offer" }),
     );
-    expect(await screen.findByLabelText("Purchase Amount (ETB)")).toBeVisible();
+    expect(await screen.findByLabelText("Purchase Amount")).toBeVisible();
     expect(screen.queryByLabelText("Customer phone")).not.toBeInTheDocument();
     await userEvent.type(
-      screen.getByLabelText("Purchase Amount (ETB)"),
+      screen.getByLabelText("Purchase Amount"),
       "1000",
     );
     await userEvent.click(

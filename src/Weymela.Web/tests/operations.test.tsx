@@ -44,7 +44,7 @@ describe("Operational states", () => {
   });
   it("submits arbitrary positive deposit for review without claiming wallet credit", async () => {
     const api = mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);
-    await userEvent.type(screen.getByLabelText("Amount (ETB)"), "17.23"); await userEvent.type(screen.getByLabelText("Payment reference"), "PAY-17");
+    await userEvent.type(screen.getByLabelText("Amount"), "17.23"); await userEvent.type(screen.getByLabelText("Payment reference"), "PAY-17");
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     expect(await screen.findByText(/wallet has not been credited/)).toBeVisible(); expect(api.writes[0].body).toEqual({ amount: 17.23, externalReference: "PAY-17", proofReference: null });
   });

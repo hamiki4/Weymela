@@ -100,7 +100,7 @@ export function Checkout() {
       {result ? (
         <Section title="Purchase confirmed">
           <Notice>
-            Purchase of {amount(result.purchaseAmount.amount)} ETB confirmed.
+            Purchase of {amount(result.purchaseAmount.amount)} confirmed.
           </Notice>
           <p>The eligible rewards have been recorded.</p>
           <Button
@@ -151,7 +151,7 @@ export function Checkout() {
             }}
           >
             <fieldset disabled={confirm.busy}>
-              <Field label="Purchase Amount (ETB)">
+              <Field label="Purchase Amount">
                 <MoneyInput
                   value={purchase}
                   onChange={(e) => setPurchase(e.target.value)}

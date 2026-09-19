@@ -61,7 +61,7 @@ export function CreatorActiveCampaigns() {
                     ]}
                   />
                   <p className="fine-print">
-                    ETB · {count(r.verifiedViews)} verified views ·{" "}
+                    {count(r.verifiedViews)} verified views ·{" "}
                     {daysLeft(r.endUtc)} days left
                   </p>
                   <ActionLink to={`/creator/campaigns/${r.budgetId}`} secondary>

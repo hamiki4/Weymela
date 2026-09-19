@@ -3,6 +3,7 @@ import { post, useAction, useResource } from "../../api/client";
 import type {
   FinancialSettings as Settings,
   SettingsWorkspace,
+  UgcSettings,
   ViewPriceInput,
 } from "../../api/types";
 import {
@@ -29,6 +30,8 @@ function SettingsForm({
   const action = useAction();
   const update = (key: keyof Settings, value: number) =>
     set({ ...settings, [key]: value });
+  const updateUgc = (key: keyof UgcSettings, value: number | null) =>
+    settings.ugc && set({ ...settings, ugc: { ...settings.ugc, [key]: value } });
   const price = (
     mode: "viewOnly" | "viewPlusCommission",
     field: keyof ViewPriceInput,
@@ -52,7 +55,16 @@ function SettingsForm({
     settings.creatorCommissionPercent +
       settings.customerCashbackPercent +
       settings.platformPercent <=
-      100;
+      100 &&
+    (!settings.ugc ||
+      (settings.ugc.minimumCreatorPayment > 0 &&
+        settings.ugc.platformFeePercent >= 0 &&
+        settings.ugc.platformFeePercent <= 100 &&
+        (settings.ugc.minimumUgcBudget === null || settings.ugc.minimumUgcBudget > 0) &&
+        (settings.ugc.customerOfferPlatformSalePercent === null ||
+          (settings.ugc.customerOfferPlatformSalePercent >= 0 && settings.ugc.customerOfferPlatformSalePercent <= 100)) &&
+        (settings.ugc.maximumCustomerDiscountPercent === null ||
+          (settings.ugc.maximumCustomerDiscountPercent > 0 && settings.ugc.maximumCustomerDiscountPercent <= 100))));
   return (
     <form
       className="settings-form"
@@ -82,7 +94,7 @@ function SettingsForm({
       <fieldset disabled={action.busy}>
         <Section
           title="View Pricing"
-          description="Business Pays must equal Creator Earns plus Platform Keeps. Amounts in ETB."
+          description="Business Pays must equal Creator Earns plus Platform Keeps."
           action={<Currency />}
         >
           <table className="settings-table">
@@ -189,7 +201,7 @@ function SettingsForm({
           </Section>
           <Section
             title="Payout Thresholds"
-            description="Minimum to cash out · ETB"
+            description="Minimum to cash out"
           >
             <div className="form-grid">
               <Field label="Creator">
@@ -219,6 +231,69 @@ function SettingsForm({
             </div>
           </Section>
         </div>
+        {settings.ugc && (
+          <Section
+            title="UGC Pricing"
+            description="Applied to UGC creator payments and optional Customer Offers."
+            action={<Currency />}
+          >
+            <div className="form-grid">
+              <Field label="Minimum Creator Payment">
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={settings.ugc.minimumCreatorPayment}
+                  onChange={(e) => updateUgc("minimumCreatorPayment", Number(e.target.value))}
+                  required
+                />
+              </Field>
+              <Field label="Platform Fee %">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.0001"
+                  value={settings.ugc.platformFeePercent}
+                  onChange={(e) => updateUgc("platformFeePercent", Number(e.target.value))}
+                  required
+                />
+              </Field>
+              <Field label="Minimum UGC Budget">
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={settings.ugc.minimumUgcBudget ?? ""}
+                  onChange={(e) => updateUgc("minimumUgcBudget", e.target.value === "" ? null : Number(e.target.value))}
+                  placeholder="Optional"
+                />
+              </Field>
+              <Field label="Customer Offer Platform Sale Fee %">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.0001"
+                  value={settings.ugc.customerOfferPlatformSalePercent ?? ""}
+                  onChange={(e) => updateUgc("customerOfferPlatformSalePercent", e.target.value === "" ? null : Number(e.target.value))}
+                  placeholder="Optional"
+                />
+              </Field>
+              <Field label="Maximum Customer Discount %">
+                <input
+                  type="number"
+                  min="0.01"
+                  max="100"
+                  step="0.0001"
+                  value={settings.ugc.maximumCustomerDiscountPercent ?? ""}
+                  onChange={(e) => updateUgc("maximumCustomerDiscountPercent", e.target.value === "" ? null : Number(e.target.value))}
+                  placeholder="Required for Customer Offers"
+                />
+              </Field>
+            </div>
+          </Section>
+        )}
         <Section
           title="Effective date"
           description={`Current effective version: ${data.version}. Existing Campaign pricing never changes retroactively.`}
@@ -316,7 +391,7 @@ export function AdminFinancialSettings() {
                       views · Business{" "}
                       {amount(v.settings.viewOnly.businessPays)} / Creator{" "}
                       {amount(v.settings.viewOnly.creatorEarns)} / Platform{" "}
-                      {amount(v.settings.viewOnly.platformKeeps)} ETB
+                      {amount(v.settings.viewOnly.platformKeeps)}
                     </p>
                     <p>
                       View &amp; Sale:{" "}
@@ -326,7 +401,7 @@ export function AdminFinancialSettings() {
                       Creator{" "}
                       {amount(v.settings.viewPlusCommission.creatorEarns)} /
                       Platform{" "}
-                      {amount(v.settings.viewPlusCommission.platformKeeps)} ETB
+                      {amount(v.settings.viewPlusCommission.platformKeeps)}
                     </p>
                     <p>
                       Sales: Creator {v.settings.creatorCommissionPercent}% /
@@ -335,7 +410,7 @@ export function AdminFinancialSettings() {
                     </p>
                     <p>
                       Thresholds: Creator {amount(v.settings.creatorThreshold)}{" "}
-                      / Customer {amount(v.settings.customerThreshold)} ETB
+                      / Customer {amount(v.settings.customerThreshold)}
                     </p>
                     <p>
                       Minimum Campaign Budgets: View Only{" "}

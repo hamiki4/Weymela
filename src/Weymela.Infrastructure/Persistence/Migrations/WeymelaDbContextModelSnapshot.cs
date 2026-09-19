@@ -3471,6 +3471,10 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                                 .HasPrecision(9, 4)
                                 .HasColumnType("numeric(9,4)");
 
+                            b1.Property<decimal?>("MaximumCustomerDiscountPercent")
+                                .HasPrecision(9, 4)
+                                .HasColumnType("numeric(9,4)");
+
                             b1.Property<DateTime>("EffectiveFromUtc")
                                 .HasColumnType("timestamp with time zone");
 
@@ -3603,6 +3607,10 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                                 .HasColumnType("uuid");
 
                             b1.Property<decimal?>("CustomerOfferPlatformSalePercent")
+                                .HasPrecision(9, 4)
+                                .HasColumnType("numeric(9,4)");
+
+                            b1.Property<decimal?>("MaximumCustomerDiscountPercent")
                                 .HasPrecision(9, 4)
                                 .HasColumnType("numeric(9,4)");
 

@@ -74,7 +74,7 @@ export function AdminDashboard() {
             <Metric
               label="Campaign spend"
               value={amount(d.campaignSpend)}
-              note="ETB · verified activity"
+              note="Verified activity"
             />
           </div>
           <div className="two-column">

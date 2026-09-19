@@ -15,7 +15,7 @@ export function ManualDeposit() {
       await post("/business/deposit-requests", { amount: Number(value), externalReference: reference, proofReference: null }, key);
       setSubmitted(true); setValue(""); setReference(""); history.reload();
     }); }}><fieldset disabled={action.busy}>
-      <Field label="Amount (ETB)"><MoneyInput value={value} onChange={event => { setValue(event.target.value); setSubmitted(false); }} /></Field>
+      <Field label="Amount"><MoneyInput value={value} onChange={event => { setValue(event.target.value); setSubmitted(false); }} /></Field>
       <Field label="Payment reference" help="Use the reference from your completed payment. Do not enter passwords or private payment details."><input required maxLength={120} pattern="[A-Za-z0-9._-]+" value={reference} onChange={event => setReference(event.target.value)} /></Field>
       {action.error && <Notice error>{action.error}</Notice>}{submitted && <Notice>Deposit submitted for review. Your wallet has not been credited yet.</Notice>}
       <Button type="submit" disabled={!value || !reference || action.busy}>{action.busy ? "Submitting…" : "Submit for Review"}</Button>

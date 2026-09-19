@@ -34,7 +34,7 @@ for (const width of [375, 1366])
     await screenshot(page, `${width}-flow-creator-requirements`);
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
-      .getByLabel("Campaign Budget (ETB)", { exact: true })
+      .getByLabel("Campaign Budget", { exact: true })
       .fill("1000");
     await screenshot(page, `${width}-flow-campaign-budget`);
     await page.getByRole("button", { name: "Create Draft" }).click();
@@ -76,7 +76,7 @@ for (const width of [375, 1366])
     await login(context, "business");
     await open(page, `/business/campaigns/${campaignId}?tab=applicants`);
     await page.getByRole("button", { name: "Approve", exact: true }).click();
-    await page.getByLabel("Creator Budget (ETB)", { exact: true }).fill("500");
+    await page.getByLabel("Creator Budget", { exact: true }).fill("500");
     await screenshot(page, `${width}-flow-approve-budget`);
     await page.getByRole("button", { name: "Approve & Set Budget" }).click();
     await expect(
@@ -90,7 +90,7 @@ for (const width of [375, 1366])
     await page
       .getByRole("button", { name: "Increase Budget", exact: true })
       .click();
-    await page.getByLabel("Amount to add (ETB)", { exact: true }).fill("100");
+    await page.getByLabel("Amount to add", { exact: true }).fill("100");
     await page.getByRole("button", { name: "Confirm Increase" }).click();
     await expect(
       page.getByText("Creator Budget increased.", { exact: true }),
@@ -134,7 +134,7 @@ test("real Add Funds accepts an arbitrary positive amount", async ({
   const before = await (
     await context.request.get("/api/business/wallet")
   ).json();
-  await page.getByLabel("Amount (ETB)", { exact: true }).fill("17.23");
+  await page.getByLabel("Amount", { exact: true }).fill("17.23");
   await page.getByRole("button", { name: "Add Funds", exact: true }).click();
   await expect(
     page.getByText("Funds added. Your saved wallet balance is shown above.", {

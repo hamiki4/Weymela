@@ -39,10 +39,12 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             {
                 if (pricing.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
                     throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
+                if (pricing.MaximumCustomerDiscountPercent is not { } maximumDiscount)
+                    throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not include a maximum Customer Discount.");
                 var offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,
                     input.CustomerOfferFundedAllocation, input.CustomerFacingSlogan,
                     input.CustomerOfferStartsAtUtc, input.CustomerOfferEndsAtUtc,
-                    platformSalePercent, pricing.EffectiveFromUtc, pricing.ConfigurationVersionId);
+                    platformSalePercent, maximumDiscount, pricing.EffectiveFromUtc, pricing.ConfigurationVersionId);
                 db.UgcCustomerOffers.Add(offer);
             }
             db.UgcRevisions.Add(new(opportunity.Id, 1, false, Snapshot(opportunity), actor.UserId, Now));
@@ -158,11 +160,18 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var assignment = await db.UgcAssignments.SingleOrDefaultAsync(x => x.Id == assignmentId, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC assignment not found.");
             if (assignment.CreatorId != actor.CreatorId) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC assignment belongs to another Creator.");
+            var opportunity = await Opportunity(assignment.UgcOpportunityId, token);
+            if (opportunity.PlatformRequirements.Count > 0)
+            {
+                if (Now > opportunity.DueDateUtc)
+                    throw new ApplicationFailure(FailureKind.Validation, "Social UGC content must be posted by the due date.");
+                if (!MatchesRequiredSocialPlatform(url, opportunity.PlatformRequirements))
+                    throw new ApplicationFailure(FailureKind.Validation, "Submit a secure social post link from one of the required platforms.");
+            }
             assignment.Submitted();
             var submission = new UgcSubmission(assignment.Id, assignment.AcceptedRevisionNumber, url, Now);
             db.UgcSubmissions.Add(submission);
             operation.Remember(actor, "SubmitUgc", key, fingerprint, submission.Id.ToString(), Now);
-            var opportunity = await db.UgcOpportunities.SingleAsync(x => x.Id == assignment.UgcOpportunityId, token);
             Record(actor, "UgcContentSubmitted", opportunity.Id, assignment.CreatorId, Guid.NewGuid(),
                 new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id, SubmissionId = submission.Id, opportunity.BusinessId });
             return submission.Id;
@@ -278,12 +287,16 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     var ugc = config.Ugc ?? throw new ApplicationFailure(FailureKind.Validation, "UGC financial settings are unavailable.");
                     if (ugc.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
                         throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
+                    if (ugc.MaximumCustomerDiscountPercent is not { } maximumDiscount)
+                        throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not include a maximum Customer Discount.");
+                    var discount = input.CustomerDiscountPercent ?? offer?.CustomerDiscountPercent;
+                    EnsureCustomerDiscount(discount, maximumDiscount);
                     if (offer is null)
                     {
                         offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,
                             input.CustomerOfferFundedAllocation, input.CustomerFacingSlogan,
                             input.CustomerOfferStartsAtUtc, input.CustomerOfferEndsAtUtc,
-                            platformSalePercent, ugc.EffectiveFromUtc, ugc.ConfigurationVersionId);
+                            platformSalePercent, maximumDiscount, ugc.EffectiveFromUtc, ugc.ConfigurationVersionId);
                         db.UgcCustomerOffers.Add(offer);
                     }
                     else
@@ -379,7 +392,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var offers = await db.UgcCustomerOffers.AsNoTracking().Where(x => x.BusinessId == actor.BusinessId)
             .ToDictionaryAsync(x => x.UgcOpportunityId, ct);
         var name = (await db.PublicWorkspaceProfiles.AsNoTracking().SingleAsync(x => x.Role == ActorRole.Business && x.SubjectId == actor.BusinessId, ct)).DisplayName;
-        return rows.Select(x => Card(x, name, null, offers.GetValueOrDefault(x.Id))).ToArray();
+        return rows.Select(x => Card(x, name, null, offers.GetValueOrDefault(x.Id), true)).ToArray();
     }
 
     public async Task<IReadOnlyList<UgcCard>> DiscoverAsync(Actor actor, CancellationToken ct)
@@ -394,7 +407,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId))
             .ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         return rows.Where(x => Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity)
-            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString())).ToArray();
+            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), null, false)).ToArray();
     }
 
     public async Task<IReadOnlyList<UgcRequestView>> CreatorRequestsAsync(Actor actor, CancellationToken ct)
@@ -444,7 +457,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var status = isCreator ? requestRows.OrderByDescending(x => x.RequestedAtUtc).FirstOrDefault()?.Status.ToString() : null;
         var customerOffer = isBusiness || isAdmin
             ? await db.UgcCustomerOffers.AsNoTracking().SingleOrDefaultAsync(x => x.UgcOpportunityId == id, ct) : null;
-        return new UgcDetail(Card(opportunity, business, status, customerOffer), opportunity.Instructions, ParseResources(opportunity.ResourcesJson),
+        return new UgcDetail(Card(opportunity, business, status, customerOffer, isBusiness || isAdmin), opportunity.Instructions, ParseResources(opportunity.ResourcesJson),
             opportunity.ProductProvided, opportunity.CreatorMustPurchase, opportunity.UsageRights, opportunity.CurrentRevision, requests, assignments, revisions);
     }
 
@@ -455,13 +468,14 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var ids = rows.Select(x => x.BusinessId).Distinct().ToArray();
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && ids.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         var offers = await db.UgcCustomerOffers.AsNoTracking().ToDictionaryAsync(x => x.UgcOpportunityId, ct);
-        return rows.Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), null, offers.GetValueOrDefault(x.Id))).ToArray();
+        return rows.Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), null, offers.GetValueOrDefault(x.Id), true)).ToArray();
     }
 
     private async Task<IReadOnlyList<UgcAssignmentView>> AssignmentViews(IReadOnlyCollection<UgcAssignment> rows, CancellationToken ct)
     {
         var opportunityIds = rows.Select(x => x.UgcOpportunityId).Distinct().ToArray();
-        var opportunities = await db.UgcOpportunities.AsNoTracking().Where(x => opportunityIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        var opportunities = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements)
+            .Where(x => opportunityIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
         var businessIds = opportunities.Values.Select(x => x.BusinessId).Distinct().ToArray();
         var creatorIds = rows.Select(x => x.CreatorId).Distinct().ToArray();
         var profiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => businessIds.Contains(x.SubjectId) || creatorIds.Contains(x.SubjectId)).ToListAsync(ct);
@@ -474,6 +488,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 x.CreatorId, profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.DisplayName ?? "Creator",
                 x.CreatorPayment.Amount, x.Status.ToString(), x.AcceptedRevisionNumber, x.RevisionAcceptanceRequired,
                 opportunity.DueDateUtc, opportunity.Instructions, ParseResources(opportunity.ResourcesJson), opportunity.Location,
+                opportunity.PlatformRequirements.Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(),
                 submission?.Feedback, submission?.SubmissionUrl);
         }).ToArray();
     }
@@ -539,6 +554,18 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo)) throw new ApplicationFailure(FailureKind.Validation, "Enter a secure HTTPS submission link.");
         return uri.AbsoluteUri;
     }
+    private static bool MatchesRequiredSocialPlatform(string url, IReadOnlyCollection<UgcPlatformRequirement> requirements)
+    {
+        var host = new Uri(url).Host.ToLowerInvariant();
+        return requirements.Any(x => x.Platform switch
+        {
+            CreatorPlatform.TikTok => host == "tiktok.com" || host.EndsWith(".tiktok.com", StringComparison.Ordinal),
+            CreatorPlatform.Instagram => host == "instagram.com" || host.EndsWith(".instagram.com", StringComparison.Ordinal),
+            CreatorPlatform.YouTube => host == "youtube.com" || host.EndsWith(".youtube.com", StringComparison.Ordinal) || host == "youtu.be",
+            CreatorPlatform.Facebook => host == "facebook.com" || host.EndsWith(".facebook.com", StringComparison.Ordinal) || host == "fb.watch",
+            _ => false
+        });
+    }
     private static string[] Resources(IReadOnlyList<string>? resources) => (resources ?? [])
         .Where(x => !string.IsNullOrWhiteSpace(x)).Select(ExternalUrl).Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToArray();
     private static IReadOnlyList<(CreatorPlatform Platform, string Format, long? MinimumAudience)> Requirements(IReadOnlyList<UgcPlatformRequirementInput>? input)
@@ -552,18 +579,26 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         }
         return result;
     }
-    private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer = null) => new(x.Id, x.BusinessId, business,
+    private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer, bool includeBusinessFinancials) => new(x.Id, x.BusinessId, business,
         x.Title, x.Slogan, x.ContentType.ToString(), x.Status.ToString(), x.CreatorPayment.Amount, x.CreatorCapacity,
-        x.ApprovedCreatorCount, x.RequiredFunding.Amount, x.ReservedFunding.Amount, x.UsedFunding.Amount, x.DueDateUtc,
+        x.ApprovedCreatorCount, includeBusinessFinancials ? x.RequiredFunding.Amount : null,
+        includeBusinessFinancials ? x.ReservedFunding.Amount : null, includeBusinessFinancials ? x.UsedFunding.Amount : null, x.DueDateUtc,
         x.Location, x.PlatformRequirements.Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(), requestStatus, x.Version,
-        offer is not null, offer?.CustomerDiscountPercent, offer?.FundedLimit.Amount, offer?.RemainingFunding.Amount,
-        offer?.Status.ToString(), offer?.CustomerFacingSlogan, x.PricingSnapshot.PlatformFeePercent, x.PlatformFee.Amount);
+        includeBusinessFinancials ? offer is not null : null,
+        includeBusinessFinancials ? offer?.CustomerDiscountPercent : null,
+        includeBusinessFinancials ? offer?.FundedLimit.Amount : null,
+        includeBusinessFinancials ? offer?.RemainingFunding.Amount : null,
+        includeBusinessFinancials ? offer?.Status.ToString() : null,
+        includeBusinessFinancials ? offer?.CustomerFacingSlogan : null,
+        includeBusinessFinancials ? x.PricingSnapshot.PlatformFeePercent : null,
+        includeBusinessFinancials ? x.PlatformFee.Amount : null);
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,
-        decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)
+        decimal platformSalePercent, decimal maximumDiscount, DateTime effectiveFrom, Guid configurationVersionId)
     {
         if (discount is null || fundedAllocation is null || starts is null || ends is null)
             throw new ApplicationFailure(FailureKind.Validation, "Customer discount, funded allocation, start, and end are required when Customer Offer is ON.");
+        EnsureCustomerDiscount(discount, maximumDiscount);
         try
         {
             return new UgcCustomerOffer(opportunity.Id, opportunity.BusinessId, slogan, discount.Value,
@@ -571,6 +606,11 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 new(platformSalePercent, effectiveFrom, configurationVersionId), Now);
         }
         catch (ArgumentException ex) { throw new ApplicationFailure(FailureKind.Validation, ex.Message, ex); }
+    }
+    private static void EnsureCustomerDiscount(decimal? discount, decimal maximumDiscount)
+    {
+        if (discount is null || discount <= 0 || discount > maximumDiscount)
+            throw new ApplicationFailure(FailureKind.Validation, "Customer Discount must be positive and no greater than the Admin maximum.");
     }
     private static string[] ParseResources(string json)
     { try { return JsonSerializer.Deserialize<string[]>(json) ?? []; } catch (JsonException) { return []; } }

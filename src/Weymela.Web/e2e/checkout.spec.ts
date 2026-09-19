@@ -27,7 +27,7 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await page.getByRole("button", { name: "Resolve Offer" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(
-    page.getByLabel("Purchase Amount (ETB)", { exact: true }),
+    page.getByLabel("Purchase Amount", { exact: true }),
   ).toHaveCount(0);
   await login(context, "cashier");
   await open(page, "/checkout");
@@ -35,9 +35,9 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await page.getByLabel("Scanned QR code", { exact: true }).fill(qr.token);
   await page.getByRole("button", { name: "Resolve Offer" }).click();
   await expect(
-    page.getByLabel("Purchase Amount (ETB)", { exact: true }),
+    page.getByLabel("Purchase Amount", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Purchase Amount (ETB)", { exact: true }).fill("1000");
+  await page.getByLabel("Purchase Amount", { exact: true }).fill("1000");
   await screenshot(page, "checkout-confirmation");
   await page.getByRole("button", { name: "Confirm Purchase" }).click();
   await expect(
@@ -101,9 +101,9 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Scan QR", exact: true }).click();
   await expect(
-    page.getByLabel("Purchase Amount (ETB)", { exact: true }),
+    page.getByLabel("Purchase Amount", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Purchase Amount (ETB)", { exact: true }).fill("50");
+  await page.getByLabel("Purchase Amount", { exact: true }).fill("50");
   await page.getByRole("button", { name: "Confirm Purchase" }).click();
   await expect(
     page.getByRole("heading", { name: "Purchase confirmed", exact: true }),

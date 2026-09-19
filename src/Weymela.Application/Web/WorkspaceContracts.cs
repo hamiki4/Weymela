@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Weymela.Domain;
 
 namespace Weymela.Application.Web;
@@ -29,7 +30,7 @@ public sealed record CreatorPrice(string Type, int Views, decimal YouEarn, decim
 public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime EffectiveFromUtc);
 public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent,
-    int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
+    decimal? MaximumCustomerDiscountPercent, int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
 public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal MinimumToCashOut, DateTime EffectiveFromUtc);
 public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available);
 public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
@@ -72,7 +73,8 @@ public sealed record AdminCampaign(CampaignRow Campaign, IReadOnlyList<AdminCrea
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> History, int FinancialConfigurationVersion);
 public sealed record ViewPriceInput(int ViewsPerReward, decimal BusinessPays, decimal CreatorEarns, decimal PlatformKeeps, decimal? MinimumCampaignBudget);
 public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
-    decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null);
+    decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null,
+    decimal? MaximumCustomerDiscountPercent = null);
 public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceInput ViewPlusCommission, decimal CreatorCommissionPercent,
     decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold,
     DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null);
@@ -131,18 +133,25 @@ public sealed record UgcRevisionInput(string? Slogan, string Instructions, IRead
 public sealed record UgcPlatformRequirementView(string Platform, string Format, long? MinimumAudience);
 public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string Title, string? Slogan,
     string ContentType, string Status, decimal CreatorPayment, int CreatorsNeeded, int ApprovedCreators,
-    decimal RequiredFunding, decimal ReservedFunding, decimal UsedFunding, DateTime DueDateUtc,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? RequiredFunding,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ReservedFunding,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? UsedFunding, DateTime DueDateUtc,
     string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements, string? RequestStatus, long Version,
-    bool CustomerOfferEnabled = false, decimal? CustomerDiscountPercent = null,
-    decimal? CustomerOfferFundedAllocation = null, decimal? CustomerOfferRemaining = null,
-    string? CustomerOfferStatus = null, string? CustomerFacingSlogan = null,
-    decimal PlatformFeePercent = 0, decimal PlatformFee = 0);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CustomerOfferEnabled = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? CustomerDiscountPercent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? CustomerOfferFundedAllocation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? CustomerOfferRemaining = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomerOfferStatus = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomerFacingSlogan = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFeePercent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee = null);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason);
 public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,
     string Business, Guid CreatorId, string Creator, decimal CreatorPayment, string Status,
     int AcceptedRevision, bool RevisionAcceptanceRequired, DateTime DueDateUtc, string Instructions,
-    IReadOnlyList<string> Resources, string? Location, string? Feedback, string? SubmissionUrl);
+    IReadOnlyList<string> Resources, string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements,
+    string? Feedback, string? SubmissionUrl);
 public sealed record UgcRevisionView(int RevisionNumber, bool IsMaterial, DateTime CreatedAtUtc, string SnapshotJson);
 public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOnlyList<string> Resources,
     bool ProductProvided, bool CreatorMustPurchase, string? UsageRights, int CurrentRevision,

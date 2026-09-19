@@ -179,7 +179,7 @@ export function BusinessCampaignDetail() {
                   <div className="pricing-note">
                     <strong>Saved Campaign Pricing</strong>
                     <p>
-                      {amount(data.pricing.businessPays)} ETB per{" "}
+                      {amount(data.pricing.businessPays)} per{" "}
                       {count(data.pricing.views)} verified views
                       {isViewAndSale(c.type) &&
                         ` · ${amount(data.pricing.saleCostPercent)}% per verified sale`}
@@ -261,7 +261,7 @@ export function BusinessCampaignDetail() {
             {tab === "budgets" && (
               <Section
                 title="Approved Creators"
-                description={`Available Campaign Budget: ${amount(c.availableCampaignBudget)} ETB`}
+                description={`Available Campaign Budget: ${amount(c.availableCampaignBudget)}`}
                 action={<Currency />}
               >
                 <DataTable
@@ -379,7 +379,7 @@ export function BusinessCampaignDetail() {
                         "Confirmed Sales",
                         data.creators.reduce((sum, r) => sum + r.sales, 0),
                       ],
-                      ["Campaign spend (ETB)", c.used],
+                      ["Campaign spend", c.used],
                     ]}
                   />
                 </Section>
@@ -401,7 +401,7 @@ export function BusinessCampaignDetail() {
             >
               <p>
                 Available Campaign Budget:{" "}
-                <strong>{amount(c.availableCampaignBudget)} ETB</strong>
+                <strong>{amount(c.availableCampaignBudget)}</strong>
               </p>
               <form
                 onSubmit={(e) => {
@@ -419,7 +419,7 @@ export function BusinessCampaignDetail() {
               >
                 <fieldset disabled={action.busy}>
                   <Field
-                    label="Creator Budget (ETB)"
+                    label="Creator Budget"
                     help="This is the maximum Campaign budget available for this Creator’s verified activity."
                   >
                     <MoneyInput
@@ -455,7 +455,7 @@ export function BusinessCampaignDetail() {
             >
               <p>
                 Available Campaign Budget:{" "}
-                <strong>{amount(c.availableCampaignBudget)} ETB</strong>
+                <strong>{amount(c.availableCampaignBudget)}</strong>
               </p>
               <form
                 onSubmit={(e) => {
@@ -473,7 +473,7 @@ export function BusinessCampaignDetail() {
               >
                 <fieldset disabled={action.busy}>
                   <Field
-                    label="Amount to add (ETB)"
+                    label="Amount to add"
                     help="This uses only your Available Campaign Budget."
                   >
                     <MoneyInput
@@ -485,7 +485,7 @@ export function BusinessCampaignDetail() {
                   {value && budget && (
                     <p>
                       New Creator Budget:{" "}
-                      {amount(budget.creatorBudget + Number(value))} ETB
+                      {amount(budget.creatorBudget + Number(value))}
                     </p>
                   )}
                   {action.error && <Notice error>{action.error}</Notice>}
@@ -520,7 +520,7 @@ export function BusinessCampaignDetail() {
                       ]}
                     />
                     <div className="balance-banner">
-                      <strong>Balance after funding · ETB</strong>
+                      <strong>Balance after funding</strong>
                       <p>
                         {amount(w.available - c.campaignBudget)} Available /{" "}
                         {amount(w.reserved + c.campaignBudget)} Reserved

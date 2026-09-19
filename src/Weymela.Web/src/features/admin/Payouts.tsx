@@ -67,7 +67,7 @@ export function PlatformSettlement({
         }}
       >
         <fieldset disabled={action.busy || available <= 0}>
-          <Field label="Settlement Amount (ETB)">
+          <Field label="Settlement Amount">
             <MoneyInput
               value={value}
               max={available}
@@ -289,7 +289,7 @@ export function AdminPayouts() {
                         <Badge status={r.status} />
                       </div>
                       <p>
-                        {amount(r.amount)} ETB ·{" "}
+                        {amount(r.amount)} ·{" "}
                         {date(r.paidAtUtc ?? r.eligibleAtUtc)}
                       </p>
                       <p className="fine-print">
@@ -323,7 +323,7 @@ export function AdminPayouts() {
       >
         <p>
           Pay Amount:{" "}
-          <strong>{amount(selected?.row.payAmount ?? 0)} ETB</strong>
+          <strong>{amount(selected?.row.payAmount ?? 0)}</strong>
         </p>
         <p className="fine-print">
           This records an external payment; it does not send money. Only the

@@ -50,7 +50,7 @@ export function CreatorDashboard() {
             <Metric
               label="Available Earnings"
               value={amount(data.earnings.availableEarnings)}
-              note="ETB · yours across every Campaign"
+            note="Yours across every Campaign"
               emphasis
               icon="wallet"
             />
@@ -132,7 +132,7 @@ function OpportunityCard({ row }: { row: Opportunity }) {
       <p>{row.requirements || row.description}</p>
       <div className="pricing-note">
         <strong>
-          {amount(row.earnings.youEarn)} ETB per {count(row.earnings.views)}{" "}
+          {amount(row.earnings.youEarn)} per {count(row.earnings.views)}{" "}
           verified views
         </strong>
         {isViewAndSale(row.type) && (
@@ -319,37 +319,44 @@ export function CreatorHowYouEarn() {
         {(p) => (
           <Section
             title="Your earning terms"
-            description="Current Platform pricing. Existing Campaigns keep their saved earning terms."
+            description="Current earning rates. Existing Promotions keep their saved earning terms."
             action={<Currency />}
           >
-            <table className="pricing-table">
-              <caption className="sr-only">Creator How You Earn</caption>
-              <thead>
-                <tr>
-                  <th>Campaign Type</th>
-                  <th>Views</th>
-                  <th>You Earn</th>
-                  <th>Sales</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.rows.map((r) => (
-                  <tr key={r.type}>
-                    <td data-label="Campaign Type">{campaignType(r.type)}</td>
-                    <td data-label="Verified views">{count(r.views)}</td>
-                    <td data-label="You Earn">{amount(r.youEarn)}</td>
-                    <td data-label="Sales">
-                      {isViewOnly(r.type)
-                        ? "—"
-                        : `${amount(r.saleCommissionPercent)}% per verified sale`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div
+              className="pricing-card-grid"
+              role="region"
+              aria-label="Creator earning options"
+            >
+              {p.rows.map((r) => (
+                <article className="pricing-card" key={r.type}>
+                  <div className="pricing-card-heading">
+                    <span className="pricing-card-kicker">Promotion type</span>
+                    <h3>{campaignType(r.type)}</h3>
+                  </div>
+                  <dl className="pricing-card-details">
+                    <div>
+                      <dt>Verified views</dt>
+                      <dd>{count(r.views)}</dd>
+                    </div>
+                    <div>
+                      <dt>You earn</dt>
+                      <dd>{amount(r.youEarn)}</dd>
+                    </div>
+                    <div>
+                      <dt>Eligible sale</dt>
+                      <dd>
+                        {isViewOnly(r.type)
+                          ? "Not included"
+                          : `You earn ${amount(r.saleCommissionPercent)}% per eligible sale`}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
             <div className="threshold-note">
               <strong>
-                Minimum to cash out: {amount(p.minimumToCashOut)} ETB
+                Minimum to cash out: {amount(p.minimumToCashOut)}
               </strong>
               <p>
                 Earnings from your Campaigns accumulate together. Any balance
@@ -367,19 +374,19 @@ export function Eligibility({ data }: { data: Earnings }) {
     <>
       <div className="payout-summary">
         <div>
-          <small>Available Earnings · ETB</small>
+          <small>Available Earnings</small>
           <strong>{amount(data.availableEarnings)}</strong>
         </div>
         <Icon name="wallet" />
       </div>
       <p>
         Minimum to cash out:{" "}
-        <strong>{amount(data.minimumToCashOut)} ETB</strong>
+        <strong>{amount(data.minimumToCashOut)}</strong>
       </p>
       {data.amountNeeded > 0 ? (
-        <p className="muted">{amount(data.amountNeeded)} ETB more needed</p>
+        <p className="muted">{amount(data.amountNeeded)} more needed</p>
       ) : (
-        <Notice>Eligible for payout · {amount(data.eligibleAmount)} ETB</Notice>
+        <Notice>Eligible for payout · {amount(data.eligibleAmount)}</Notice>
       )}
       <progress
         className="progress"
@@ -408,7 +415,7 @@ export function PayoutHistory({ rows }: { rows: Payout[] }) {
       card={(r) => (
         <>
           <div className="card-head">
-            <strong>{amount(r.amount)} ETB</strong>
+            <strong>{amount(r.amount)}</strong>
             <Badge status={r.status} />
           </div>
           <p>{date(r.paidAtUtc ?? r.eligibleAtUtc)}</p>

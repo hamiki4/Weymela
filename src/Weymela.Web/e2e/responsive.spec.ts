@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 
 const viewports = [
+  { width: 360, height: 800 },
   { width: 375, height: 812 },
   { width: 390, height: 844 },
   { width: 393, height: 852 },
@@ -27,6 +28,7 @@ for (const viewport of viewports)
           "/business/campaigns/new",
           "/business/campaigns",
           "/business/requests",
+          "/business/ugc",
           "/business/pricing",
         ],
       ],
@@ -39,6 +41,7 @@ for (const viewport of viewports)
           "/creator/requests",
           "/creator/earnings",
           "/creator/payouts",
+          "/creator/ugc",
           "/creator/pricing",
         ],
       ],
@@ -77,7 +80,8 @@ for (const viewport of viewports)
           await expect(page.locator("main")).not.toContainText("Allocation");
         }
         if (path.endsWith("/pricing")) {
-          await expect(page.locator("main table")).toHaveCount(1);
+          await expect(page.locator("main .pricing-card-grid")).toHaveCount(1);
+          await expect(page.locator("main .pricing-card")).toHaveCount(2);
           await expect(page.locator("main")).not.toContainText(
             /Customer Cashback|Platform Keeps|Platform revenue/,
           );

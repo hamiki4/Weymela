@@ -27,7 +27,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         await service.PublishAsync(state.Business, opportunityId, 0, "ugc-publish", default);
         var requestId = await service.RequestAsync(state.Creator, opportunityId, "ugc-request", default);
         var assignmentId = await service.ReviewRequestAsync(state.Business, requestId, true, null, "ugc-request-approve", default);
-        await service.SubmitAsync(state.Creator, assignmentId, new("https://example.com/submission/video"), "ugc-submit", default);
+        await service.SubmitAsync(state.Creator, assignmentId, new("https://www.tiktok.com/@mimi/video/123"), "ugc-submit", default);
         await service.ReviewSubmissionAsync(state.Business, assignmentId, "approve", null, "ugc-content-approve", default);
         var replay = await service.ReviewSubmissionAsync(state.Business, assignmentId, "approve", null, "ugc-content-approve", default);
         Assert.Equal(assignmentId, replay);
@@ -44,6 +44,62 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(50m, fee.Amount.Amount);
         Assert.Equal(2, await db.FinancialJournals.CountAsync(x => EF.Property<Guid?>(x, "UgcOpportunityId") == opportunityId));
         Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == opportunityId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Social_post_off_allows_direct_content_delivery()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, Input() with { PlatformRequirements = [] }, "ugc-direct-create", default);
+        await service.PublishAsync(state.Business, id, 0, "ugc-direct-publish", default);
+        var request = await service.RequestAsync(state.Creator, id, "ugc-direct-request", default);
+        var assignment = await service.ReviewRequestAsync(state.Business, request, true, null, "ugc-direct-approve", default);
+        await service.SubmitAsync(state.Creator, assignment, new("https://example.com/submission/video"), "ugc-direct-submit", default);
+        Assert.Equal(UgcAssignmentStatus.Submitted, (await db.UgcAssignments.SingleAsync(x => x.Id == assignment)).Status);
+    }
+
+    [Fact]
+    public async Task Social_post_on_requires_one_selected_platform_link()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, Input(), "ugc-social-create", default);
+        await service.PublishAsync(state.Business, id, 0, "ugc-social-publish", default);
+        var request = await service.RequestAsync(state.Creator, id, "ugc-social-request", default);
+        var assignment = await service.ReviewRequestAsync(state.Business, request, true, null, "ugc-social-approve", default);
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(state.Creator, assignment, new("https://example.com/submission/video"), "ugc-social-submit-invalid", default));
+        Assert.Equal(FailureKind.Validation, failure.Kind);
+        await service.SubmitAsync(state.Creator, assignment, new("https://www.tiktok.com/@mimi/video/456"), "ugc-social-submit-valid", default);
+    }
+
+    [Fact]
+    public async Task Creator_ugc_view_hides_business_funding_and_platform_fee()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, Input(), "ugc-creator-visibility", default);
+        await service.PublishAsync(state.Business, id, 0, "ugc-creator-visibility-publish", default);
+        var detail = await service.DetailAsync(state.Creator, id, default);
+        Assert.Equal(500m, detail.Opportunity.CreatorPayment);
+        Assert.Null(detail.Opportunity.RequiredFunding);
+        Assert.Null(detail.Opportunity.PlatformFeePercent);
+        Assert.Null(detail.Opportunity.PlatformFee);
+        Assert.Null(detail.Opportunity.CustomerDiscountPercent);
+    }
+
+    [Fact]
+    public async Task Customer_offer_discount_cannot_exceed_effective_admin_maximum()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, Input() with
+        {
+            CustomerOfferEnabled = true, CustomerDiscountPercent = 21m,
+            CustomerOfferFundedAllocation = 1000m, CustomerOfferStartsAtUtc = Now,
+            CustomerOfferEndsAtUtc = Now.AddDays(7)
+        }, "ugc-discount-limit", default));
+        Assert.Equal(FailureKind.Validation, failure.Kind);
     }
 
     [Fact]
@@ -255,10 +311,10 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             "Addis Ababa", "90-day digital use", false), version, "ugc-material-update", default);
         db.ChangeTracker.Clear();
         Assert.True((await db.UgcAssignments.AsNoTracking().SingleAsync(x => x.Id == assignment)).RevisionAcceptanceRequired);
-        await Assert.ThrowsAnyAsync<Exception>(() => service.SubmitAsync(state.Creator, assignment, new("https://example.com/content"), "ugc-submit-before-accept", default));
+        await Assert.ThrowsAnyAsync<Exception>(() => service.SubmitAsync(state.Creator, assignment, new("https://www.tiktok.com/@mimi/video/before-accept"), "ugc-submit-before-accept", default));
         var current = await db.UgcOpportunities.AsNoTracking().SingleAsync(x => x.Id == id);
         await service.AcceptRevisionAsync(state.Creator, assignment, current.CurrentRevision, "ugc-accept-revision", default);
-        Assert.NotEqual(Guid.Empty, await service.SubmitAsync(state.Creator, assignment, new("https://example.com/content"), "ugc-submit-after-accept", default));
+        Assert.NotEqual(Guid.Empty, await service.SubmitAsync(state.Creator, assignment, new("https://www.tiktok.com/@mimi/video/after-accept"), "ugc-submit-after-accept", default));
     }
 
     [Fact]
@@ -319,9 +375,9 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             await service.PublishAsync(state.Business, id, 0, "ugc-notify-publish", default);
             var request = await service.RequestAsync(state.Creator, id, "ugc-notify-request", default);
             var assignment = await service.ReviewRequestAsync(state.Business, request, true, null, "ugc-notify-approve", default);
-            await service.SubmitAsync(state.Creator, assignment, new("https://example.com/notify-content"), "ugc-notify-submit", default);
+            await service.SubmitAsync(state.Creator, assignment, new("https://www.tiktok.com/@mimi/video/notify-content"), "ugc-notify-submit", default);
             await service.ReviewSubmissionAsync(state.Business, assignment, "changes", "Use a clearer opening.", "ugc-notify-changes", default);
-            await service.SubmitAsync(state.Creator, assignment, new("https://example.com/notify-content-v2"), "ugc-notify-resubmit", default);
+            await service.SubmitAsync(state.Creator, assignment, new("https://www.tiktok.com/@mimi/video/notify-content-v2"), "ugc-notify-resubmit", default);
             await service.ReviewSubmissionAsync(state.Business, assignment, "approve", null, "ugc-notify-content-approve", default);
         }
         await DrainNotifications(state.Database);
@@ -355,7 +411,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.FinancialConfigurations.Add(new(configurationId, "PlatformPricing"));
         db.FinancialConfigurationVersions.Add(new(versionId, configurationId, 1, Guid.NewGuid(), Now,
             Scenario.Price(PromotionType.ViewOnly, versionId), Scenario.Price(PromotionType.ViewPlusCommission, versionId),
-            new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId, 3m)));
+            new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId, 3m, 20m)));
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         await new FinancialCommands(db, new FixedTime(Now)).CreditDepositAsync(new(business, new Money(deposit), "ugc-seed-deposit", Now), 0);
         return new(database, business, creator);

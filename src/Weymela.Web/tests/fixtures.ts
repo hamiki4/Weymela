@@ -174,6 +174,13 @@ export const settings = {
   creatorThreshold: 5000,
   customerThreshold: 500,
   effectiveFromUtc: "2026-09-01T00:00:00Z",
+  ugc: {
+    minimumCreatorPayment: 200,
+    platformFeePercent: 10,
+    minimumUgcBudget: null,
+    customerOfferPlatformSalePercent: 3,
+    maximumCustomerDiscountPercent: 20,
+  },
 };
 export const queue = {
   subjectId: "creator",

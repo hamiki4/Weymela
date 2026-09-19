@@ -7,9 +7,8 @@ describe("context-aware money display", () => {
     expect(money(750)).toBe("750");
   });
 
-  it("retains explicit currency in financial contexts", () => {
-    const explicit = money(3_000, "explicit", "ETB");
-    expect(explicit).toContain("ETB");
-    expect(explicit).toContain("3,000");
+  it("keeps financial amounts numeric in every display context", () => {
+    const explicit = money(3_000, "explicit", "legacy-code");
+    expect(explicit).toBe("3,000");
   });
 });

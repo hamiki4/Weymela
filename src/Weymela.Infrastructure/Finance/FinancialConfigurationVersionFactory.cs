@@ -22,9 +22,12 @@ public static class FinancialConfigurationVersionFactory
         if (ugcInput.CustomerOfferPlatformSalePercent is { } offerPercent
             && (offerPercent is < 0 or > 100 || decimal.Round(offerPercent, 4) != offerPercent))
             throw new ApplicationFailure(FailureKind.Validation, "Enter a valid UGC Customer Offer Platform Sale fee percentage.");
+        if (ugcInput.MaximumCustomerDiscountPercent is { } maximumDiscount
+            && (maximumDiscount is <= 0 or > 100 || decimal.Round(maximumDiscount, 4) != maximumDiscount))
+            throw new ApplicationFailure(FailureKind.Validation, "Enter a valid maximum UGC Customer Discount percentage.");
         var ugc = new UgcPricingSnapshot(Amount(ugcInput.MinimumCreatorPayment), ugcInput.PlatformFeePercent,
             ugcInput.MinimumUgcBudget is { } minimumUgc ? Amount(minimumUgc) : null, effectiveFromUtc, id,
-            ugcInput.CustomerOfferPlatformSalePercent);
+            ugcInput.CustomerOfferPlatformSalePercent, ugcInput.MaximumCustomerDiscountPercent);
         return new FinancialConfigurationVersion(id, configurationId, version, changedBy,
             effectiveFromUtc, Price(PromotionType.ViewOnly, input.ViewOnly),
             Price(PromotionType.ViewPlusCommission, input.ViewPlusCommission),

@@ -37,7 +37,7 @@ describe("Phase 3 multi-profile shell", () => {
     expect(screen.queryByText("INTERNAL-ID")).not.toBeInTheDocument();
     expect(screen.queryByText("subject-secret")).not.toBeInTheDocument();
     if (role === "Business") {
-      expect(screen.getByRole("link", { name: "Profile", exact: true })).toHaveAttribute("href", "/onboarding");
+      expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/onboarding");
     } else {
       expect(screen.getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
     }

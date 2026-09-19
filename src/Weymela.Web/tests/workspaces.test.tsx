@@ -70,7 +70,7 @@ describe("Business workspace", () => {
     expect(screen.getByText("6,000")).toBeVisible();
     expect(
       screen.getByRole("link", {
-        name: /Promotion Pricing.*View rates & fees/,
+        name: "Pricing",
       }),
     ).toBeVisible();
   });
@@ -99,9 +99,9 @@ describe("Business workspace", () => {
   it("shows compact pricing cards and no internal split", async () => {
     mount(<BusinessPricingPage />);
     expect(
-      await screen.findByRole("region", { name: "Promotion pricing options" }),
+      await screen.findByRole("region", { name: "Business pricing options" }),
     ).toBeVisible();
-    expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(screen.getAllByRole("article")).toHaveLength(3);
     expect(screen.getByText("10% per verified sale")).toBeVisible();
     expect(
       screen.queryByText(/Creator:|Customer Cashback|Platform Keeps/),

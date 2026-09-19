@@ -60,6 +60,14 @@ export const businessPricing = {
   ],
   effectiveFromUtc: "2026-09-01T00:00:00Z",
 };
+export const ugcPricing = {
+  minimumCreatorPayment: 200,
+  platformFeePercent: 10,
+  minimumUgcBudget: null,
+  customerOfferPlatformSalePercent: 3,
+  financialConfigurationVersion: 1,
+  effectiveFromUtc: "2026-09-01T00:00:00Z",
+};
 export const creatorPricing = {
   rows: [
     { type: "ViewOnly", views: 3000, youEarn: 200, saleCommissionPercent: 0 },
@@ -216,8 +224,10 @@ export const routes: Record<string, unknown> = {
     creatorRequests: 1,
     confirmedSales: 1,
   },
+  "/business/ugc": [],
   "/business/wallet": wallet,
   "/business/pricing": businessPricing,
+  "/business/ugc-pricing": ugcPricing,
   "/business/campaigns": [campaign],
   "/business/campaigns/campaign": detail,
   "/creator/home": { creator, requests: 1, activeCampaigns: 1, earnings },

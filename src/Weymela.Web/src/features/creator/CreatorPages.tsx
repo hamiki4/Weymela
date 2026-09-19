@@ -77,10 +77,10 @@ export function CreatorDashboard() {
               <strong>Your Earnings</strong>
               <span>Every verified moment counts.</span>
             </Link>
-            <Link className="quick-card" to="/creator/pricing">
+            <Link className="quick-card pricing-home-card" to="/creator/pricing">
               <Icon name="spark" />
-              <strong>How You Earn</strong>
-              <span>Clear rewards for your creativity.</span>
+              <strong>Pricing</strong>
+              <Icon name="arrow" />
             </Link>
           </div>
           <div className="two-column section-kicker-space">
@@ -312,8 +312,8 @@ export function CreatorHowYouEarn() {
     <>
       <PageHeader
         eyebrow="Clear rewards, real creativity"
-        title="How You Earn"
-        description="Build your earnings across Campaigns through verified activity."
+        title="Pricing"
+        description="Current earning rates. Existing Promotions keep their saved earning terms."
       />
       <Resource resource={resource}>
         {(p) => (

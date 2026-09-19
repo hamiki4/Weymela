@@ -14,12 +14,11 @@ import { ConnectionStatus } from "./ConnectionStatus";
 
 const navigation: Record<Role, [string, string, string][]> = {
   Business: [
-    ["/business", "Overview", "home"],
-    ["/business/wallet", "Wallet", "wallet"],
-    ["/business/campaigns", "Campaigns", "campaign"],
-    ["/business/requests", "Creator Requests", "people"],
+    ["/business", "Home", "home"],
+    ["/business/campaigns", "Promotions", "campaign"],
     ["/business/ugc", "UGC", "sparkle"],
-    ["/business/pricing", "Promotion Pricing", "settings"],
+    ["/business/wallet", "Wallet", "wallet"],
+    ["/onboarding", "Profile", "people"],
   ],
   Creator: [
     ["/creator", "Overview", "home"],
@@ -86,12 +85,15 @@ export function Shell({ children }: { children?: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   if (!user) return null;
-  const items = [
-    ...navigation[user.role],
-    ...(user.role === "Business" && user.canCheckout
-      ? [["/checkout", "Checkout", "qr"] as [string, string, string]]
-      : []),
-  ];
+  const baseItems = navigation[user.role];
+  const items =
+    user.role === "Business" && user.canCheckout
+      ? [
+          ...baseItems.slice(0, 4),
+          ["/checkout", "Checkout", "qr"] as [string, string, string],
+          ...baseItems.slice(4),
+        ]
+      : baseItems;
   const isPublicProfile =
     user.role === "Customer" ||
     user.role === "Creator" ||
@@ -130,7 +132,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           </NavLink>
         ))}
       </nav>
-      {isPublicProfile && (
+      {isPublicProfile && user.role !== "Business" && (
         <Link
           className="nav-link add-profile-link"
           to="/onboarding"

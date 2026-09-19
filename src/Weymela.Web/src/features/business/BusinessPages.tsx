@@ -5,6 +5,8 @@ import type {
   BusinessHome,
   BusinessPricing,
   CampaignRow,
+  UgcCard,
+  UgcPricing,
   Wallet,
 } from "../../api/types";
 import {
@@ -46,13 +48,13 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
         emphasis
       />
       <Metric
-        label="Available"
+        label="Available Balance"
         value={amount(wallet.available)}
         note="Ready for your next Campaign"
         icon="plus"
       />
       <Metric
-        label="Reserved"
+        label="Reserved Balance"
         value={amount(wallet.reserved)}
         note="Committed to Campaigns"
         icon="lock"
@@ -62,6 +64,8 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
 }
 export function BusinessDashboard() {
   const resource = useResource<BusinessHome>("/business/home");
+  const ugc = useResource<UgcCard[]>("/business/ugc");
+  const { user } = useSession();
   return (
     <Resource resource={resource}>
       {(data) => (
@@ -85,25 +89,53 @@ export function BusinessDashboard() {
             <Link className="quick-card" to="/business/campaigns">
               <Icon name="campaign" />
               <span className="quick-value">{count(data.activeCampaigns)}</span>
-              <strong>Active Campaigns</strong>
+              <strong>Active Promotions</strong>
             </Link>
             <Link className="quick-card" to="/business/requests">
               <Icon name="people" />
               <span className="quick-value">{count(data.creatorRequests)}</span>
               <strong>Creator Requests</strong>
             </Link>
+            <Resource resource={ugc}>
+              {(rows) => (
+                <Link className="quick-card" to="/business/ugc">
+                  <Icon name="sparkle" />
+                  <span className="quick-value">
+                    {count(rows.filter((row) => row.status === "Open").length)}
+                  </span>
+                  <strong>Open UGC</strong>
+                </Link>
+              )}
+            </Resource>
             <Link className="quick-card" to="/business/campaigns">
               <Icon name="chart" />
               <span className="quick-value">{count(data.confirmedSales)}</span>
               <strong>Confirmed Sales</strong>
             </Link>
-            <Link className="quick-card" to="/business/pricing">
+            <Link className="quick-card pricing-home-card" to="/business/pricing">
               <Icon name="settings" />
-              <strong>Promotion Pricing</strong>
-              <span>View rates &amp; fees</span>
+              <strong>Pricing</strong>
               <Icon name="arrow" />
             </Link>
           </div>
+          <Section title="Quick actions" className="quick-actions-section">
+            <div className="actions quick-actions">
+              <ActionLink to="/business/campaigns/new" icon="plus">
+                New Promotion
+              </ActionLink>
+              <ActionLink to="/business/ugc" secondary icon="sparkle">
+                Create UGC
+              </ActionLink>
+              <ActionLink to="/business/wallet" secondary icon="wallet">
+                Add Funds
+              </ActionLink>
+              {user?.canCheckout && (
+                <ActionLink to="/checkout" secondary icon="qr">
+                  Cashier Management
+                </ActionLink>
+              )}
+            </div>
+          </Section>
           <div className="content-grid section-kicker-space">
             <Section
               title="Recent fund activity"
@@ -305,62 +337,98 @@ export function BusinessWallet() {
 }
 export function BusinessPricingPage() {
   const resource = useResource<BusinessPricing>("/business/pricing");
+  const ugcResource = useResource<UgcPricing>("/business/ugc-pricing");
   return (
     <>
       <PageHeader
         eyebrow="Know your costs"
-        title="Promotion Pricing"
+        title="Pricing"
         description="See current rates and how promotion costs are calculated."
       />
       <Resource resource={resource}>
         {(pricing) => (
-          <Section
-            title="A simple cost for verified activity"
-            description="Existing Promotions keep their saved pricing."
-            action={<Currency />}
-          >
-            <div
-              className="pricing-card-grid"
-              role="region"
-              aria-label="Promotion pricing options"
-            >
-              {pricing.rows.map((row) => (
-                <article className="pricing-card" key={row.type}>
-                  <div className="pricing-card-heading">
-                    <span className="pricing-card-kicker">Promotion type</span>
-                    <h3>{campaignType(row.type)}</h3>
-                  </div>
-                  <dl className="pricing-card-details">
-                    <div>
-                      <dt>Verified views</dt>
-                      <dd>{count(row.views)}</dd>
+          <Resource resource={ugcResource}>
+            {(ugcPricing) => (
+              <Section
+                title="A simple cost for verified activity"
+                description="Existing Promotions keep their saved pricing."
+                action={<Currency />}
+              >
+                <div
+                  className="pricing-card-grid"
+                  role="region"
+                  aria-label="Business pricing options"
+                >
+                  {pricing.rows.map((row) => (
+                    <article className="pricing-card" key={row.type}>
+                      <div className="pricing-card-heading">
+                        <span className="pricing-card-kicker">Promotion type</span>
+                        <h3>{campaignType(row.type)}</h3>
+                      </div>
+                      <dl className="pricing-card-details">
+                        <div>
+                          <dt>Verified views</dt>
+                          <dd>{count(row.views)}</dd>
+                        </div>
+                        <div>
+                          <dt>Business funds</dt>
+                          <dd>{amount(row.businessPays)}</dd>
+                        </div>
+                        <div>
+                          <dt>{isViewOnly(row.type) ? "Sale" : "Sale cost"}</dt>
+                          <dd>
+                            {isViewOnly(row.type)
+                              ? "Not included"
+                              : `${amount(row.saleCostPercent)}% per verified sale`}
+                          </dd>
+                        </div>
+                      </dl>
+                      {row.minimumCampaignBudget !== null && (
+                        <p className="pricing-card-note">
+                          Minimum Promotion Budget: {amount(row.minimumCampaignBudget)}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                  <article className="pricing-card pricing-card-business-ugc">
+                    <div className="pricing-card-heading">
+                      <span className="pricing-card-kicker">UGC funding</span>
+                      <h3>UGC</h3>
                     </div>
-                    <div>
-                      <dt>Business funds</dt>
-                      <dd>{amount(row.businessPays)}</dd>
-                    </div>
-                    <div>
-                      <dt>{isViewOnly(row.type) ? "Sale" : "Sale cost"}</dt>
-                      <dd>
-                        {isViewOnly(row.type)
-                          ? "Not included"
-                          : `${amount(row.saleCostPercent)}% per verified sale`}
-                      </dd>
-                    </div>
-                  </dl>
-                  {row.minimumCampaignBudget !== null && (
+                    <dl className="pricing-card-details">
+                      <div>
+                        <dt>Starting Creator Payment</dt>
+                        <dd>{amount(ugcPricing.minimumCreatorPayment)}</dd>
+                      </div>
+                      <div>
+                        <dt>Platform Fee</dt>
+                        <dd>{amount(ugcPricing.platformFeePercent)}%</dd>
+                      </div>
+                      {ugcPricing.minimumUgcBudget !== null && (
+                        <div>
+                          <dt>Minimum UGC Budget</dt>
+                          <dd>{amount(ugcPricing.minimumUgcBudget)}</dd>
+                        </div>
+                      )}
+                      {ugcPricing.customerOfferPlatformSalePercent !== null && (
+                        <div>
+                          <dt>UGC + Sale Platform Fee</dt>
+                          <dd>{amount(ugcPricing.customerOfferPlatformSalePercent)}%</dd>
+                        </div>
+                      )}
+                    </dl>
                     <p className="pricing-card-note">
-                      Minimum Promotion Budget: {amount(row.minimumCampaignBudget)}
+                      For UGC + Sale, you choose the Customer Discount and fund the Customer Offer budget.
                     </p>
-                  )}
-                </article>
-              ))}
-            </div>
-            <p className="fine-print section-kicker-space">
-              Effective {date(pricing.effectiveFromUtc)}. You control your
-              Promotion Budget; Weymela sets activity pricing.
-            </p>
-          </Section>
+                  </article>
+                </div>
+                <p className="fine-print section-kicker-space">
+                  Effective {date(pricing.effectiveFromUtc)}. You control your
+                  Promotion Budget; Weymela sets activity pricing.
+                </p>
+              </Section>
+            )}
+          </Resource>
         )}
       </Resource>
     </>

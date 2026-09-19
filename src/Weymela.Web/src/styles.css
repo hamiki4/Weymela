@@ -529,7 +529,23 @@ td .button {
 }
 .quick-card:hover {
   text-decoration: none;
-  background: #fcfdfb;
+  border-color: var(--line);
+}
+.pricing-home-card {
+  min-height: 96px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.pricing-home-card > svg:last-child {
+  margin-left: auto;
+}
+.quick-actions .secondary:hover {
+  background: #fff;
+}
+.app-shell .button.quiet:hover {
+  background: transparent;
 }
 .quick-card > svg {
   color: #53744b;
@@ -550,7 +566,7 @@ td .button {
 }
 .pricing-card-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 14px;
 }
 .pricing-card {
@@ -1209,13 +1225,15 @@ td .button {
   font-size: 0.8rem;
   border-radius: 8px;
   font-weight: 550;
+  border: 1px solid transparent;
 }
 .nav-link:hover {
-  background: #edf2e8;
+  border-color: var(--line);
   text-decoration: none;
 }
 .nav-link.active {
   background: #e6eddf;
+  border-color: #c9d9c4;
   color: var(--green);
   font-weight: 650;
 }
@@ -1634,7 +1652,7 @@ td .button {
   background: var(--role-accent);
 }
 .app-shell .button.primary:hover {
-  background: color-mix(in srgb, var(--role-accent) 85%, #000);
+  background: var(--role-accent);
 }
 .mobile-role-nav {
   display: none;
@@ -1682,7 +1700,8 @@ td .button {
   }
   .mobile-role-link:hover {
     text-decoration: none;
-    background: var(--role-soft);
+    background: transparent;
+    border-color: var(--line);
   }
 }
 .profile-choice p {

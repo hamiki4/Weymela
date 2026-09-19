@@ -30,7 +30,7 @@ public sealed record CreatorPrice(string Type, int Views, decimal YouEarn, decim
 public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime EffectiveFromUtc);
 public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent,
-    decimal? MaximumCustomerDiscountPercent, int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
+    int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
 public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal MinimumToCashOut, DateTime EffectiveFromUtc);
 public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available);
 public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
@@ -73,8 +73,7 @@ public sealed record AdminCampaign(CampaignRow Campaign, IReadOnlyList<AdminCrea
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> History, int FinancialConfigurationVersion);
 public sealed record ViewPriceInput(int ViewsPerReward, decimal BusinessPays, decimal CreatorEarns, decimal PlatformKeeps, decimal? MinimumCampaignBudget);
 public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
-    decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null,
-    decimal? MaximumCustomerDiscountPercent = null);
+    decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null);
 public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceInput ViewPlusCommission, decimal CreatorCommissionPercent,
     decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold,
     DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null);

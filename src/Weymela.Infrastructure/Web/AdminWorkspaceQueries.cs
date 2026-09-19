@@ -58,11 +58,11 @@ public sealed partial class WorkspaceQueries
         ViewPriceInput Input(PricingSnapshot p)=>new(p.ViewsPerReward,p.BusinessCharge.Amount,p.CreatorEarning.Amount,p.PlatformEarning.Amount,p.MinimumPromotionBudget?.Amount);
         var saved=await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).ToListAsync(ct);
         FinancialSettingsInput Settings(FinancialConfigurationVersion x)=>new(Input(x.ViewOnly),Input(x.ViewPlusCommission),x.ViewPlusCommission.CreatorCommissionPercent,x.ViewPlusCommission.CustomerCashbackPercent,x.ViewPlusCommission.PlatformPercent,x.CreatorPayoutThreshold.Amount,x.CustomerPayoutThreshold.Amount,x.EffectiveFromUtc,
-            x.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent,ugc.MaximumCustomerDiscountPercent) : null);
+            x.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent) : null);
         var versions=saved.Select(x=>new FinancialVersionInfo(x.Id,x.Version,x.EffectiveFromUtc,x.ChangedBy,Settings(x))).ToArray();
         return new(new(Input(v.ViewOnly),Input(v.ViewPlusCommission),v.ViewPlusCommission.CreatorCommissionPercent,v.ViewPlusCommission.CustomerCashbackPercent,
             v.ViewPlusCommission.PlatformPercent,v.CreatorPayoutThreshold.Amount,v.CustomerPayoutThreshold.Amount,v.EffectiveFromUtc,
-            v.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent,ugc.MaximumCustomerDiscountPercent) : null),v.Version,versions);
+            v.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent) : null),v.Version,versions);
     }
     public async Task<PayoutWorkspace> PayoutsAsync(Actor actor,CancellationToken ct)
     {

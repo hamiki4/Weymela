@@ -39,12 +39,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             {
                 if (pricing.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
                     throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
-                if (pricing.MaximumCustomerDiscountPercent is not { } maximumDiscount)
-                    throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not include a maximum Customer Discount.");
                 var offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,
                     input.CustomerOfferFundedAllocation, input.CustomerFacingSlogan,
                     input.CustomerOfferStartsAtUtc, input.CustomerOfferEndsAtUtc,
-                    platformSalePercent, maximumDiscount, pricing.EffectiveFromUtc, pricing.ConfigurationVersionId);
+                    platformSalePercent, pricing.EffectiveFromUtc, pricing.ConfigurationVersionId);
                 db.UgcCustomerOffers.Add(offer);
             }
             db.UgcRevisions.Add(new(opportunity.Id, 1, false, Snapshot(opportunity), actor.UserId, Now));
@@ -287,16 +285,14 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     var ugc = config.Ugc ?? throw new ApplicationFailure(FailureKind.Validation, "UGC financial settings are unavailable.");
                     if (ugc.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
                         throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
-                    if (ugc.MaximumCustomerDiscountPercent is not { } maximumDiscount)
-                        throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not include a maximum Customer Discount.");
                     var discount = input.CustomerDiscountPercent ?? offer?.CustomerDiscountPercent;
-                    EnsureCustomerDiscount(discount, maximumDiscount);
+                    EnsureCustomerDiscount(discount);
                     if (offer is null)
                     {
                         offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,
                             input.CustomerOfferFundedAllocation, input.CustomerFacingSlogan,
                             input.CustomerOfferStartsAtUtc, input.CustomerOfferEndsAtUtc,
-                            platformSalePercent, maximumDiscount, ugc.EffectiveFromUtc, ugc.ConfigurationVersionId);
+                            platformSalePercent, ugc.EffectiveFromUtc, ugc.ConfigurationVersionId);
                         db.UgcCustomerOffers.Add(offer);
                     }
                     else
@@ -594,11 +590,11 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         includeBusinessFinancials ? x.PlatformFee.Amount : null);
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,
-        decimal platformSalePercent, decimal maximumDiscount, DateTime effectiveFrom, Guid configurationVersionId)
+        decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)
     {
         if (discount is null || fundedAllocation is null || starts is null || ends is null)
             throw new ApplicationFailure(FailureKind.Validation, "Customer discount, funded allocation, start, and end are required when Customer Offer is ON.");
-        EnsureCustomerDiscount(discount, maximumDiscount);
+        EnsureCustomerDiscount(discount);
         try
         {
             return new UgcCustomerOffer(opportunity.Id, opportunity.BusinessId, slogan, discount.Value,
@@ -607,10 +603,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         }
         catch (ArgumentException ex) { throw new ApplicationFailure(FailureKind.Validation, ex.Message, ex); }
     }
-    private static void EnsureCustomerDiscount(decimal? discount, decimal maximumDiscount)
+    private static void EnsureCustomerDiscount(decimal? discount)
     {
-        if (discount is null || discount <= 0 || discount > maximumDiscount)
-            throw new ApplicationFailure(FailureKind.Validation, "Customer Discount must be positive and no greater than the Admin maximum.");
+        if (discount is null || discount <= 0 || discount > 100 || decimal.Round(discount.Value, 4) != discount.Value)
+            throw new ApplicationFailure(FailureKind.Validation, "Customer Discount must be a valid percentage between 0 and 100.");
     }
     private static string[] ParseResources(string json)
     { try { return JsonSerializer.Deserialize<string[]>(json) ?? []; } catch (JsonException) { return []; } }

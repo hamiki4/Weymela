@@ -37,7 +37,7 @@ public sealed partial class WorkspaceQueries
         await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
         var ugc=v.Ugc??throw new InvalidOperationException("The effective financial configuration does not include UGC settings.");
         return new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,
-            ugc.CustomerOfferPlatformSalePercent,ugc.MaximumCustomerDiscountPercent,v.Version,v.EffectiveFromUtc);
+            ugc.CustomerOfferPlatformSalePercent,v.Version,v.EffectiveFromUtc);
     }
     public async Task<IReadOnlyList<CampaignRow>> BusinessCampaignsAsync(Actor actor,CancellationToken ct)
     {

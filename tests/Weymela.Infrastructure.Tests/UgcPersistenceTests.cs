@@ -89,16 +89,23 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Customer_offer_discount_cannot_exceed_effective_admin_maximum()
+    public async Task Customer_offer_discount_uses_basic_percentage_validation_without_admin_maximum()
     {
         var state = await Setup();
         await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
-        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, Input() with
+        var id = await service.CreateAsync(state.Business, Input() with
         {
-            CustomerOfferEnabled = true, CustomerDiscountPercent = 21m,
+            CustomerOfferEnabled = true, CustomerDiscountPercent = 80m,
             CustomerOfferFundedAllocation = 1000m, CustomerOfferStartsAtUtc = Now,
             CustomerOfferEndsAtUtc = Now.AddDays(7)
-        }, "ugc-discount-limit", default));
+        }, "ugc-discount-basic-validation", default);
+        Assert.NotEqual(Guid.Empty, id);
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, Input() with
+        {
+            CustomerOfferEnabled = true, CustomerDiscountPercent = 100.0001m,
+            CustomerOfferFundedAllocation = 1000m, CustomerOfferStartsAtUtc = Now,
+            CustomerOfferEndsAtUtc = Now.AddDays(7)
+        }, "ugc-discount-range", default));
         Assert.Equal(FailureKind.Validation, failure.Kind);
     }
 
@@ -411,7 +418,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.FinancialConfigurations.Add(new(configurationId, "PlatformPricing"));
         db.FinancialConfigurationVersions.Add(new(versionId, configurationId, 1, Guid.NewGuid(), Now,
             Scenario.Price(PromotionType.ViewOnly, versionId), Scenario.Price(PromotionType.ViewPlusCommission, versionId),
-            new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId, 3m, 20m)));
+            new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId, 3m)));
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         await new FinancialCommands(db, new FixedTime(Now)).CreditDepositAsync(new(business, new Money(deposit), "ugc-seed-deposit", Now), 0);
         return new(database, business, creator);

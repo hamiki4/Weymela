@@ -342,7 +342,6 @@ export interface UgcPricing {
   platformFeePercent: number;
   minimumUgcBudget: number | null;
   customerOfferPlatformSalePercent: number | null;
-  maximumCustomerDiscountPercent: number | null;
   financialConfigurationVersion: number;
   effectiveFromUtc: string;
 }
@@ -351,7 +350,6 @@ export interface UgcSettings {
   platformFeePercent: number;
   minimumUgcBudget: number | null;
   customerOfferPlatformSalePercent: number | null;
-  maximumCustomerDiscountPercent: number | null;
 }
 export interface UgcPlatformRequirement {
   platform: string;

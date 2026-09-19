@@ -94,7 +94,7 @@ export function BusinessUgcPage() {
           const requiredFunding = roundMoney(creatorTotal + platformFee);
           const minimumBudgetMet = config.minimumUgcBudget === null || requiredFunding >= config.minimumUgcBudget;
           const discount = Number(form.customerDiscount) || 0;
-          const offerValid = !form.customerOffer || (config.customerOfferPlatformSalePercent !== null && config.maximumCustomerDiscountPercent !== null && discount > 0 && discount <= config.maximumCustomerDiscountPercent && Number(form.customerRewardBudget) > 0);
+          const offerValid = !form.customerOffer || (config.customerOfferPlatformSalePercent !== null && discount > 0 && discount <= 100 && Number(form.customerRewardBudget) > 0);
           const valid = Boolean(form.title.trim() && form.instructions.trim() && form.dueDate && payment >= config.minimumCreatorPayment && creators >= 1 && minimumBudgetMet && (!form.mustPost || form.platforms.length > 0) && offerValid);
           return (
             <div className="content-grid form-layout">
@@ -127,11 +127,10 @@ export function BusinessUgcPage() {
                   <label className="field wide"><span><input type="checkbox" checked={form.mustPost} onChange={(e) => set("mustPost", e.target.checked)} /> Creator must post on social media</span><small>OFF means the Creator delivers the video/content directly to the Business.</small></label>
                   {form.mustPost && <fieldset className="field wide"><legend>Required social platform</legend><div className="tag-row">{SOCIAL_PLATFORMS.map((platform) => <label key={platform}><input type="checkbox" checked={form.platforms.includes(platform)} onChange={(e) => set("platforms", e.target.checked ? [...form.platforms, platform] : form.platforms.filter((item) => item !== platform))} /> {platform}</label>)}</div></fieldset>}
                   <label className="field wide"><span><input type="checkbox" checked={form.customerOffer} onChange={(e) => set("customerOffer", e.target.checked)} /> Add optional Customer Offer</span></label>
-                  {form.customerOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max={config.maximumCustomerDiscountPercent ?? undefined} step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer Reward Budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
+                  {form.customerOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer Reward Budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
                   {form.mustPost && form.platforms.length === 0 && <Notice error>Choose at least one social platform.</Notice>}
                   {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer Offers require an Admin platform sale fee configuration.</Notice>}
-                  {form.customerOffer && config.maximumCustomerDiscountPercent === null && <Notice error>Customer Offers require an Admin maximum discount configuration.</Notice>}
-                  {form.customerOffer && config.maximumCustomerDiscountPercent !== null && discount > config.maximumCustomerDiscountPercent && <Notice error>Discount cannot exceed the Admin maximum of {amount(config.maximumCustomerDiscountPercent)}%.</Notice>}
+                  {form.customerOffer && discount > 100 && <Notice error>Discount must be between 0 and 100%.</Notice>}
                   {!minimumBudgetMet && <Notice error>Required UGC funding is below the configured minimum budget.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}
                   <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Creating…" : "Create UGC"}</Button></div>

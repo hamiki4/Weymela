@@ -179,7 +179,6 @@ export const settings = {
     platformFeePercent: 10,
     minimumUgcBudget: null,
     customerOfferPlatformSalePercent: 3,
-    maximumCustomerDiscountPercent: 20,
   },
 };
 export const queue = {

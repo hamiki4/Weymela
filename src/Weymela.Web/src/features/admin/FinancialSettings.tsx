@@ -62,9 +62,7 @@ function SettingsForm({
         settings.ugc.platformFeePercent <= 100 &&
         (settings.ugc.minimumUgcBudget === null || settings.ugc.minimumUgcBudget > 0) &&
         (settings.ugc.customerOfferPlatformSalePercent === null ||
-          (settings.ugc.customerOfferPlatformSalePercent >= 0 && settings.ugc.customerOfferPlatformSalePercent <= 100)) &&
-        (settings.ugc.maximumCustomerDiscountPercent === null ||
-          (settings.ugc.maximumCustomerDiscountPercent > 0 && settings.ugc.maximumCustomerDiscountPercent <= 100))));
+          (settings.ugc.customerOfferPlatformSalePercent >= 0 && settings.ugc.customerOfferPlatformSalePercent <= 100))));
   return (
     <form
       className="settings-form"
@@ -278,17 +276,6 @@ function SettingsForm({
                   value={settings.ugc.customerOfferPlatformSalePercent ?? ""}
                   onChange={(e) => updateUgc("customerOfferPlatformSalePercent", e.target.value === "" ? null : Number(e.target.value))}
                   placeholder="Optional"
-                />
-              </Field>
-              <Field label="Maximum Customer Discount %">
-                <input
-                  type="number"
-                  min="0.01"
-                  max="100"
-                  step="0.0001"
-                  value={settings.ugc.maximumCustomerDiscountPercent ?? ""}
-                  onChange={(e) => updateUgc("maximumCustomerDiscountPercent", e.target.value === "" ? null : Number(e.target.value))}
-                  placeholder="Required for Customer Offers"
                 />
               </Field>
             </div>

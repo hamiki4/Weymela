@@ -23,7 +23,6 @@ internal sealed class UgcOpportunityConfiguration : IEntityTypeConfiguration<Ugc
             p.Property(x => x.PlatformFeePercent).HasPrecision(9, 4);
             Mapping.Money(p.Property(x => x.MinimumUgcBudget), true);
             p.Property(x => x.CustomerOfferPlatformSalePercent).HasPrecision(9, 4);
-            p.Property(x => x.MaximumCustomerDiscountPercent).HasPrecision(9, 4);
             p.Property(x => x.EffectiveFromUtc); p.Property(x => x.ConfigurationVersionId);
         });
         b.HasMany(x => x.PlatformRequirements).WithOne().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);

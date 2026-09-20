@@ -150,11 +150,10 @@ describe("shared role-themed onboarding", () => {
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
   });
 
-  it("shows an already-added Customer as an active profile without legacy handoff", () => {
-    const profile = { role: "Customer" };
-    mocks.activeProfiles = [profile];
+  it("shows an already-added Customer without legacy handoff", () => {
+    mocks.activeProfiles = [{ role: "Customer" }];
     renderOnboarding();
-    expect(screen.getByText(/Customer.*Active/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Customer.*Already added/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
   });

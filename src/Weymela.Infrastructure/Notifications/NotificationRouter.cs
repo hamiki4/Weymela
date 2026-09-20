@@ -154,7 +154,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.UgcId is {} au ? $"/admin/ugc/{au}" : plan.CampaignId is {} p ? $"/admin/promotions/{p}" : "/admin/" + (plan.WorkspacePath == "businesses" ? "businesses" : "notifications"),
         ActorRole.Business => plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/promotions/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
         ActorRole.Creator => plan.UgcId is {} cu ? $"/creator/ugc/{cu}" : plan.BudgetId is {} a ? $"/creator/promotions/{a}" : "/creator/" + (plan.WorkspacePath is "requests" or "payouts" ? plan.WorkspacePath : "discover"),
-        ActorRole.Customer => plan.WorkspacePath=="profiles"?"/onboarding":"/shopper",
+        ActorRole.Customer => plan.WorkspacePath=="profiles"?"/onboarding":"/customer/offers",
         _ => "/checkout"
     };
 }

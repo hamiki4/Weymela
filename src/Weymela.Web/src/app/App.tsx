@@ -49,7 +49,7 @@ import { LockScreen } from "./LockScreen";
 import { SecuritySetup } from "./SecuritySetup";
 import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 import { LegalDocumentPage } from "./LegalDocumentPage";
-import { ProductHandoffCallback, ProductSignOut, ProductWorkspaceEntry } from "./ProductIntegration";
+
 
 function Home() {
   const { user, loading } = useSession();
@@ -87,20 +87,26 @@ export function App() {
       <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/product-handoff" element={<ProductHandoffCallback />} />
-      <Route path="/integration/sign-out" element={<ProductSignOut />} />
       <Route path="/business" element={
-        <ProductWorkspaceEntry role="Business" fallback={<Shell><BusinessDashboard /></Shell>} />
+        <RoleGate roles={["Business"]}>
+          <Shell><BusinessDashboard /></Shell>
+        </RoleGate>
       } />
       <Route path="/creator" element={
-        <ProductWorkspaceEntry role="Creator" fallback={<Shell><CreatorDashboard /></Shell>} />
+        <RoleGate roles={["Creator"]}>
+          <Shell><CreatorDashboard /></Shell>
+        </RoleGate>
       } />
-      <Route path="/admin" element={<RoleGate roles={["PlatformAdmin"]}>
-        <ProductWorkspaceEntry role="PlatformAdmin" fallback={<Shell><AdminDashboard /></Shell>} />
-      </RoleGate>} />
-      <Route path="/customer/offers" element={<RoleGate roles={["Customer"]}>
-        <ProductWorkspaceEntry role="Customer" fallback={<Shell><CustomerOffers /></Shell>} />
-      </RoleGate>} />
+      <Route path="/admin" element={
+        <RoleGate roles={["PlatformAdmin"]}>
+          <Shell><AdminDashboard /></Shell>
+        </RoleGate>
+      } />
+      <Route path="/customer/offers" element={
+        <RoleGate roles={["Customer"]}>
+          <Shell><CustomerOffers /></Shell>
+        </RoleGate>
+      } />
       <Route
         path="/legal/terms-of-service"
         element={<LegalDocumentPage kind="terms" />}

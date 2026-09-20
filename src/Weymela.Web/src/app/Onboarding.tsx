@@ -4,7 +4,6 @@ import { post, useAction, useResource } from "../api/client";
 import { actorRoleNameFromWire } from "../api/actorRoleContract";
 import type { AccountLegalStatus, SessionProfile } from "../api/types";
 import { Button, Empty, Field, Notice, PageHeader, Resource, Section } from "../ui/components";
-import { beginProductHandoff, useProductIntegrationConfiguration } from "./ProductIntegration";
 import { RoleOnboardingShell, type OnboardingRole } from "./RoleOnboardingShell";
 import { useSession } from "./Session";
 
@@ -28,71 +27,7 @@ function publicRole(role: Enrollment["role"]): OnboardingRole | null {
 }
 
 export function Onboarding() {
-  const integration = useProductIntegrationConfiguration();
-  if (integration.loading) return <div className="loading" role="status">Opening your account setup…</div>;
-  if (integration.error || !integration.data)
-    return <main className="main-content page-shell"><Notice error>We couldn't verify profile setup configuration.</Notice></main>;
-  return integration.data.enabled ? <IntegratedOnboarding /> : <LegacyOnboarding />;
-}
-
-function IntegratedOnboarding() {
-  const { user, loading, signOut, switchProfile } = useSession();
-  const status = useResource<{ profiles: Enrollment[] }>("/onboarding/status");
-  const legal = useResource<AccountLegalStatus>("/onboarding/legal");
-  const action = useAction();
-  const [role, setRole] = useState<OnboardingRole | null>(null);
-  const [accepted, setAccepted] = useState(false);
-  if (loading) return <div className="loading" role="status">Opening your account setup…</div>;
-  if (!user) return <Navigate to="/sign-in" replace />;
-  const profiles = user.profiles ?? [];
-  const active = new Map(profiles.map((profile) => [profile.role, profile]));
-  const openExisting = (profile: SessionProfile) => void switchProfile(profile);
-  const begin = (selected: OnboardingRole) => void action.run(async () => {
-    if (!legal.data?.available) throw new Error("Profile setup isn't available yet.");
-    if (!legal.data.current) {
-      const terms = legal.data.documents.find((item) => item.kind === "TermsOfService");
-      const privacy = legal.data.documents.find((item) => item.kind === "PrivacyPolicy");
-      if (!accepted || !terms || !privacy) throw new Error("Accept the current Terms of Service and Privacy Policy.");
-      await post<void>("/integration/product/legal-acceptance", { confirmation: {
-        termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
-        privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },
-      }});
-    }
-    await beginProductHandoff(selected, "PROFILE_ONBOARDING");
-  });
-  return <main className="main-content page-shell section-kicker-space onboarding-page">
-    <PageHeader eyebrow="Your Weymela account" title="How do you want to use Weymela?" action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
-    <Resource resource={status}>{(data) => {
-      const pending = new Set(data.profiles.filter((item) => item.status === "Pending" || item.status === 0).map((item) => publicRole(item.role)));
-      const rejected = new Set(data.profiles.filter((item) => item.status === "Rejected" || item.status === 2).map((item) => publicRole(item.role)));
-      return <Section title="Choose a profile">
-        <div className="content-grid profile-choice-grid">
-          {choices.map(([choice, description, label, className]) => {
-            const existing = active.get(choice);
-            const state = existing ? "Already added" : pending.has(choice) ? "Pending"
-              : rejected.has(choice) ? "Not approved — contact support" : label;
-            const unavailable = !existing && (pending.has(choice) || rejected.has(choice));
-            return <button key={choice} className={`profile-choice ${className}${role === choice ? " selected" : ""}`} type="button"
-              aria-label={`${choice} — ${state}`} aria-pressed={role === choice} disabled={unavailable}
-              onClick={() => existing ? openExisting(existing) : (setRole(choice), setAccepted(false))}>
-              <strong>{choice}</strong><span>{description}</span><span className="profile-choice-action">{state}</span>
-            </button>;
-          })}
-        </div>
-        {role && <RoleOnboardingShell role={role} title={role === "Customer" ? "Use as Customer" : role === "Creator" ? "Creator setup" : "Business setup"}
-          description="Continue with the existing Weymela profile setup.">
-          <Resource resource={legal}>{(documents) => documents.available ? <div className="onboarding-form">
-            {!documents.current && <div className="legal-consent"><label className="check-row">
-              <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-              <span>I agree to the <a href={documents.documents.find((item) => item.kind === "TermsOfService")?.viewPath} target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href={documents.documents.find((item) => item.kind === "PrivacyPolicy")?.viewPath} target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
-            </label></div>}
-            {action.error && <Notice error>{action.error}</Notice>}
-            <div className="form-footer">{role === "Customer" && <Button variant="secondary" onClick={() => setRole(null)}>Back</Button>}<Button disabled={action.busy} onClick={() => begin(role)}>{action.busy ? "Opening…" : "Continue"}</Button></div>
-          </div> : <Empty icon="lock" title="Profile setup isn't available yet." message="Required terms and privacy information have not been published." action={role === "Customer" ? <Button variant="secondary" onClick={() => setRole(null)}>Back</Button> : undefined} />}</Resource>
-        </RoleOnboardingShell>}
-      </Section>;
-    }}</Resource>
-  </main>;
+  return <LegacyOnboarding />;
 }
 
 function statusLabel(status: Enrollment["status"]) {
@@ -203,9 +138,9 @@ function LegacyOnboarding() {
           </RoleOnboardingShell>}
           {(role === "Creator" || role === "Business") && <RoleOnboardingShell role={role}
             title={role === "Creator" ? "Creator setup" : "Business setup"}
-            description={role === "Creator" ? "Your Creator profile setup will be available soon."
-              : "Your Business profile setup will be available soon."}>
-            <div className="onboarding-coming-soon" role="status"><p>There’s nothing you need to enter yet.</p></div>
+            description={role === "Creator" ? "Your Creator profile is under review."
+              : "Your Business profile is under review."}>
+            <div className="onboarding-under-review" role="status"><p>Your profile request is under review. We’ll notify you when the review is complete.</p></div>
           </RoleOnboardingShell>}
         </Section>
       </>;

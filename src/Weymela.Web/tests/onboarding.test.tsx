@@ -37,7 +37,6 @@ const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
   refresh: vi.fn().mockResolvedValue(undefined),
   switchProfile: vi.fn().mockResolvedValue(undefined),
-  handoff: vi.fn().mockResolvedValue(undefined),
   legalStatus: null as AccountLegalStatus | null,
   statusProfiles: [] as Array<{
     id: string;
@@ -82,15 +81,6 @@ vi.mock("../src/app/Session", () => ({
     signOut: vi.fn(),
   }),
 }));
-vi.mock("../src/app/ProductIntegration", () => ({
-  beginProductHandoff: mocks.handoff,
-  useProductIntegrationConfiguration: () => ({
-    data: { enabled: true, beginUrl: "https://product.test/begin", callbackId: "test" },
-    loading: false,
-    error: null,
-    reload: vi.fn(),
-  }),
-}));
 
 import { Onboarding } from "../src/app/Onboarding";
 
@@ -108,7 +98,6 @@ describe("shared role-themed onboarding", () => {
     mocks.reload.mockClear();
     mocks.refresh.mockClear();
     mocks.switchProfile.mockClear();
-    mocks.handoff.mockClear();
     mocks.statusProfiles = [];
     mocks.activeProfiles = [];
     mocks.legalStatus = effectiveLegal;
@@ -168,74 +157,6 @@ describe("shared role-themed onboarding", () => {
     expect(mocks.switchProfile).toHaveBeenCalledWith(profile);
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
-  });
-
-  it("uses a purple Creator handoff shell without exposing a replacement product form", async () => {
-    renderOnboarding();
-    await userEvent.click(screen.getByRole("button", { name: /Become a Creator/ }));
-    const shell = screen.getByRole("heading", { name: "Creator setup" }).closest("section");
-    expect(shell).toHaveClass("role-creator");
-    expect(shell).toHaveAttribute("data-role-theme", "creator");
-    expect(within(shell!).getByText(/existing Weymela profile setup/)).toBeVisible();
-    expect(within(shell!).queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(shell!).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Public ID")).not.toBeInTheDocument();
-  });
-
-  it("uses a blue Business handoff shell without exposing the old generic form", async () => {
-    renderOnboarding();
-    await userEvent.click(screen.getByRole("button", { name: /Add a Business/ }));
-    const shell = screen.getByRole("heading", { name: "Business setup" }).closest("section");
-    expect(shell).toHaveClass("role-business");
-    expect(shell).toHaveAttribute("data-role-theme", "business");
-    expect(within(shell!).getByText(/existing Weymela profile setup/)).toBeVisible();
-    expect(within(shell!).queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(shell!).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
-  });
-
-  it("accepts current legal versions then starts Customer product onboarding without collecting identity data", async () => {
-    renderOnboarding();
-    await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
-    const shell = screen.getByRole("heading", { name: "Use as Customer" }).closest("section");
-    expect(shell).toHaveClass("role-customer");
-    expect(shell).toHaveAttribute("data-role-theme", "customer");
-    expect(screen.queryByLabelText(/Preferred name|Email|Phone|Password|PIN|Public ID/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute(
-      "href",
-      "/legal/terms-of-service",
-    );
-    expect(screen.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute(
-      "href",
-      "/legal/privacy-policy",
-    );
-    expect(screen.getByText(/I agree to the/)).toBeVisible();
-    expect(screen.getByText(/and acknowledge the/)).toBeVisible();
-    expect(screen.queryByText(/Review these documents/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Version pilot-1/)).not.toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("checkbox", {
-        name: /I agree to the Terms of Service and acknowledge the Privacy Policy/,
-      }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    expect(mocks.post).toHaveBeenCalledWith(
-      "/integration/product/legal-acceptance",
-      { confirmation: {
-          termsOfService: {
-            documentId: "terms-id",
-            contentHash: "terms-hash",
-            accepted: true,
-          },
-          privacyPolicy: {
-            documentId: "privacy-id",
-            contentHash: "privacy-hash",
-            accepted: true,
-          },
-        } },
-    );
-    expect(mocks.handoff).toHaveBeenCalledWith("Customer", "PROFILE_ONBOARDING");
   });
 
   it("fails closed with a clear Customer state when legal documents are unavailable", async () => {

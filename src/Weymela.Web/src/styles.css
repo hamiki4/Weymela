@@ -1734,7 +1734,7 @@ td .button {
   font-size: clamp(1.2rem, 4vw, 1.5rem);
 }
 .role-onboarding-heading p,
-.onboarding-coming-soon p {
+.onboarding-under-review p {
   margin: 0;
   color: var(--muted);
 }
@@ -1767,7 +1767,7 @@ td .button {
 .customer-onboarding-form {
   margin: 0;
 }
-.onboarding-coming-soon {
+.onboarding-under-review {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1856,7 +1856,7 @@ td .button {
   .role-onboarding-shell {
     padding: 1rem;
   }
-  .onboarding-coming-soon .button {
+  .onboarding-under-review .button {
     width: 100%;
   }
 }

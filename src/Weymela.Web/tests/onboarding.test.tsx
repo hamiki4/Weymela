@@ -145,16 +145,16 @@ describe("shared role-themed onboarding", () => {
       },
     ];
     renderOnboarding();
-    expect(screen.getByRole("button", { name: /Creator.*Not approved.*contact support/ })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: /Become a Creator/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Bella.*Rejected/)).toBeVisible();
+    expect(screen.getByText("Not approved")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
   });
 
-  it("keeps one identity and opens an already-added Customer through authoritative profile selection", async () => {
+  it("shows an already-added Customer as an active profile without legacy handoff", () => {
     const profile = { role: "Customer" };
     mocks.activeProfiles = [profile];
     renderOnboarding();
-    await userEvent.click(screen.getByRole("button", { name: /Customer.*Already added/ }));
-    expect(mocks.switchProfile).toHaveBeenCalledWith(profile);
+    expect(screen.getByText(/Customer.*Active/)).toBeVisible();
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
   });
@@ -164,7 +164,7 @@ describe("shared role-themed onboarding", () => {
     renderOnboarding();
     await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
     expect(
-      screen.getByRole("heading", { name: "Profile setup isn't available yet." }),
+      screen.getByRole("heading", { name: "Customer setup isn't available yet." }),
     ).toBeVisible();
     expect(
       screen.getByText("Required terms and privacy information have not been published."),

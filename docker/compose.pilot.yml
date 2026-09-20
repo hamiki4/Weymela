@@ -1,5 +1,5 @@
 # PREPARATION ONLY: image-only, separate project/network/volumes. Never use V2 env files.
-name: weymela-v3-pilot
+name: weymela-pilot
 x-logging: &logging
   driver: json-file
   options: { max-size: "10m", max-file: "3" }
@@ -13,7 +13,7 @@ x-app: &app
   logging: *logging
   stop_grace_period: 30s
 services:
-  weymela-v3-pilot-postgres:
+  postgres:
     image: ${V3_POSTGRES_IMAGE:?Use postgres:17-alpine@sha256 digest from approved manifest}
     platform: linux/amd64
     restart: "no"
@@ -41,7 +41,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-  weymela-v3-pilot-api:
+  api:
     <<: *app
     image: ${V3_API_IMAGE:?Use approved ghcr V3 API sha256 digest}
     platform: linux/amd64
@@ -65,7 +65,7 @@ services:
         bind: { create_host_path: false }
     networks: [data, edge]
     depends_on:
-      weymela-v3-pilot-postgres: { condition: service_healthy }
+      postgres: { condition: service_healthy }
     mem_limit: 512m
     cpus: 0.75
     healthcheck:
@@ -74,7 +74,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 90s
-  weymela-v3-pilot-worker:
+  worker:
     <<: *app
     image: ${V3_WORKER_IMAGE:?Use approved ghcr V3 Worker sha256 digest}
     platform: linux/amd64
@@ -86,7 +86,7 @@ services:
       V3__FinancialWritesEnabled: "false"
     networks: [data]
     depends_on:
-      weymela-v3-pilot-postgres: { condition: service_healthy }
+      postgres: { condition: service_healthy }
     mem_limit: 256m
     cpus: 0.25
     healthcheck:
@@ -95,7 +95,7 @@ services:
       timeout: 8s
       retries: 3
       start_period: 90s
-  weymela-v3-pilot-web:
+  web:
     <<: *app
     image: ${V3_WEB_IMAGE:?Use approved ghcr V3 Web sha256 digest}
     platform: linux/amd64
@@ -112,10 +112,10 @@ services:
       retries: 3
 networks:
   data:
-    name: weymela-v3-pilot-data
+    name: weymela-pilot-data
     internal: true
   edge:
-    name: weymela-v3-pilot-edge
+    name: weymela-pilot-edge
     ipam:
       config:
         - subnet: ${V3_EDGE_SUBNET:?Owner must approve unused private subnet}

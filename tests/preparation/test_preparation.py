@@ -163,7 +163,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('healthSignal.MarkFailedCycle()', program)
 
         compose = (ROOT / 'docker/compose.pilot.yml').read_text()
-        worker = compose.split('  weymela-v3-pilot-worker:', 1)[1].split('  weymela-v3-pilot-web:', 1)[0]
+        worker = compose.split('  worker:', 1)[1].split('  web:', 1)[0]
         self.assertIn('cpus: 0.25', worker)
         self.assertIn('mem_limit: 256m', worker)
         self.assertIn('timeout: 8s', worker)
@@ -182,7 +182,7 @@ class ComposeIsolationTests(unittest.TestCase):
         (root / 'api.env').write_text(
             'ASPNETCORE_ENVIRONMENT=Pilot\n'
             'DOTNET_ENVIRONMENT=Pilot\n'
-            f'ConnectionStrings__WeymelaV3=Host=weymela-v3-pilot-postgres;Database=weymela_v3_pilot;Username=weymela_v3_api;Password={database_password}\n'
+            f'ConnectionStrings__WeymelaV3=Host=postgres;Database=weymela_v3_pilot;Username=weymela_v3_api;Password={database_password}\n'
             'V3__EnableDevelopmentIdentity=false\n'
             'V3__Auth__Provider=Firebase\n'
             'V3__Auth__EmailDeliveryMode=Resend\n'
@@ -242,20 +242,20 @@ class ComposeIsolationTests(unittest.TestCase):
 
     def test_only_web_exposes_loopback_not_v2_ports(self):
         for name, service in self.config['services'].items():
-            if name.endswith('-web'):
+            if name == 'web':
                 self.assertEqual(service['ports'][0]['host_ip'], '127.0.0.1')
                 self.assertEqual(str(service['ports'][0]['published']), '18080')
             else: self.assertNotIn('ports', service)
 
-    def test_database_volume_and_network_are_v3_only(self):
-        self.assertEqual(self.config['name'], 'weymela-v3-pilot')
+    def test_database_volume_and_network_are_weymela_only(self):
+        self.assertEqual(self.config['name'], 'weymela-pilot')
         self.assertTrue(self.config['networks']['data']['internal'])
         self.assertTrue(self.config['volumes']['postgres-data']['external'])
         self.assertNotIn('creatorpay', json.dumps(self.config).lower())
 
     def test_financial_writes_and_development_identity_are_forced_off(self):
         for suffix in ('api', 'worker'):
-            env = self.config['services']['weymela-v3-pilot-'+suffix]['environment']
+            env = self.config['services'][suffix]['environment']
             self.assertEqual(env['V3__FinancialWritesEnabled'], 'false')
             self.assertEqual(env['V3__EnableDevelopmentIdentity'], 'false')
 
@@ -268,39 +268,39 @@ class ComposeIsolationTests(unittest.TestCase):
             self.assertEqual(service['restart'], 'no')
 
     def test_worker_does_not_mount_api_cookie_secrets(self):
-        worker = self.config['services']['weymela-v3-pilot-worker']
+        worker = self.config['services']['worker']
         self.assertNotIn('secrets', worker)
         self.assertNotIn('volumes', worker)
 
     def test_cookie_certificate_and_persistent_keyring_are_api_only(self):
-        api = self.config['services']['weymela-v3-pilot-api']
+        api = self.config['services']['api']
         self.assertIn('v3-cookie-protection.pfx', {item['source'] for item in api['secrets']})
         key_mount = next(item for item in api['volumes'] if item['target'] == '/run/weymela-v3/keys')
         self.assertEqual(key_mount['type'], 'bind')
         self.assertFalse(key_mount.get('read_only', False))
         for part in ('worker', 'web'):
-            service = self.config['services']['weymela-v3-pilot-'+part]
+            service = self.config['services'][part]
             self.assertNotIn('v3-cookie-protection.pfx', {item['source'] for item in service.get('secrets', [])})
             self.assertNotIn('/run/weymela-v3/keys', {item.get('target') for item in service.get('volumes', [])})
 
     def test_firebase_admin_and_resend_secrets_are_api_only(self):
-        api = self.config['services']['weymela-v3-pilot-api']
+        api = self.config['services']['api']
         self.assertIn('v3-firebase-admin.json', {item['source'] for item in api['secrets']})
         self.assertEqual(api['environment']['GOOGLE_APPLICATION_CREDENTIALS'], '/run/secrets/v3-firebase-admin.json')
         for part in ('worker', 'web'):
-            service = self.config['services']['weymela-v3-pilot-'+part]
+            service = self.config['services'][part]
             self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', service.get('environment', {}))
             self.assertNotIn('V3__Auth__ResendApiKey', service.get('environment', {}))
             self.assertNotIn('v3-firebase-admin.json', {item['source'] for item in service.get('secrets', [])})
 
     def test_readonly_apps_have_exact_single_bounded_tmpfs(self):
         for part in ('api', 'worker', 'web'):
-            app = self.config['services']['weymela-v3-pilot-'+part]
+            app = self.config['services'][part]
             self.assertTrue(app['read_only'])
             self.assertEqual(app['tmpfs'], ['/tmp:size=32m,mode=1777'])
 
     def manifest(self):
-        images = [{'component': p, 'commit': 'test-commit', 'digest': self.config['services']['weymela-v3-pilot-'+p]['image']} for p in ('api', 'worker', 'web')]
+        images = [{'component': p, 'commit': 'test-commit', 'digest': self.config['services'][p]['image']} for p in ('api', 'worker', 'web')]
         next(item for item in images if item['component'] == 'web')['firebaseProjectId'] = 'weymela-pilot'
         return {'commit': 'test-commit', 'images': images}
 
@@ -309,7 +309,7 @@ class ComposeIsolationTests(unittest.TestCase):
 
     def test_preflight_rejects_v2_or_mutable_image_reference(self):
         config = copy.deepcopy(self.config)
-        config['services']['weymela-v3-pilot-api']['image'] = 'creatorpay-api:latest'
+        config['services']['api']['image'] = 'creatorpay-api:latest'
         self.assertTrue(preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_foreign_source_manifest(self):
@@ -322,19 +322,19 @@ class ComposeIsolationTests(unittest.TestCase):
         manifest = self.manifest()
         image = next(item for item in manifest['images'] if item['component'] == 'api')
         image['imageId'] = 'sha256:' + '2' * 64
-        config['services']['weymela-v3-pilot-api']['image'] = image['digest'].split('@', 1)[0] + '@' + image['imageId']
+        config['services']['api']['image'] = image['digest'].split('@', 1)[0] + '@' + image['imageId']
         errors = preflight.validate(config, manifest)
         self.assertIn('api: imageId is not a registry digest reference.', errors)
 
     def test_preflight_rejects_public_listener_and_external_network(self):
         config = copy.deepcopy(self.config)
-        config['services']['weymela-v3-pilot-web']['ports'][0]['host_ip'] = '0.0.0.0'
+        config['services']['web']['ports'][0]['host_ip'] = '0.0.0.0'
         config['networks']['data']['external'] = True
         self.assertTrue(preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_unfreeze(self):
         config = copy.deepcopy(self.config)
-        config['services']['weymela-v3-pilot-api']['environment']['V3__FinancialWritesEnabled'] = 'true'
+        config['services']['api']['environment']['V3__FinancialWritesEnabled'] = 'true'
         self.assertTrue(preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_disabled_or_mismatched_authentication(self):
@@ -347,16 +347,16 @@ class ComposeIsolationTests(unittest.TestCase):
             ('V3__Auth__CodeHashKey', 'weak')):
             with self.subTest(key=key):
                 config = copy.deepcopy(self.config)
-                config['services']['weymela-v3-pilot-api']['environment'][key] = value
+                config['services']['api']['environment'][key] = value
                 self.assertTrue(preflight.validate(config, self.manifest()))
 
         config = copy.deepcopy(self.config)
-        config['services']['weymela-v3-pilot-worker']['environment']['V3__Auth__FirebaseProjectId'] = 'other-project'
+        config['services']['worker']['environment']['V3__Auth__FirebaseProjectId'] = 'other-project'
         self.assertTrue(preflight.validate(config, self.manifest()))
 
         config = copy.deepcopy(self.config)
-        config['services']['weymela-v3-pilot-api']['environment']['V3__Auth__PinPepper'] = \
-            config['services']['weymela-v3-pilot-api']['environment']['V3__Auth__CodeHashKey']
+        config['services']['api']['environment']['V3__Auth__PinPepper'] = \
+            config['services']['api']['environment']['V3__Auth__CodeHashKey']
         self.assertTrue(preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_web_api_firebase_project_mismatch(self):
@@ -383,7 +383,7 @@ class ComposeIsolationTests(unittest.TestCase):
         certificate.chmod(0o400)
 
         directory = pathlib.Path(next(item['source'] for item in
-            self.config['services']['weymela-v3-pilot-api']['volumes']
+            self.config['services']['api']['volumes']
             if item['target'] == '/run/weymela-v3/keys'))
         directory.chmod(0o750)
         self.assertTrue(preflight.validate(self.config, self.manifest()))

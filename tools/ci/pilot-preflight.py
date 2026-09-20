@@ -61,13 +61,13 @@ def _key_directory_source(service):
 
 def validate(config, manifest):
     errors = []
-    expected = {f'weymela-v3-pilot-{part}' for part in ('api', 'worker', 'web', 'postgres')}
-    if config.get('name') != 'weymela-v3-pilot' or set(config.get('services', {})) != expected:
-        return ['Unexpected Compose project/services; V3-only required.']
+    expected = {'api', 'worker', 'web', 'postgres'}
+    if config.get('name') != 'weymela-pilot' or set(config.get('services', {})) != expected:
+        return ['Unexpected Compose project/services; Weymela Pilot required.']
     images = {item['component']: item for item in manifest.get('images', [])}
     if set(images) != {'api', 'worker', 'web'}: errors.append('Complete three-image release manifest required.')
     for name, service in config['services'].items():
-        part = name.removeprefix('weymela-v3-pilot-')
+        part = name
         expression = (r'postgres:17-alpine@sha256:[a-f0-9]{64}' if part == 'postgres' else rf'ghcr\.io/[a-z0-9_.-]+/weymela-v3-{part}@sha256:[a-f0-9]{{64}}')
         if not re.fullmatch(expression, service.get('image', '')): errors.append(f'{part}: exact approved V3 digest reference required.')
         if 'build' in service or service.get('privileged') or service.get('network_mode') == 'host': errors.append(f'{part}: unsafe runtime mode.')
@@ -86,7 +86,7 @@ def validate(config, manifest):
             environment = service.get('environment', {})
             if environment.get('V3__FinancialWritesEnabled') != 'false' or environment.get('V3__EnableDevelopmentIdentity') != 'false':
                 errors.append(f'{part}: preparation must stay frozen with Development identity disabled.')
-    api = config['services']['weymela-v3-pilot-api']
+    api = config['services']['api']
     api_environment = api.get('environment', {})
     required_api = {
         'V3__Auth__Provider': 'Firebase',
@@ -137,7 +137,7 @@ def validate(config, manifest):
     except OSError:
         errors.append('api: persistent cookie key directory metadata is missing or unsafe.')
     for part in ('worker', 'web'):
-        service = config['services'][f'weymela-v3-pilot-{part}']
+        service = config['services'][part]
         environment = service.get('environment', {})
         forbidden = ('V3__Auth__ResendApiKey', 'V3__Auth__CodeHashKey', 'V3__Auth__PinPepper',
                      'V3__Auth__CookieCertificatePassword', 'GOOGLE_APPLICATION_CREDENTIALS')
@@ -146,15 +146,15 @@ def validate(config, manifest):
                 or {'v3-firebase-admin.json', 'v3-cookie-protection.pfx'} & secret_sources
                 or any(item.get('target') == '/run/weymela-v3/keys' for item in service.get('volumes', []))):
             errors.append(f'{part}: API authentication secrets are forbidden.')
-    worker_environment = config['services']['weymela-v3-pilot-worker'].get('environment', {})
+    worker_environment = config['services']['worker'].get('environment', {})
     if worker_environment.get('V3__Auth__Provider') != 'Firebase' or worker_environment.get('V3__Auth__FirebaseProjectId') != 'weymela-pilot':
         errors.append('worker: approved public Firebase project identity is required.')
     web_image = images.get('web', {})
     if web_image.get('firebaseProjectId') != api_environment.get('V3__Auth__FirebaseProjectId'):
         errors.append('web/api: Firebase project identities do not match.')
-    if not config.get('networks', {}).get('data', {}).get('internal'): errors.append('V3 data network must be internal.')
+    if not config.get('networks', {}).get('data', {}).get('internal'): errors.append('Weymela data network must be internal.')
     for network in config.get('networks', {}).values():
-        if not network.get('name', '').startswith('weymela-v3-pilot-') or network.get('external'):
+        if not network.get('name', '').startswith('weymela-pilot-') or network.get('external'):
             errors.append('No existing/external V2 network is permitted.')
     for volume in config.get('volumes', {}).values():
         if volume.get('name') != 'weymela-v3-pilot-postgres-data': errors.append('Unexpected data volume.')
@@ -162,13 +162,13 @@ def validate(config, manifest):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env-file', required=True, help='Protected V3-only interpolation file, outside source')
+    parser.add_argument('--env-file', required=True, help='Protected Weymela Pilot interpolation file, outside source')
     parser.add_argument('--manifest', required=True)
     args = parser.parse_args()
     root = pathlib.Path(__file__).resolve().parents[2]
     # Never print expanded config: it contains runtime credentials from env_file.
     process = subprocess.run(['docker', 'compose', '--env-file', args.env_file, '-f', str(root/'docker/compose.pilot.yml'), 'config', '--format', 'json'], text=True, capture_output=True)
-    if process.returncode: raise SystemExit('Compose configuration unavailable/invalid. Review protected V3 files privately; output redacted.')
+    if process.returncode: raise SystemExit('Compose configuration unavailable/invalid. Review protected Pilot files privately; output redacted.')
     errors = validate(json.loads(process.stdout), json.loads(pathlib.Path(args.manifest).read_text()))
     print(json.dumps({'readOnly': True, 'deploymentAuthorized': False, 'errors': errors}, indent=2))
     raise SystemExit(bool(errors))

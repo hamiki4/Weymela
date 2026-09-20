@@ -4,7 +4,7 @@ Weymela V3 is a new platform/middleman implementation. It shares no V2 migration
 
 ## Status
 
-Phases 0–6 provide architecture, domain/application foundations, isolated PostgreSQL persistence, the verified-view/QR financial engine, role-specific responsive Web/PWA and security/operational readiness. See [persistence design](docs/architecture/PERSISTENCE.md), [financial engine](docs/finance/PHASE-4-FINANCIAL-ENGINE.md), [Web/API design](docs/architecture/PHASE-5-WEB-API.md), and [Phase 6 readiness](docs/deployment/PHASE-6-READINESS.md). Phase7 now prepares [side-by-side Pilot CI/runtime/runbooks](docs/deployment/V3-PILOT-PREPARATION.md), without changing product implementation or deploying. Capacity, live sign-in/provisioning, manual evidence, legal and operational gates remain; no push or public cutover is authorized by these files.
+Phases 0–6 provide architecture, domain/application foundations, isolated PostgreSQL persistence, the verified-view/QR financial engine, role-specific responsive Web/PWA and security/operational readiness. See [persistence design](docs/architecture/PERSISTENCE.md), [financial engine](docs/finance/PHASE-4-FINANCIAL-ENGINE.md), [Web/API design](docs/architecture/PHASE-5-WEB-API.md), and [Phase 6 readiness](docs/deployment/PHASE-6-READINESS.md). Phase7 now prepares [side-by-side Pilot CI/runtime/runbooks](docs/deployment/WEYMELA-PILOT-PREPARATION.md), without changing product implementation or deploying. Capacity, live sign-in/provisioning, manual evidence, legal and operational gates remain; no push or public cutover is authorized by these files.
 
 ## Projects
 

@@ -115,7 +115,7 @@ jobs:
         run: python3 tools/ci/release-evidence.py complete
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: v3-image-${{ matrix.component }}
+          name: weymela-image-${{ matrix.component }}
           path: .artifacts/release/
           include-hidden-files: true
           retention-days: 30
@@ -134,7 +134,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: v3-diagnostics-${{ matrix.component }}
+          name: weymela-diagnostics-${{ matrix.component }}
           path: .artifacts/diagnostics/${{ matrix.component }}-diagnostics.json
           include-hidden-files: true
           if-no-files-found: error
@@ -153,7 +153,7 @@ jobs:
         run: bash tools/ci/migration-artifacts.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: v3-migrations
+          name: weymela-migrations
           path: .artifacts/migrations/
           include-hidden-files: true
           retention-days: 30
@@ -163,9 +163,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { pattern: 'v3-image-*', path: release/images, merge-multiple: true }
+        with: { pattern: 'weymela-image-*', path: release/images, merge-multiple: true }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { name: v3-migrations, path: release/migrations }
+        with: { name: weymela-migrations, path: release/migrations }
       - name: Assemble complete release record (never a deployment)
         run: |
           python3 - <<'PY'
@@ -186,13 +186,13 @@ jobs:
                   evidence=i[key]
                   assert evidence['path']==f"images/{i['component']}-{suffix}.json"
                   assert hashlib.sha256((root/evidence['path']).read_bytes()).hexdigest()==evidence['sha256']
-          manifest={'releaseId':f"v3-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':json.loads((root/'migrations/migration-manifest.json').read_text()),'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
+          manifest={'releaseId':f"weymela-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':json.loads((root/'migrations/migration-manifest.json').read_text()),'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
           assert manifest['migrations']['commit']==manifest['commit']
           (root/'release-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
           PY
           (cd release && sha256sum release-manifest.json > SHA256SUMS)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: v3-release-package
+          name: weymela-release-package
           path: release/
           retention-days: 30

@@ -68,11 +68,11 @@ class AttestationPolicyTests(unittest.TestCase):
     def test_failure_upload_is_separate_from_successful_release_artifacts(self):
         step = RELEASE.split('      - name: Upload failure diagnostics only', 1)[1].split('\n  migrations:', 1)[0]
         self.assertIn('if: failure()', step)
-        self.assertIn('name: v3-diagnostics-${{ matrix.component }}', step)
+        self.assertIn('name: weymela-diagnostics-${{ matrix.component }}', step)
         self.assertIn('path: .artifacts/diagnostics/${{ matrix.component }}-diagnostics.json', step)
         self.assertIn('if-no-files-found: error', step)
         self.assertNotIn('path: .artifacts/release/', step)
-        self.assertIn("pattern: 'v3-image-*'", RELEASE)
+        self.assertIn("pattern: 'weymela-image-*'", RELEASE)
 
 
 class ImageEvidenceTests(unittest.TestCase):
@@ -272,7 +272,7 @@ class ImageEvidenceTests(unittest.TestCase):
         self.assertEqual(retained['findingCounts']['vulnerabilities']['CRITICAL'], 1)
         self.assertEqual(retained['findingCounts']['secrets']['HIGH'], 1)
         self.assertNotIn('private-fixture', path.read_text() + diagnostic.stdout + diagnostic.stderr)
-        self.assertIn('v3-diagnostics-web', diagnostic.stdout)
+        self.assertIn('weymela-diagnostics-web', diagnostic.stdout)
 
     def manifest(self):
         body = RELEASE.split('- name: Assemble complete release record', 1)[1].split("python3 - <<'PY'\n", 1)[1].split('\n          PY', 1)[0]
@@ -283,7 +283,7 @@ class ImageEvidenceTests(unittest.TestCase):
         result = self.manifest()
         self.assertEqual(result.returncode, 0, result.stderr)
         manifest = json.loads((self.root/'release/release-manifest.json').read_text())
-        self.assertEqual(manifest['releaseId'], 'v3-'+'a'*40+'-run123-attempt1')
+        self.assertEqual(manifest['releaseId'], 'weymela-'+'a'*40+'-run123-attempt1')
         self.assertEqual(len(manifest['images']), 3)
         self.assertEqual(next(image for image in manifest['images'] if image['component'] == 'web')['firebaseProjectId'], 'weymela-pilot')
         self.assertIn('migrations/migration-manifest.json', manifest['checksums'])

@@ -32,7 +32,7 @@ jobs:
           assert r['path']=='.github/workflows/release.yml'
           assert r['head_repository']['full_name']==os.environ['REPOSITORY']
           PY
-          gh run download "$RELEASE_RUN" --repo "$REPOSITORY" --name v3-release-package --dir release
+          gh run download "$RELEASE_RUN" --repo "$REPOSITORY" --name weymela-release-package --dir release
           (cd release && sha256sum --check SHA256SUMS)
           python3 tools/ci/verify-release.py release
           python3 -c 'import json; assert json.load(open("run.json"))["head_sha"] == json.load(open("release/release-manifest.json"))["commit"]'

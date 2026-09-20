@@ -114,7 +114,7 @@ class WorkflowGateTests(unittest.TestCase):
     def test_browser_installer_has_own_deadline_and_raw_control_is_not_uploaded(self):
         self.assertIn('timeout-minutes: 10\n        working-directory: src/Weymela.Web\n        run: npx playwright install --with-deps chromium', CI)
         self.assertNotRegex(CI, r'(?m)^\s+\.artifacts/browser-host\.(json|log)$')
-        self.assertEqual(CI.count('name: v3-'), 7)
+        self.assertEqual(CI.count('name: weymela-'), 7)
 
 class DispatcherTests(unittest.TestCase):
     def setUp(self):

@@ -193,7 +193,7 @@ if __name__ == '__main__':
         complete(pathlib.Path('.artifacts/release'), os.environ)
     else:
         record = diagnostics(pathlib.Path('.artifacts/release'), pathlib.Path('.artifacts/diagnostics'), os.environ)
-        print(f"Security report: {record['scanReportStatus']}. See artifact v3-diagnostics-{record['component']}.")
+        print(f"Security report: {record['scanReportStatus']}. See artifact weymela-diagnostics-{record['component']}.")
         if 'findingCounts' in record:
             counts = record['findingCounts']
             print(f"Retained HIGH/CRITICAL vulnerabilities: {sum(counts['vulnerabilities'].values())}; secret findings: {sum(counts['secrets'].values())}.")

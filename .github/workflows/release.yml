@@ -1,4 +1,4 @@
-name: V3 immutable registry release
+name: Weymela immutable registry release
 on:
   push:
     branches: [main]

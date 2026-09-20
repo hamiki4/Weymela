@@ -1,4 +1,4 @@
-name: V3 Pilot review gate - NO DEPLOY
+name: Weymela Pilot review gate - NO DEPLOY
 on:
   workflow_dispatch:
     inputs:

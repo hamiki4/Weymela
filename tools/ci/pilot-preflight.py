@@ -167,7 +167,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     root = pathlib.Path(__file__).resolve().parents[2]
     # Never print expanded config: it contains runtime credentials from env_file.
-    process = subprocess.run(['docker', 'compose', '--env-file', args.env_file, '-f', str(root/'docker/compose.v3-pilot.yml'), 'config', '--format', 'json'], text=True, capture_output=True)
+    process = subprocess.run(['docker', 'compose', '--env-file', args.env_file, '-f', str(root/'docker/compose.pilot.yml'), 'config', '--format', 'json'], text=True, capture_output=True)
     if process.returncode: raise SystemExit('Compose configuration unavailable/invalid. Review protected V3 files privately; output redacted.')
     errors = validate(json.loads(process.stdout), json.loads(pathlib.Path(args.manifest).read_text()))
     print(json.dumps({'readOnly': True, 'deploymentAuthorized': False, 'errors': errors}, indent=2))

@@ -22,7 +22,7 @@ Missing live social API credentials alone do **not** block a controlled Pilot. M
 
 GitHub main commit → hosted CI acceptance → scanned/attested GHCR images + migration artifact → separately approved operator preparation → server pulls by digest → isolated V3 services. No server image builds, Windows tar-copy cycle, automatic deployment or Production promotion.
 
-- Compose project `weymela-v3-pilot`, file [`docker/compose.v3-pilot.yml`](../../docker/compose.v3-pilot.yml).
+- Compose project `weymela-v3-pilot`, file [`docker/compose.pilot.yml`](../../docker/compose.pilot.yml).
 - Services `weymela-v3-pilot-api`, `weymela-v3-pilot-worker`, `weymela-v3-pilot-web`, `weymela-v3-pilot-postgres`.
 - Private `weymela-v3-pilot-data` (internal; DB/Worker/API); separate `weymela-v3-pilot-edge` (API/Web; API needs egress to Google's public signing certificate endpoint after live authorization).
 - Only Web binds a host port: `127.0.0.1:18080`. API and PostgreSQL have **no host ports**. Worker no listener. Port observed unused, must recheck before deployment. API health uses DB and Worker readiness; no dependency cycle waiting for API before Worker starts.

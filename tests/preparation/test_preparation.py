@@ -162,7 +162,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('healthSignal.MarkSuccessfulCycle()', program)
         self.assertIn('healthSignal.MarkFailedCycle()', program)
 
-        compose = (ROOT / 'docker/compose.v3-pilot.yml').read_text()
+        compose = (ROOT / 'docker/compose.pilot.yml').read_text()
         worker = compose.split('  weymela-v3-pilot-worker:', 1)[1].split('  weymela-v3-pilot-web:', 1)[0]
         self.assertIn('cpus: 0.25', worker)
         self.assertIn('mem_limit: 256m', worker)
@@ -229,7 +229,7 @@ class ComposeIsolationTests(unittest.TestCase):
                     'V3_POSTGRES_PASSWORD_FILE': str(root/'placeholder'), 'V3_COOKIE_CERTIFICATE_FILE': str(cookie),
                     'V3_FIREBASE_ADMIN_CREDENTIALS_FILE': str(firebase),
                     'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
-        cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.v3-pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
+        cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
 
     @classmethod
     def tearDownClass(cls):

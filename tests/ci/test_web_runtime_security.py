@@ -41,7 +41,8 @@ class ShellFixture(unittest.TestCase):
             tool=pathlib.Path(sys.argv[0]).name
             stage=tool
             if tool=='docker' and args[:2]==['buildx','build']: stage='build'
-            if tool=='docker' and args[:1]==['run']: stage='runtime'
+            if tool=='docker' and args[:1]==['run']:
+                stage='identity' if '--entrypoint' in args and args[args.index('--entrypoint')+1]=='/bin/sh' else 'runtime'
             if tool=='apk' and args[:1]==['add']: stage='install'
             if tool=='apk' and args[:1]==['info']: stage='floor'
             call={'tool':tool,'args':args,'stage':stage}
@@ -49,7 +50,11 @@ class ShellFixture(unittest.TestCase):
             with open(os.environ['WEB_TEST_CALLS'],'a') as stream:
                 stream.write(json.dumps(call)+'\\n')
             if os.environ['WEB_TEST_FAIL']==stage: sys.exit(8)
-            if tool=='git': print('a'*40)
+            if tool=='git':
+                if args == ['ls-files', '-z', '--', 'src/Weymela.Web']:
+                    sys.stdout.write('src/Weymela.Web/package.json\\0')
+                else:
+                    print('a'*40)
             elif tool=='docker' and args[:3]==['buildx','imagetools','inspect']:
                 if args[3].startswith('ghcr.io/'):
                     sys.exit(0 if os.environ['WEB_TEST_EXISTING'] else 1)
@@ -63,6 +68,8 @@ class ShellFixture(unittest.TestCase):
             path = self.bin / name
             path.write_text(stub)
             path.chmod(0o700)
+        (self.root / 'src/Weymela.Web').mkdir(parents=True)
+        (self.root / 'src/Weymela.Web/package.json').write_text('{}\n')
 
     def calls(self):
         return [json.loads(line) for line in self.calls_file.read_text().splitlines()] if self.calls_file.exists() else []
@@ -139,6 +146,9 @@ class HostedRuntimeGateTests(ShellFixture):
             'VITE_FIREBASE_PROJECT_ID=weymela-pilot',
             'VITE_FIREBASE_APP_ID=1:123456789:web:abcdef123456'):
             self.assertIn(value, build)
+        self.assertIn('V3_SOURCE_COMMIT=' + 'a' * 40, build)
+        fingerprint_arg = next(value for value in build if value.startswith('V3_FRONTEND_SOURCE_FINGERPRINT='))
+        self.assertRegex(fingerprint_arg.split('=', 1)[1], r'^[a-f0-9]{64}$')
         self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', ' '.join(build))
         self.assertNotIn('RESEND', ' '.join(build).upper())
         self.assertEqual((self.root / '.artifacts/release/web-firebase-project.txt').read_text(), 'weymela-pilot\n')
@@ -160,12 +170,27 @@ class HostedRuntimeGateTests(ShellFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
         runtime = next(call['args'] for call in calls if call['stage'] == 'runtime')
+        identity = next(call['args'] for call in calls if call['stage'] == 'identity')
         built = next(call['args'] for call in calls if call['stage'] == 'build')
+        fingerprint = next(value.split('=', 1)[1] for value in built
+                           if value.startswith('V3_FRONTEND_SOURCE_FINGERPRINT='))
+        expected_identity = ('EXPECTED_BUILD_IDENTITY={"commit":"' + 'a' * 40
+                             + '","frontendSourceFingerprint":"' + fingerprint + '"}')
+        self.assertIn('--env', identity)
+        self.assertEqual(identity[identity.index('--env') + 1], expected_identity)
+        self.assertEqual(identity[identity.index('--entrypoint') + 1], '/bin/sh')
+        self.assertIn('/usr/share/nginx/html/build-identity.json', ' '.join(identity))
         self.assertEqual(runtime, ['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
                                   '--security-opt', 'no-new-privileges', '--entrypoint', '/sbin/apk',
                                   built[built.index('--tag') + 1], 'info', '-v'])
         self.assertIn('libuuid-2.42.3-r1\n', (self.root / '.artifacts/release/web-runtime-packages.txt').read_text())
         self.assertTrue((self.root / 'output').read_text().startswith('image=ghcr.io/'))
+
+    def test_runtime_identity_gate_failure_blocks_build_outputs(self):
+        result = self.run_build(WEB_TEST_FAIL='identity')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('libuuid-2.42.3-r1', [call.get('stage') for call in self.calls()])
+        self.assertFalse((self.root / 'output').exists())
 
     def test_vulnerable_runtime_version_cannot_emit_successful_build_outputs(self):
         result = self.run_build(WEB_TEST_PACKAGE='libuuid-2.42.1-r0')

@@ -28,10 +28,32 @@ if test "$component" = web; then
   [[ "$VITE_FIREBASE_AUTH_DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$ ]]
   [[ "$VITE_FIREBASE_APP_ID" =~ ^[0-9]+:[0-9]+:web:[A-Za-z0-9]+$ ]]
   node_image="$(resolve_base node:24-bookworm-slim)"
+  frontend_source_fingerprint="$({
+    git ls-files -z -- src/Weymela.Web
+  } | python3 -c '
+import hashlib
+import pathlib
+import sys
+
+paths = sorted(path for path in sys.stdin.buffer.read().split(b"\0") if path)
+if not paths:
+    raise SystemExit("No tracked Web frontend inputs found")
+digest = hashlib.sha256()
+for name in paths:
+    data = pathlib.Path(name.decode("utf-8")).read_bytes()
+    digest.update(len(name).to_bytes(8, "big"))
+    digest.update(name)
+    digest.update(len(data).to_bytes(8, "big"))
+    digest.update(data)
+print(digest.hexdigest())
+')"
+  [[ "$frontend_source_fingerprint" =~ ^[a-f0-9]{64}$ ]]
   # Current upstream still contains vulnerable libuuid. Keep the Alpine base
   # fixed while Dockerfile.web applies the checksum-pinned, package-only fix.
   web_image="nginx:stable-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c"
   build_args=(--build-arg "NODE_IMAGE=$node_image" --build-arg "WEB_IMAGE=$web_image"
+    --build-arg "V3_SOURCE_COMMIT=$GITHUB_SHA"
+    --build-arg "V3_FRONTEND_SOURCE_FINGERPRINT=$frontend_source_fingerprint"
     --build-arg "VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY"
     --build-arg "VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN"
     --build-arg "VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID"
@@ -50,6 +72,12 @@ docker buildx build --platform linux/amd64 --load --provenance=false \
   --label "org.opencontainers.image.revision=$GITHUB_SHA" \
   --label "org.opencontainers.image.version=$release" "${build_args[@]}" .
 if test "$component" = web; then
+  expected_build_identity="$(printf '{\"commit\":\"%s\",\"frontendSourceFingerprint\":\"%s\"}' \
+    "$GITHUB_SHA" "$frontend_source_fingerprint")"
+  docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --env "EXPECTED_BUILD_IDENTITY=$expected_build_identity" \
+    --entrypoint /bin/sh "$image" -c \
+    'test "$(cat /usr/share/nginx/html/build-identity.json)" = "$EXPECTED_BUILD_IDENTITY"'
   # Check the actual built runtime on the hosted builder, before Trivy/publish.
   docker run --rm --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --entrypoint /sbin/apk "$image" info -v \

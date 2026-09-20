@@ -5,11 +5,16 @@ ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN
 ARG VITE_FIREBASE_PROJECT_ID
 ARG VITE_FIREBASE_APP_ID
+ARG V3_SOURCE_COMMIT
+ARG V3_FRONTEND_SOURCE_FINGERPRINT
 ENV VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY} \
     VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN} \
     VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID} \
     VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
 WORKDIR /source
+RUN test -n "$V3_SOURCE_COMMIT" \
+    && test -n "$V3_FRONTEND_SOURCE_FINGERPRINT" \
+    && printf '%s\n' "$V3_FRONTEND_SOURCE_FINGERPRINT" > /tmp/weymela-frontend-source-fingerprint
 COPY src/Weymela.Web/package.json src/Weymela.Web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY src/Weymela.Web/ ./
@@ -17,7 +22,10 @@ RUN test -n "$VITE_FIREBASE_API_KEY" \
     && test -n "$VITE_FIREBASE_AUTH_DOMAIN" \
     && test "$VITE_FIREBASE_PROJECT_ID" = "weymela-pilot" \
     && test -n "$VITE_FIREBASE_APP_ID" \
+    && test "$(cat /tmp/weymela-frontend-source-fingerprint)" = "$V3_FRONTEND_SOURCE_FINGERPRINT" \
     && npm run build \
+    && printf '{"commit":"%s","frontendSourceFingerprint":"%s"}\n' \
+      "$V3_SOURCE_COMMIT" "$V3_FRONTEND_SOURCE_FINGERPRINT" > dist/build-identity.json \
     && printf '{"firebaseProjectId":"%s"}\n' "$VITE_FIREBASE_PROJECT_ID" > dist/firebase-build.json
 
 FROM ${WEB_IMAGE} AS runtime

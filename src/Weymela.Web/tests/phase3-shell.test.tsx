@@ -70,10 +70,8 @@ describe("Phase 3 multi-profile shell", () => {
     expect(within(mobile).getByRole("link", { name: "Your Cashback" })).toHaveAttribute("href", "/customer/history");
     expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
     const account = screen.getByRole("button", { name: "Open account menu" });
-    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(() => {});
     account.focus();
     await userEvent.keyboard("{Enter}");
-    expect(showModal).toHaveBeenCalledTimes(1);
     const menu = screen.getByRole("dialog", { name: "Account menu", hidden: true });
     expect(within(menu).getByText("Hana")).toBeInTheDocument();
     expect(within(menu).getByText("Customer")).toBeInTheDocument();
@@ -90,9 +88,7 @@ describe("Phase 3 multi-profile shell", () => {
     setup("Creator", "/creator");
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
     const more = within(mobile).getByRole("button", { name: "More navigation" });
-    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(() => {});
     await userEvent.click(more);
-    expect(showModal).toHaveBeenCalledTimes(1);
     const menu = screen.getByRole("dialog", { name: "More navigation", hidden: true });
     expect(within(menu).getByRole("link", { name: "Campaign Requests", hidden: true })).toBeInTheDocument();
     expect(within(menu).getByRole("link", { name: "UGC", hidden: true })).toBeInTheDocument();

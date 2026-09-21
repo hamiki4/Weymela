@@ -23,7 +23,7 @@ Required external inputs before live sign-in are: the four public Web build vari
 | `V3__Auth__FirebaseCustomTokenMode=FirebaseAdmin` | environment setting | API only |
 | `V3__Auth__FirebaseProjectId=weymela-pilot` | public config | API/Worker; must match Web evidence |
 | `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/v3-firebase-admin.json` | file path only | API only |
-| `/opt/weymela/secrets/v3-firebase-admin.json` | private read-only service-account file | mounted into API only |
+| `/etc/weymela/pilot/firebase-admin.json` | private read-only service-account file | mounted into API only |
 | `V3__Auth__CodeHashKey` | base64 32+ byte secret | protected API env only |
 | `V3__Auth__PinPepper` | base64 32+ byte secret | protected API env only |
 | cookie PFX/password and persistent key directory | private file/secret/storage | API only |

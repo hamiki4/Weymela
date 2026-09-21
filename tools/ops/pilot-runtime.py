@@ -18,7 +18,7 @@ import stat
 import tempfile
 
 
-FIREBASE_ADMIN_HOST = pathlib.Path('/opt/weymela/secrets/v3-firebase-admin.json')
+FIREBASE_ADMIN_HOST = pathlib.Path('/etc/weymela/pilot/firebase-admin.json')
 COOKIE_CERTIFICATE_HOST = pathlib.Path('/etc/weymela-v3/pilot/cookie-protection.pfx')
 COOKIE_KEYS_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/cookie-keys')
 

@@ -55,7 +55,7 @@ eventually establish:
 
 | Host path | Type | Owner | Mode | Container use |
 |---|---|---:|---:|---|
-| `/opt/weymela/secrets/v3-firebase-admin.json` | regular, non-symlink | `1654:1654` | `0400` | API secret, read-only |
+| `/etc/weymela/pilot/firebase-admin.json` | regular, non-symlink | `1654:1654` | `0400` | API secret, read-only |
 | `/etc/weymela-v3/pilot/cookie-protection.pfx` | regular, non-symlink | `1654:1654` | `0400` | API secret, read-only |
 | `/var/lib/weymela-v3/pilot/cookie-keys` | persistent directory | `1654:1654` | `0700` | API bind mount, writable |
 

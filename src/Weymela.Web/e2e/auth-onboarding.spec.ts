@@ -749,16 +749,21 @@ test("public role shell keeps mobile navigation and profile actions tappable", a
   await open(page, "/customer/offers");
   const navigation = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(navigation).toBeVisible();
-  const more = navigation.getByRole("button", { name: "More navigation and profiles" });
-  const target = await more.boundingBox();
+  await expect(navigation.getByRole("link", { name: "Offers for you", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Your Cashback", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "More navigation", exact: true })).toHaveCount(0);
+  const accountButton = page.getByRole("button", { name: "Open account menu" });
+  const target = await accountButton.boundingBox();
   expect(target?.height).toBeGreaterThanOrEqual(44);
-  await more.click();
-  const menu = page.getByRole("dialog", { name: "Workspace menu" });
+  await accountButton.click();
+  const menu = page.getByRole("dialog", { name: "Account menu" });
   await expect(menu).toBeVisible();
   await expect(menu.getByRole("link", { name: "Add a profile" })).toBeVisible();
   await expect(menu.getByLabel("Switch profile", { exact: true })).toBeVisible();
+  await expect(menu.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  await expect(menu.getByRole("button", { name: "Close account menu", exact: true })).toBeVisible();
   const session = await (await context.request.get("/api/session")).json() as SessionUser;
-  expect(await page.locator(".sidebar, .topbar, .nav-drawer, .mobile-role-nav").evaluateAll((elements, publicId) =>
+  expect(await page.locator(".sidebar, .topbar, .account-sheet, .more-sheet, .mobile-role-nav").evaluateAll((elements, publicId) =>
     elements.some((element) => element.textContent?.includes(publicId)), session.publicId)).toBe(false);
   await page.keyboard.press("Escape");
   await expect(menu).not.toBeVisible();

@@ -1068,8 +1068,7 @@ td .button {
   color: var(--ink);
   box-shadow: 0 24px 60px #1834212b;
 }
-.dialog::backdrop,
-.nav-drawer::backdrop {
+.dialog::backdrop {
   background: #122d266b;
 }
 .dialog-header {
@@ -1167,24 +1166,62 @@ td .button {
   font-size: 0.84rem;
   margin-bottom: 20px;
 }
-.nav-drawer {
-  position: fixed;
-  left: 0;
-  top: 0;
-  margin: 0;
-  width: min(320px, calc(100vw - 36px));
-  height: 100dvh;
-  max-height: none;
-  max-width: none;
-  border: 0;
-  padding: 24px;
-  background: #fafcf6;
-  color: var(--ink);
+.account-sheet,
+.more-sheet {
+  width: min(360px, calc(100% - 24px));
+  padding: 18px;
 }
-.close-menu {
-  position: absolute;
-  right: 9px;
-  top: 9px;
+.account-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--role-border);
+  border-radius: 12px;
+  background: var(--role-soft);
+}
+.account-summary strong,
+.account-summary small {
+  display: block;
+}
+.account-summary small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+.account-menu-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--role-border);
+  border-radius: 9px;
+  color: var(--role-accent);
+}
+.account-menu-link:hover {
+  border-color: var(--role-accent);
+  text-decoration: none;
+}
+.account-menu-actions {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.account-menu-actions .button {
+  width: 100%;
+}
+.account-trigger {
+  width: 44px;
+  min-height: 44px;
+  padding: 3px;
+  border-radius: 50%;
+}
+.account-trigger:hover {
+  background: transparent;
+}
+.more-sheet .nav-link {
+  margin: 2px 0;
 }
 .nav-eyebrow {
   text-transform: uppercase;

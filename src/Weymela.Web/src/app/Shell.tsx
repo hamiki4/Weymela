@@ -81,7 +81,8 @@ export function Brand() {
 }
 export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
-  const menu = useRef<HTMLDialogElement>(null);
+  const accountMenu = useRef<HTMLDialogElement>(null);
+  const moreMenu = useRef<HTMLDialogElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
   if (!user) return null;
@@ -99,96 +100,147 @@ export function Shell({ children }: { children?: ReactNode }) {
     user.role === "Creator" ||
     user.role === "Business";
   const mobileItems = items.slice(0, 3);
-  const nav = (
-    <>
-      <Link
-        className="brand-link"
-        to={roleHome[user.role]}
-        onClick={() => menu.current?.close()}
-      >
-        <Brand />
-      </Link>
-      <p className="nav-eyebrow">{roles[user.role]} workspace</p>
-      {user.profiles && user.profiles.length > 0 && (
-        <ProfileSwitcher
-          profiles={user.profiles}
-          activeKey={user.activeProfileKey}
-          onSwitch={switchProfile}
-        />
-      )}
-      <nav aria-label="Main navigation">
-        {items.map(([to, label, icon]) => (
-          <NavLink
-            to={to}
-            end
-            key={to}
-            className={({ isActive }) =>
-              `nav-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`
-            }
-            onClick={() => menu.current?.close()}
-          >
-            <Icon name={icon} />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      {isPublicProfile && user.role !== "Business" && (
-        <Link
-          className="nav-link add-profile-link"
-          to="/onboarding"
-          onClick={() => menu.current?.close()}
+  const overflowItems = items.slice(3);
+  const renderNavigation = (
+    entries: [string, string, string][],
+    ariaLabel: string,
+    onNavigate?: () => void,
+  ) => (
+    <nav aria-label={ariaLabel}>
+      {entries.map(([to, label, icon]) => (
+        <NavLink
+          to={to}
+          end
+          key={to}
+          className={({ isActive }) =>
+            `nav-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`
+          }
+          onClick={onNavigate}
         >
-          <Icon name="people" />
-          Add a profile
-        </Link>
-      )}
-      <div className="sidebar-bottom">
-        <div className="person">
-          <span className="avatar">{user.displayName.slice(0, 1)}</span>
-          <div>
-            <strong>{user.displayName}</strong>
-            <small>{roles[user.role]}</small>
-          </div>
-        </div>
-        <Button
-          variant="quiet"
-          icon="logout"
-          onClick={() => {
-            void signOut().then(() => navigate("/sign-in"));
-          }}
-        >
-          Sign out
-        </Button>
-      </div>
-    </>
+          <Icon name={icon} />
+          {label}
+        </NavLink>
+      ))}
+    </nav>
   );
+  const closeAccountMenu = () => accountMenu.current?.close();
+  const openMoreMenu = () => {
+    closeAccountMenu();
+    moreMenu.current?.showModal();
+  };
+  const signOutAndClose = () => {
+    closeAccountMenu();
+    void signOut().then(() => navigate("/sign-in"));
+  };
   return (
     <div className={`app-shell role-${user.role.toLowerCase()}`}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <aside className="sidebar">{nav}</aside>
-      <dialog ref={menu} className="nav-drawer" aria-label="Workspace menu">
-        <Button
-          variant="quiet"
-          className="close-menu"
-          aria-label="Close menu"
-          onClick={() => menu.current?.close()}
-        >
-          <Icon name="close" />
-        </Button>
-        {nav}
-      </dialog>
-      <div className="workspace">
-        <header className="topbar">
+      <aside className="sidebar">
+        <Link className="brand-link" to={roleHome[user.role]}>
+          <Brand />
+        </Link>
+        <p className="nav-eyebrow">{roles[user.role]} workspace</p>
+        {user.profiles && user.profiles.length > 0 && (
+          <ProfileSwitcher
+            profiles={user.profiles}
+            activeKey={user.activeProfileKey}
+            onSwitch={switchProfile}
+          />
+        )}
+        {renderNavigation(items, "Main navigation")}
+        {isPublicProfile && user.role !== "Business" && (
+          <Link className="nav-link add-profile-link" to="/onboarding">
+            <Icon name="people" />
+            Add a profile
+          </Link>
+        )}
+        <div className="sidebar-bottom">
+          <div className="person">
+            <span className="avatar">{user.displayName.slice(0, 1)}</span>
+            <div>
+              <strong>{user.displayName}</strong>
+              <small>{roles[user.role]}</small>
+            </div>
+          </div>
+          <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
+            Sign out
+          </Button>
+        </div>
+      </aside>
+      <dialog
+        ref={accountMenu}
+        id="account-menu"
+        className="dialog account-sheet"
+        aria-labelledby="account-menu-title"
+      >
+        <div className="dialog-header">
+          <h2 id="account-menu-title">Account menu</h2>
           <Button
             variant="quiet"
-            className="menu-toggle"
-            aria-label="Open menu"
-            onClick={() => menu.current?.showModal()}
+            aria-label="Close account menu"
+            onClick={closeAccountMenu}
           >
-            <Icon name="menu" />
+            <Icon name="close" />
           </Button>
+        </div>
+        <div className="account-summary">
+          <span className="avatar" aria-hidden="true">
+            {user.displayName.slice(0, 1)}
+          </span>
+          <div>
+            <strong>{user.displayName}</strong>
+            <small>{roles[user.role]}</small>
+          </div>
+        </div>
+        {user.profiles && user.profiles.length > 0 && (
+          <ProfileSwitcher
+            profiles={user.profiles}
+            activeKey={user.activeProfileKey}
+            onSwitch={switchProfile}
+          />
+        )}
+        {isPublicProfile && user.role !== "Business" && (
+          <Link
+            className="account-menu-link"
+            to="/onboarding"
+            onClick={closeAccountMenu}
+          >
+            <Icon name="people" />
+            Add a profile
+          </Link>
+        )}
+        <div className="account-menu-actions">
+          <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
+            Sign out
+          </Button>
+        </div>
+      </dialog>
+      {overflowItems.length > 0 && (
+        <dialog
+          ref={moreMenu}
+          id="more-navigation"
+          className="dialog more-sheet"
+          aria-labelledby="more-navigation-title"
+        >
+          <div className="dialog-header">
+            <h2 id="more-navigation-title">More navigation</h2>
+            <Button
+              variant="quiet"
+              aria-label="Close more navigation"
+              onClick={() => moreMenu.current?.close()}
+            >
+              <Icon name="close" />
+            </Button>
+          </div>
+          {renderNavigation(overflowItems, "More navigation", () =>
+            moreMenu.current?.close(),
+          )}
+        </dialog>
+      )}
+      <div className="workspace">
+        <header className="topbar">
           <span className="workspace-label">
             {roles[user.role]} <span className="muted">/ Weymela</span>
           </span>
@@ -203,9 +255,21 @@ export function Shell({ children }: { children?: ReactNode }) {
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
             )}
-            <span className="small-avatar" aria-label={user.displayName}>
-              {user.displayName.slice(0, 1)}
-            </span>
+            <Button
+              variant="quiet"
+              className="account-trigger"
+              aria-label="Open account menu"
+              aria-haspopup="dialog"
+              aria-controls="account-menu"
+              onClick={() => {
+                moreMenu.current?.close();
+                accountMenu.current?.showModal();
+              }}
+            >
+              <span className="small-avatar" aria-hidden="true">
+                {user.displayName.slice(0, 1)}
+              </span>
+            </Button>
           </div>
         </header>
         <main id="main-content" className="main-content" tabIndex={-1}>
@@ -226,15 +290,19 @@ export function Shell({ children }: { children?: ReactNode }) {
               <span>{label}</span>
             </NavLink>
           ))}
-          <button
-            type="button"
-            className="mobile-role-link"
-            aria-label="More navigation and profiles"
-            onClick={() => menu.current?.showModal()}
-          >
-            <Icon name="menu" />
-            <span>More</span>
-          </button>
+          {overflowItems.length > 0 && (
+            <button
+              type="button"
+              className="mobile-role-link"
+              aria-label="More navigation"
+              aria-haspopup="dialog"
+              aria-controls="more-navigation"
+              onClick={openMoreMenu}
+            >
+              <Icon name="menu" />
+              <span>More</span>
+            </button>
+          )}
         </nav>
         <footer className="workspace-footer">
           <span>Grow together, with Weymela.</span>

@@ -13,11 +13,15 @@ vi.mock("../src/app/ConnectionStatus", () => ({ ConnectionStatus: () => null }))
 
 import { Shell } from "../src/app/Shell";
 
-function setup(role: Role, path: string) {
+function setup(role: Role, path: string, withSecondProfile = false) {
+  const profile = { role, subjectId: "subject-secret", businessId: null, displayName: "Hana", publicId: "INTERNAL-ID", canCheckout: false };
+  const profiles = withSecondProfile
+    ? [profile, { ...profile, subjectId: "subject-two", displayName: "Mina", publicId: "PUBLIC-ID" }]
+    : [profile];
   state.user = {
     role, displayName: "Hana", publicId: "INTERNAL-ID",
     canCheckout: false, developmentMode: false,
-    profiles: [{ role, subjectId: "subject-secret", businessId: null, displayName: "Hana", publicId: "INTERNAL-ID", canCheckout: false }],
+    profiles,
     activeProfileKey: `${role}:subject-secret:-`,
   };
   render(<MemoryRouter initialEntries={[path]}><Routes><Route path="*" element={<Shell />} /></Routes></MemoryRouter>);
@@ -39,14 +43,22 @@ describe("Phase 3 multi-profile shell", () => {
     if (role === "Business") {
       expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/onboarding");
     } else {
-      expect(screen.getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
+      const addProfileLinks = screen.getAllByRole("link", { name: "Add a profile", hidden: true });
+      expect(addProfileLinks).toHaveLength(2);
+      expect(addProfileLinks.every((link) => link.getAttribute("href") === "/onboarding")).toBe(true);
     }
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
-    expect(within(mobile).getByRole("button", { name: "More navigation and profiles" })).toBeInTheDocument();
+    if (role === "Customer") {
+      expect(within(mobile).getByRole("link", { name: "Offers for you" })).toBeInTheDocument();
+      expect(within(mobile).getByRole("link", { name: "Your Cashback" })).toBeInTheDocument();
+      expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
+    } else {
+      expect(within(mobile).getByRole("button", { name: "More navigation" })).toBeInTheDocument();
+    }
   });
 
-  it("shows active profile and makes the mobile menu reachable by keyboard and touch", async () => {
-    setup("Customer", "/customer/offers");
+  it("opens the account menu without exposing identifiers and preserves profile switching", async () => {
+    setup("Customer", "/customer/offers", true);
     expect(screen.getAllByLabelText("Switch profile")).toHaveLength(2);
     expect(screen.getAllByLabelText("Switch profile")[0]).toBeDisabled();
     const ids = screen.getAllByLabelText("Switch profile").map((element) => element.id);
@@ -54,13 +66,39 @@ describe("Phase 3 multi-profile shell", () => {
     expect(document.querySelector(".profile-switcher option")?.getAttribute("value")).toBe("0");
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
     expect(within(mobile).getByRole("link", { name: /Offers for you/ })).toHaveAttribute("href", "/customer/offers");
-    const more = within(mobile).getByRole("button", { name: "More navigation and profiles" });
+    expect(within(mobile).getByRole("link", { name: "Your Cashback" })).toHaveAttribute("href", "/customer/history");
+    expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
+    const account = screen.getByRole("button", { name: "Open account menu" });
     const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(() => {});
-    more.focus();
+    account.focus();
     await userEvent.keyboard("{Enter}");
     expect(showModal).toHaveBeenCalledTimes(1);
+    const menu = screen.getByRole("dialog", { name: "Account menu", hidden: true });
+    expect(within(menu).getByText("Hana")).toBeInTheDocument();
+    expect(within(menu).getByText("Customer")).toBeInTheDocument();
+    expect(within(menu).getByLabelText("Switch profile")).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Sign out", hidden: true })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Close account menu", hidden: true })).toBeInTheDocument();
+    expect(within(menu).queryByText("INTERNAL-ID")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("PUBLIC-ID")).not.toBeInTheDocument();
+    await userEvent.selectOptions(within(menu).getByLabelText("Switch profile"), "1");
+    expect(state.switchProfile).toHaveBeenCalledWith(state.user?.profiles?.[1]);
+  });
+
+  it("keeps More navigation limited to overflow destinations", async () => {
+    setup("Creator", "/creator");
+    const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
+    const more = within(mobile).getByRole("button", { name: "More navigation" });
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(() => {});
     await userEvent.click(more);
-    expect(showModal).toHaveBeenCalledTimes(2);
+    expect(showModal).toHaveBeenCalledTimes(1);
+    const menu = screen.getByRole("dialog", { name: "More navigation", hidden: true });
+    expect(within(menu).getByRole("link", { name: "Campaign Requests", hidden: true })).toBeInTheDocument();
+    expect(within(menu).getByRole("link", { name: "UGC", hidden: true })).toBeInTheDocument();
+    expect(within(menu).queryByLabelText("Switch profile")).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Hana")).not.toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Close more navigation", hidden: true })).toBeInTheDocument();
   });
 
   it("keeps internal Admin navigation separate from public add-profile choice", () => {

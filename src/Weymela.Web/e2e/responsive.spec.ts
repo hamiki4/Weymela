@@ -95,8 +95,8 @@ for (const viewport of viewports)
         if (path === "/admin/payouts") {
           if (viewport.width <= 430) {
             await open(page, "/admin");
-            await page.getByRole("button", { name: "More navigation and profiles" }).click();
-            const menu = page.getByRole("dialog", { name: "Workspace menu" });
+            await page.getByRole("button", { name: "More navigation" }).click();
+            const menu = page.getByRole("dialog", { name: "More navigation" });
             await expect(menu).toBeVisible();
             await menu.getByRole("link", { name: "Payouts", exact: true }).click();
             await expect(page).toHaveURL(/\/admin\/payouts$/);
@@ -203,17 +203,17 @@ test("stable buttons and mobile keyboard navigation", async ({
   await open(page, "/business");
   await page.keyboard.press("Tab");
   await expect(skip).toBeFocused();
-  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Open account menu" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Workspace menu" }),
+    page.getByRole("dialog", { name: "Account menu" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("dialog", { name: "Workspace menu" }),
+    page.getByRole("dialog", { name: "Account menu" }),
   ).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "Open menu" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("dialog", { name: "Workspace menu" }),
+    page.getByRole("dialog", { name: "Account menu" }),
   ).toBeVisible();
 });

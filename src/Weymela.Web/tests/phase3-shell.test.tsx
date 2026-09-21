@@ -60,7 +60,8 @@ describe("Phase 3 multi-profile shell", () => {
   it("opens the account menu without exposing identifiers and preserves profile switching", async () => {
     setup("Customer", "/customer/offers", true);
     expect(screen.getAllByLabelText("Switch profile")).toHaveLength(2);
-    expect(screen.getAllByLabelText("Switch profile")[0]).toBeDisabled();
+    expect(screen.getAllByLabelText("Switch profile")[0]).toBeEnabled();
+    expect(screen.getAllByLabelText("Switch profile")[1]).toBeEnabled();
     const ids = screen.getAllByLabelText("Switch profile").map((element) => element.id);
     expect(new Set(ids).size).toBe(2);
     expect(document.querySelector(".profile-switcher option")?.getAttribute("value")).toBe("0");

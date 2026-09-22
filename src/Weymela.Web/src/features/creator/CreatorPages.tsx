@@ -41,21 +41,21 @@ export function CreatorDashboard() {
           <PageHeader
             eyebrow={`Welcome, ${data.creator.displayName}`}
             title="Make your creativity count."
-            description="Find the right Campaigns, create something genuine and grow your earnings."
+            description="Discover Business-created opportunities, create something genuine and grow your earnings."
             action={
-              <ActionLink to="/creator/discover">Discover Campaigns</ActionLink>
+              <ActionLink to="/creator/discover">Discover</ActionLink>
             }
           />
           <div className="metric-grid">
             <Metric
               label="Available Earnings"
               value={amount(data.earnings.availableEarnings)}
-            note="Yours across every Campaign"
+            note="Yours across every Promotion"
               emphasis
               icon="wallet"
             />
             <Metric
-              label="Active Campaigns"
+              label="Active Promotions"
               value={count(data.activeCampaigns)}
               note="Your current collaborations"
               icon="campaign"
@@ -65,11 +65,11 @@ export function CreatorDashboard() {
             <Link className="quick-card" to="/creator/requests">
               <Icon name="people" />
               <span className="quick-value">{data.requests}</span>
-              <strong>Campaign Requests</strong>
+              <strong>Promotion Requests</strong>
             </Link>
             <Link className="quick-card" to="/creator/campaigns">
               <Icon name="campaign" />
-              <strong>Active Campaigns</strong>
+              <strong>Active Promotions</strong>
               <span>Content, views and your progress.</span>
             </Link>
             <Link className="quick-card" to="/creator/earnings">
@@ -93,16 +93,16 @@ export function CreatorDashboard() {
             <div className="overview-highlight">
               <p className="eyebrow">The right fit, already found</p>
               <h2>
-                Campaigns made
+                Promotions made
                 <br />
                 for your kind of creativity.
               </h2>
               <p>
                 Discovery matches your category, region and verified profile to
-                funded Campaigns.
+                funded Promotions.
               </p>
               <ActionLink to="/creator/discover" secondary>
-                Find your next Campaign
+                Find your next opportunity
               </ActionLink>
             </div>
           </div>
@@ -146,7 +146,7 @@ function OpportunityCard({ row }: { row: Opportunity }) {
         {date(row.startUtc)} – {date(row.endUtc)}
       </p>
       <ActionLink to={`/creator/discover/${row.id}`} secondary>
-        {row.requestStatus ? "View Campaign" : "Join Campaign"}
+        {row.requestStatus ? "View Promotion" : "Request to Join"}
       </ActionLink>
     </article>
   );
@@ -157,8 +157,8 @@ export function CreatorDiscovery() {
     <>
       <PageHeader
         eyebrow="Create with a purpose"
-        title="Discover Campaigns"
-        description="Funded Campaigns that match your verified profile. Your next collaboration starts here."
+        title="Discover"
+        description="Funded Promotions that match your verified profile. Your next collaboration starts here."
       />
       <Resource resource={resource}>
         {(rows) =>
@@ -171,8 +171,8 @@ export function CreatorDiscovery() {
           ) : (
             <Section title="Made for your profile">
               <Empty
-                title="No available Campaigns right now"
-                message="New opportunities will appear when a funded Campaign matches your category, region and verified metrics."
+                title="No available Promotions right now"
+                message="New opportunities will appear when a funded Promotion matches your category, region and verified metrics."
               />
             </Section>
           )
@@ -190,7 +190,7 @@ export function CreatorOpportunity() {
   return (
     <>
       <Link className="back-link" to="/creator/discover">
-        ← Discover Campaigns
+        ← Discover
       </Link>
       <Resource resource={resource}>
         {(p) => (
@@ -202,8 +202,9 @@ export function CreatorOpportunity() {
               action={p.requestStatus && <Badge status={p.requestStatus} />}
             />
             <div className="content-grid">
-              <Section title="The Campaign">
+              <Section title="Promotion details">
                 <p className="preserve-lines">{p.description}</p>
+                {p.slogan?.trim() && <p className="creator-opportunity-slogan">{p.slogan}</p>}
                 <div className="pricing-note">
                   <strong>Requirements</strong>
                   <p className="preserve-lines">
@@ -214,7 +215,7 @@ export function CreatorOpportunity() {
                   <div>
                     <dt>Duration</dt>
                     <dd>
-                      {date(p.startUtc)} – {date(p.endUtc)}
+                      {p.promotionLiveDurationDays} days after you go live
                     </dd>
                   </div>
                   <div>
@@ -232,6 +233,7 @@ export function CreatorOpportunity() {
                     </div>
                   )}
                 </dl>
+                {!!p.platforms?.length && <div className="creator-platform-counts">{p.platforms.map((slot) => <span key={slot.platform}><strong>{slot.platform}</strong> {slot.approved}/{slot.capacity}</span>)}</div>}
                 <Notice>{p.eligibility}</Notice>
               </Section>
               <Section title="How You Earn" action={<Currency />}>
@@ -246,8 +248,7 @@ export function CreatorOpportunity() {
                   </p>
                 )}
                 <p className="fine-print">
-                  These are the saved earning terms for this Campaign. Your
-                  Creator Budget will be shown after Business approval.
+                    These are the saved Creator reward terms for this Promotion.
                 </p>
               </Section>
             </div>
@@ -258,7 +259,7 @@ export function CreatorOpportunity() {
               {p.requestStatus ? (
                 <Notice>
                   Your request is {p.requestStatus.toLowerCase()}.{" "}
-                  <Link to="/creator/requests">View your requests</Link>
+                  <Link to="/creator/promotions">View My Promotions</Link>
                 </Notice>
               ) : (
                 <form
@@ -267,7 +268,7 @@ export function CreatorOpportunity() {
                     e.preventDefault();
                     void action.run(async (key) => {
                       await post(
-                        `/creator/campaigns/${id}/join`,
+                        `/creator/promotions/${id}/request`,
                         { message, contentConcept: concept || null },
                         key,
                       );
@@ -312,8 +313,8 @@ export function CreatorHowYouEarn() {
     <>
       <PageHeader
         eyebrow="Clear rewards, real creativity"
-        title="Pricing"
-        description="Current earning rates. Existing Promotions keep their saved earning terms."
+        title="How You Earn"
+        description="Creator rewards are recorded from verified activity using the saved terms for each Promotion."
       />
       <Resource resource={resource}>
         {(p) => (
@@ -359,7 +360,7 @@ export function CreatorHowYouEarn() {
                 Minimum to cash out: {amount(p.minimumToCashOut)}
               </strong>
               <p>
-                Earnings from your Campaigns accumulate together. Any balance
+                Earnings from your Promotions accumulate together. Any balance
                 left after a payout carries forward.
               </p>
             </div>
@@ -434,7 +435,7 @@ export function PayoutHistory({ rows }: { rows: Payout[] }) {
     />
   );
 }
-export function CreatorEarnings({ payout = false }: { payout?: boolean }) {
+export function CreatorEarnings() {
   const resource = useResource<Earnings>("/creator/earnings");
   const action = useAction();
   const [requested, setRequested] = useState(false);
@@ -442,8 +443,8 @@ export function CreatorEarnings({ payout = false }: { payout?: boolean }) {
     <>
       <PageHeader
         eyebrow="Your creativity, rewarded"
-        title={payout ? "Your Payouts" : "Your Earnings"}
-        description="One earnings balance across all your Campaigns. No weekly or monthly cash-out schedule."
+        title="Earnings"
+        description="Your available balance, earnings history and payouts in one place."
       />
       <Resource resource={resource}>
         {(data) => (
@@ -451,61 +452,40 @@ export function CreatorEarnings({ payout = false }: { payout?: boolean }) {
             <div className="two-column">
               <Section title="Available Earnings">
                 <Eligibility data={data} />
-                {payout && (
-                  <>
-                    <Button
-                      disabled={
-                        action.busy ||
-                        data.amountNeeded > 0 ||
-                        data.payoutHistory.some((r) => r.status === "Eligible")
-                      }
-                      onClick={() =>
-                        void action.run(async (key) => {
-                          await post("/creator/payouts/request", {}, key);
-                          setRequested(true);
-                          resource.reload();
-                        })
-                      }
-                    >
-                      {data.payoutHistory.some((r) => r.status === "Eligible")
-                        ? "Awaiting payment confirmation"
-                        : "Request Payout"}
-                    </Button>
-                    {requested && (
-                      <Notice>
-                        Payout request recorded. Your balance changes only after
-                        payment is confirmed.
-                      </Notice>
-                    )}
-                    {action.error && <Notice error>{action.error}</Notice>}
-                  </>
-                )}
+                <Button
+                  disabled={action.busy || data.amountNeeded > 0 || data.payoutHistory.some((r) => r.status === "Eligible")}
+                  onClick={() => void action.run(async (key) => {
+                    await post("/creator/payouts/request", {}, key);
+                    setRequested(true);
+                    resource.reload();
+                  })}
+                >
+                  {data.payoutHistory.some((r) => r.status === "Eligible") ? "Awaiting payment confirmation" : "Request Payout"}
+                </Button>
+                {requested && <Notice>Payout request recorded. Your balance changes only after payment is confirmed.</Notice>}
+                {action.error && <Notice error>{action.error}</Notice>}
               </Section>
               <div className="overview-highlight">
-                <p className="eyebrow">Every Campaign adds up</p>
+                <p className="eyebrow">Every Promotion adds up</p>
                 <h2>
                   One balance.
                   <br />
                   More possibilities.
                 </h2>
                 <p>
-                  View Rewards and Sale Commissions build the same earnings
-                  balance. A payout uses your threshold amount; the rest stays
+                  View rewards, eligible sales and completed UGC work build your
+                  earnings balance. A payout uses your threshold amount; the rest stays
                   with you.
                 </p>
-                <ActionLink to="/creator/pricing" secondary>
-                  How You Earn
-                </ActionLink>
               </div>
             </div>
-            {!payout && (
-              <Section title="Earning History" action={<Currency />}>
+            <Section title="Earning History" action={<Currency />}>
                 <DataTable
                   rows={data.history}
                   rowKey={(r) => r.id}
                   label="Earning History"
                   columns={[
-                    { label: "Campaign", cell: (r) => r.campaign },
+                    { label: "Promotion or source", cell: (r) => r.campaign },
                     { label: "Source", cell: (r) => r.source },
                     {
                       label: "Amount",
@@ -534,10 +514,10 @@ export function CreatorEarnings({ payout = false }: { payout?: boolean }) {
                   }
                 />
               </Section>
-            )}
             <Section title="Payout history" action={<Currency />}>
               <PayoutHistory rows={data.payoutHistory} />
             </Section>
+            <details className="creator-how-you-earn"><summary>How You Earn</summary><CreatorHowYouEarn /></details>
           </>
         )}
       </Resource>
@@ -560,8 +540,8 @@ export function CreatorRequests() {
     <>
       <PageHeader
         eyebrow="Your next collaborations"
-        title="Campaign Requests"
-        description="Keep track of the Campaigns you’ve asked to join."
+        title="My Promotions"
+        description="Keep track of the Promotions you’ve requested to join."
       />
       <Resource resource={resource}>
         {(rows) => (
@@ -569,10 +549,10 @@ export function CreatorRequests() {
             <DataTable
               rows={rows}
               rowKey={(r) => r.id}
-              label="Campaign Requests"
+              label="Promotion Requests"
               columns={[
                 {
-                  label: "Campaign",
+                  label: "Promotion",
                   cell: (r) => (
                     <>
                       <strong>{r.campaign}</strong>
@@ -597,19 +577,19 @@ export function CreatorRequests() {
                     {campaignType(r.type)} · Requested {date(r.appliedAtUtc)}
                   </p>
                   {r.status === "Approved" && (
-                    <ActionLink to="/creator/campaigns" secondary>
-                      Your Campaigns
+                    <ActionLink to="/creator/promotions" secondary>
+                      My Promotions
                     </ActionLink>
                   )}
                 </>
               )}
               empty={
                 <Empty
-                  title="No Campaign requests yet"
-                  message="Discover funded Campaigns that match your creativity."
+                  title="No Promotion requests yet"
+                  message="Discover funded Promotions that match your creativity."
                   action={
                     <ActionLink to="/creator/discover">
-                      Discover Campaigns
+                      Discover opportunities
                     </ActionLink>
                   }
                 />

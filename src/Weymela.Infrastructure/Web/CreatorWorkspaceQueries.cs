@@ -24,9 +24,14 @@ public sealed partial class WorkspaceQueries
     public async Task<CreatorHome> CreatorHomeAsync(Actor actor,CancellationToken ct)
     {
         await DemandCreator(actor,ct);
+        var now=Now;
+        var activeAllocations=await (from participation in db.CreatorPromotionParticipations.AsNoTracking()
+            join promotion in db.Promotions.AsNoTracking() on participation.PromotionId equals promotion.Id
+            where participation.CreatorId==actor.CreatorId&&participation.Status==ParticipationStatus.Active
+            select new { Participation=participation, promotion.PromotionLiveDurationDays }).ToListAsync(ct);
         return new(await directory.CreatorCardAsync(actor.CreatorId!.Value,ct),
             await db.CreatorApplications.CountAsync(x=>x.CreatorId==actor.CreatorId&&x.Status==CreatorApplicationStatus.Pending,ct),
-            await db.CreatorAllocations.CountAsync(x=>x.CreatorId==actor.CreatorId&&x.Status==CreatorAllocationStatus.Active,ct),await EarningsAsync(actor,ct));
+            activeAllocations.Count(x=>x.Participation.IsLive(now,x.PromotionLiveDurationDays)),await EarningsAsync(actor,ct));
     }
     public async Task<CreatorPricing> CreatorPricingAsync(Actor actor,CancellationToken ct)
     {
@@ -54,9 +59,9 @@ public sealed partial class WorkspaceQueries
             if(p.Platforms.Count>0&&eligibleSocials.Length==0&&request is null)continue;
             result.Add(new(p.Id,p.PublicPromotionId,businessCards[p.BusinessId],p.Title,p.Description,PromotionTypeLabel(p.PromotionType),
                 p.Eligibility.Requirements,p.Eligibility.Category,p.Eligibility.Market,p.Eligibility.MinimumVerifiedFollowers,p.StartDateUtc,p.EndDateUtc,
-                CreatorPrice(p.PricingSnapshot),request?.Status.ToString(),"Your Creator profile meets this Promotion's requirements.",p.Slogan,p.Location,
+                p.PromotionLiveDurationDays,CreatorPrice(p.PricingSnapshot),request?.Status.ToString(),"Your Creator profile meets this Promotion's requirements.",p.Slogan,p.Location,
                 p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available)).ToArray(),eligibleSocials,
-                p.TotalBudget.Amount,p.Platforms.Sum(x=>x.ApprovedCount),p.Platforms.Sum(x=>x.Capacity)));
+                p.Platforms.Sum(x=>x.ApprovedCount),p.Platforms.Sum(x=>x.Capacity)));
         }
         return result;
     }
@@ -70,10 +75,28 @@ public sealed partial class WorkspaceQueries
         {
             var p=await Campaign(a.PromotionId,ct);var f=await Financial.CreatorAsync(actor,a.Id,ct);
             var live=await db.CreatorPromotionParticipations.AsNoTracking().SingleOrDefaultAsync(x=>x.CreatorAllocationId==a.Id,ct);
+            var submission=await db.CreatorPromotionContentSubmissions.AsNoTracking().Where(x=>x.CreatorAllocationId==a.Id)
+                .OrderByDescending(x=>x.RevisionNumber).FirstOrDefaultAsync(ct);
             var closed=a.Status is CreatorAllocationStatus.Completed or CreatorAllocationStatus.Cancelled;
+            var remaining=live is null||live.Status==ParticipationStatus.Completed?null:live.RemainingDays(Now,p.PromotionLiveDurationDays);
+            var status=closed?a.Status.ToString():live is not null
+                ? remaining is null?"Ended":live.Status.ToString()
+                : submission?.ReviewStatus switch
+                {
+                    PromotionContentReviewStatus.UnderReview=>"UnderReview",
+                    PromotionContentReviewStatus.ChangesRequested=>"ChangesRequested",
+                    PromotionContentReviewStatus.Approved=>"ReadyToGoLive",
+                    PromotionContentReviewStatus.Rejected=>"Rejected",
+                    _=>"Approved"
+                };
+            var contentStatus=live is not null
+                ? remaining is null?"Ended":"Live"
+                : submission?.ReviewStatus.ToString()??"AddContent";
             result.Add(new(p.Id,a.Id,live?.Id,p.Title,await directory.BusinessCardAsync(p.BusinessId,ct),PromotionTypeLabel(p.PromotionType),a.OriginalAllocation.Amount,
                 closed?0:a.RemainingAmount.Amount,live?.CampaignVerifiedViews??0,live?.RewardedViewCount??0,f.ViewEarnings.Amount,f.SaleCommissionEarnings.Amount,
-                closed?a.Status.ToString():live?.Status.ToString()??"AwaitingContent",live is null?"Ready for your content":"Content connected",live?.Provider,live?.ExternalContentId,p.StartDateUtc,p.EndDateUtc));
+                status,contentStatus,live?.Provider,live?.ExternalContentId,p.StartDateUtc,p.EndDateUtc,p.PromotionLiveDurationDays,
+                submission?.RevisionNumber,submission?.ReviewStatus.ToString(),submission?.Feedback,submission?.SubmittedAtUtc,
+                live?.WentLiveAtUtc,live is null ? null : live.ExpiresAtUtc(p.PromotionLiveDurationDays),remaining));
         }
         return result;
     }

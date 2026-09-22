@@ -44,7 +44,7 @@ describe("Phase 3 multi-profile shell", () => {
       expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/onboarding");
     } else {
       const addProfileLinks = screen.getAllByRole("link", { name: "Add a profile", hidden: true });
-      expect(addProfileLinks).toHaveLength(2);
+      expect(addProfileLinks).toHaveLength(role === "Creator" ? 1 : 2);
       expect(addProfileLinks.every((link) => link.getAttribute("href") === "/onboarding")).toBe(true);
     }
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
@@ -55,6 +55,13 @@ describe("Phase 3 multi-profile shell", () => {
       expect(within(mobile).getByRole("link", { name: "Cashback" })).toBeInTheDocument();
       expect(within(mobile).getAllByRole("link")).toHaveLength(4);
       expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
+      expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
+    } else if (role === "Creator") {
+      expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
+        "Home", "Discover", "My Promotions", "Earnings",
+      ]);
+      expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
+      expect(within(mobile).getAllByRole("link")).toHaveLength(4);
       expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
     } else {
       expect(within(mobile).getByRole("button", { name: "More navigation" })).toBeInTheDocument();
@@ -96,18 +103,18 @@ describe("Phase 3 multi-profile shell", () => {
     expect(state.switchProfile).toHaveBeenCalledWith(state.user?.profiles?.[1]);
   });
 
-  it("keeps More navigation limited to overflow destinations", async () => {
+  it("keeps Creator navigation to five destinations and Profile opens the shared account menu", async () => {
     setup("Creator", "/creator");
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
-    const more = within(mobile).getByRole("button", { name: "More navigation" });
-    await userEvent.click(more);
-    const menu = screen.getByRole("dialog", { name: "More navigation", hidden: true });
-    expect(within(menu).getByRole("link", { name: "Campaign Requests", hidden: true })).toBeInTheDocument();
-    expect(within(menu).getByRole("link", { name: "UGC", hidden: true })).toBeInTheDocument();
-    expect(within(menu).queryByLabelText("Switch profile")).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
-    expect(within(menu).queryByText("Hana")).not.toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Close more navigation", hidden: true })).toBeInTheDocument();
+    expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Home", "Discover", "My Promotions", "Earnings",
+    ]);
+    expect(within(mobile).queryByRole("link", { name: /Find Businesses|Campaign Requests|Payouts|How You Earn|Add a profile/ })).not.toBeInTheDocument();
+    await userEvent.click(within(mobile).getByRole("button", { name: "Profile" }));
+    const menu = screen.getByRole("dialog", { name: "Account menu" });
+    expect(within(menu).getByLabelText("Switch profile")).toBeInTheDocument();
+    expect(within(menu).getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
+    expect(within(menu).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 
   it("keeps internal Admin navigation separate from public add-profile choice", () => {

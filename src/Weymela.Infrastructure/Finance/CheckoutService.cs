@@ -29,6 +29,11 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             if (replay is not null)
             {
                 var old = await db.OfferQrSessions.SingleAsync(x => x.Id == Guid.Parse(replay), token);
+                if (old.CustomerId != c.Actor.CustomerId || old.CreatorAllocationId != c.CreatorAllocationId)
+                    throw new ApplicationFailure(FailureKind.Forbidden, "Offer QR does not belong to this Customer offer.");
+                var oldAllocation = await db.CreatorAllocations.SingleAsync(x => x.Id == c.CreatorAllocationId, token);
+                var oldPromotion = (await new PromotionRepository(db).GetAsync(oldAllocation.PromotionId, token))!;
+                await ValidateOffer(oldPromotion, oldAllocation, token);
                 return new IssuedOfferQr(old.Id, old.ExpiresAtUtc, null, true);
             }
             var allocation = await db.CreatorAllocations.SingleOrDefaultAsync(x => x.Id == c.CreatorAllocationId, token)
@@ -207,11 +212,17 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
     private async Task ValidateOffer(Promotion p, CreatorAllocation a, CancellationToken ct)
     {
         if (p.PromotionType != PromotionType.ViewPlusCommission) throw new ApplicationFailure(FailureKind.Validation, "VIEW_ONLY is not a purchase offer.");
-        VerifiedViewService.EnsureCampaignActive(p, clock.GetUtcNow().UtcDateTime);
+        var now = clock.GetUtcNow().UtcDateTime;
+        VerifiedViewService.EnsureCampaignActive(p, now);
         await access.EnsureBusinessAsync(p.BusinessId, ct);
-        if (a.Status != CreatorAllocationStatus.Active || a.ActivatedAtUtc is null || a.RemainingAmount.Amount <= 0 ||
-            !await db.CreatorPromotionParticipations.AnyAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active, ct))
+        if (a.Status != CreatorAllocationStatus.Active || a.ActivatedAtUtc is null || a.RemainingAmount.Amount <= 0)
             throw new ApplicationFailure(FailureKind.InsufficientFunds, "Creator participation is not active and funded.");
+        var participation = await db.CreatorPromotionParticipations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active, ct);
+        if (participation is null)
+            throw new ApplicationFailure(FailureKind.InsufficientFunds, "Creator participation is not active and funded.");
+        if (!participation.IsLive(now,p.PromotionLiveDurationDays))
+            throw new ApplicationFailure(FailureKind.Validation, "Creator participation has ended.");
     }
     private async Task ValidateUgcOffer(UgcCustomerOffer offer, CancellationToken ct)
     {

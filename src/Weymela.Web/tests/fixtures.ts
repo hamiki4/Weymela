@@ -59,6 +59,7 @@ export const businessPricing = {
     },
   ],
   effectiveFromUtc: "2026-09-01T00:00:00Z",
+  promotionLiveDurationDays: 30,
 };
 export const ugcPricing = {
   minimumCreatorPayment: 200,
@@ -181,6 +182,7 @@ export const settings = {
   platformPercent: 3.5,
   creatorThreshold: 5000,
   customerThreshold: 500,
+  promotionLiveDurationDays: 30,
   effectiveFromUtc: "2026-09-01T00:00:00Z",
   ugc: {
     minimumCreatorPayment: 200,
@@ -257,6 +259,8 @@ export const routes: Record<string, unknown> = {
   "/creator/pricing": creatorPricing,
   "/creator/discover": [opportunity],
   "/creator/discover/campaign": opportunity,
+  "/creator/ugc": [],
+  "/creator/ugc/assignments": [],
   "/creator/campaigns": [active],
   "/creator/earnings": earnings,
   "/creator/requests": [],

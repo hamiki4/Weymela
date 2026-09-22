@@ -22,13 +22,15 @@ internal static class CreatorEndpoints
             EndpointSupport.Id(await commands.JoinAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/promotions/{id:guid}/request",async(Guid id,JoinInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.JoinAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
-        g.MapPost("/creator-budgets/{id:guid}/content",async(Guid id,ContentInput input,HttpContext c,VerifiedViewService service,CancellationToken ct)=>
+        g.MapPost("/creator-budgets/{id:guid}/content",async(Guid id,ContentInput input,HttpContext c,CreatorPromotionContentService service,CancellationToken ct)=>
         {
             Weymela.Infrastructure.Operations.InputRules.Reference(input.ExternalContentId,"video reference",100);
             if(input.Provider is not ("TikTok" or "YouTube" or "Instagram")||string.IsNullOrWhiteSpace(input.ExternalContentId)||input.ExternalContentId.Length>100)
                 return Results.BadRequest(new{message="Choose a supported platform and valid video reference."});
-            return EndpointSupport.Id(await service.GoLiveAsync(new(EndpointSupport.Actor(c),id,input.Provider,input.ExternalContentId,EndpointSupport.Key(c)),ct));
+            return Results.Ok(await service.SubmitAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct));
         });
+        g.MapPost("/creator-budgets/{id:guid}/go-live",async(Guid id,HttpContext c,VerifiedViewService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.GoLiveAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct:ct)));
         g.MapPost("/participations/{id:guid}/refresh",(Guid id,HttpContext c,VerifiedViewService service,CancellationToken ct)=>
             service.RefreshAsync(new(EndpointSupport.Actor(c),id,EndpointSupport.Key(c)),ct));
         g.MapPost("/payouts/request",async(HttpContext c,PayoutService service,CancellationToken ct)=>

@@ -22,13 +22,24 @@ public sealed class CreatorPromotionParticipation
 
     public CreatorPromotionParticipation(Guid promotionId, Guid creatorId, Guid allocationId, string provider, string contentId,
         long baselineViews, DateTime verifiedAt)
+        : this(promotionId, creatorId, allocationId, provider, contentId, baselineViews, verifiedAt, verifiedAt) { }
+
+    public CreatorPromotionParticipation(Guid promotionId, Guid creatorId, Guid allocationId, string provider, string contentId,
+        long baselineViews, DateTime wentLiveAtUtc, DateTime verifiedAtUtc)
     {
         if (baselineViews < 0 || string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(contentId))
             throw new ArgumentException("A verified content baseline is required.");
         PromotionId = promotionId; CreatorId = creatorId; CreatorAllocationId = allocationId;
         Provider = provider; ExternalContentId = contentId; BaselineViews = baselineViews; LatestVerifiedViews = baselineViews;
-        WentLiveAtUtc = verifiedAt; LatestVerifiedAtUtc = verifiedAt;
+        WentLiveAtUtc = wentLiveAtUtc; LatestVerifiedAtUtc = verifiedAtUtc;
     }
+
+    public DateTime ExpiresAtUtc(int promotionLiveDurationDays)
+        => CreatorLiveWindow.ExpiresAtUtc(WentLiveAtUtc, promotionLiveDurationDays);
+    public int? RemainingDays(DateTime nowUtc, int promotionLiveDurationDays)
+        => CreatorLiveWindow.RemainingDays(WentLiveAtUtc, nowUtc, promotionLiveDurationDays);
+    public bool IsLive(DateTime nowUtc, int promotionLiveDurationDays)
+        => CreatorLiveWindow.IsLive(WentLiveAtUtc, nowUtc, promotionLiveDurationDays);
 
     public bool Observe(long reportedViews, DateTime verifiedAt)
     {

@@ -54,8 +54,11 @@ function SettingsForm({
     validSplit(settings.viewPlusCommission) &&
     settings.creatorCommissionPercent +
       settings.customerCashbackPercent +
-      settings.platformPercent <=
+    settings.platformPercent <=
       100 &&
+    Number.isInteger(settings.promotionLiveDurationDays) &&
+    settings.promotionLiveDurationDays >= 1 &&
+    settings.promotionLiveDurationDays <= 365 &&
     (!settings.ugc ||
       (settings.ugc.minimumCreatorPayment > 0 &&
         settings.ugc.platformFeePercent >= 0 &&
@@ -228,6 +231,23 @@ function SettingsForm({
               </Field>
             </div>
           </Section>
+          <Section
+            title="Promotion live duration"
+            description="Number of days each new Promotion can remain live after a Creator goes live."
+          >
+            <Field label="Promotion live duration">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                step="1"
+                value={settings.promotionLiveDurationDays}
+                onChange={(e) => update("promotionLiveDurationDays", Number(e.target.value))}
+                required
+              />
+            </Field>
+            <p className="fine-print">Set by Weymela. Existing Promotions keep their saved duration.</p>
+          </Section>
         </div>
         {settings.ugc && (
           <Section
@@ -399,6 +419,7 @@ export function AdminFinancialSettings() {
                       Thresholds: Creator {amount(v.settings.creatorThreshold)}{" "}
                       / Customer {amount(v.settings.customerThreshold)}
                     </p>
+                    <p>Promotion live duration: {v.settings.promotionLiveDurationDays} days</p>
                     <p>
                       Minimum Campaign Budgets: View Only{" "}
                       {v.settings.viewOnly.minimumCampaignBudget ??

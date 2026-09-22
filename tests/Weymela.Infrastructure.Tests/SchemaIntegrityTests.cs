@@ -53,7 +53,7 @@ public sealed class SchemaIntegrityTests(PostgresFixture fixture)
     {
         var s = await Scenario.Create(fixture); await using var db = s.Database.Open();
         var original = await db.Promotions.SingleAsync();
-        var p = new Promotion(s.Business.BusinessId!.Value, "Other", "", PromotionType.ViewOnly, new Money(100), new(null,null,null,null), Scenario.Now, Scenario.Now.AddDays(1), original.PricingSnapshot with {}, Scenario.Now);
+        var p = new Promotion(s.Business.BusinessId!.Value, "Other", "", PromotionType.ViewOnly, new Money(100), new(null,null,null,null), Scenario.Now, Scenario.Now.AddDays(1), original.PricingSnapshot with {}, Scenario.Now, original.PromotionLiveDurationDays);
         db.Promotions.Add(p); db.Entry(p).Property(x => x.PublicPromotionId).CurrentValue = original.PublicPromotionId;
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }

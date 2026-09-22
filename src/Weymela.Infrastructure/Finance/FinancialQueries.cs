@@ -84,9 +84,12 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
             if (!await db.CommercePermissions.AnyAsync(x => x.Role == ActorRole.Business && x.SubjectId == p.BusinessId && x.IsActive,ct)) continue;
             foreach(var a in p.Allocations.Where(x => x.Status == CreatorAllocationStatus.Active && x.ActivatedAtUtc != null && x.RemainingAmount.Amount > 0))
             {
-                if (!await db.CreatorPromotionParticipations.AnyAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active,ct)) continue;
+                var participation = await db.CreatorPromotionParticipations.AsNoTracking()
+                    .SingleOrDefaultAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active,ct);
+                if (participation is null || !participation.IsLive(now,p.PromotionLiveDurationDays)) continue;
                 result.Add(new(a.Id,"VIEW_AND_SALE_PROMOTION",p.Title,await directory.BusinessAsync(p.BusinessId,ct),
-                    await directory.CreatorAsync(a.CreatorId,ct),p.PricingSnapshot.CustomerCashbackPercent,p.Slogan,p.Location));
+                    await directory.CreatorAsync(a.CreatorId,ct),p.PricingSnapshot.CustomerCashbackPercent,p.Slogan,p.Location,
+                    participation.WentLiveAtUtc,participation.ExpiresAtUtc(p.PromotionLiveDurationDays),participation.RemainingDays(now,p.PromotionLiveDurationDays)));
             }
         }
         var ugcOffers = await db.UgcCustomerOffers.AsNoTracking()

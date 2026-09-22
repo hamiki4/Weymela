@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Weymela.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Weymela.Infrastructure.Persistence;
 namespace Weymela.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(WeymelaDbContext))]
-    partial class WeymelaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922161742_AddCreatorPromotionContentSubmissions")]
+    partial class AddCreatorPromotionContentSubmissions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -959,9 +962,6 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<string>("Location")
                         .HasColumnType("text");
 
-                    b.Property<int>("PromotionLiveDurationDays")
-                        .HasColumnType("integer");
-
                     b.Property<string>("PromotionType")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1038,8 +1038,6 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Promotion_Budgets", "\"TotalBudget\" > 0 AND \"ReservedBudget\" >= 0 AND \"UsedBudget\" >= 0 AND \"ReservedBudget\" + \"UsedBudget\" <= \"TotalBudget\" AND \"AllocatedBudget\" >= \"UsedBudget\" AND \"AllocatedBudget\" <= \"TotalBudget\"");
 
                             t.HasCheckConstraint("CK_Promotion_Dates", "\"EndDateUtc\" > \"StartDateUtc\"");
-
-                            t.HasCheckConstraint("CK_Promotion_LiveDuration", "\"PromotionLiveDurationDays\" BETWEEN 1 AND 365");
                         });
                 });
 
@@ -2353,9 +2351,6 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("EffectiveFromUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("PromotionLiveDurationDays")
-                        .HasColumnType("integer");
-
                     b.Property<int>("Version")
                         .HasColumnType("integer");
 
@@ -2366,10 +2361,7 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EffectiveFromUtc", "Version");
 
-                    b.ToTable("FinancialConfigurationVersions", "v3", t =>
-                        {
-                            t.HasCheckConstraint("CK_Configuration_PromotionLiveDuration", "\"PromotionLiveDurationDays\" BETWEEN 1 AND 365");
-                        });
+                    b.ToTable("FinancialConfigurationVersions", "v3");
                 });
 
             modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.IdentityBinding", b =>

@@ -266,7 +266,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
                 effective: now.AddDays(-3)), price, new Money(2500), new Money(500));
         var promotion = new Promotion(businessId, "Worker grant campaign", "Rehearsal",
             PromotionType.ViewPlusCommission, new Money(6000), new(null, null, "ET", "Content"),
-            now.AddDays(-1), now.AddDays(5), price, now.AddDays(-2));
+            now.AddDays(-1), now.AddDays(5), price, now.AddDays(-2), 30);
         db.AddRange(wallet, configuration, version, promotion);
         await db.SaveChangesAsync();
 
@@ -518,7 +518,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260917233008_AddBusinessLedPromotionAndUgc",
             "20260918144832_AddUgcCustomerOffers",
             "20260919120000_AddUgcCustomerDiscountLimit",
-            "20260922004528_AddBusinessProfileCoordinates"
+            "20260922004528_AddBusinessProfileCoordinates",
+            "20260922161742_AddCreatorPromotionContentSubmissions"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','v3') AND c.relkind='S'";

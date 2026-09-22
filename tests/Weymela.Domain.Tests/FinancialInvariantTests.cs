@@ -7,7 +7,7 @@ namespace Weymela.Domain.Tests;
 public sealed class FinancialInvariantTests
 {
     private static readonly DateTime Now = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-    private static Promotion Promotion(PromotionType type) => new(Guid.NewGuid(), "Campaign", "", type, new Money(1000), new(null, null, null, null), Now, Now.AddDays(1), new PricingSnapshot(type, 1000, new Money(300), new Money(200), new Money(100), 4.5m, 2m, 3.5m, Now, Guid.NewGuid()), Now);
+    private static Promotion Promotion(PromotionType type) => new(Guid.NewGuid(), "Campaign", "", type, new Money(1000), new(null, null, null, null), Now, Now.AddDays(1), new PricingSnapshot(type, 1000, new Money(300), new Money(200), new Money(100), 4.5m, 2m, 3.5m, Now, Guid.NewGuid()), Now, 30);
 
     [Fact] public void View_only_rejects_verified_sale() => Assert.Throws<InvalidOperationException>(() => new VerifiedSale(Promotion(PromotionType.ViewOnly), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new Money(100), new Money(5), new Money(2), new Money(3), "qr", "key", Now));
     [Fact] public void View_plus_commission_sale_uses_configured_split() { var sale = new VerifiedSale(Promotion(PromotionType.ViewPlusCommission), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new Money(100), new Money(4.5m), new Money(2), new Money(3.5m), "qr", "key", Now); Assert.Equal(10, sale.TotalPromotionCharge.Amount); }

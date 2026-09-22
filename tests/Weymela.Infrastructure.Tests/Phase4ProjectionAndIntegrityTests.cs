@@ -117,16 +117,16 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         db.LegalDocumentVersions.Add(new(Guid.NewGuid(),LegalDocumentType.CreatorAgreement,"2","new-hash",Scenario.Now));await db.SaveChangesAsync();
-        var e=await Assert.ThrowsAsync<ApplicationFailure>(()=>s.Views(db).GoLiveAsync(new(s.Creator,s.AllocationId,"TestProvider","content-1","new-key")));
+        var e=await Assert.ThrowsAsync<ApplicationFailure>(()=>s.Views(db).GoLiveAsync(new(s.Creator,s.AllocationId,"TikTok","content-1","new-key")));
         Assert.Equal(FailureKind.Forbidden,e.Kind);
     }
     [Fact] public async Task Additive_migration_matches_model_and_retains_existing_schema_history()
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         var migrations=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates"},migrations);
+        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates","20260922161742_AddCreatorPromotionContentSubmissions"},migrations);
         Assert.False(db.Database.HasPendingModelChanges());
-        foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint),typeof(UgcOpportunity),typeof(UgcAssignment),typeof(AdminGrantRecord)})
+        foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(CreatorPromotionContentSubmission),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint),typeof(UgcOpportunity),typeof(UgcAssignment),typeof(AdminGrantRecord)})
         { var model=db.Model.FindEntityType(entity)!;Assert.True(model.FindProperty("xmin")!.IsConcurrencyToken);Assert.True(model.FindProperty("Version")!.IsConcurrencyToken); }
         Assert.Equal(18,db.Model.FindEntityType(typeof(PayoutRecord))!.FindProperty(nameof(PayoutRecord.Amount))!.GetPrecision());
         Assert.Equal(2,db.Model.FindEntityType(typeof(ViewRewardReceipt))!.FindProperty(nameof(ViewRewardReceipt.BusinessCharge))!.GetScale());

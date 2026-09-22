@@ -11,44 +11,74 @@ namespace Weymela.Infrastructure.Finance;
 
 public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvider provider, ICommerceAccessPolicy access, TimeProvider clock)
 {
-    public async Task<Guid> GoLiveAsync(GoLiveCommand c, CancellationToken ct = default)
+    public Task<Guid> GoLiveAsync(GoLiveCommand c, CancellationToken ct = default)
+        => GoLiveAsync(c.Actor, c.AllocationId, c.IdempotencyKey, c.Provider, c.ExternalContentId, ct);
+
+    public async Task<Guid> GoLiveAsync(Actor actor, Guid allocationId, string idempotencyKey,
+        string? expectedProvider = null, string? expectedContentId = null, CancellationToken ct = default)
     {
-        var allocation = await db.CreatorAllocations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == c.AllocationId, ct)
+        var allocation = await db.CreatorAllocations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == allocationId, ct)
             ?? throw new ApplicationFailure(FailureKind.NotFound, "Creator Budget not found.");
-        await access.EnsureCreatorAsync(c.Actor, allocation.CreatorId, ct);
-        var result = await provider.VerifyAsync(new(allocation.CreatorId, allocation.PromotionId, c.Provider, c.ExternalContentId), ct);
-        ValidateProvider(result, c.Provider, c.ExternalContentId);
+        await access.EnsureCreatorAsync(actor, allocation.CreatorId, ct);
+        var promotion = await new PromotionRepository(db).GetAsync(allocation.PromotionId, ct)
+            ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
+        await access.EnsureBusinessAsync(promotion.BusinessId, ct);
+        EnsureCampaignActive(promotion, clock.GetUtcNow().UtcDateTime);
+        if (!await db.CreatorApplications.AnyAsync(x => x.PromotionId == promotion.Id
+                && x.CreatorId == allocation.CreatorId && x.Status == CreatorApplicationStatus.Approved, ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Business approval is required before Go Live.");
+        if (allocation.Status != CreatorAllocationStatus.Active || allocation.RemainingAmount.Amount <= 0)
+            throw new ApplicationFailure(FailureKind.InsufficientFunds, "Creator Budget is not active and funded.");
+        var latest = await db.CreatorPromotionContentSubmissions.AsNoTracking()
+            .Where(x => x.CreatorAllocationId == allocationId).OrderByDescending(x => x.RevisionNumber).FirstOrDefaultAsync(ct)
+            ?? throw new ApplicationFailure(FailureKind.Validation, "Submit Promotion content and wait for Business approval before Go Live.");
+        if (latest.ReviewStatus != PromotionContentReviewStatus.Approved)
+            throw new ApplicationFailure(FailureKind.Validation, "The latest Promotion content revision is not approved.");
+        if ((expectedProvider is not null && expectedProvider != latest.Provider)
+            || (expectedContentId is not null && expectedContentId != latest.ContentReference))
+            throw new ApplicationFailure(FailureKind.Validation, "Go Live must use the latest Business-approved content revision.");
+        await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Creator,
+            [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], ct);
+        var result = await provider.VerifyAsync(new(allocation.CreatorId, allocation.PromotionId, latest.Provider, latest.ContentReference), ct);
+        ValidateProvider(result, latest.Provider, latest.ContentReference);
         return await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
+            var now = clock.GetUtcNow().UtcDateTime;
             var op = new FinancialOperation(db);
-            var fp = RequestFingerprint.Create(c.AllocationId.ToString(), c.Provider, c.ExternalContentId);
-            var replay = await op.Replay(c.Actor, "GoLive", c.IdempotencyKey, fp, token);
+            var fp = RequestFingerprint.Create(allocationId.ToString(), latest.Id.ToString(), latest.Provider, latest.ContentReference);
+            var replay = await op.Replay(actor, "GoLive", idempotencyKey, fp, token);
             if (replay is not null) return Guid.Parse(replay);
             var p = await new PromotionRepository(db).GetAsync(allocation.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
-            var a = p.Allocations.Single(x => x.Id == c.AllocationId);
-            await access.EnsureCreatorAsync(c.Actor, a.CreatorId, token);
+            var a = p.Allocations.Single(x => x.Id == allocationId);
+            await access.EnsureCreatorAsync(actor, a.CreatorId, token);
             await access.EnsureBusinessAsync(p.BusinessId, token);
-            EnsureCampaignActive(p, clock.GetUtcNow().UtcDateTime);
-            await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Creator,
-                [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
+            EnsureCampaignActive(p, now);
+            if (!await db.CreatorApplications.AnyAsync(x => x.PromotionId == p.Id
+                    && x.CreatorId == a.CreatorId && x.Status == CreatorApplicationStatus.Approved, token))
+                throw new ApplicationFailure(FailureKind.Forbidden, "Business approval is required before Go Live.");
+            var latestNow = await db.CreatorPromotionContentSubmissions.Where(x => x.CreatorAllocationId == a.Id)
+                .OrderByDescending(x => x.RevisionNumber).FirstOrDefaultAsync(token);
+            if (latestNow is null || latestNow.Id != latest.Id || latestNow.ReviewStatus != PromotionContentReviewStatus.Approved)
+                throw new ApplicationFailure(FailureKind.Validation, "The latest Promotion content revision is not approved.");
             var existing = await db.CreatorPromotionParticipations.SingleOrDefaultAsync(x => x.CreatorAllocationId == a.Id, token);
             if (existing is not null)
             {
-                if (existing.Provider != c.Provider || existing.ExternalContentId != c.ExternalContentId)
-                    throw new ApplicationFailure(FailureKind.Validation, "Content baseline is already bound and cannot be replaced.");
-                op.Remember(c.Actor, "GoLive", c.IdempotencyKey, fp, existing.Id.ToString(), clock.GetUtcNow().UtcDateTime);
+                if (existing.Provider != latest.Provider || existing.ExternalContentId != latest.ContentReference)
+                    throw new ApplicationFailure(FailureKind.Validation, "Live content is already bound and cannot be replaced.");
+                op.Remember(actor, "GoLive", idempotencyKey, fp, existing.Id.ToString(), now);
                 return existing.Id;
             }
             if (a.Status != CreatorAllocationStatus.Active || a.RemainingAmount.Amount <= 0)
                 throw new ApplicationFailure(FailureKind.InsufficientFunds, "Creator Budget is not active and funded.");
-            a.Activate(clock.GetUtcNow().UtcDateTime);
-            var participation = new CreatorPromotionParticipation(p.Id, a.CreatorId, a.Id, c.Provider, c.ExternalContentId, result.Count, result.VerifiedAtUtc);
+            a.Activate(now);
+            var participation = new CreatorPromotionParticipation(p.Id, a.CreatorId, a.Id, latest.Provider,
+                latest.ContentReference, result.Count, now, result.VerifiedAtUtc);
             db.CreatorPromotionParticipations.Add(participation);
-            db.PromotionViewVerifications.Add(new(p.Id, a.CreatorId, a.Id, c.Provider, c.ExternalContentId, result.Count, result.Count, 0,
+            db.PromotionViewVerifications.Add(new(p.Id, a.CreatorId, a.Id, latest.Provider, latest.ContentReference, result.Count, result.Count, 0,
                 result.VerifiedAtUtc, result.EvidenceReference, Guid.NewGuid().ToString("N"), result.Count, false, participation.Id, true));
-            op.Remember(c.Actor, "GoLive", c.IdempotencyKey, fp, participation.Id.ToString(), clock.GetUtcNow().UtcDateTime);
-            op.Audit(c.Actor, "CreatorParticipationActivated", Guid.NewGuid(), clock.GetUtcNow().UtcDateTime, p.Id, a.CreatorId);
-            op.Event("CreatorParticipationActivated", new { ParticipationId = participation.Id }, clock.GetUtcNow().UtcDateTime);
+            op.Remember(actor, "GoLive", idempotencyKey, fp, participation.Id.ToString(), now);
+            op.Audit(actor, "CreatorParticipationActivated", Guid.NewGuid(), now, p.Id, a.CreatorId);
+            op.Event("CreatorParticipationActivated", new { ParticipationId = participation.Id }, now);
             return participation.Id;
         }, ct);
     }
@@ -72,8 +102,9 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
             await access.EnsureCreatorAsync(c.Actor, participation.CreatorId, token);
             var p = (await new PromotionRepository(db).GetAsync(participation.PromotionId, token))!;
             await access.EnsureBusinessAsync(p.BusinessId, token);
+            var now = clock.GetUtcNow().UtcDateTime;
             if (p.Status is not (PromotionStatus.Active or PromotionStatus.BudgetExhausted) ||
-                clock.GetUtcNow().UtcDateTime < p.StartDateUtc || clock.GetUtcNow().UtcDateTime >= p.EndDateUtc ||
+                now < p.StartDateUtc || now >= p.EndDateUtc || !participation.IsLive(now,p.PromotionLiveDurationDays) ||
                 participation.Status is ParticipationStatus.Paused or ParticipationStatus.Completed)
                 throw new ApplicationFailure(FailureKind.Validation, "Participation is not open for verified rewards.");
             var allocation = p.Allocations.Single(x => x.Id == participation.CreatorAllocationId);

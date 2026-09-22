@@ -21,14 +21,11 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/onboarding", "Profile", "people"],
   ],
   Creator: [
-    ["/creator", "Overview", "home"],
-    ["/creator/discover", "Discover Campaigns", "search"],
-    ["/creator/campaigns", "Active Campaigns", "campaign"],
-    ["/creator/requests", "Campaign Requests", "people"],
-    ["/creator/ugc", "UGC", "sparkle"],
+    ["/creator", "Home", "home"],
+    ["/creator/discover", "Discover", "search"],
+    ["/creator/promotions", "My Promotions", "campaign"],
     ["/creator/earnings", "Earnings", "wallet"],
-    ["/creator/payouts", "Payouts", "money"],
-    ["/creator/pricing", "How You Earn", "settings"],
+    ["/profile", "Profile", "people"],
   ],
   PlatformAdmin: [
     ["/admin", "Dashboard", "home"],
@@ -48,7 +45,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/customer/discover", "Discover", "search"],
     ["/customer/transactions", "Transactions", "document"],
     ["/customer/cashback", "Cashback", "wallet"],
-    ["/onboarding", "Profile", "people"],
+    ["/profile", "Profile", "people"],
   ],
   Cashier: [["/checkout", "Checkout", "qr"]],
   Onboarding: [],
@@ -102,8 +99,9 @@ export function Shell({ children }: { children?: ReactNode }) {
     user.role === "Customer" ||
     user.role === "Creator" ||
     user.role === "Business";
-  const mobileItems = user.role === "Customer" ? items : items.slice(0, 3);
-  const overflowItems = user.role === "Customer" ? [] : items.slice(3);
+  const hasFiveItemMobileNav = user.role === "Customer" || user.role === "Creator";
+  const mobileItems = hasFiveItemMobileNav ? items : items.slice(0, 3);
+  const overflowItems = hasFiveItemMobileNav ? [] : items.slice(3);
   const itemIsActive = (to: string, isActive: boolean) =>
     isActive ||
     (to === "/customer/offers" && location.pathname.startsWith("/customer/offers")) ||
@@ -120,18 +118,25 @@ export function Shell({ children }: { children?: ReactNode }) {
   ) => (
     <nav aria-label={ariaLabel}>
       {entries.map(([to, label, icon]) => (
-        <NavLink
-          to={to}
-          end
-          key={to}
-          className={({ isActive }) =>
-            `nav-link ${itemIsActive(to, isActive) ? "active" : ""}`
-          }
-          onClick={onNavigate}
-        >
-          <Icon name={icon} />
-          {label}
-        </NavLink>
+        label === "Profile" && (user.role === "Customer" || user.role === "Creator") ? (
+          <button key={to} type="button" className="nav-link" onClick={openAccountMenu}>
+            <Icon name={icon} />
+            {label}
+          </button>
+        ) : (
+          <NavLink
+            to={to}
+            end
+            key={to}
+            className={({ isActive }) =>
+              `nav-link ${itemIsActive(to, isActive) ? "active" : ""}`
+            }
+            onClick={onNavigate}
+          >
+            <Icon name={icon} />
+            {label}
+          </NavLink>
+        )
       ))}
     </nav>
   );
@@ -161,7 +166,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           />
         )}
         {renderNavigation(items, "Main navigation")}
-        {isPublicProfile && user.role !== "Business" && (
+        {isPublicProfile && user.role !== "Business" && user.role !== "Creator" && (
           <Link className="nav-link add-profile-link" to="/onboarding">
             <Icon name="people" />
             Add a profile
@@ -252,8 +257,8 @@ export function Shell({ children }: { children?: ReactNode }) {
       )}
       <div className="workspace">
         <header className="topbar">
-          {user.role === "Customer" && (
-            <Link className="topbar-brand" to="/customer/offers" aria-label="Weymela Customer home">
+          {(user.role === "Customer" || user.role === "Creator") && (
+            <Link className="topbar-brand" to={user.role === "Customer" ? "/customer/offers" : "/creator"} aria-label={`Weymela ${roles[user.role]} home`}>
               <Brand />
             </Link>
           )}
@@ -291,7 +296,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         </main>
         <nav className="mobile-role-nav" aria-label="Mobile navigation">
           {mobileItems.map(([to, label, icon]) =>
-            user.role === "Customer" && label === "Profile" ? (
+            (user.role === "Customer" || user.role === "Creator") && label === "Profile" ? (
               <button
                 key={to}
                 type="button"

@@ -149,7 +149,7 @@ export function BusinessUgcPage() {
   );
 }
 
-function CreatorAssignmentCard({ assignment, onSubmitted }: { assignment: UgcAssignment; onSubmitted: () => void }) {
+export function CreatorAssignmentCard({ assignment, onSubmitted }: { assignment: UgcAssignment; onSubmitted: () => void }) {
   const action = useAction();
   const [url, setUrl] = useState(assignment.submissionUrl ?? "");
   const socialRequired = assignment.platformRequirements.length > 0;

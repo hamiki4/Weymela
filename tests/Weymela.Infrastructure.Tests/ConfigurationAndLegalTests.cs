@@ -17,6 +17,7 @@ public sealed class ConfigurationAndLegalTests(PostgresFixture fixture)
         var v = await new FinancialConfigurationResolver(db).EffectiveAsync(Scenario.Now);
         Assert.Equal(s.PricingVersionId, v.Id);
         Assert.Equal(2500, v.CreatorPayoutThreshold.Amount);
+        Assert.Equal(30, v.PromotionLiveDurationDays);
     }
     [Fact] public async Task Future_pricing_does_not_apply_early()
     {
@@ -38,9 +39,32 @@ public sealed class ConfigurationAndLegalTests(PostgresFixture fixture)
     }
     [Fact] public async Task Later_admin_configuration_does_not_rewrite_funded_snapshot()
     {
-        var s = await Scenario.Create(fixture, funded: true); await AddVersion(s, 2, Scenario.Now, 600);
+        var s = await Scenario.Create(fixture, funded: true); await AddVersion(s, 2, Scenario.Now, 600, 20);
         await using var db = s.Database.Open(); var p = await db.Promotions.SingleAsync();
         Assert.Equal(300, p.PricingSnapshot.BusinessCharge.Amount); Assert.Equal(s.PricingVersionId, p.PricingSnapshot.ConfigurationVersionId);
+        Assert.Equal(30, p.PromotionLiveDurationDays);
+        Assert.Equal(20, (await new FinancialConfigurationResolver(db).EffectiveAsync(Scenario.Now)).PromotionLiveDurationDays);
+    }
+    [Fact] public async Task New_promotion_uses_new_configuration_duration_without_retroactively_changing_old_promotion()
+    {
+        var s = await Scenario.Create(fixture, funded: true); await AddVersion(s, 2, Scenario.Now, 600, 20);
+        await using var db = s.Database.Open();
+        var current = await new FinancialConfigurationResolver(db).EffectiveAsync(Scenario.Now);
+        var later = new Promotion(s.Business.BusinessId!.Value, "Later", "Brief", PromotionType.ViewOnly,
+            new Money(6000), new(null, null, "ET", "Content"), Scenario.Now, Scenario.Now.AddDays(30),
+            current.ViewOnly, Scenario.Now, current.PromotionLiveDurationDays);
+        db.Promotions.Add(later); await db.SaveChangesAsync();
+        var promotions = await db.Promotions.OrderBy(x => x.CreatedAtUtc).ToListAsync();
+        Assert.Equal(30, promotions[0].PromotionLiveDurationDays);
+        Assert.Equal(20, promotions[1].PromotionLiveDurationDays);
+    }
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(366)]
+    public void Promotion_duration_is_bounded(int durationDays)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => PromotionLiveDurationPolicy.Validate(durationDays));
     }
     [Fact] public async Task Business_cannot_create_financial_configuration()
     {
@@ -77,11 +101,11 @@ public sealed class ConfigurationAndLegalTests(PostgresFixture fixture)
             .EnsureCurrentAcceptedAsync(Guid.NewGuid(), LegalRole.Creator, [LegalDocumentType.CreatorAgreement], default));
     }
 
-    private static async Task AddVersion(Scenario s, int number, DateTime effective, decimal charge = 300)
+    private static async Task AddVersion(Scenario s, int number, DateTime effective, decimal charge = 300, int durationDays = 30)
     {
         await using var db = s.Database.Open(); var id = Guid.NewGuid(); var actor = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
         await new FinancialCommands(db).CreateFinancialConfigurationAsync(actor, new FinancialConfigurationVersion(id, s.ConfigurationId, number, actor.UserId,
-            effective, Scenario.Price(PromotionType.ViewOnly, id, charge), Scenario.Price(PromotionType.ViewPlusCommission, id, charge), new Money(2500), new Money(500)));
+            effective, Scenario.Price(PromotionType.ViewOnly, id, charge), Scenario.Price(PromotionType.ViewPlusCommission, id, charge), new Money(2500), new Money(500), null, durationDays));
     }
     private sealed class FixedClock(DateTime now) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(now); }
 }

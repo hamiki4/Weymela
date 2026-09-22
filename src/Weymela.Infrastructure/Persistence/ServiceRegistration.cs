@@ -37,6 +37,7 @@ public static class ServiceRegistration
         services.AddScoped<CheckoutService>();
         services.AddScoped<PayoutService>();
         services.AddScoped<VerifiedViewService>();
+        services.AddScoped<CreatorPromotionContentService>();
         services.AddScoped<FinancialQueries>();
         services.AddScoped<IAdminFinancialQueries>(sp => sp.GetRequiredService<FinancialQueries>());
         services.AddScoped<EmailAuthService>();

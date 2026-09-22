@@ -134,6 +134,7 @@ export interface CreatorPrice {
 export interface BusinessPricing {
   rows: BusinessPrice[];
   effectiveFromUtc: string;
+  promotionLiveDurationDays: number;
 }
 export interface CreatorPricing {
   rows: CreatorPrice[];
@@ -155,6 +156,7 @@ export interface CampaignRow {
   creatorCount: number;
   startUtc: string;
   endUtc: string;
+  promotionLiveDurationDays: number;
   status: string;
   version: number;
 }
@@ -203,9 +205,15 @@ export interface Opportunity {
   minimumVerifiedFollowers: number | null;
   startUtc: string;
   endUtc: string;
+  promotionLiveDurationDays: number;
   earnings: CreatorPrice;
   requestStatus: string | null;
   eligibility: string;
+  slogan?: string | null;
+  location?: string | null;
+  platforms?: { platform: string; approved: number; capacity: number; available: number }[] | null;
+  approvedCreators?: number;
+  creatorCapacity?: number;
 }
 export interface CreatorCampaign {
   id: string;
@@ -226,6 +234,35 @@ export interface CreatorCampaign {
   externalContentId: string | null;
   startUtc: string;
   endUtc: string;
+  promotionLiveDurationDays: number;
+  contentRevisionNumber?: number | null;
+  contentReviewStatus?: "UnderReview" | "ChangesRequested" | "Approved" | "Rejected" | null;
+  contentFeedback?: string | null;
+  contentSubmittedAtUtc?: string | null;
+  wentLiveAtUtc?: string | null;
+  expiresAtUtc?: string | null;
+  remainingDays?: number | null;
+}
+export interface CreatorRequest {
+  id: string;
+  campaignId: string;
+  campaign: string;
+  business: string;
+  type: string;
+  status: string;
+  appliedAtUtc: string;
+}
+export interface PromotionContentReviewCard {
+  submissionId: string;
+  creator: string;
+  promotion: string;
+  provider: string;
+  contentReference: string;
+  revisionNumber: number;
+  submittedAtUtc: string;
+  reviewStatus: string;
+  feedback: string | null;
+  reviewedAtUtc: string | null;
 }
 export interface Payout {
   id: string;
@@ -325,6 +362,7 @@ export interface FinancialSettings {
   customerThreshold: number;
   effectiveFromUtc: string | null;
   ugc: UgcSettings | null;
+  promotionLiveDurationDays: number;
 }
 export interface SettingsWorkspace {
   current: FinancialSettings;
@@ -474,6 +512,7 @@ export interface Offer {
   watchUrl: string | null;
   slogan: string | null;
   location: string | null;
+  remainingDays?: number | null;
 }
 export interface CustomerTransaction {
   source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;

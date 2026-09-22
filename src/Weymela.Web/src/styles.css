@@ -1661,6 +1661,247 @@ td .button {
   --role-soft: #f1eaff;
   --role-border: #d5c4f8;
 }
+.role-creator .creator-live-days,
+.role-creator .creator-opportunity-reward strong {
+  color: var(--role-accent);
+  font-weight: 800;
+}
+.creator-dashboard-metric,
+.creator-promotion-list-card {
+  color: inherit;
+  text-decoration: none;
+}
+.creator-dashboard-metric:focus-visible,
+.creator-promotion-list-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--role-accent) 32%, transparent);
+  outline-offset: 2px;
+}
+.creator-metrics .metric {
+  border-color: var(--role-border);
+}
+.creator-discover-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+  padding: clamp(1.1rem, 3vw, 1.6rem);
+  border: 1px solid var(--role-border);
+  border-radius: 18px;
+  background: linear-gradient(120deg, #fff, var(--role-soft));
+}
+.creator-discover-cta h2,
+.creator-discover-cta p {
+  margin: 0.25rem 0;
+}
+.creator-discover-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 1.25rem 0;
+}
+.creator-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.creator-tabs button {
+  min-height: 42px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--role-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+}
+.creator-tabs button.selected {
+  border-color: var(--role-accent);
+  background: var(--role-soft);
+  color: var(--role-accent);
+}
+.creator-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: min(100%, 340px);
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--role-border);
+  border-radius: 11px;
+  background: #fff;
+}
+.creator-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+}
+.creator-opportunity-section + .creator-opportunity-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.creator-opportunity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 1rem;
+}
+.creator-opportunity-card,
+.creator-promotion-row,
+.business-promotion-review-row {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--role-border);
+  border-radius: 16px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.creator-opportunity-card h3,
+.creator-promotion-row h3,
+.business-promotion-review-row h3 {
+  margin: 0.15rem 0 0.35rem;
+}
+.creator-opportunity-heading,
+.business-review-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.creator-opportunity-heading > div,
+.business-review-heading > div,
+.creator-promotion-row > div:first-child {
+  min-width: 0;
+}
+.creator-opportunity-slogan {
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--role-accent);
+  color: var(--muted);
+}
+.creator-platform-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.65rem 0;
+}
+.creator-platform-counts span {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--role-border);
+  border-radius: 8px;
+  background: var(--role-soft);
+  font-size: 0.82rem;
+}
+.creator-opportunity-reward {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.creator-promotion-filters {
+  margin: 1rem 0 1.25rem;
+}
+.creator-promotion-list,
+.business-promotion-review-list,
+.creator-activity-list {
+  display: grid;
+  gap: 0.8rem;
+}
+.creator-promotion-list-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--role-border);
+  border-radius: 16px;
+  background: #fff;
+}
+.creator-promotion-list-card:hover {
+  border-color: var(--role-accent);
+}
+.creator-promotion-list-card h3,
+.creator-promotion-list-card p {
+  margin-block: 0.15rem;
+}
+.creator-promotion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.6fr);
+  gap: 1rem;
+}
+.creator-next-action {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.creator-live-days {
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+}
+.creator-activity-list article {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--role-border);
+  border-radius: 12px;
+}
+.creator-activity-list article > div {
+  min-width: 0;
+  flex: 1;
+}
+.creator-activity-list p {
+  margin: 0.15rem 0 0;
+}
+.creator-activity-list small {
+  text-align: end;
+}
+.creator-activity-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--role-soft);
+  color: var(--role-accent);
+}
+.creator-progress {
+  display: grid;
+  align-content: center;
+  justify-items: end;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+.business-promotion-review-row {
+  border-color: #b7cbf8;
+}
+.business-review-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+.creator-how-you-earn {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--role-border);
+  border-radius: 14px;
+  background: var(--role-soft);
+}
+.creator-how-you-earn > summary {
+  color: var(--role-accent);
+  font-weight: 750;
+  cursor: pointer;
+}
+.role-creator .sidebar .nav-link:not(a) {
+  width: 100%;
+  text-align: start;
+}
 .role-business {
   --role-accent: #1d4fc1;
   --role-soft: #e8f0ff;
@@ -2230,10 +2471,42 @@ td .button {
     white-space: nowrap;
     max-width: 100%;
   }
+  .role-creator .mobile-role-nav {
+    min-height: 68px;
+  }
+  .role-creator .mobile-role-link span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    line-height: 1.05;
+  }
   .mobile-role-link:hover {
     text-decoration: none;
     background: transparent;
     border-color: var(--line);
+  }
+}
+@media (max-width: 640px) {
+  .creator-discover-cta,
+  .creator-promotion-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .creator-discover-cta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .creator-activity-list article {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .creator-activity-list small {
+    width: 100%;
+    margin-inline-start: 3.1rem;
+    text-align: start;
+  }
+  .creator-progress {
+    justify-items: start;
   }
 }
 .profile-choice p {

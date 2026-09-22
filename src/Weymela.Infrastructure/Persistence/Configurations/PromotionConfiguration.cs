@@ -12,6 +12,7 @@ internal sealed class PromotionConfiguration : IEntityTypeConfiguration<Promotio
         {
             t.HasCheckConstraint("CK_Promotion_Budgets", "\"TotalBudget\" > 0 AND \"ReservedBudget\" >= 0 AND \"UsedBudget\" >= 0 AND \"ReservedBudget\" + \"UsedBudget\" <= \"TotalBudget\" AND \"AllocatedBudget\" >= \"UsedBudget\" AND \"AllocatedBudget\" <= \"TotalBudget\"");
             t.HasCheckConstraint("CK_Promotion_Dates", "\"EndDateUtc\" > \"StartDateUtc\"");
+            t.HasCheckConstraint("CK_Promotion_LiveDuration", $"\"PromotionLiveDurationDays\" BETWEEN {PromotionLiveDurationPolicy.MinimumDays} AND {PromotionLiveDurationPolicy.MaximumDays}");
         });
         Mapping.Scalars(b, "AllocatedBudget", "RemainingBudget", "UnallocatedBudget", "DomainEvents", "Platforms");
         b.HasKey(x => x.Id);

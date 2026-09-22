@@ -57,7 +57,7 @@ public sealed partial class WorkspaceQueries
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
                 var content=PublicContentUrl(live.Provider,live.ExternalContentId);
                 result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
-                    new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location));
+                    new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location,offer.RemainingDays));
             }
             else
             {

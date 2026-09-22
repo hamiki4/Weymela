@@ -3,6 +3,8 @@ using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence;
+using Weymela.Application.Web;
+using Weymela.Infrastructure.Web;
 
 namespace Weymela.Infrastructure.Tests;
 
@@ -17,7 +19,7 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
     public FinancialQueries Queries(WeymelaDbContext db) => new(db, new CommerceAccessPolicy(db), new TestDirectory(), Clock);
 
     public static async Task<Phase4Scenario> Create(PostgresFixture fixture, PromotionType type = PromotionType.ViewPlusCommission,
-        decimal allocation = 2000, decimal budget = 6000, decimal threshold = 5000)
+        decimal allocation = 2000, decimal budget = 6000, decimal threshold = 5000, bool goLive = true)
     {
         var seed = await Scenario.Create(fixture, Math.Max(10000, budget), true, budget, type, 3000, threshold, threshold);
         var creatorId = await seed.ApprovedCreator();
@@ -41,9 +43,17 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
             new(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
             new(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        var participation = await new VerifiedViewService(db, provider, new CommerceAccessPolicy(db), clock)
-            .GoLiveAsync(new(creator, allocationId, "TestProvider", "content-1", "go-live"));
-        return new(seed, creator, customer, cashier, allocationId, participation, clock, provider);
+        if (goLive)
+        {
+            var review = new CreatorPromotionContentService(db,new CommerceAccessPolicy(db),new TestDirectory(),clock);
+            await review.SubmitAsync(creator,allocationId,new ContentInput("TikTok","content-1"),"submit-content",default);
+            var submitted=await db.CreatorPromotionContentSubmissions.SingleAsync();
+            await review.ReviewAsync(seed.Business,submitted.Id,new PromotionContentReviewInput("approve",null),"approve-content",default);
+            var participation = await new VerifiedViewService(db, provider, new CommerceAccessPolicy(db), clock)
+                .GoLiveAsync(new(creator, allocationId, "TikTok", "content-1", "go-live"));
+            return new(seed, creator, customer, cashier, allocationId, participation, clock, provider);
+        }
+        return new(seed, creator, customer, cashier, allocationId, Guid.Empty, clock, provider);
     }
     public async Task<ViewRewardResult> Refresh(long campaignViews, string key = "refresh")
     {
@@ -80,8 +90,12 @@ internal sealed class TestViews(TestClock clock) : IVerifiedViewProvider
     public Task<VerifiedViewResult> VerifyAsync(VerifiedViewRequest request, CancellationToken ct) =>
         Task.FromResult(new VerifiedViewResult(Count, request.Provider, request.ExternalContentId, clock.Now, "test-evidence"));
 }
-internal sealed class TestDirectory : IPublicIdentityDirectory
+internal sealed class TestDirectory : IWorkspaceDirectory
 {
     public Task<PublicBusiness> BusinessAsync(Guid id, CancellationToken ct) => Task.FromResult(new PublicBusiness(id, "Abc"));
     public Task<PublicCreator> CreatorAsync(Guid id, CancellationToken ct) => Task.FromResult(new PublicCreator(id, "CR-100", "Bella"));
+    public Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct) => Task.FromResult(new BusinessCard(id,"Abc","Addis Ababa",null));
+    public Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken ct) => Task.FromResult(new CustomerOfferBusiness("Abc",null));
+    public Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct) => Task.FromResult(new CreatorCard(id,"Bella","CR-100","Addis Ababa","Food",10000,0,true,null));
+    public Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken ct) => Task.FromResult(new CustomerCard(id,"Customer","CU-100"));
 }

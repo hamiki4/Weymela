@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 
 for (const width of [375, 1366])
-  test(`real Campaign lifecycle through all three roles at ${width}px`, async ({
+  test(`real Promotion lifecycle through all three roles at ${width}px`, async ({
     page,
     context,
   }) => {
@@ -63,7 +63,7 @@ for (const width of [375, 1366])
     const card = page
       .locator("article")
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
-    await card.getByRole("link", { name: "Join Campaign" }).click();
+    await card.getByRole("link", { name: "Review Promotion" }).click();
     await page
       .getByLabel("Short message", { exact: true })
       .fill("I would love to create this.");
@@ -97,17 +97,48 @@ for (const width of [375, 1366])
     ).toBeVisible();
     await screenshot(page, `${width}-flow-budget-saved`);
     await login(context, "other-creator");
-    await open(page, "/creator/campaigns");
+    await open(page, "/creator/promotions");
     await page
       .locator("article")
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) })
-      .getByRole("link", { name: "Open Campaign" })
+      .getByRole("link", { name: "Review Requirements & Add Content" })
       .click();
-    await expect(page.getByText("600", { exact: true }).first()).toBeVisible();
     await page
-      .getByLabel("Video reference", { exact: true })
+      .getByLabel("Promotion content reference", { exact: true })
       .fill(`${Date.now()}${width}`);
-    await page.getByRole("button", { name: "Connect Content" }).click();
+    await page.getByRole("button", { name: "Submit Content for Review" }).click();
+    await expect(page.getByText(/under Business review/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Refresh Views" })).toHaveCount(0);
+    await login(context, "business");
+    await open(page, "/business/campaigns");
+    const review = page.locator(".business-promotion-review-row").filter({ hasText: title });
+    await review
+      .getByLabel("Feedback (required for changes requested)")
+      .fill("Please revise the opening.");
+    await review.getByRole("button", { name: "Request Changes", exact: true }).click();
+    await expect(review.getByText("Changes Requested", { exact: true })).toBeVisible();
+    await login(context, "other-creator");
+    await open(page, "/creator/promotions");
+    const changesRequested = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+    await changesRequested.getByRole("link", { name: "Resubmit Content", exact: true }).click();
+    await page
+      .getByLabel("Promotion content reference", { exact: true })
+      .fill(`${Date.now()}${width}-revision-2`);
+    await page.getByRole("button", { name: "Submit Revised Content", exact: true }).click();
+    await expect(page.getByText(/under Business review/i)).toBeVisible();
+    await login(context, "business");
+    await open(page, "/business/campaigns");
+    const revisedReview = page
+      .locator(".business-promotion-review-row")
+      .filter({ hasText: title })
+      .filter({ hasText: "Revision 2" });
+    await revisedReview.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(revisedReview.getByText("Approved")).toBeVisible();
+    await login(context, "other-creator");
+    await open(page, "/creator/promotions");
+    const approved = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+    await approved.getByRole("button", { name: "Go Live", exact: true }).click();
+    await approved.getByRole("link", { name: "View progress" }).click();
     await expect(
       page.getByRole("button", { name: "Refresh Views" }),
     ).toBeVisible();

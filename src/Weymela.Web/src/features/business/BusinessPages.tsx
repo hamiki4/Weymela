@@ -36,6 +36,7 @@ import {
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 import { DepositSubmission } from "./DepositSubmission";
+import { PromotionContentReviewQueue } from "./PromotionContentReviewQueue";
 
 export function WalletMetrics({ wallet }: { wallet: Wallet }) {
   return (
@@ -426,6 +427,9 @@ export function BusinessPricingPage() {
                   Effective {date(pricing.effectiveFromUtc)}. You control your
                   Promotion Budget; Weymela sets activity pricing.
                 </p>
+                <p className="fine-print">
+                  Promotion live duration: {pricing.promotionLiveDurationDays} days · Set by Weymela for new Promotions.
+                </p>
               </Section>
             )}
           </Resource>
@@ -497,6 +501,10 @@ export function CampaignTable({
       cell: (r: CampaignRow) => r.creatorCount,
       numeric: true,
     },
+    {
+      label: "Live Duration",
+      cell: (r: CampaignRow) => `${r.promotionLiveDurationDays} days`,
+    },
     { label: "Start", cell: (r: CampaignRow) => date(r.startUtc) },
     {
       label: admin ? "End" : "Days Left",
@@ -537,6 +545,7 @@ export function CampaignTable({
               <Icon name="calendar" />
               {date(r.startUtc)}
             </span>
+            <span>{r.promotionLiveDurationDays} days live after Creator goes live</span>
             <span>
               {admin
                 ? `Ends ${date(r.endUtc)}`
@@ -607,6 +616,7 @@ export function BusinessCampaigns() {
           </Section>
         )}
       </Resource>
+      <PromotionContentReviewQueue />
     </>
   );
 }

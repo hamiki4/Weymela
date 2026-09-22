@@ -11,15 +11,18 @@ import {
 } from "../src/features/business/BusinessPages";
 import { CreateCampaign } from "../src/features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../src/features/business/CampaignDetail";
+import { PromotionContentReviewQueue } from "../src/features/business/PromotionContentReviewQueue";
 import {
-  CreatorDashboard,
-  CreatorDiscovery,
   CreatorOpportunity,
   CreatorHowYouEarn,
   CreatorEarnings,
 } from "../src/features/creator/CreatorPages";
 import {
-  CreatorActiveCampaigns,
+  CreatorDashboard,
+  CreatorDiscover,
+  CreatorPromotions,
+} from "../src/features/creator/CreatorExperience";
+import {
   CreatorActiveDetail,
 } from "../src/features/creator/ActiveCampaigns";
 import {
@@ -40,6 +43,7 @@ import {
   campaign,
   detail,
   earnings,
+  active,
   mockApi,
   offer,
   ugcCustomerOffer,
@@ -267,31 +271,57 @@ describe("Business workspace", () => {
       screen.queryByRole("button", { name: /End Campaign|End Promotion/ }),
     ).not.toBeInTheDocument();
   });
+  it("lets the owning Business request changes on a submitted Promotion revision", async () => {
+    const api = mockApi({
+      "/business/promotion-content-submissions": [{
+        submissionId: "submission-safe-key",
+        creator: "Mina Creator",
+        promotion: "Seasonal stories",
+        provider: "TikTok",
+        contentReference: "video-123",
+        revisionNumber: 1,
+        submittedAtUtc: "2026-09-22T12:00:00Z",
+        reviewStatus: "UnderReview",
+        feedback: null,
+        reviewedAtUtc: null,
+      }],
+    });
+    mount(<PromotionContentReviewQueue />);
+    expect(await screen.findByText("Mina Creator · Seasonal stories")).toBeVisible();
+    expect(screen.getByText("TikTok content · Revision 1")).toBeVisible();
+    expect(screen.queryByText(/AllocationId|BusinessId|CreatorId|Wallet|Commission/)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Feedback (required for changes requested)"), "Please adjust the opening shot.");
+    await userEvent.click(screen.getByRole("button", { name: "Request Changes" }));
+    await waitFor(() => expect(api.writes[0]).toMatchObject({
+      path: "/business/promotion-content-submissions/submission-safe-key/review",
+      body: { action: "requestchanges", feedback: "Please adjust the opening shot." },
+    }));
+  });
 });
 
 describe("Creator workspace", () => {
   it("groups own earnings and Campaigns", async () => {
     mount(<CreatorDashboard />);
     expect(
-      await screen.findByRole("heading", {
-        name: "Make your creativity count.",
-      }),
+      await screen.findByRole("heading", { name: "Dashboard" }),
     ).toBeVisible();
     expect(screen.getAllByText("5,400").length).toBeGreaterThan(0);
   });
-  it("renders eligible discovery opportunities with Join Campaign", async () => {
-    mount(<CreatorDiscovery />);
-    expect(
-      await screen.findByRole("link", { name: "Join Campaign" }),
-    ).toBeVisible();
-    expect(screen.queryByText("Campaign Budget")).not.toBeInTheDocument();
+  it("discovers Business-created Promotions and keeps All, Promotions and UGC filters", async () => {
+    mockApi({ "/creator/ugc": [] });
+    mount(<CreatorDiscover />);
+    expect(await screen.findByRole("heading", { name: "Available Opportunities" })).toBeVisible();
+    const tabs = within(screen.getByRole("tablist", { name: "Opportunity type" }));
+    expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["All", "Promotions", "UGC"]);
+    expect(await screen.findByText(/Abc Coffee/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Review Promotion" })).toHaveAttribute("href", "/creator/discover/campaign");
+    expect(screen.queryByText(/Business Wallet|Reserved Funds|Campaign Budget/)).not.toBeInTheDocument();
   });
   it("has a designed empty discovery state", async () => {
-    mockApi({ "/creator/discover": [] });
-    mount(<CreatorDiscovery />);
-    expect(
-      await screen.findByText("No available Campaigns right now"),
-    ).toBeVisible();
+    mockApi({ "/creator/discover": [], "/creator/ugc": [] });
+    mount(<CreatorDiscover />);
+    expect(await screen.findByText("No available Promotions")).toBeVisible();
+    expect(screen.getByText("No available UGC opportunities")).toBeVisible();
   });
   it("sends a join message without negotiating budget or rates", async () => {
     const api = mockApi();
@@ -313,15 +343,19 @@ describe("Creator workspace", () => {
         contentConcept: null,
       }),
     );
+    expect(api.writes[0].path).toBe("/creator/promotions/campaign/request");
   });
-  it("shows only own active Campaign budget", async () => {
-    mount(<CreatorActiveCampaigns />);
-    expect(await screen.findByText("Your Budget")).toBeVisible();
-    expect(screen.getByText("Budget Remaining")).toBeVisible();
+  it("shows own Promotion progress without Business budget or wallet details", async () => {
+    mockApi({ "/creator/campaigns": [{ ...active, remainingDays: 20 }] });
+    mount(<CreatorPromotions />);
+    expect(await screen.findByRole("heading", { name: "My Promotions" })).toBeVisible();
+    expect(screen.getByText("20 days left")).toBeVisible();
+    expect(screen.getByText(/3,000 verified views/)).toBeVisible();
+    expect(screen.queryByText(/Your Budget|Budget Remaining|Campaign Budget/)).not.toBeInTheDocument();
     expect(screen.queryByText("Business Wallet")).not.toBeInTheDocument();
   });
   it("refreshes verified views through the participation endpoint", async () => {
-    const api = mockApi();
+    const api = mockApi({ "/creator/campaigns": [{ ...active, remainingDays: 30 }] });
     mount(
       <CreatorActiveDetail />,
       "/creator/campaigns/budget",
@@ -335,6 +369,33 @@ describe("Creator workspace", () => {
         "/creator/participations/participation/refresh",
       ),
     );
+  });
+  it("keeps Go Live unavailable while submitted content is under Business review", async () => {
+    mockApi({ "/creator/campaigns": [{
+      ...active,
+      participationId: null,
+      status: "UnderReview",
+      contentReviewStatus: "UnderReview",
+      contentRevisionNumber: 1,
+      remainingDays: null,
+    }] });
+    mount(<CreatorActiveDetail />, "/creator/promotions/budget", "/creator/promotions/:id");
+    expect(await screen.findByText("Content is under Business review. Go Live is not available yet.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Go Live" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit Content for Review" })).not.toBeInTheDocument();
+  });
+  it("allows the Creator to start the live window only after content approval", async () => {
+    const api = mockApi({ "/creator/campaigns": [{
+      ...active,
+      participationId: null,
+      status: "ReadyToGoLive",
+      contentReviewStatus: "Approved",
+      contentRevisionNumber: 1,
+      remainingDays: null,
+    }] });
+    mount(<CreatorActiveDetail />, "/creator/promotions/budget", "/creator/promotions/:id");
+    await userEvent.click(await screen.findByRole("button", { name: "Go Live" }));
+    await waitFor(() => expect(api.writes[0].path).toBe("/creator/creator-budgets/budget/go-live"));
   });
   it("has compact earning cards without other role finances", async () => {
     mount(<CreatorHowYouEarn />);
@@ -355,7 +416,7 @@ describe("Creator workspace", () => {
     expect(screen.queryByText("VIEW_REWARD")).not.toBeInTheDocument();
   });
   it("shows threshold eligibility without payout calendar dates", async () => {
-    mount(<CreatorEarnings payout />);
+    mount(<CreatorEarnings />);
     expect(
       await screen.findByText("Eligible for payout · 5,000"),
     ).toBeVisible();
@@ -372,7 +433,7 @@ describe("Creator workspace", () => {
         eligibleAmount: 0,
       },
     });
-    mount(<CreatorEarnings payout />);
+    mount(<CreatorEarnings />);
     expect(await screen.findByText("4,600 more needed")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Request Payout" }),
@@ -417,11 +478,16 @@ describe("Admin workspace", () => {
   it("submits valid settings with the saved version", async () => {
     const api = mockApi();
     mount(<AdminFinancialSettings />);
+    const duration = await screen.findByLabelText("Promotion live duration");
+    expect(duration).toHaveValue(30);
+    await userEvent.clear(duration);
+    await userEvent.type(duration, "20");
     await userEvent.click(
       await screen.findByRole("button", { name: "Save Financial Settings" }),
     );
     await waitFor(() => expect(api.writes[0].body.expectedVersion).toBe(1));
     expect(api.writes[0].body.settings.effectiveFromUtc).toBeNull();
+    expect(api.writes[0].body.settings.promotionLiveDurationDays).toBe(20);
   });
   it("has all four payout tabs and supports keyboard selection", async () => {
     mount(<AdminPayouts />);

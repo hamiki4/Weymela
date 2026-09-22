@@ -139,6 +139,9 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
         {distanceKm !== null && (
           <span><Icon name="location" size={16} />{distanceKm < 0.05 ? "Under 0.1 km" : `${distanceKm.toFixed(1)} km`}</span>
         )}
+        {offer.source === "VIEW_AND_SALE_PROMOTION" && offer.remainingDays != null && offer.remainingDays > 0 && (
+          <span className="customer-live-days">{offer.remainingDays} days left</span>
+        )}
         {offer.creator && (
           <span className="customer-promotion-creator">
             <span className="customer-creator-avatar" aria-hidden="true">

@@ -289,6 +289,9 @@ export function CreateCampaign() {
                     Your Creator Budgets protect the funds assigned to each
                     Creator. No Creator can spend another Creator’s budget.
                   </p>
+                  <p className="fine-print">
+                    Promotion duration: {data.promotionLiveDurationDays} days · Set by Weymela.
+                  </p>
                 </Section>
               </aside>
             </div>

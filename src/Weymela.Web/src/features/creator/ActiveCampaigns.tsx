@@ -19,7 +19,6 @@ import {
   campaignType,
   count,
   date,
-  daysLeft,
   isViewAndSale,
 } from "../../ui/format";
 
@@ -39,8 +38,8 @@ export function CreatorActiveCampaigns() {
     <>
       <PageHeader
         eyebrow="Your collaborations"
-        title="Active Campaigns"
-        description="Your content, verified activity and Creator Budgets—all in one place."
+        title="My Promotions"
+        description="Your Promotion content, verified activity and Creator earnings—all in one place."
       />
       <Resource resource={resource}>
         {(rows) =>
@@ -54,30 +53,25 @@ export function CreatorActiveCampaigns() {
                     <Badge status={r.status} />
                   </div>
                   <p>{campaignType(r.type)}</p>
-                  <FundsGrid
-                    values={[
-                      ["Your Budget", r.yourBudget],
-                      ["Budget Remaining", r.budgetRemaining],
-                    ]}
-                  />
+                  <FundsGrid values={[["Verified Views", r.verifiedViews], ["Your Earnings", r.viewEarnings + r.saleCommissionEarnings]]} />
                   <p className="fine-print">
                     {count(r.verifiedViews)} verified views ·{" "}
-                    {daysLeft(r.endUtc)} days left
+                    {r.remainingDays != null ? `${r.remainingDays} days left` : r.participationId ? "Ended" : "Not live yet"}
                   </p>
-                  <ActionLink to={`/creator/campaigns/${r.budgetId}`} secondary>
-                    Open Campaign
+                  <ActionLink to={`/creator/promotions/${r.budgetId}`} secondary>
+                    Open Promotion
                   </ActionLink>
                 </article>
               ))}
             </div>
           ) : (
-            <Section title="Your Campaigns">
+            <Section title="Your Promotions">
               <Empty
-                title="No active Campaigns yet"
-                message="Request to join a Campaign. After Business approval, your Creator Budget and content workspace appear here."
+                title="No Promotions yet"
+                message="Request to join a specific Promotion. After Business approval, your content workspace appears here."
                 action={
                   <ActionLink to="/creator/discover">
-                    Discover Campaigns
+                    Discover opportunities
                   </ActionLink>
                 }
               />
@@ -100,10 +94,13 @@ function CreatorContent({
   const [message, setMessage] = useState("");
   const action = useAction();
   const url = contentUrl(row.provider, row.externalContentId);
+  const maySubmit = !row.participationId &&
+    (row.contentReviewStatus == null || row.contentReviewStatus === "ChangesRequested") &&
+    !["Completed", "Cancelled", "Rejected"].includes(row.status);
+  const mayGoLive = !row.participationId && row.contentReviewStatus === "Approved" && row.status === "ReadyToGoLive";
   return (
-    <Section title="Video" description={row.contentStatus}>
-      {!row.participationId &&
-      !["Completed", "Cancelled"].includes(row.status) ? (
+    <Section title="Promotion content" description={row.contentStatus}>
+      {maySubmit ? (
         <form
           className="contained-form"
           onSubmit={(e) => {
@@ -114,9 +111,7 @@ function CreatorContent({
                 { provider, externalContentId: content.trim() },
                 key,
               );
-              setMessage(
-                "Content connected. Your verified starting views have been recorded.",
-              );
+              setMessage("Content submitted. The Business must approve this revision before you go live.");
               reload();
             });
           }}
@@ -133,8 +128,8 @@ function CreatorContent({
               </select>
             </Field>
             <Field
-              label="Video reference"
-              help="Use the video ID from your public content, not a private link."
+              label="Promotion content reference"
+              help="Use the public content ID. Business review is required before Go Live."
             >
               <input
                 value={content}
@@ -144,15 +139,21 @@ function CreatorContent({
                 required
               />
             </Field>
-            <p className="fine-print">
-              Development uses a test verification provider. No live social
-              account is contacted.
-            </p>
+            {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
             <Button type="submit" disabled={action.busy || !content}>
-              Connect Content
+              {row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Content" : "Submit Content for Review"}
             </Button>
           </fieldset>
         </form>
+      ) : mayGoLive ? (
+        <div className="creator-review-ready">
+          <Notice>Content approved by the Business. You decide when to go live.</Notice>
+          <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
+            await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key);
+              setMessage(`Promotion is live. Your ${row.promotionLiveDurationDays}-day window has started.`);
+            reload();
+          })}>{action.busy ? "Going live…" : "Go Live"}</Button>
+        </div>
       ) : (
         <div className="actions">
           {url && (
@@ -165,10 +166,9 @@ function CreatorContent({
               Open {row.provider}
             </a>
           )}
-          <Button
+          {row.participationId && row.remainingDays != null && <Button
             disabled={
               action.busy ||
-              !row.participationId ||
               ["Completed", "Cancelled", "Paused"].includes(row.status)
             }
             onClick={() =>
@@ -186,15 +186,18 @@ function CreatorContent({
             }
           >
             {action.busy ? "Refreshing…" : "Refresh Views"}
-          </Button>
+          </Button>}
         </div>
       )}
+      {row.contentReviewStatus === "UnderReview" && <Notice>Content is under Business review. Go Live is not available yet.</Notice>}
+      {row.contentReviewStatus === "Rejected" && <Notice>This content revision was rejected and cannot go live.</Notice>}
+      {row.participationId && row.remainingDays != null && <p className="creator-live-days">{row.remainingDays} days left</p>}
+      {row.participationId && row.remainingDays == null && <p className="creator-live-days">Ended</p>}
       {action.error && <Notice error>{action.error}</Notice>}
       {message && <Notice>{message}</Notice>}
       {row.status === "FundingRequired" && (
         <Notice>
-          Your Creator Budget cannot cover the next activity reward. The
-          Business can increase your budget from its Campaign funds.
+          Your participation needs Business attention before additional rewards can be recorded.
         </Notice>
       )}
     </Section>
@@ -205,18 +208,18 @@ export function CreatorActiveDetail() {
   const resource = useResource<CreatorCampaign[]>("/creator/campaigns");
   return (
     <>
-      <Link className="back-link" to="/creator/campaigns">
-        ← Active Campaigns
+      <Link className="back-link" to="/creator/promotions">
+        ← My Promotions
       </Link>
       <Resource resource={resource}>
         {(rows) => {
           const r = rows.find((row) => row.budgetId === id);
           if (!r)
             return (
-              <Section title="Campaign unavailable">
+              <Section title="Promotion unavailable">
                 <Empty
-                  title="This Campaign isn’t in your workspace"
-                  message="You can open only Campaigns you have been approved to join."
+                  title="This Promotion isn’t in your workspace"
+                  message="You can open only Promotions you have been approved to join."
                 />
               </Section>
             );
@@ -229,11 +232,10 @@ export function CreatorActiveDetail() {
                 action={<Badge status={r.status} />}
               />
               <div className="two-column">
-                <Section title="Your Creator Budget" action={<Currency />}>
+                <Section title="Your Promotion progress">
                   <FundsGrid
                     values={[
-                      ["Your Budget", r.yourBudget],
-                      ["Budget Remaining", r.budgetRemaining],
+                      ["Verified Views", r.verifiedViews],
                       ["View Earnings", r.viewEarnings],
                       ...(isViewAndSale(r.type)
                         ? [
@@ -246,14 +248,12 @@ export function CreatorActiveDetail() {
                     ]}
                   />
                   <p className="fine-print section-kicker-space">
-                    Your earnings accumulate with earnings from all your
-                    Campaigns.
+                    Your earnings accumulate across your Creator work.
                   </p>
                 </Section>
                 <Section title="Verified activity">
                   <FundsGrid
                     values={[
-                      ["Verified Views", r.verifiedViews],
                       ["Rewarded Views", r.rewardedViews],
                     ]}
                   />
@@ -263,8 +263,24 @@ export function CreatorActiveDetail() {
                       <dd>{date(r.startUtc)}</dd>
                     </div>
                     <div>
-                      <dt>Days Left</dt>
-                      <dd>{daysLeft(r.endUtc)}</dd>
+                      <dt>Promotion duration</dt>
+                      <dd>{r.promotionLiveDurationDays} days after you go live</dd>
+                    </div>
+                    {r.wentLiveAtUtc && (
+                      <div>
+                        <dt>Started</dt>
+                        <dd>{date(r.wentLiveAtUtc)}</dd>
+                      </div>
+                    )}
+                    {r.expiresAtUtc && (
+                      <div>
+                        <dt>Ends</dt>
+                        <dd>{date(r.expiresAtUtc)}</dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>Live window</dt>
+                      <dd>{r.remainingDays == null ? "Not live or ended" : `${r.remainingDays} days left`}</dd>
                     </div>
                     <div>
                       <dt>Participation Status</dt>

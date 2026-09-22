@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Weymela.Domain;
 using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Infrastructure.Persistence.Configurations;
@@ -8,7 +9,10 @@ internal sealed class FinancialConfigurationMapping : IEntityTypeConfiguration<F
 {
     public void Configure(EntityTypeBuilder<FinancialConfigurationVersion> b)
     {
-        b.ToTable("FinancialConfigurationVersions"); Mapping.Scalars(b); b.HasKey(x => x.Id);
+        b.ToTable("FinancialConfigurationVersions", t =>
+            t.HasCheckConstraint("CK_Configuration_PromotionLiveDuration",
+                $"\"PromotionLiveDurationDays\" BETWEEN {PromotionLiveDurationPolicy.MinimumDays} AND {PromotionLiveDurationPolicy.MaximumDays}"));
+        Mapping.Scalars(b); b.HasKey(x => x.Id);
         b.HasOne<FinancialConfiguration>().WithMany().HasForeignKey(x => x.ConfigurationId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => new { x.ConfigurationId, x.Version }).IsUnique();
         b.HasIndex(x => new { x.EffectiveFromUtc, x.Version });

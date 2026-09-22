@@ -27,7 +27,7 @@ public static class DevelopmentWorkspaceSeed
         db.FinancialConfigurationVersions.Add(new(version,config,1,admin.UserId,now.AddDays(-1),
             new(PromotionType.ViewOnly,3000,new Money(300),new Money(200),new Money(100),3m,4m,3m,now.AddDays(-1),version),
             new(PromotionType.ViewPlusCommission,3000,new Money(150),new Money(100),new Money(50),3m,4m,3m,now.AddDays(-1),version),new Money(3000),new Money(4000),
-            new(new Money(200),10m,null,now.AddDays(-1),version)));
+            new(new Money(200),10m,null,now.AddDays(-1),version), 30));
         foreach(var type in new[]{LegalDocumentType.TermsOfService,LegalDocumentType.PrivacyPolicy,LegalDocumentType.BusinessAgreement,LegalDocumentType.CreatorAgreement,LegalDocumentType.AntiCircumventionAgreement})
         {
             var id=Guid.NewGuid();db.LegalDocumentVersions.Add(new(id,type,"fixture-1","development-fixture-not-legal-wording",now.AddDays(-1)));
@@ -53,6 +53,10 @@ public static class DevelopmentWorkspaceSeed
             var allocation=await commands.ApproveAndSetBudgetAsync(business,app,new Money(hybrid?2000:1500),p.Version,"fixture-approve-"+type,now);
             var content=hybrid?"7611111111111111111":"7611111111111111112";provider.SetCount(content,1000);
             var views=new VerifiedViewService(db,provider,new CommerceAccessPolicy(db),clock);
+            var contentReview=new CreatorPromotionContentService(db,new CommerceAccessPolicy(db),directory,clock);
+            await contentReview.SubmitAsync(creator,allocation,new("TikTok",content),"fixture-content-"+type,default);
+            var submitted=await db.CreatorPromotionContentSubmissions.SingleAsync(x=>x.CreatorAllocationId==allocation);
+            await contentReview.ReviewAsync(business,submitted.Id,new("approve",null),"fixture-content-review-"+type,default);
             var participation=await views.GoLiveAsync(new(creator,allocation,"TikTok",content,"fixture-live-"+type));
             provider.SetCount(content,hybrid?4000:7000);await views.RefreshAsync(new(creator,participation,"fixture-views-"+type));
             if(hybrid)

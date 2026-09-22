@@ -17,7 +17,7 @@ public sealed class Phase4ContractTests
         Assert.DoesNotContain(token.Value,c.ToString());Assert.DoesNotContain(token.Value,JsonSerializer.Serialize(c));Assert.DoesNotContain(token.Value,token.ToString());
     }
     [Fact] public void Customer_projection_cannot_expose_budgets_commission_or_platform_revenue()
-    { Assert.Equal(new[]{"OfferId","Source","Offer","Business","Creator","BenefitPercent","Slogan","Location","CashbackPercent"},typeof(CustomerOffer).GetProperties().Select(x=>x.Name)); }
+    { Assert.Equal(new[]{"OfferId","Source","Offer","Business","Creator","BenefitPercent","Slogan","Location","WentLiveAtUtc","ExpiresAtUtc","RemainingDays","CashbackPercent"},typeof(CustomerOffer).GetProperties().Select(x=>x.Name)); }
     [Fact] public void Customer_history_projection_contains_only_customer_relevant_purchase_and_cashback()
     {
         Assert.Equal(new[]{"Source","Offer","Business","Creator","PurchaseAmount","CustomerPaidAmount","CashbackEarned","DiscountReceived","PurchasedAtUtc"},typeof(CustomerTransaction).GetProperties().Select(x=>x.Name));

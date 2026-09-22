@@ -17,7 +17,12 @@ public interface IUnitOfWork
     Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct);
 }
 public interface IEventPublisher { Task PublishAsync(IReadOnlyCollection<DomainEvent> events, CancellationToken ct); }
-public interface IFinancialConfigurationResolver { Task<PricingSnapshot> ResolveAsync(PromotionType type, DateTime at, CancellationToken ct); }
+public sealed record PromotionConfigurationSnapshot(PricingSnapshot Pricing, int PromotionLiveDurationDays);
+public interface IFinancialConfigurationResolver
+{
+    Task<PricingSnapshot> ResolveAsync(PromotionType type, DateTime at, CancellationToken ct);
+    Task<PromotionConfigurationSnapshot> ResolvePromotionAsync(PromotionType type, DateTime at, CancellationToken ct);
+}
 public interface IPromotionRepository { Task<Promotion?> GetAsync(Guid id, CancellationToken ct); Task AddAsync(Promotion promotion, CancellationToken ct); Task SaveAsync(Promotion promotion, long expectedVersion, CancellationToken ct); Task<IReadOnlyList<Promotion>> QueryAsync(CancellationToken ct); }
 public interface IWalletRepository { Task<BusinessWallet?> GetAsync(Guid businessId, CancellationToken ct); Task SaveAsync(BusinessWallet wallet, long expectedVersion, CancellationToken ct); }
 public interface IBusinessWalletRepository : IWalletRepository { }

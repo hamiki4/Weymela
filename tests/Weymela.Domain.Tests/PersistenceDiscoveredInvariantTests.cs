@@ -27,7 +27,7 @@ public sealed class PersistenceDiscoveredInvariantTests
         var now = DateTime.UtcNow; var business = Guid.NewGuid();
         var p = new Promotion(business, "Campaign", "", PromotionType.ViewOnly, new Money(1000),
             new(null,null,null,null), now, now.AddDays(1),
-            new(PromotionType.ViewOnly,1000,new Money(300),new Money(200),new Money(100),0,0,0,now,Guid.NewGuid()),now);
+            new(PromotionType.ViewOnly,1000,new Money(300),new Money(200),new Money(100),0,0,0,now,Guid.NewGuid()),now,30);
         var w = new BusinessWallet(business); w.CreditDeposit(new Money(1000),now,Guid.NewGuid()); p.Fund(w,now,Guid.NewGuid());
         p.Publish(now,Guid.NewGuid()); p.Activate(now,Guid.NewGuid());
         var a = p.Allocate(Guid.NewGuid(),new Money(300),now,Guid.NewGuid());
@@ -39,7 +39,7 @@ public sealed class PersistenceDiscoveredInvariantTests
     {
         var now = DateTime.UtcNow; var business = Guid.NewGuid();
         var p = new Promotion(business,"Campaign","",PromotionType.ViewOnly,new Money(1000),new(null,null,null,null),now,now.AddDays(1),
-            new(PromotionType.ViewOnly,1000,new Money(300),new Money(200),new Money(100),0,0,0,now,Guid.NewGuid()),now);
+            new(PromotionType.ViewOnly,1000,new Money(300),new Money(200),new Money(100),0,0,0,now,Guid.NewGuid()),now,30);
         var w = new BusinessWallet(business);w.CreditDeposit(new Money(1500),now,Guid.NewGuid());p.Fund(w,now,Guid.NewGuid());
         p.Publish(now,Guid.NewGuid());p.Activate(now,Guid.NewGuid());p.Allocate(Guid.NewGuid(),new Money(500),now,Guid.NewGuid());
         p.Complete(w,now,Guid.NewGuid());

@@ -27,6 +27,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<UgcCustomerOfferBudgetEntry> UgcCustomerOfferBudgetEntries => Set<UgcCustomerOfferBudgetEntry>();
     public DbSet<CreatorApplication> CreatorApplications => Set<CreatorApplication>();
     public DbSet<CreatorAllocation> CreatorAllocations => Set<CreatorAllocation>();
+    public DbSet<CreatorPromotionContentSubmission> CreatorPromotionContentSubmissions => Set<CreatorPromotionContentSubmission>();
     public DbSet<PromotionViewVerification> PromotionViewVerifications => Set<PromotionViewVerification>();
     public DbSet<VerifiedSale> VerifiedSales => Set<VerifiedSale>();
     public DbSet<CreatorEarningsAccount> CreatorEarningsAccounts => Set<CreatorEarningsAccount>();
@@ -96,6 +97,12 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
             if (e.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
             if (IsImmutable(e.Entity) && e.State != EntityState.Added)
                 throw new InvalidOperationException("Posted accounting, snapshots and audit records are append-only.");
+            if (e.Entity is CreatorPromotionContentSubmission && e.State != EntityState.Added)
+            {
+                if (e.State == EntityState.Deleted || new[] { "Id", "CreatorAllocationId", "RevisionNumber", "Provider", "ContentReference", "SubmittedAtUtc" }
+                    .Any(name => !Equals(e.Property(name).OriginalValue, e.Property(name).CurrentValue)))
+                    throw new InvalidOperationException("Submitted Promotion content revisions are immutable; only review metadata may change.");
+            }
             foreach (var p in e.Properties)
             {
                 if (p.CurrentValue is Money m && (m.Currency != "ETB" || decimal.Round(m.Amount, 2) != m.Amount || m.Amount > 9999999999999999.99m))

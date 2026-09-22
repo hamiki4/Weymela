@@ -87,7 +87,8 @@ describe("Customer mobile navigation", () => {
       </MemoryRouter>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Profile" }));
+    const navigation = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
+    await userEvent.click(navigation.getByRole("button", { name: "Profile" }));
     const accountMenu = screen.getByRole("dialog", { name: "Account menu" });
     expect(accountMenu).toBeVisible();
     expect(within(accountMenu).getByLabelText("Switch profile")).toBeVisible();

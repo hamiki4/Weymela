@@ -17,6 +17,10 @@ internal static class BusinessEndpoints
         g.MapGet("/campaigns/{id:guid}",(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignAsync(EndpointSupport.Actor(c),id,ct));
         g.MapGet("/promotions",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/promotions/{id:guid}",(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignAsync(EndpointSupport.Actor(c),id,ct));
+        g.MapGet("/promotion-content-submissions",(HttpContext c,CreatorPromotionContentService service,CancellationToken ct)=>
+            service.BusinessSubmissionsAsync(EndpointSupport.Actor(c),ct));
+        g.MapPost("/promotion-content-submissions/{id:guid}/review",async(Guid id,PromotionContentReviewInput input,HttpContext c,CreatorPromotionContentService service,CancellationToken ct)=>
+            Results.Ok(await service.ReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/wallet/deposits",async(DepositInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
         {
             // No pretend bank confirmation in a non-development environment. A trusted deposit adapter is required later.

@@ -25,10 +25,11 @@ public static class FinancialConfigurationVersionFactory
         var ugc = new UgcPricingSnapshot(Amount(ugcInput.MinimumCreatorPayment), ugcInput.PlatformFeePercent,
             ugcInput.MinimumUgcBudget is { } minimumUgc ? Amount(minimumUgc) : null, effectiveFromUtc, id,
             ugcInput.CustomerOfferPlatformSalePercent);
+        PromotionLiveDurationPolicy.Validate(input.PromotionLiveDurationDays);
         return new FinancialConfigurationVersion(id, configurationId, version, changedBy,
             effectiveFromUtc, Price(PromotionType.ViewOnly, input.ViewOnly),
             Price(PromotionType.ViewPlusCommission, input.ViewPlusCommission),
-            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold), ugc);
+            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold), ugc, input.PromotionLiveDurationDays);
     }
 
     private static Money Amount(decimal value)

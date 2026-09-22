@@ -13,7 +13,7 @@ public sealed class Phase4ViewTests(PostgresFixture fixture)
     {
         var s = await Phase4Scenario.Create(fixture); s.Provider.Count = 9000;
         await using var db = s.Database.Open();
-        var id = await s.Views(db).GoLiveAsync(new(s.Creator, s.AllocationId, "TestProvider", "content-1", "repeat"));
+        var id = await s.Views(db).GoLiveAsync(new(s.Creator, s.AllocationId, "TikTok", "content-1", "repeat"));
         Assert.Equal(s.ParticipationId, id);
         Assert.Equal(1000, (await db.CreatorPromotionParticipations.SingleAsync()).BaselineViews);
         Assert.Single(await db.PromotionViewVerifications.ToListAsync());

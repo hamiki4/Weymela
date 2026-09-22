@@ -25,7 +25,7 @@ internal sealed record Scenario(TestDatabase Database, Actor Business, Guid Prom
             Price(PromotionType.ViewOnly, versionId) with { ViewsPerReward = viewsPerReward },
             Price(PromotionType.ViewPlusCommission, versionId) with { ViewsPerReward = viewsPerReward }, new Money(creatorThreshold), new Money(customerThreshold));
         db.FinancialConfigurationVersions.Add(version);
-        var p = new Promotion(business.BusinessId.Value, "Campaign", "Brief", type, new Money(budget), new(null, null, "ET", "Content"), Now, Now.AddDays(30), (type == PromotionType.ViewOnly ? version.ViewOnly : version.ViewPlusCommission) with { }, Now);
+        var p = new Promotion(business.BusinessId.Value, "Campaign", "Brief", type, new Money(budget), new(null, null, "ET", "Content"), Now, Now.AddDays(30), (type == PromotionType.ViewOnly ? version.ViewOnly : version.ViewPlusCommission) with { }, Now, version.PromotionLiveDurationDays);
         db.Promotions.Add(p);
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         var commands = new FinancialCommands(db);

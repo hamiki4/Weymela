@@ -37,12 +37,8 @@ for (const viewport of viewports)
         [
           "/creator",
           "/creator/discover",
-          "/creator/campaigns",
-          "/creator/requests",
+          "/creator/promotions",
           "/creator/earnings",
-          "/creator/payouts",
-          "/creator/ugc",
-          "/creator/pricing",
         ],
       ],
       [
@@ -65,7 +61,19 @@ for (const viewport of viewports)
     for (const [role, paths] of screens) {
       await login(context, role);
       for (const path of paths) {
-        await open(page, path);
+        if (role === "creator" && path === "/creator/earnings") {
+          await page.goto(path);
+          await expect(
+            page.getByRole("heading", { name: "Earnings", exact: true }),
+          ).toBeVisible();
+          await expect(
+            page.getByRole("status", { name: "Loading workspace" }),
+          ).toHaveCount(0);
+          await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+          await expect(page.getByRole("alert")).toHaveCount(0);
+        } else {
+          await open(page, path);
+        }
         await layout(page);
         await screenshot(
           page,
@@ -137,7 +145,7 @@ for (const viewport of viewports)
         const rows = await (
           await context.request.get("/api/creator/campaigns")
         ).json();
-        await open(page, `/creator/campaigns/${rows[0].budgetId}`);
+        await open(page, `/creator/promotions/${rows[0].budgetId}`);
         await layout(page);
         await screenshot(page, `${viewport.width}-creator-active-detail`);
         const opportunities = await (

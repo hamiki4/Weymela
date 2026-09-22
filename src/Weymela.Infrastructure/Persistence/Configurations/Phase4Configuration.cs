@@ -9,6 +9,7 @@ internal static class Phase4Configuration
     public static void Configure(ModelBuilder model)
     {
         var participation = model.Entity<CreatorPromotionParticipation>(); Mapping.Scalars(participation, "CampaignVerifiedViews");
+        participation.Ignore("ExpiresAtUtc");
         participation.ToTable("CreatorPromotionParticipations", t => t.HasCheckConstraint("CK_Participation_Views",
             "\"BaselineViews\" >= 0 AND \"LatestVerifiedViews\" >= \"BaselineViews\" AND \"RewardedViewCount\" >= 0 AND \"RewardedViewCount\" <= \"LatestVerifiedViews\" - \"BaselineViews\""));
         participation.HasKey(x => x.Id); participation.HasIndex(x => x.CreatorAllocationId).IsUnique();

@@ -12,17 +12,13 @@ import {
 } from "../features/business/BusinessPages";
 import { CreateCampaign } from "../features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
-import { BusinessUgcPage, CreatorUgcPage } from "../features/business/UgcPages";
+import { BusinessUgcPage } from "../features/business/UgcPages";
 import {
-  CreatorDashboard,
-  CreatorDiscovery,
   CreatorEarnings,
-  CreatorHowYouEarn,
   CreatorOpportunity,
-  CreatorRequests,
 } from "../features/creator/CreatorPages";
+import { CreatorDashboard, CreatorDiscover, CreatorPromotions } from "../features/creator/CreatorExperience";
 import {
-  CreatorActiveCampaigns,
   CreatorActiveDetail,
 } from "../features/creator/ActiveCampaigns";
 import {
@@ -165,18 +161,17 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/creator/discover" element={<CreatorDiscovery />} />
+        <Route path="/creator/discover" element={<CreatorDiscover />} />
         <Route path="/creator/discover/:id" element={<CreatorOpportunity />} />
-        <Route path="/creator/campaigns" element={<CreatorActiveCampaigns />} />
-        <Route
-          path="/creator/campaigns/:id"
-          element={<CreatorActiveDetail />}
-        />
-        <Route path="/creator/requests" element={<CreatorRequests />} />
-        <Route path="/creator/pricing" element={<CreatorHowYouEarn />} />
-        <Route path="/creator/ugc" element={<CreatorUgcPage />} />
+        <Route path="/creator/promotions" element={<CreatorPromotions />} />
+        <Route path="/creator/promotions/:id" element={<CreatorActiveDetail />} />
+        <Route path="/creator/campaigns" element={<Navigate to="/creator/promotions" replace />} />
+        <Route path="/creator/campaigns/:id" element={<CreatorActiveDetail />} />
+        <Route path="/creator/requests" element={<Navigate to="/creator/promotions" replace />} />
+        <Route path="/creator/pricing" element={<Navigate to="/creator/earnings#how-you-earn" replace />} />
+        <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
         <Route path="/creator/earnings" element={<CreatorEarnings />} />
-        <Route path="/creator/payouts" element={<CreatorEarnings payout />} />
+        <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
       </Route>
       <Route
         element={

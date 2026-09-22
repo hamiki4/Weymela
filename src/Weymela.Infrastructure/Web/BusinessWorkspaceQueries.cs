@@ -30,7 +30,7 @@ public sealed partial class WorkspaceQueries
     public async Task<BusinessPricing> BusinessPricingAsync(Actor actor,CancellationToken ct)
     {
         await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
-        return new([BusinessPrice(v.ViewOnly),BusinessPrice(v.ViewPlusCommission)],v.EffectiveFromUtc);
+        return new([BusinessPrice(v.ViewOnly),BusinessPrice(v.ViewPlusCommission)],v.EffectiveFromUtc,v.PromotionLiveDurationDays);
     }
     public async Task<UgcPricing> UgcPricingAsync(Actor actor,CancellationToken ct)
     {

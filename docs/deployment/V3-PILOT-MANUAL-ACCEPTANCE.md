@@ -49,8 +49,8 @@
 ## Customer
 
 - [ ] Only active View + Commission offers; View Only invisible and server rejects commerce attempts.
-- [ ] Business/Creator/cashback,Watch Promotion,Get Directions,Get Offer QR; no internal financial details/private contacts.
-- [ ] Offer page: working Back,Business name,Promoted by Creator,cashback,Get Offer QR; no redundant Promotion/Creator wording.
+- [ ] Business/Creator/cashback,Watch Promotion,Get Directions,Get Offer; no internal financial details/private contacts.
+- [ ] Offer page: working Back,Business name,Promoted by Creator,cashback,Get Offer; no redundant Promotion/Creator wording.
 - [ ] Generated QR shows opaque token only,5-minute countdown,show-to-cashier text; replacement after expiry creates new token/history.
 - [ ] Another Customer cannot access QR/history/cashback. Verified purchase cashback accumulates immediately; threshold carry-forward correct.
 
@@ -68,7 +68,7 @@
 
 Repeat all camera checks on **iPhone Safari**, **installed iPhone PWA**, **Android Chrome**, **installed Android PWA**, **desktop webcam**. Record exact hardware/OS/browser versions.
 
-- [ ] HTTPS and actual delivered `Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()`; no conflicting edge header.
+- [ ] HTTPS and actual delivered `Permissions-Policy: camera=(self), microphone=(), geolocation=(self), payment=(), usb=()`; no conflicting edge header.
 - [ ] First permission grant,deny,deny→browser settings→allow; clear denied/unavailable/in-use states without a blank screen.
 - [ ] Rear/front camera where available; portrait/landscape; scan full-frame center and edges. Visual guide must not crop decoder input.
 - [ ] Navigate away/back,background/foreground,lock/unlock,close modal; no leaked stream/camera indicator after exit.

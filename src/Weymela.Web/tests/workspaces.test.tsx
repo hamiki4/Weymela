@@ -32,9 +32,19 @@ import { AdminPayouts } from "../src/features/admin/Payouts";
 import {
   CustomerOffers,
   CustomerOfferQr,
+  CustomerTransactions,
+  CustomerCashback,
 } from "../src/features/commerce/CustomerPages";
 import { Checkout } from "../src/features/commerce/Checkout";
-import { campaign, detail, earnings, mockApi, wallet } from "./fixtures";
+import {
+  campaign,
+  detail,
+  earnings,
+  mockApi,
+  offer,
+  ugcCustomerOffer,
+  wallet,
+} from "./fixtures";
 vi.mock("../src/app/Session", () => ({
   useSession: () => ({ user: { developmentMode: true, role: "Business" } }),
 }));
@@ -446,16 +456,132 @@ describe("Admin workspace", () => {
 });
 
 describe("Accepted commerce compatibility", () => {
-  it("preserves cashback, directions, video and Get Offer QR", async () => {
+  it("renders the safe Customer offer projection with cashback, directions and video", async () => {
+    const api = mockApi();
     mount(<CustomerOffers />);
     expect(
-      await screen.findByRole("link", { name: "Get Offer QR" }),
+      await screen.findByRole("link", { name: "Get Offer" }),
     ).toBeVisible();
-    expect(screen.getByText("2% Cashback")).toBeVisible();
+    expect(screen.getByText("2% cashback")).toBeVisible();
+    expect(screen.getByText("Good coffee, thoughtful stories.")).toBeVisible();
+    expect(screen.getByText("By Bella")).toBeVisible();
     expect(screen.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Get Directions" })).toBeVisible();
+    expect(screen.queryByText("CAM-100")).not.toBeInTheDocument();
+    expect(screen.queryByText("creator")).not.toBeInTheDocument();
+    expect(screen.queryByText(/wallet|platform revenue|commission|budget/i)).not.toBeInTheDocument();
+    expect(api.fetch.mock.calls.some(([path]) => path === "/api/customer/offers")).toBe(true);
+  });
+  it("renders a UGC Customer Offer without inventing Creator attribution", async () => {
+    mockApi({ "/customer/offers": [ugcCustomerOffer] });
+    mount(<CustomerOffers />);
+    expect(await screen.findByText("Save on your next visit")).toBeVisible();
+    expect(screen.getByText("5% off")).toBeVisible();
+    expect(screen.getByText("Customer offer")).toBeVisible();
+    expect(screen.queryByText(/By /)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Get Directions" })).not.toBeInTheDocument();
+  });
+  it("only renders optional promotion links when the API provides safe URLs", async () => {
+    mockApi({
+      "/customer/offers": [{ ...offer, watchUrl: null, business: { ...offer.business, directionsUrl: null } }],
+    });
+    mount(<CustomerOffers />);
+    await screen.findByRole("link", { name: "Get Offer" });
+    expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Get Directions" })).not.toBeInTheDocument();
+  });
+  it("keeps Discover on the same eligible Customer offer API and filters safely", async () => {
+    mockApi({ "/customer/offers": [offer, ugcCustomerOffer] });
+    mount(<CustomerOffers discover />);
+    expect(await screen.findByRole("heading", { name: "Discover Promotions" })).toBeVisible();
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "Customer offers" }));
+    expect(screen.getByText("Bella Beauty")).toBeVisible();
+    expect(screen.queryByText("Abc Coffee")).not.toBeInTheDocument();
+  });
+  it("requests location only after an explicit tap and keeps offers when permission is denied", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+    const getCurrentPosition = vi.fn((_success: unknown, failure: (error: unknown) => void) =>
+      failure({ code: 1, PERMISSION_DENIED: 1 }));
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+    sessionStorage.removeItem("weymela.customer-location");
+    try {
+      mockApi({ "/customer/offers": [offer] });
+      mount(<CustomerOffers discover />);
+      expect(await screen.findByRole("heading", { name: "Abc Coffee" })).toBeVisible();
+      expect(getCurrentPosition).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole("button", { name: "Use Location" }));
+      expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText("Location access is off. You can still browse and filter promotions by location.")).toBeVisible();
+      expect(screen.getByRole("heading", { name: "Abc Coffee" })).toBeVisible();
+    } finally {
+      if (original) Object.defineProperty(navigator, "geolocation", original);
+      else Reflect.deleteProperty(navigator, "geolocation");
+    }
+  });
+  it("renders authoritative View + Sale and UGC transactions without merging their benefits", async () => {
+    mockApi({
+      "/customer/transactions": [
+        {
+          source: "VIEW_AND_SALE_PROMOTION", offer: "Coffee stories", business: "Abc Coffee",
+          creator: "Bella", purchaseAmount: { amount: 1000, currency: "ETB" },
+          customerPaidAmount: null, cashbackEarned: { amount: 40, currency: "ETB" },
+          discountReceived: null, purchasedAtUtc: "2026-09-22T10:00:00Z",
+        },
+        {
+          source: "UGC_CUSTOMER_OFFER", offer: "Save on your next visit", business: "Bella Beauty",
+          creator: null, purchaseAmount: { amount: 1000, currency: "ETB" },
+          customerPaidAmount: { amount: 950, currency: "ETB" }, cashbackEarned: null,
+          discountReceived: { amount: 50, currency: "ETB" }, purchasedAtUtc: "2026-09-21T10:00:00Z",
+        },
+      ],
+    });
+    const rendered = mount(<CustomerTransactions />);
+    expect(await screen.findByText("Cashback earned")).toBeVisible();
+    expect(screen.getByText("Promoted by Bella")).toBeVisible();
+    expect(screen.getByText("Original purchase")).toBeVisible();
+    expect(screen.getByText("Discount")).toBeVisible();
+    const cards = rendered.container.querySelectorAll(".customer-transaction-card");
+    expect(within(cards[1] as HTMLElement).getByText("Paid")).toBeVisible();
+    expect(cards[0]).toHaveTextContent("Abc Coffee");
+    expect(cards[1]).toHaveTextContent("Bella Beauty");
+    expect(cards[1]).not.toHaveTextContent("Promoted by");
+    expect(rendered.container).not.toHaveTextContent(/creatorId|businessId|commission|journal/i);
+  });
+  it("loads cashback balance, threshold and payout history from its safe projection", async () => {
+    mockApi({
+      "/customer/cashback": {
+        availableCashback: { amount: 2800, currency: "ETB" },
+        minimumCashOut: { amount: 4000, currency: "ETB" },
+        remainingToCashOut: { amount: 1200, currency: "ETB" },
+        eligible: false,
+        status: "BelowThreshold",
+        payoutHistory: [{ amount: { amount: 5000, currency: "ETB" }, status: "Paid", eligibleAtUtc: "2026-09-20T10:00:00Z", paidAtUtc: "2026-09-21T10:00:00Z" }],
+      },
+    });
+    const rendered = mount(<CustomerCashback />);
+    expect(await screen.findByText("Available Cashback")).toBeVisible();
+    expect(screen.getByText("2,800")).toBeVisible();
+    expect(screen.getByText("4,000")).toBeVisible();
+    expect(screen.getByText("1,200 remaining to cash out.")).toBeVisible();
+    expect(screen.getByText("Paid out")).toBeVisible();
+    expect(rendered.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "70");
+    expect(rendered.container).not.toHaveTextContent(/journal|customerId|reference/i);
+  });
+  it("shows empty transaction and payout histories", async () => {
+    mockApi();
+    const rendered = mount(<CustomerTransactions />);
+    expect(await screen.findByText("No transactions yet")).toBeVisible();
+    rendered.unmount();
+    mount(<CustomerCashback />);
+    expect(await screen.findByText("No payouts recorded yet")).toBeVisible();
   });
   it("renders the simple QR page with working Back destination", async () => {
+    const api = mockApi();
     mount(
       <CustomerOfferQr />,
       "/customer/offers/offer",
@@ -466,14 +592,13 @@ describe("Accepted commerce compatibility", () => {
       "href",
       "/customer/offers",
     );
-    expect(
-      screen.queryByText(/selected creator|Creator promotion/),
-    ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Get Offer QR" }));
+    expect(screen.queryByText(/selected creator|Creator promotion/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Get Offer" }));
     expect(
       await screen.findByRole("img", { name: "Offer QR for the cashier" }),
     ).toBeVisible();
     expect(screen.getByText("Show this QR to the cashier.")).toBeVisible();
+    expect(api.writes[0]?.path).toBe("/customer/offers/offer/qr");
   });
   it("provides scanner and a clearly unavailable manual lookup shell", () => {
     mount(<Checkout />);

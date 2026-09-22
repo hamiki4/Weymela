@@ -48,7 +48,7 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
             'V3__AllowedOrigins__0': 'https://pilot.weymela.com',
             'V3__PublicWebUrl': 'https://pilot.weymela.com',
             'V3__PublicApiUrl': 'https://pilot.weymela.com',
-            'V3__Security__CameraPolicy': 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()',
+            'V3__Security__CameraPolicy': 'camera=(self), microphone=(), geolocation=(self), payment=(), usb=()',
             'V3__Security__TlsEdgeConfirmed': 'true',
             'V3__FinancialWritesEnabled': 'false',
             'V3__Deposits__Mode': 'ManualApproval',

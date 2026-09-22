@@ -44,8 +44,11 @@ const navigation: Record<Role, [string, string, string][]> = {
   ],
   OperationsAdmin: [],
   Customer: [
-    ["/customer/offers", "Offers for you", "sparkle"],
-    ["/customer/history", "Your Cashback", "wallet"],
+    ["/customer/offers", "Home", "home"],
+    ["/customer/discover", "Discover", "search"],
+    ["/customer/transactions", "Transactions", "document"],
+    ["/customer/cashback", "Cashback", "wallet"],
+    ["/onboarding", "Profile", "people"],
   ],
   Cashier: [["/checkout", "Checkout", "qr"]],
   Onboarding: [],
@@ -99,8 +102,17 @@ export function Shell({ children }: { children?: ReactNode }) {
     user.role === "Customer" ||
     user.role === "Creator" ||
     user.role === "Business";
-  const mobileItems = items.slice(0, 3);
-  const overflowItems = items.slice(3);
+  const mobileItems = user.role === "Customer" ? items : items.slice(0, 3);
+  const overflowItems = user.role === "Customer" ? [] : items.slice(3);
+  const itemIsActive = (to: string, isActive: boolean) =>
+    isActive ||
+    (to === "/customer/offers" && location.pathname.startsWith("/customer/offers")) ||
+    (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`));
+  const closeAccountMenu = () => accountMenu.current?.close();
+  const openAccountMenu = () => {
+    moreMenu.current?.close();
+    accountMenu.current?.showModal();
+  };
   const renderNavigation = (
     entries: [string, string, string][],
     ariaLabel: string,
@@ -113,7 +125,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           end
           key={to}
           className={({ isActive }) =>
-            `nav-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`
+            `nav-link ${itemIsActive(to, isActive) ? "active" : ""}`
           }
           onClick={onNavigate}
         >
@@ -123,7 +135,6 @@ export function Shell({ children }: { children?: ReactNode }) {
       ))}
     </nav>
   );
-  const closeAccountMenu = () => accountMenu.current?.close();
   const openMoreMenu = () => {
     closeAccountMenu();
     moreMenu.current?.showModal();
@@ -241,6 +252,11 @@ export function Shell({ children }: { children?: ReactNode }) {
       )}
       <div className="workspace">
         <header className="topbar">
+          {user.role === "Customer" && (
+            <Link className="topbar-brand" to="/customer/offers" aria-label="Weymela Customer home">
+              <Brand />
+            </Link>
+          )}
           <span className="workspace-label">
             {roles[user.role]} <span className="muted">/ Weymela</span>
           </span>
@@ -261,10 +277,7 @@ export function Shell({ children }: { children?: ReactNode }) {
               aria-label="Open account menu"
               aria-haspopup="dialog"
               aria-controls="account-menu"
-              onClick={() => {
-                moreMenu.current?.close();
-                accountMenu.current?.showModal();
-              }}
+              onClick={openAccountMenu}
             >
               <span className="small-avatar" aria-hidden="true">
                 {user.displayName.slice(0, 1)}
@@ -277,19 +290,34 @@ export function Shell({ children }: { children?: ReactNode }) {
           {children ?? <Outlet />}
         </main>
         <nav className="mobile-role-nav" aria-label="Mobile navigation">
-          {mobileItems.map(([to, label, icon]) => (
-            <NavLink
-              key={to}
-              to={to}
-              end
-              className={({ isActive }) =>
-                `mobile-role-link ${isActive || (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`)) ? "active" : ""}`
-              }
-            >
-              <Icon name={icon} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
+          {mobileItems.map(([to, label, icon]) =>
+            user.role === "Customer" && label === "Profile" ? (
+              <button
+                key={to}
+                type="button"
+                className="mobile-role-link"
+                aria-label="Profile"
+                aria-haspopup="dialog"
+                aria-controls="account-menu"
+                onClick={openAccountMenu}
+              >
+                <Icon name={icon} />
+                <span>{label}</span>
+              </button>
+            ) : (
+              <NavLink
+                key={to}
+                to={to}
+                end
+                className={({ isActive }) =>
+                  `mobile-role-link ${itemIsActive(to, isActive) ? "active" : ""}`
+                }
+              >
+                <Icon name={icon} />
+                <span>{label}</span>
+              </NavLink>
+            ),
+          )}
           {overflowItems.length > 0 && (
             <button
               type="button"

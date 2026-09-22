@@ -16,7 +16,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
         context.Response.Headers["X-Correlation-ID"]=correlation;
         using var scope=logger.BeginScope(new Dictionary<string,object>{{"CorrelationId",correlation}});
         context.Response.Headers["X-Content-Type-Options"]="nosniff";context.Response.Headers["Referrer-Policy"]="no-referrer";
-        context.Response.Headers["Permissions-Policy"]="camera=(self), microphone=(), geolocation=(), payment=(), usb=()";
+        context.Response.Headers["Permissions-Policy"]="camera=(self), microphone=(), geolocation=(self), payment=(), usb=()";
         var productFormOrigin = productIntegration.Enabled
             ? " " + new Uri(productIntegration.BeginUrl).GetLeftPart(UriPartial.Authority)
             : "";

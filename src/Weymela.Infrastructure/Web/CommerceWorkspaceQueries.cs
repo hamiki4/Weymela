@@ -54,16 +54,16 @@ public sealed partial class WorkspaceQueries
                 var a=await db.CreatorAllocations.AsNoTracking().SingleAsync(x=>x.Id==offer.OfferId,ct);
                 var live=await db.CreatorPromotionParticipations.AsNoTracking().SingleAsync(x=>x.CreatorAllocationId==a.Id,ct);
                 var profile=await directory.CreatorCardAsync(a.CreatorId,ct);
-                var business=await directory.BusinessCardAsync(offer.Business.Id,ct);
+                var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
                 var content=PublicContentUrl(live.Provider,live.ExternalContentId);
-                result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl),
+                result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
                     new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location));
             }
             else
             {
-                var business=await directory.BusinessCardAsync(offer.Business.Id,ct);
+                var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
                 result.Add(new(offer.OfferId,offer.Source,offer.Offer,
-                    new(business.DisplayName,business.DirectionsUrl),null,offer.BenefitPercent,null,offer.Slogan,offer.Location));
+                    new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),null,offer.BenefitPercent,null,offer.Slogan,offer.Location));
             }
         }
         return result;

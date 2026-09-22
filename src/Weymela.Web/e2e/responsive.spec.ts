@@ -59,7 +59,7 @@ for (const viewport of viewports)
           "/admin/audit",
         ],
       ],
-      ["customer", ["/customer/offers", "/customer/history"]],
+      ["customer", ["/customer/offers", "/customer/discover", "/customer/transactions", "/customer/cashback"]],
       ["cashier", ["/checkout"]],
     ];
     for (const [role, paths] of screens) {
@@ -155,7 +155,7 @@ for (const viewport of viewports)
         await layout(page);
         await screenshot(page, `${viewport.width}-customer-offer`);
         await page
-          .getByRole("button", { name: "Get Offer QR", exact: true })
+          .getByRole("button", { name: "Get Offer", exact: true })
           .click();
         await expect(
           page.getByRole("img", { name: "Offer QR for the cashier" }),

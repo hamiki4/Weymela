@@ -139,6 +139,11 @@ public sealed class PersistentWorkspaceDirectory(WeymelaDbContext db) : IWorkspa
         ?? throw new ApplicationFailure(FailureKind.NotFound, "The public workspace profile is unavailable.");
     public async Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct)
     { var p = await Profile(id, ActorRole.Business, ct); return new(id, p.DisplayName, p.Region, SafeUrl(p.DirectionsUrl)); }
+    public async Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken ct)
+    {
+        var p = await Profile(id, ActorRole.Business, ct);
+        return new(p.DisplayName, SafeUrl(p.DirectionsUrl), p.Latitude, p.Longitude);
+    }
     public async Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct)
     { var p = await Profile(id, ActorRole.Creator, ct); return new(id, p.DisplayName, p.PublicId, p.Region, p.Category, p.VerifiedFollowers, p.VerifiedViews, p.SocialVerified, SafeUrl(p.PortfolioUrl)); }
     public async Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken ct)

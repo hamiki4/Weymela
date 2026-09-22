@@ -209,12 +209,35 @@ export const payouts = {
 };
 export const offer = {
   id: "offer",
-  campaignId: "campaign",
-  campaign: "Coffee stories",
-  business,
-  creator,
-  cashbackPercent: 2,
+  source: "VIEW_AND_SALE_PROMOTION",
+  offer: "Coffee stories",
+  business: {
+    displayName: business.displayName,
+    directionsUrl: business.directionsUrl,
+    latitude: null,
+    longitude: null,
+  },
+  creator: { displayName: creator.displayName },
+  benefitPercent: 2,
   watchUrl: "https://www.tiktok.com/@creator/video/7611111111111111111",
+  slogan: "Good coffee, thoughtful stories.",
+  location: "Addis Ababa",
+};
+export const ugcCustomerOffer = {
+  id: "ugc-offer",
+  source: "UGC_CUSTOMER_OFFER",
+  offer: "Save on your next visit",
+  business: {
+    displayName: "Bella Beauty",
+    directionsUrl: null,
+    latitude: null,
+    longitude: null,
+  },
+  creator: null,
+  benefitPercent: 5,
+  watchUrl: null,
+  slogan: "Save on your next visit",
+  location: "Addis Ababa",
 };
 export const routes: Record<string, unknown> = {
   "/business/home": {
@@ -314,7 +337,15 @@ export const routes: Record<string, unknown> = {
   "/admin/notifications": [],
   "/admin/audit": [],
   "/customer/offers": [offer],
-  "/customer/history": [],
+  "/customer/transactions": [],
+  "/customer/cashback": {
+    availableCashback: { amount: 0, currency: "ETB" },
+    minimumCashOut: { amount: 0, currency: "ETB" },
+    remainingToCashOut: { amount: 0, currency: "ETB" },
+    eligible: false,
+    status: "BelowThreshold",
+    payoutHistory: [],
+  },
 };
 export function mockApi(overrides: Record<string, unknown> = {}) {
   const data = { ...routes, ...overrides };

@@ -13,6 +13,7 @@ public sealed record CreatorCard(Guid Id, string DisplayName, string PublicId, s
 public interface IWorkspaceDirectory : IPublicIdentityDirectory
 {
     Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct);
+    Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken ct);
     Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct);
     Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken ct);
 }
@@ -83,7 +84,8 @@ public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name,
     DateTime? EligibleSinceUtc, string Status);
 public sealed record PayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers,
     decimal PlatformAccrued, decimal PlatformSettled, decimal PlatformUnsettled, IReadOnlyList<PayoutItem> History);
-public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl);
+public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl,
+    decimal? Latitude = null, decimal? Longitude = null);
 public sealed record CustomerOfferCreator(string DisplayName);
 public sealed record CustomerOfferCard(Guid Id, string Source, string Offer, CustomerOfferBusiness Business,
     CustomerOfferCreator? Creator, decimal BenefitPercent, string? WatchUrl, string? Slogan = null, string? Location = null);

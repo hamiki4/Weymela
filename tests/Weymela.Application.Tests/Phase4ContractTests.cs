@@ -19,7 +19,10 @@ public sealed class Phase4ContractTests
     [Fact] public void Customer_projection_cannot_expose_budgets_commission_or_platform_revenue()
     { Assert.Equal(new[]{"OfferId","Source","Offer","Business","Creator","BenefitPercent","Slogan","Location","CashbackPercent"},typeof(CustomerOffer).GetProperties().Select(x=>x.Name)); }
     [Fact] public void Customer_history_projection_contains_only_customer_relevant_purchase_and_cashback()
-    { Assert.Equal(new[]{"SaleId","Campaign","Business","Creator","PurchaseAmount","Cashback","PurchasedAtUtc"},typeof(CustomerPurchase).GetProperties().Select(x=>x.Name)); }
+    {
+        Assert.Equal(new[]{"Source","Offer","Business","Creator","PurchaseAmount","CustomerPaidAmount","CashbackEarned","DiscountReceived","PurchasedAtUtc"},typeof(CustomerTransaction).GetProperties().Select(x=>x.Name));
+        Assert.Equal(new[]{"AvailableCashback","MinimumCashOut","RemainingToCashOut","Eligible","Status","PayoutHistory"},typeof(CustomerCashbackSummary).GetProperties().Select(x=>x.Name));
+    }
     [Fact] public void Creator_projection_contains_only_own_budget_views_and_earnings()
     { Assert.Equal(new[]{"PromotionId","Campaign","Type","YourBudget","BudgetRemaining","VerifiedViews","ViewEarnings","SaleCommissionEarnings","Status"},typeof(CreatorCampaignFinance).GetProperties().Select(x=>x.Name)); }
     [Fact] public void Business_projection_has_total_sale_cost_but_no_internal_earnings_split()

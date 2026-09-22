@@ -7,7 +7,7 @@ namespace Weymela.Infrastructure.Operations;
 
 public sealed class RuntimeOptions
 {
-    public const string CameraPolicy = "camera=(self), microphone=(), geolocation=(), payment=(), usb=()";
+    public const string CameraPolicy = "camera=(self), microphone=(), geolocation=(self), payment=(), usb=()";
     public bool Development { get; init; }
     public string EnvironmentName { get; init; } = "Development";
     public bool DevelopmentIdentity { get; init; }

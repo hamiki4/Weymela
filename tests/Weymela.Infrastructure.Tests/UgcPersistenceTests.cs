@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
@@ -114,12 +115,14 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     {
         var state = await Setup();
         var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var otherCustomer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
         var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
         IssuedOfferQr qr;
         await using (var db = state.Database.Open())
         {
             db.CommercePermissions.AddRange(
                 new CommercePermission(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
+                new CommercePermission(otherCustomer.UserId, ActorRole.Customer, otherCustomer.CustomerId!.Value, null, true, false),
                 new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
             await db.SaveChangesAsync();
             var ugc = new UgcService(db, new FixedTime(Now));
@@ -150,6 +153,21 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(5520m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
         Assert.Equal(7170m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
         Assert.Equal(OfferQrStatus.Used, (await verify.OfferQrSessions.SingleAsync()).Status);
+        var queries = new FinancialQueries(verify, new CommerceAccessPolicy(verify),
+            new PersistentWorkspaceDirectory(verify), new FixedTime(Now));
+        var transaction = Assert.Single(await queries.CustomerTransactionsAsync(customer, default));
+        Assert.Equal("UGC_CUSTOMER_OFFER", transaction.Source);
+        Assert.Equal("Save on your next visit", transaction.Offer);
+        Assert.Equal("Bella Beauty", transaction.Business);
+        Assert.Null(transaction.Creator);
+        Assert.Equal(1000m, transaction.PurchaseAmount.Amount);
+        Assert.Equal(950m, transaction.CustomerPaidAmount!.Value.Amount);
+        Assert.Equal(50m, transaction.DiscountReceived!.Value.Amount);
+        Assert.Null(transaction.CashbackEarned);
+        Assert.Empty(await queries.CustomerTransactionsAsync(otherCustomer, default));
+        var json = JsonSerializer.Serialize(transaction);
+        foreach (var internalField in new[] { "CreatorId", "BusinessId", "CreatorAllocationId", "Commission", "Platform", "JournalId", "CorrelationId", "IdempotencyKey" })
+            Assert.DoesNotContain(internalField, json);
     }
 
     [Fact]
@@ -215,6 +233,10 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             CustomerOfferEndsAtUtc = Now.AddDays(7)
         }, "visible-create", default);
         await ugc.PublishAsync(state.Business, visible, 0, "visible-publish", default);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE v3."PublicWorkspaceProfiles" SET "Latitude"={9.01m}, "Longitude"={38.72m}
+            WHERE "SubjectId"={state.Business.BusinessId} AND "Role"='Business'
+            """);
 
         var cards = await new WorkspaceQueries(db, new PersistentWorkspaceDirectory(db), new FixedTime(Now))
             .OffersAsync(customer, default);
@@ -226,6 +248,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(5m, card.BenefitPercent);
         Assert.Null(card.Creator);
         Assert.Null(card.WatchUrl);
+        Assert.Equal(9.01m, card.Business.Latitude);
+        Assert.Equal(38.72m, card.Business.Longitude);
         Assert.DoesNotContain("Internal", card.Offer, StringComparison.Ordinal);
     }
 

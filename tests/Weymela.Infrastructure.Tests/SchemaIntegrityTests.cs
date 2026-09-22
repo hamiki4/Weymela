@@ -20,7 +20,10 @@ public sealed class SchemaIntegrityTests(PostgresFixture fixture)
         var implicitNumeric = await db.Database.SqlQueryRaw<int>("""
             SELECT count(*)::int AS "Value" FROM information_schema.columns
             WHERE table_schema='v3' AND data_type='numeric'
-              AND NOT ((numeric_precision=18 AND numeric_scale=2) OR (numeric_precision=9 AND numeric_scale=4))
+              AND NOT ((numeric_precision=18 AND numeric_scale=2)
+                OR (numeric_precision=9 AND numeric_scale=4)
+                OR (table_name='PublicWorkspaceProfiles' AND column_name IN ('Latitude','Longitude')
+                    AND numeric_precision=9 AND numeric_scale=6))
             """).SingleAsync();
         Assert.True(money >= 30); Assert.Equal(0, implicitNumeric);
     }

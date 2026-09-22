@@ -49,8 +49,12 @@ describe("Phase 3 multi-profile shell", () => {
     }
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
     if (role === "Customer") {
-      expect(within(mobile).getByRole("link", { name: "Offers for you" })).toBeInTheDocument();
-      expect(within(mobile).getByRole("link", { name: "Your Cashback" })).toBeInTheDocument();
+      expect(within(mobile).getByRole("link", { name: "Home" })).toBeInTheDocument();
+      expect(within(mobile).getByRole("link", { name: "Discover" })).toBeInTheDocument();
+      expect(within(mobile).getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/customer/transactions");
+      expect(within(mobile).getByRole("link", { name: "Cashback" })).toBeInTheDocument();
+      expect(within(mobile).getAllByRole("link")).toHaveLength(4);
+      expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
       expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
     } else {
       expect(within(mobile).getByRole("button", { name: "More navigation" })).toBeInTheDocument();
@@ -66,10 +70,18 @@ describe("Phase 3 multi-profile shell", () => {
     expect(new Set(ids).size).toBe(2);
     expect(document.querySelector(".profile-switcher option")?.getAttribute("value")).toBe("0");
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
-    expect(within(mobile).getByRole("link", { name: /Offers for you/ })).toHaveAttribute("href", "/customer/offers");
-    expect(within(mobile).getByRole("link", { name: "Your Cashback" })).toHaveAttribute("href", "/customer/history");
+    expect(within(mobile).getByRole("link", { name: "Home" })).toHaveAttribute("href", "/customer/offers");
+    expect(within(mobile).getByRole("link", { name: "Discover" })).toHaveAttribute("href", "/customer/discover");
+    expect(within(mobile).getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/customer/transactions");
+    expect(within(mobile).getByRole("link", { name: "Cashback" })).toHaveAttribute("href", "/customer/cashback");
+    expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
     expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
+    await userEvent.click(within(mobile).getByRole("button", { name: "Profile" }));
+    const profileMenu = screen.getByRole("dialog", { name: "Account menu", hidden: true });
+    expect(within(profileMenu).getByLabelText("Switch profile")).toBeInTheDocument();
+    expect(within(profileMenu).getByRole("link", { name: "Add a profile", hidden: true })).toHaveAttribute("href", "/onboarding");
     const account = screen.getByRole("button", { name: "Open account menu" });
+    await userEvent.click(within(profileMenu).getByRole("button", { name: "Close account menu", hidden: true }));
     account.focus();
     await userEvent.keyboard("{Enter}");
     const menu = screen.getByRole("dialog", { name: "Account menu", hidden: true });

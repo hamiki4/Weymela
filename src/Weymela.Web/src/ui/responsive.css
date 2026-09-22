@@ -307,6 +307,87 @@
   .offer-page .back-link {
     margin-bottom: 12px;
   }
+  .topbar-brand .brand-wordmark {
+    width: 88px;
+  }
+  .customer-home-hero {
+    align-items: flex-start;
+    padding: 25px 21px;
+    border-radius: 20px;
+  }
+  .customer-location-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+  .customer-location-card .customer-location-copy {
+    flex-basis: calc(100% - 64px);
+  }
+  .customer-location-card > .button {
+    flex: 1 1 100%;
+  }
+  .customer-hero-mark {
+    width: 52px;
+    height: 52px;
+    border-radius: 17px;
+  }
+  .customer-filter-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .customer-search-control {
+    grid-column: 1 / -1;
+  }
+  .customer-filter-control {
+    padding-inline: 9px;
+  }
+  .customer-filter-control select {
+    width: 100%;
+    font-size: 0.72rem;
+  }
+  .customer-filter-control input {
+    width: 100%;
+    min-width: 0;
+  }
+  .role-customer .mobile-role-link {
+    font-size: 0.6rem;
+  }
+  .role-customer .mobile-role-link svg {
+    width: 18px;
+    height: 18px;
+  }
+  .customer-location-off-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .customer-location-off-note .button {
+    width: 100%;
+  }
+  .customer-transaction-card,
+  .customer-cashback-summary,
+  .customer-payout-history {
+    padding: 16px;
+  }
+  .customer-cashback-summary {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .customer-transaction-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .customer-offer-section-heading {
+    align-items: flex-start;
+  }
+  .customer-promotion-card {
+    padding: 17px;
+  }
+  .customer-promotion-actions .button {
+    flex: 1 1 auto;
+  }
+  .customer-promotion-actions .primary {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
 }
 .desktop-data {
   display: none;

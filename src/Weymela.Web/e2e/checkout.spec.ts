@@ -8,13 +8,13 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await login(context, "customer");
   await open(page, "/customer/offers");
   await page
-    .getByRole("link", { name: "Get Offer QR", exact: true })
+    .getByRole("link", { name: "Get Offer", exact: true })
     .first()
     .click();
   const issuing = page.waitForResponse(
     (r) => r.url().endsWith("/qr") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
   const qr = await (await issuing).json();
   await expect(
     page.getByRole("img", { name: "Offer QR for the cashier" }),
@@ -50,6 +50,11 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   ).json();
   expect(status.status).toBe("Used");
   await open(page, "/customer/history");
+  await expect(page).toHaveURL(/\/customer\/transactions$/);
+  await open(page, "/customer/transactions");
+  await expect(page.locator("main")).toContainText("Abc Coffee");
+  await expect(page.locator("main")).toContainText("Cashback earned");
+  await open(page, "/customer/cashback");
   await expect(page.locator("main")).toContainText("Cashback");
   expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
 });
@@ -61,10 +66,10 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
   await login(context, "customer");
   await open(page, "/customer/offers");
   await page
-    .getByRole("link", { name: "Get Offer QR", exact: true })
+    .getByRole("link", { name: "Get Offer", exact: true })
     .first()
     .click();
-  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
   const image = page.getByRole("img", { name: "Offer QR for the cashier" });
   await expect(image).toBeVisible();
   const src = await image.getAttribute("src");

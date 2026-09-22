@@ -108,18 +108,61 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
         return result;
     }
 
-    public async Task<IReadOnlyList<CustomerPurchase>> CustomerHistoryAsync(Actor actor, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CustomerTransaction>> CustomerTransactionsAsync(Actor actor, CancellationToken ct = default)
     {
         await access.EnsureCustomerAsync(actor,ct);
-        var sales = await db.VerifiedSales.AsNoTracking().Where(x => x.CustomerId == actor.CustomerId).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
-        var result = new List<CustomerPurchase>();
-        foreach(var sale in sales)
+        var customerId = actor.CustomerId!.Value;
+        var result = new List<CustomerTransaction>();
+        var sales = await db.VerifiedSales.AsNoTracking().Where(x => x.CustomerId == customerId).ToListAsync(ct);
+        foreach (var sale in sales)
         {
             var title = await db.Promotions.Where(x => x.Id == sale.PromotionId).Select(x => x.Title).SingleAsync(ct);
-            result.Add(new(sale.Id,title,await directory.BusinessAsync(sale.BusinessId,ct),await directory.CreatorAsync(sale.CreatorId,ct),
-                sale.PurchaseAmount,sale.CustomerCashbackAmount,sale.CreatedAtUtc));
+            var business = await directory.BusinessAsync(sale.BusinessId, ct);
+            var creator = await directory.CreatorAsync(sale.CreatorId, ct);
+            result.Add(new("VIEW_AND_SALE_PROMOTION", title, business.DisplayName, creator.DisplayName,
+                sale.PurchaseAmount, null, sale.CustomerCashbackAmount, null, sale.CreatedAtUtc));
         }
-        return result;
+
+        var ugcSales = await db.UgcCustomerOfferSales.AsNoTracking()
+            .Where(x => x.CustomerId == customerId).ToListAsync(ct);
+        var offerIds = ugcSales.Select(x => x.UgcCustomerOfferId).Distinct().ToArray();
+        var offers = await db.UgcCustomerOffers.AsNoTracking().Where(x => offerIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
+        foreach (var sale in ugcSales)
+        {
+            if (!offers.TryGetValue(sale.UgcCustomerOfferId, out var offer)) continue;
+            var business = await directory.BusinessAsync(sale.BusinessId, ct);
+            var label = offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off";
+            result.Add(new("UGC_CUSTOMER_OFFER", label, business.DisplayName, null,
+                sale.PurchaseAmount, sale.CustomerPaysAmount, null, sale.CustomerDiscountAmount,
+                sale.CreatedAtUtc));
+        }
+
+        return result.OrderByDescending(x => x.PurchasedAtUtc).ToArray();
+    }
+
+    // Kept as a compatibility alias; both routes use the same normalized projection.
+    public Task<IReadOnlyList<CustomerTransaction>> CustomerHistoryAsync(Actor actor, CancellationToken ct = default)
+        => CustomerTransactionsAsync(actor, ct);
+
+    public async Task<CustomerCashbackSummary> CustomerCashbackAsync(Actor actor, CancellationToken ct = default)
+    {
+        await access.EnsureCustomerAsync(actor, ct);
+        var customerId = actor.CustomerId!.Value;
+        var eligibility = await new PayoutService(db, clock)
+            .EligibilityAsync(actor, PayoutBeneficiary.Customer, customerId, ct);
+        var payouts = await db.PayoutRecords.AsNoTracking()
+            .Where(x => x.Beneficiary == PayoutBeneficiary.Customer && x.CustomerId == customerId)
+            .OrderByDescending(x => x.PaidAtUtc ?? x.EligibleAtUtc)
+            .ToListAsync(ct);
+        var eligible = eligibility.EligibleAmount.Amount > 0;
+        var hasPreparedPayout = payouts.Any(x => x.Status == PayoutStatus.Eligible);
+        var status = hasPreparedPayout ? "PayoutPrepared" : eligible ? "Eligible" : "BelowThreshold";
+        var remaining = Math.Max(eligibility.Threshold.Amount - eligibility.Available.Amount, 0m);
+        return new(eligibility.Available, eligibility.Threshold,
+            new Money(remaining, eligibility.Threshold.Currency), eligible, status,
+            payouts.Select(x => new CustomerPayoutHistory(x.Amount, x.Status.ToString(),
+                x.EligibleAtUtc, x.PaidAtUtc)).ToArray());
     }
     private Task<Promotion> Campaign(Guid id, CancellationToken ct) => db.Promotions.AsNoTracking().Include(x => x.Allocations).SingleAsync(x => x.Id == id,ct);
     private static Money Sum(IEnumerable<Money> values) => new(values.Sum(x => x.Amount));

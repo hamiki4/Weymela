@@ -14,7 +14,9 @@ internal static class CommerceEndpoints
     {
         var customer=app.MapGroup("/api/customer").RequireAuthorization("Customer").AddEndpointFilter<Weymela.Api.Security.ValidatedInputFilter>();
         customer.MapGet("/offers",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.OffersAsync(EndpointSupport.Actor(c),ct));
+        customer.MapGet("/transactions",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.CustomerTransactionsAsync(EndpointSupport.Actor(c),ct));
         customer.MapGet("/history",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.CustomerHistoryAsync(EndpointSupport.Actor(c),ct));
+        customer.MapGet("/cashback",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.CustomerCashbackAsync(EndpointSupport.Actor(c),ct));
         customer.MapPost("/offers/{id:guid}/qr",async(Guid id,HttpContext c,CheckoutService service,CancellationToken ct)=>
         {
             var qr=await service.IssueCustomerOfferAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct);

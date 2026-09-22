@@ -29,4 +29,6 @@ public sealed class PublicWorkspaceProfile
     public bool SocialVerified { get; init; }
     public string? PortfolioUrl { get; init; }
     public string? DirectionsUrl { get; init; }
+    public decimal? Latitude { get; init; }
+    public decimal? Longitude { get; init; }
 }

@@ -156,6 +156,7 @@ public sealed class MultiRoleIdentityTests(PostgresFixture fixture)
     private sealed class Directory : IWorkspaceDirectory
     {
         public Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken _) => Task.FromResult(new BusinessCard(id, "Business", "Region", null));
+        public Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken _) => Task.FromResult(new CustomerOfferBusiness("Business", null));
         public Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken _) => Task.FromResult(new CreatorCard(id, "Creator", "CR-1", "Region", "Food", 1, 1, true, null));
         public Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken _) => Task.FromResult(new CustomerCard(id, "Customer", "CU-1"));
         public Task<PublicBusiness> BusinessAsync(Guid id, CancellationToken _) => Task.FromResult(new PublicBusiness(id, "Business"));

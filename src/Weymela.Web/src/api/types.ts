@@ -461,12 +461,43 @@ export interface PlatformSummary {
 }
 export interface Offer {
   id: string;
-  campaignId: string;
-  campaign: string;
-  business: BusinessCard;
-  creator: CreatorCard;
-  cashbackPercent: number;
+  source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;
+  offer: string;
+  business: {
+    displayName: string;
+    directionsUrl: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  creator: { displayName: string } | null;
+  benefitPercent: number;
   watchUrl: string | null;
+  slogan: string | null;
+  location: string | null;
+}
+export interface CustomerTransaction {
+  source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;
+  offer: string;
+  business: string;
+  creator: string | null;
+  purchaseAmount: Money;
+  customerPaidAmount: Money | null;
+  cashbackEarned: Money | null;
+  discountReceived: Money | null;
+  purchasedAtUtc: string;
+}
+export interface CustomerCashbackSummary {
+  availableCashback: Money;
+  minimumCashOut: Money;
+  remainingToCashOut: Money;
+  eligible: boolean;
+  status: "BelowThreshold" | "Eligible" | "PayoutPrepared" | string;
+  payoutHistory: {
+    amount: Money;
+    status: "Eligible" | "Paid" | string;
+    eligibleAtUtc: string;
+    paidAtUtc: string | null;
+  }[];
 }
 export interface Qr {
   id: string;

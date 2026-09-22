@@ -54,7 +54,7 @@ The browser uses same-origin `/api`, proxied by V3 Web to API. Do **not** change
 
 Later TLS edge must use new server blocks only, strict hostname routing, TLS certificate approval, HSTS `max-age=31536000`, no request URI/query/body/token logging. Overwrite `X-Forwarded-Proto` with the real TLS scheme and `X-Forwarded-For` with the actual client address (not appended untrusted chains), preserve Host. V3 Web relays sanitized values; API accepts only its Web proxy. Do not set `TlsEdgeConfirmed=true` before testing. No existing DNS/TLS/server blocks are edited by this package. For pre-DNS testing choose separately approved internal access and trusted HTTPS certificate; plain SSH HTTP tunneling alone cannot prove Secure-cookie/camera/PWA acceptance.
 
-Web CSP/self, no framing, nosniff, no-referrer and `camera=(self), microphone=(), geolocation=(), payment=(), usb=()` are supplied in the new Web image. API headers remain Phase 6. Production's existing policy is untouched. Offline assets only are cached; HTML/SW no-cache, hashed build assets immutable, API/QR/financial requests never cached or queued.
+Web CSP/self, no framing, nosniff, no-referrer and `camera=(self), microphone=(), geolocation=(self), payment=(), usb=()` are supplied in the new Web image. API headers remain Phase 6. Production's existing policy is untouched. Offline assets only are cached; HTML/SW no-cache, hashed build assets immutable, API/QR/financial requests never cached or queued.
 
 ## Health, logging and operational limits
 

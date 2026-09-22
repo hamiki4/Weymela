@@ -37,9 +37,11 @@ import {
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
 import {
-  CustomerHistory,
+  CustomerDiscover,
+  CustomerCashback,
   CustomerOfferQr,
   CustomerOffers,
+  CustomerTransactions,
 } from "../features/commerce/CustomerPages";
 import { Checkout } from "../features/commerce/Checkout";
 import { Inbox } from "../features/notifications/Inbox";
@@ -105,6 +107,11 @@ export function App() {
       <Route path="/customer/offers" element={
         <RoleGate roles={["Customer"]}>
           <Shell><CustomerOffers /></Shell>
+        </RoleGate>
+      } />
+      <Route path="/customer/discover" element={
+        <RoleGate roles={["Customer"]}>
+          <Shell><CustomerDiscover /></Shell>
         </RoleGate>
       } />
       <Route
@@ -204,7 +211,9 @@ export function App() {
         }
       >
         <Route path="/customer/offers/:id" element={<CustomerOfferQr />} />
-        <Route path="/customer/history" element={<CustomerHistory />} />
+        <Route path="/customer/transactions" element={<CustomerTransactions />} />
+        <Route path="/customer/history" element={<Navigate to="/customer/transactions" replace />} />
+        <Route path="/customer/cashback" element={<CustomerCashback />} />
       </Route>
       <Route
         element={

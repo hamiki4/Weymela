@@ -45,9 +45,25 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
         var s=await Phase4Scenario.Create(fixture);var qr=await s.Issue();await using var db=s.Database.Open();
         var resolved=await s.Checkout(db).ResolveAsync(s.Cashier,qr.Token!,new TestDirectory());Assert.Equal("Abc",resolved.Business.DisplayName);Assert.Equal("Bella",resolved.Creator.DisplayName);
         var offer=Assert.Single(await s.Queries(db).CustomerOffersAsync(s.Customer));Assert.Equal(2,offer.CashbackPercent);
-        await s.Redeem(qr);var history=Assert.Single(await s.Queries(db).CustomerHistoryAsync(s.Customer));Assert.Equal(20,history.Cashback.Amount);
+        await s.Redeem(qr);var history=Assert.Single(await s.Queries(db).CustomerTransactionsAsync(s.Customer));
+        Assert.Equal("VIEW_AND_SALE_PROMOTION",history.Source);Assert.Equal(20,history.CashbackEarned!.Value.Amount);
+        Assert.Equal("Bella",history.Creator);Assert.Equal(1000,history.PurchaseAmount.Amount);
         var json=JsonSerializer.Serialize(new { resolved,offer,history });
         foreach(var forbidden in new[]{"Wallet","Budget","PlatformRevenue","Commission","Email","Phone","Address"})Assert.DoesNotContain(forbidden,json);
+        foreach(var forbidden in new[]{"SaleId","BusinessId","CreatorId","CreatorAllocationId","JournalId","CorrelationId","IdempotencyKey"})Assert.DoesNotContain(forbidden,json);
+    }
+    [Fact] public async Task Customer_transactions_are_newest_first_from_recorded_sale_times()
+    {
+        var s=await Phase4Scenario.Create(fixture);var first=await s.Issue("first-issue");
+        await s.Redeem(first,1000,"first-sale");
+        s.Clock.Now=Scenario.Now.AddHours(2);
+        var second=await s.Issue("second-issue");await s.Redeem(second,2000,"second-sale");
+        await using var db=s.Database.Open();var transactions=await s.Queries(db).CustomerTransactionsAsync(s.Customer);
+        Assert.Equal(2,transactions.Count);
+        Assert.Equal(Scenario.Now.AddHours(2),transactions[0].PurchasedAtUtc);
+        Assert.Equal(40,transactions[0].CashbackEarned!.Value.Amount);
+        Assert.Equal(Scenario.Now,transactions[1].PurchasedAtUtc);
+        Assert.Equal(20,transactions[1].CashbackEarned!.Value.Amount);
     }
     [Theory] [InlineData(ActorRole.Business)] [InlineData(ActorRole.Creator)] [InlineData(ActorRole.Customer)] [InlineData(ActorRole.Cashier)]
     public async Task Non_admin_roles_cannot_access_control_tower_financials(ActorRole role)
@@ -70,7 +86,7 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
         var s=await Phase4Scenario.Create(fixture);await s.Redeem(await s.Issue());await using var db=s.Database.Open();
         var other=new Actor(Guid.NewGuid(),ActorRole.Customer,CustomerId:Guid.NewGuid());
         db.CommercePermissions.Add(new(other.UserId,other.Role,other.CustomerId!.Value,null,true,false));await db.SaveChangesAsync();
-        Assert.Empty(await s.Queries(db).CustomerHistoryAsync(other));
+        Assert.Empty(await s.Queries(db).CustomerTransactionsAsync(other));
     }
     [Fact] public async Task Baseline_and_reward_receipts_cannot_be_rewritten_using_raw_sql()
     {
@@ -108,7 +124,7 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         var migrations=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit"},migrations);
+        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates"},migrations);
         Assert.False(db.Database.HasPendingModelChanges());
         foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint),typeof(UgcOpportunity),typeof(UgcAssignment),typeof(AdminGrantRecord)})
         { var model=db.Model.FindEntityType(entity)!;Assert.True(model.FindProperty("xmin")!.IsConcurrencyToken);Assert.True(model.FindProperty("Version")!.IsConcurrencyToken); }

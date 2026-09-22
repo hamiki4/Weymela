@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Weymela.Infrastructure.Development;
 using Weymela.Infrastructure.Tests;
 using Xunit;
 
@@ -26,6 +27,8 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [InlineData("admin","/api/admin/notifications")]
     [InlineData("admin","/api/admin/audit")]
     [InlineData("customer","/api/customer/offers")]
+    [InlineData("customer","/api/customer/transactions")]
+    [InlineData("customer","/api/customer/cashback")]
     [InlineData("customer","/api/customer/history")]
     public async Task Role_workspace_loads_from_real_persistence(string persona,string path)
     {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login(persona);Assert.NotNull(await c.GetJson(path));}
@@ -34,6 +37,8 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [InlineData("creator","/api/business/wallet")]
     [InlineData("business","/api/admin/payouts")]
     [InlineData("customer","/api/admin/campaigns")]
+    [InlineData("business","/api/customer/transactions")]
+    [InlineData("creator","/api/customer/cashback")]
     [InlineData("cashier","/api/business/campaigns")]
     public async Task Other_role_endpoint_is_forbidden(string persona,string path)
     {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login(persona);Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync(path)).StatusCode);}
@@ -65,6 +70,38 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [Fact] public async Task Customer_offers_are_eligible_customer_facing_only_and_have_no_internal_finances()
     {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");var offers=await c.GetJson("/api/customer/offers");Assert.Single(offers.AsArray());Assert.Equal("VIEW_AND_SALE_PROMOTION",offers[0]!["source"]!.GetValue<string>());Assert.Equal(4,offers[0]!["benefitPercent"]!.GetValue<decimal>());foreach(var forbidden in new[]{"budget","earning","platformRevenue","wallet","creatorPayment","creatorsNeeded","instructions","resources"})Assert.DoesNotContain(forbidden,offers.ToJsonString());}
 
+    [Fact] public async Task Customer_offer_business_coordinates_are_nullable_and_omit_business_identity()
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");
+        var offer=Assert.Single((await c.GetJson("/api/customer/offers")).AsArray());
+        Assert.Null(offer!["business"]!["latitude"]);
+        Assert.Null(offer["business"]!["longitude"]);
+        Assert.Null(offer["business"]!["businessId"]);
+    }
+
+    [Fact] public async Task Customer_transactions_and_cashback_are_self_scoped_and_safe_no_store_reads()
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");
+        var transactionsResponse=await c.GetAsync("/api/customer/transactions");
+        Assert.Equal("no-store",transactionsResponse.Headers.CacheControl!.ToString());
+        var transactions=JsonNode.Parse(await transactionsResponse.Content.ReadAsStringAsync())!;
+        var transaction=Assert.Single(transactions.AsArray());
+        Assert.Equal("VIEW_AND_SALE_PROMOTION",transaction!["source"]!.GetValue<string>());
+        Assert.Equal("Abc Coffee",transaction["business"]!.GetValue<string>());
+        Assert.Equal("Bella",transaction["creator"]!.GetValue<string>());
+        Assert.NotNull(transaction["purchaseAmount"]);
+        var cashbackResponse=await c.GetAsync("/api/customer/cashback");
+        Assert.Equal("no-store",cashbackResponse.Headers.CacheControl!.ToString());
+        var cashback=JsonNode.Parse(await cashbackResponse.Content.ReadAsStringAsync())!;
+        Assert.NotNull(cashback["availableCashback"]);Assert.NotNull(cashback["minimumCashOut"]);
+        Assert.NotNull(cashback["remainingToCashOut"]);Assert.NotNull(cashback["payoutHistory"]);
+        var forbidden=new[]{"CustomerId","CreatorId","BusinessId","CreatorAllocationId","JournalId","CorrelationId","IdempotencyKey","PlatformRevenue","Commission","PlatformFee","Reference"};
+        foreach(var field in forbidden)Assert.DoesNotContain(field,(transactions.ToJsonString()+cashback.ToJsonString()),StringComparison.OrdinalIgnoreCase);
+        var withUntrustedQuery=await c.GetJson("/api/customer/cashback?customerId=00000000-0000-0000-0000-000000000001");
+        Assert.Equal(cashback.ToJsonString(),withUntrustedQuery.ToJsonString());
+        Assert.Equal("camera=(self), microphone=(), geolocation=(self), payment=(), usb=()",cashbackResponse.Headers.GetValues("Permissions-Policy").Single());
+    }
+
     [Fact] public async Task Operations_admin_can_use_operational_areas_but_not_platform_configuration()
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("operations-admin");
@@ -94,7 +131,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     }
 
     [Fact] public async Task Sensitive_responses_are_no_store_and_camera_policy_is_scoped()
-    {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");var response=await c.GetAsync("/api/customer/offers");Assert.Equal("no-store",response.Headers.CacheControl!.ToString());Assert.Equal("camera=(self), microphone=(), geolocation=(), payment=(), usb=()",response.Headers.GetValues("Permissions-Policy").Single());}
+    {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("customer");var response=await c.GetAsync("/api/customer/offers");Assert.Equal("no-store",response.Headers.CacheControl!.ToString());Assert.Equal("camera=(self), microphone=(), geolocation=(self), payment=(), usb=()",response.Headers.GetValues("Permissions-Policy").Single());}
 
     [Fact] public async Task Disabled_account_loses_access_even_with_existing_cookie()
     {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("creator");await using var db=f.Database.Open();await db.Database.ExecuteSqlRawAsync("UPDATE v3.\"CommercePermissions\" SET \"IsActive\" = false WHERE \"Role\" = 'Creator'");Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync("/api/creator/home")).StatusCode);}

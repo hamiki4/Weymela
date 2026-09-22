@@ -14,10 +14,17 @@ internal static class OperationalReadinessConfiguration
         identity.HasIndex(x => new { x.Provider, x.ProjectId, x.ExternalSubject }).IsUnique(); identity.HasIndex(x => x.UserId).IsUnique(); Mapping.Version(identity);
 
         var profile = model.Entity<PublicWorkspaceProfile>(); Mapping.Scalars(profile); profile.HasKey(x => new { x.SubjectId, x.Role });
-        profile.ToTable("PublicWorkspaceProfiles", t => t.HasCheckConstraint("CK_PublicProfile_Metrics", "\"VerifiedFollowers\" >= 0 AND \"VerifiedViews\" >= 0"));
+        profile.ToTable("PublicWorkspaceProfiles", t =>
+        {
+            t.HasCheckConstraint("CK_PublicProfile_Metrics", "\"VerifiedFollowers\" >= 0 AND \"VerifiedViews\" >= 0");
+            t.HasCheckConstraint("CK_PublicProfile_LatitudeRange", "\"Latitude\" IS NULL OR \"Latitude\" BETWEEN -90 AND 90");
+            t.HasCheckConstraint("CK_PublicProfile_LongitudeRange", "\"Longitude\" IS NULL OR \"Longitude\" BETWEEN -180 AND 180");
+            t.HasCheckConstraint("CK_PublicProfile_CoordinatesPair", "(\"Latitude\" IS NULL AND \"Longitude\" IS NULL) OR (\"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL)");
+        });
         profile.Property(x => x.DisplayName).HasMaxLength(120); profile.Property(x => x.PublicId).HasMaxLength(80);
         profile.Property(x => x.Region).HasMaxLength(80); profile.Property(x => x.Category).HasMaxLength(80);
         profile.Property(x => x.PortfolioUrl).HasMaxLength(500); profile.Property(x => x.DirectionsUrl).HasMaxLength(500);
+        profile.Property(x => x.Latitude).HasPrecision(9, 6); profile.Property(x => x.Longitude).HasPrecision(9, 6);
         profile.HasIndex(x => new { x.Role, x.PublicId }).IsUnique();
 
         var customer = model.Entity<CustomerProfileRecord>(); Mapping.Scalars(customer);

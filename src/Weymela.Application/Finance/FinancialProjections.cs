@@ -18,8 +18,13 @@ public sealed record CustomerOffer(Guid OfferId, string Source, string Offer, Pu
     // Compatibility for the existing View & Sale projection. UGC Customer Offers expose BenefitPercent.
     public decimal CashbackPercent => BenefitPercent;
 }
-public sealed record CustomerPurchase(Guid SaleId, string Campaign, PublicBusiness Business, PublicCreator Creator,
-    Money PurchaseAmount, Money Cashback, DateTime PurchasedAtUtc);
+public sealed record CustomerTransaction(string Source, string Offer, string Business, string? Creator,
+    Money PurchaseAmount, Money? CustomerPaidAmount, Money? CashbackEarned, Money? DiscountReceived,
+    DateTime PurchasedAtUtc);
+public sealed record CustomerPayoutHistory(Money Amount, string Status, DateTime EligibleAtUtc,
+    DateTime? PaidAtUtc);
+public sealed record CustomerCashbackSummary(Money AvailableCashback, Money MinimumCashOut,
+    Money RemainingToCashOut, bool Eligible, string Status, IReadOnlyList<CustomerPayoutHistory> PayoutHistory);
 public interface IAdminFinancialQueries { Task<AdminCampaignFinance> CampaignAsync(Actor actor, Guid campaignId, CancellationToken ct); }
 public sealed record PlatformSettlementInfo(Guid Id, Money Amount, string Reference, DateTime SettledAtUtc, Guid? SettledBy);
 public sealed record PlatformRevenueBreakdown(string Source, Money Accrued);

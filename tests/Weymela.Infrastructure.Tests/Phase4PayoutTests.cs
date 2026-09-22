@@ -60,6 +60,70 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         await service.MarkPaidAsync(Phase4Scenario.Admin,id,"customer-ref","paid");
         await service.MarkPaidAsync(Phase4Scenario.Admin,id,"customer-ref","paid");
         Assert.Equal(400,(await db.CustomerCashbackAccounts.SingleAsync()).AvailableCashback.Amount);
+        var creatorPayout = await service.PrepareAsync(s.Creator,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value,"creator-prepare");
+        await service.MarkPaidAsync(Phase4Scenario.Admin,creatorPayout,"creator-ref","creator-paid");
+        var summary = await s.Queries(db).CustomerCashbackAsync(s.Customer);
+        Assert.Equal(400,summary.AvailableCashback.Amount);
+        Assert.Equal(5000,summary.MinimumCashOut.Amount);
+        Assert.Equal(4600,summary.RemainingToCashOut.Amount);
+        Assert.False(summary.Eligible);
+        Assert.Equal("BelowThreshold",summary.Status);
+        var payout = Assert.Single(summary.PayoutHistory);
+        Assert.Equal(5000,payout.Amount.Amount);
+        Assert.Equal("Paid",payout.Status);
+        Assert.NotNull(payout.PaidAtUtc);
+    }
+    [Fact] public async Task Customer_cashback_projection_uses_service_eligibility_and_exposes_prepared_state_safely()
+    {
+        var s=await Phase4Scenario.Create(fixture,allocation:30000,budget:40000);
+        await s.Redeem(await s.Issue(),270000);
+        await using var db=s.Database.Open();
+        var before=await s.Queries(db).CustomerCashbackAsync(s.Customer);
+        Assert.Equal(5400,before.AvailableCashback.Amount);
+        Assert.Equal(5000,before.MinimumCashOut.Amount);
+        Assert.Equal(0,before.RemainingToCashOut.Amount);
+        Assert.True(before.Eligible);
+        Assert.Equal("Eligible",before.Status);
+        var id=await s.Payouts(db).PrepareAsync(s.Customer,PayoutBeneficiary.Customer,s.Customer.CustomerId!.Value,"customer-prepare");
+        var prepared=await s.Queries(db).CustomerCashbackAsync(s.Customer);
+        Assert.True(prepared.Eligible);
+        Assert.Equal("PayoutPrepared",prepared.Status);
+        Assert.Equal("Eligible",Assert.Single(prepared.PayoutHistory).Status);
+        var json=System.Text.Json.JsonSerializer.Serialize(prepared);
+        foreach(var forbidden in new[]{"CustomerId","CreatorId","JournalId","CorrelationId","ConfigurationVersionId","Reference"})
+            Assert.DoesNotContain(forbidden,json);
+        Assert.NotEqual(Guid.Empty,id);
+    }
+    [Fact] public async Task Customer_cashback_projection_never_returns_another_customer_or_creator_payouts()
+    {
+        var s=await Phase4Scenario.Create(fixture,allocation:70000,budget:100000);
+        await s.Redeem(await s.Issue("customer-a-issue"),270000,"customer-a-sale");
+        var other=new Actor(Guid.NewGuid(),ActorRole.Customer,CustomerId:Guid.NewGuid());
+        await using var db=s.Database.Open();
+        db.CommercePermissions.Add(new(other.UserId,ActorRole.Customer,other.CustomerId!.Value,null,true,false));
+        await db.SaveChangesAsync();
+        var checkout=s.Checkout(db);
+        var otherQr=await checkout.IssueAsync(new(other,s.AllocationId,"customer-b-issue"));
+        await checkout.RedeemAsync(new(s.Cashier,otherQr.Token!,new Money(300000),"customer-b-sale"));
+        var payouts=s.Payouts(db);
+        var a=await payouts.PrepareAsync(s.Customer,PayoutBeneficiary.Customer,s.Customer.CustomerId!.Value,"a-prepare");
+        await payouts.MarkPaidAsync(Phase4Scenario.Admin,a,"a-paid","a-mark-paid");
+        s.Clock.Now=Scenario.Now.AddHours(1);
+        var b=await payouts.PrepareAsync(other,PayoutBeneficiary.Customer,other.CustomerId.Value,"b-prepare");
+        await payouts.MarkPaidAsync(Phase4Scenario.Admin,b,"b-paid","b-mark-paid");
+        var creator=await payouts.PrepareAsync(s.Creator,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value,"creator-prepare");
+        await payouts.MarkPaidAsync(Phase4Scenario.Admin,creator,"creator-paid","creator-mark-paid");
+
+        var customerA=await s.Queries(db).CustomerCashbackAsync(s.Customer);
+        var customerB=await s.Queries(db).CustomerCashbackAsync(other);
+        Assert.Equal(400,customerA.AvailableCashback.Amount);
+        Assert.Equal(1000,customerB.AvailableCashback.Amount);
+        Assert.Equal("Paid",Assert.Single(customerA.PayoutHistory).Status);
+        Assert.Equal("Paid",Assert.Single(customerB.PayoutHistory).Status);
+        Assert.Equal(Scenario.Now,customerA.PayoutHistory.Single().PaidAtUtc);
+        Assert.Equal(Scenario.Now.AddHours(1),customerB.PayoutHistory.Single().PaidAtUtc);
+        Assert.DoesNotContain("Creator",System.Text.Json.JsonSerializer.Serialize(customerA));
+        Assert.DoesNotContain("Creator",System.Text.Json.JsonSerializer.Serialize(customerB));
     }
     [Fact] public async Task Prepared_payout_pins_threshold_when_admin_changes_later_effective_rate()
     {

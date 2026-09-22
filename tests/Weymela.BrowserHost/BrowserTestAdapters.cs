@@ -74,6 +74,9 @@ public sealed class BrowserWorkspaceDirectory(PersistentWorkspaceDirectory persi
     public Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct)
         => Prefer(() => persisted.BusinessCardAsync(id, ct), () => fixtures.BusinessCardAsync(id, ct));
 
+    public Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken ct)
+        => Prefer(() => persisted.CustomerOfferBusinessAsync(id, ct), () => fixtures.CustomerOfferBusinessAsync(id, ct));
+
     public Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct)
         => Prefer(() => persisted.CreatorCardAsync(id, ct), () => fixtures.CreatorCardAsync(id, ct));
 

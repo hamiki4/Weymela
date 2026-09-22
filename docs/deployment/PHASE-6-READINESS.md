@@ -18,7 +18,7 @@ See repository `.env.example`: intentionally invalid/blank until deployment-owne
 | `V3__Auth__CookieCertificatePath`, optional password | External current PFX with private key, mounted read-only for API; secret/private material never in source; plan overlapping key rotation and old-key recovery |
 | `V3__AllowedOrigins__N` | Explicit HTTPS origins, no wildcard; Web origin must be included |
 | `V3__PublicWebUrl`, `V3__PublicApiUrl` | Owner-approved HTTPS origins; do not assume V2 domains are available or alter DNS |
-| `V3__Security__CameraPolicy` | `camera=(self), microphone=(), geolocation=(), payment=(), usb=()` |
+| `V3__Security__CameraPolicy` | `camera=(self), microphone=(), geolocation=(self), payment=(), usb=()` |
 | `V3__Security__TlsEdgeConfirmed` | `true` only after separately verifying HTTPS/header forwarding at approved V3 edge |
 | `V3__Security__TrustedProxies__N` | Exact private proxy IPs if behind an edge; never trust arbitrary forwarding headers |
 | `V3__FinancialWritesEnabled` | Defaults `false` outside Development; keep false during preparation; no HTTP unfreeze endpoint |

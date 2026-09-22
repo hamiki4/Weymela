@@ -260,6 +260,9 @@
   .topbar-right {
     gap: 7px;
   }
+  .topbar-right .dev-badge {
+    display: none;
+  }
   .workspace-label {
     font-size: 0.68rem;
   }

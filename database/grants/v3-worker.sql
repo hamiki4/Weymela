@@ -119,6 +119,7 @@ REVOKE EXECUTE ON FUNCTION v3.guard_deposit_review() FROM PUBLIC, :"worker_role"
 REVOKE EXECUTE ON FUNCTION v3.check_approved_deposit_journal() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_notification_identity() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_outbox_envelope() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_creator_promotion_content_revision() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"worker_role";

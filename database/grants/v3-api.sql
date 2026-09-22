@@ -31,6 +31,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorApplications",
     v3."CreatorEarningEntries",
     v3."CreatorEarningsAccounts",
+    v3."CreatorPromotionContentSubmissions",
     v3."CreatorPromotionParticipations",
     v3."CreatorSocialProfiles",
     v3."CustomerCashbackAccounts",
@@ -107,6 +108,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."CreatorApplications",
     v3."CreatorAllocations",
     v3."CreatorEarningsAccounts",
+    v3."CreatorPromotionContentSubmissions",
     v3."CreatorPromotionParticipations",
     v3."CreatorSocialProfiles",
     v3."DepositRequests",
@@ -171,6 +173,7 @@ REVOKE EXECUTE ON FUNCTION v3.guard_deposit_review() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_approved_deposit_journal() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_notification_identity() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_outbox_envelope() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_creator_promotion_content_revision() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"api_role";

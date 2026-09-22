@@ -88,14 +88,19 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
           ctx.fillStyle = "white";
           ctx.fillRect(0, 0, 640, 480);
           ctx.drawImage(image, 160, 80, 320, 320);
-          const stream = canvas.captureStream(10);
-          const timer = setInterval(
-            () => ctx.drawImage(image, 160, 80, 320, 320),
-            100,
-          );
+          const stream = canvas.captureStream(30);
+          let running = true;
+          const draw = () => {
+            if (!running) return;
+            ctx.drawImage(image, 160, 80, 320, 320);
+            requestAnimationFrame(draw);
+          };
+          draw();
           stream
             .getVideoTracks()[0]
-            .addEventListener("ended", () => clearInterval(timer));
+            .addEventListener("ended", () => {
+              running = false;
+            });
           return stream;
         },
       });
@@ -105,6 +110,22 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
   await login(context, "business");
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Scan QR", exact: true }).click();
+  await expect(
+    page.getByLabel("QR camera preview", { exact: true }),
+  ).toBeVisible();
+  await Promise.race([
+    page.waitForFunction(() => {
+      const video = document.querySelector<HTMLVideoElement>(
+        'video[aria-label="QR camera preview"]',
+      );
+      return Boolean(
+        video &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          !video.paused,
+      );
+    }),
+    expect(page.getByLabel("Purchase Amount", { exact: true })).toBeVisible(),
+  ]);
   await expect(
     page.getByLabel("Purchase Amount", { exact: true }),
   ).toBeVisible();

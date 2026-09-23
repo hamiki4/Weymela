@@ -103,8 +103,13 @@ public sealed class DeviceEnrollmentService(WeymelaDbContext db, RuntimeOptions 
 
     private async Task EnsureVerifiedAccountAsync(Guid userId, CancellationToken ct)
     {
-        if (userId == Guid.Empty || !await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
-            && x.Kind == "Email" && x.IsVerified, ct))
+        var verifiedEmail = userId != Guid.Empty && await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && x.Kind == "Email" && x.IsVerified, ct);
+        var verifiedCashierPhone = userId != Guid.Empty && await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && x.Kind == "Phone" && x.IsVerified, ct)
+            && await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == userId
+                && x.Role == ActorRole.Cashier && x.IsActive && x.CanCheckout, ct);
+        if (!verifiedEmail && !verifiedCashierPhone)
             throw new ApplicationFailure(FailureKind.Forbidden,
                 "Complete account verification before setting up this device.");
     }

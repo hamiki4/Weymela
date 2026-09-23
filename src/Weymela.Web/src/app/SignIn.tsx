@@ -193,6 +193,11 @@ function FirebaseSignIn({
             >
               Sign in
             </button>
+            <p>
+              <a className="text-link" href="/cashier/activate">
+                Activate a Cashier account
+              </a>
+            </p>
           </div>
         </section>
       ) : null}

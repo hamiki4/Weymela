@@ -338,7 +338,7 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
                 }
                 if (role == ActorRole.Business) db.BusinessWallets.Add(new BusinessWallet(request.ExternalSubjectId));
                 db.CommercePermissions.Add(new CommercePermission(request.UserId, role,
-                    request.ExternalSubjectId, businessId, true, false));
+                    request.ExternalSubjectId, businessId, true, role == ActorRole.Business));
             }
         }
         else if (lifecycle == "REJECTED")

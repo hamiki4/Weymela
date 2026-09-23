@@ -66,7 +66,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
         {
             OperationalTelemetry.Failure(e.Kind,EndpointSecurity.Financial(context),EndpointSecurity.Category(context) is "qr" or "checkout");
             var status=e.Kind switch{FailureKind.Forbidden=>403,FailureKind.NotFound=>404,FailureKind.ConcurrencyConflict or FailureKind.IdempotencyConflict=>409,_=>400};
-            await Error(context,status,e.Kind.ToString(),UserLanguage(e.Message));
+            await Error(context,status,e.Code ?? e.Kind.ToString(),UserLanguage(e.Message));
         }
         catch(AuthChallengeInvalidException){await Error(context,400,"InvalidCode","The code is invalid or expired.");}
         catch(PasswordRecoveryTransactionInvalidException){await Error(context,400,"RecoverySessionExpired","Your reset session has expired. Request a new code.");}

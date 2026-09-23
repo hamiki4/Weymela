@@ -51,13 +51,13 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
       <Metric
         label="Available Balance"
         value={amount(wallet.available)}
-        note="Ready for your next Campaign"
+        note="Ready for your next Promotion"
         icon="plus"
       />
       <Metric
         label="Reserved Balance"
         value={amount(wallet.reserved)}
-        note="Committed to Campaigns"
+        note="Committed to Promotions"
         icon="lock"
       />
     </div>
@@ -66,24 +66,23 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
 export function BusinessDashboard() {
   const resource = useResource<BusinessHome>("/business/home");
   const ugc = useResource<UgcCard[]>("/business/ugc");
-  const { user } = useSession();
   return (
     <Resource resource={resource}>
       {(data) => (
         <>
           <PageHeader
             eyebrow={data.business.displayName}
-            title="Advertising Funds"
-            description="A clear picture of your funds. More room for your next great story."
+            title="Business Home"
+            description="Manage Promotions, UGC, checkout and your Business funds."
             action={
               <ActionLink to="/business/campaigns/new" icon="plus">
-                Create Campaign
+                New Promotion
               </ActionLink>
             }
           />
           <WalletMetrics wallet={data.wallet} />
           <div className="section-kicker">
-            <h2>Your Business, in motion</h2>
+            <h2>Business operations</h2>
             <Currency />
           </div>
           <div className="quick-grid">
@@ -113,6 +112,11 @@ export function BusinessDashboard() {
               <span className="quick-value">{count(data.confirmedSales)}</span>
               <strong>Confirmed Sales</strong>
             </Link>
+            <Link className="quick-card" to="/business/wallet">
+              <Icon name="wallet" />
+              <strong>Wallet</strong>
+              <span className="quick-card-arrow"><Icon name="arrow" /></span>
+            </Link>
             <Link className="quick-card pricing-home-card" to="/business/pricing">
               <Icon name="settings" />
               <strong>Pricing</strong>
@@ -127,14 +131,15 @@ export function BusinessDashboard() {
               <ActionLink to="/business/ugc" secondary icon="sparkle">
                 Create UGC
               </ActionLink>
+              <ActionLink to="/checkout" secondary icon="qr">
+                Checkout / Scan QR
+              </ActionLink>
+              <ActionLink to="/business/cashiers" secondary icon="people">
+                Cashier Management
+              </ActionLink>
               <ActionLink to="/business/wallet" secondary icon="wallet">
                 Add Funds
               </ActionLink>
-              {user?.canCheckout && (
-                <ActionLink to="/checkout" secondary icon="qr">
-                  Cashier Management
-                </ActionLink>
-              )}
             </div>
           </Section>
           <div className="content-grid section-kicker-space">
@@ -158,7 +163,7 @@ export function BusinessDashboard() {
                 ))
               ) : (
                 <Empty
-                  title="Your first Campaign starts here"
+                  title="Your first Promotion starts here"
                   message="Add any positive amount, then reserve a budget when you’re ready."
                 />
               )}
@@ -171,11 +176,11 @@ export function BusinessDashboard() {
                 Their creativity.
               </h2>
               <p>
-                Set your Campaign Budget, find the right Creators and build
+                Set your Promotion Budget, work with the right Creators and build
                 stories people connect with.
               </p>
               <ActionLink to="/business/campaigns/new" secondary icon="plus">
-                Create Campaign
+                Create Promotion
               </ActionLink>
             </div>
           </div>

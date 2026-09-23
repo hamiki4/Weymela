@@ -186,7 +186,7 @@ test("stable buttons and mobile keyboard navigation", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/business");
   const button = page
-    .getByRole("link", { name: "Create Campaign", exact: true })
+    .getByRole("link", { name: "New Promotion", exact: true })
     .first();
   const before = await button.evaluate((e) => ({
     transform: getComputedStyle(e).transform,

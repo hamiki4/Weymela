@@ -12,14 +12,23 @@ public sealed partial class WorkspaceQueries
         if(actor.BusinessId is null)throw new ApplicationFailure(FailureKind.Forbidden,"Checkout permission is required.");
         await Access.EnsureScannerAsync(actor,actor.BusinessId.Value,ct);
         var rows=new List<CheckoutSaleRow>();
-        var promotionSales=await db.VerifiedSales.AsNoTracking().Where(x=>x.BusinessId==actor.BusinessId)
+        var promotionSalesQuery = db.VerifiedSales.AsNoTracking().Where(x => x.BusinessId == actor.BusinessId);
+        if (actor.Role == ActorRole.Cashier)
+            promotionSalesQuery = promotionSalesQuery.Where(x => x.CashierId == actor.UserId);
+        var promotionSales=await promotionSalesQuery
             .OrderByDescending(x=>x.CreatedAtUtc).Take(50).ToListAsync(ct);
         var promotionIds=promotionSales.Select(x=>x.PromotionId).Distinct().ToArray();
         var titles=await db.Promotions.AsNoTracking().Where(x=>promotionIds.Contains(x.Id)).ToDictionaryAsync(x=>x.Id,x=>x.Title,ct);
+        var promotionCashiers = await db.CashierPreauthorizations.AsNoTracking()
+            .Where(x => x.BusinessId == actor.BusinessId && x.UserId != null)
+            .ToDictionaryAsync(x => x.UserId!.Value, x => x.DisplayName, ct);
         rows.AddRange(promotionSales.Select(x=>new CheckoutSaleRow(x.Id,titles.GetValueOrDefault(x.PromotionId,"View & Sale"),
             "VIEW_AND_SALE_PROMOTION",x.PurchaseAmount.Amount,x.CustomerCashbackAmount.Amount,x.PurchaseAmount.Amount,
-            x.PlatformRevenueAmount.Amount,x.CreatedAtUtc)));
-        var offerSales=await db.UgcCustomerOfferSales.AsNoTracking().Where(x=>x.BusinessId==actor.BusinessId)
+            actor.Role == ActorRole.Cashier ? null : x.PlatformRevenueAmount.Amount,x.CreatedAtUtc,promotionCashiers.GetValueOrDefault(x.CashierId))));
+        var offerSalesQuery = db.UgcCustomerOfferSales.AsNoTracking().Where(x => x.BusinessId == actor.BusinessId);
+        if (actor.Role == ActorRole.Cashier)
+            offerSalesQuery = offerSalesQuery.Where(x => x.CashierId == actor.UserId);
+        var offerSales=await offerSalesQuery
             .OrderByDescending(x=>x.CreatedAtUtc).Take(50).ToListAsync(ct);
         var offerIds=offerSales.Select(x=>x.UgcCustomerOfferId).Distinct().ToArray();
         var offers=await db.UgcCustomerOffers.AsNoTracking().Where(x=>offerIds.Contains(x.Id)).ToDictionaryAsync(x=>x.Id,ct);
@@ -28,7 +37,7 @@ public sealed partial class WorkspaceQueries
         rows.AddRange(offerSales.Select(x=>new CheckoutSaleRow(x.Id,
             offers.TryGetValue(x.UgcCustomerOfferId,out var offer)?offer.CustomerFacingSlogan??ugcTitles.GetValueOrDefault(offer.UgcOpportunityId,"Customer Offer"):"Customer Offer",
             "UGC_CUSTOMER_OFFER",x.PurchaseAmount.Amount,x.CustomerDiscountAmount.Amount,x.CustomerPaysAmount.Amount,
-            x.PlatformRevenueAmount.Amount,x.CreatedAtUtc)));
+            actor.Role == ActorRole.Cashier ? null : x.PlatformRevenueAmount.Amount,x.CreatedAtUtc,promotionCashiers.GetValueOrDefault(x.CashierId))));
         return rows.OrderByDescending(x=>x.CreatedAtUtc).Take(50).ToArray();
     }
 

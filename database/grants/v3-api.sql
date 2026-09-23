@@ -31,6 +31,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorApplications",
     v3."CreatorEarningEntries",
     v3."CreatorEarningsAccounts",
+    v3."CashierPreauthorizations",
     v3."CreatorPromotionContentSubmissions",
     v3."CreatorPromotionParticipations",
     v3."CreatorSocialProfiles",
@@ -105,6 +106,7 @@ GRANT UPDATE ("ReadAtUtc", "Version") ON TABLE v3."InAppNotifications" TO :"api_
 
 GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."AdminGrants",
+    v3."CashierPreauthorizations",
     v3."CreatorApplications",
     v3."CreatorAllocations",
     v3."CreatorEarningsAccounts",

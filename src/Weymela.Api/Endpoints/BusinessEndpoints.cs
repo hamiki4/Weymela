@@ -1,6 +1,7 @@
 using Weymela.Application.Web;
 using Weymela.Infrastructure.Web;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
 
 namespace Weymela.Api.Endpoints;
 
@@ -13,6 +14,13 @@ internal static class BusinessEndpoints
         g.MapGet("/wallet",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.WalletAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/pricing",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessPricingAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc-pricing",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.UgcPricingAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/cashiers",(HttpContext c,CashierService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),ct));
+        g.MapPost("/cashiers",async(CreateCashierInput input,HttpContext c,CashierService service,CancellationToken ct)=>
+            Results.Ok(await service.CreateAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct)));
+        g.MapPost("/cashiers/{id:guid}/activation-code",async(Guid id,HttpContext c,CashierService service,CancellationToken ct)=>
+            Results.Ok(await service.RegenerateActivationCodeAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct)));
+        g.MapPost("/cashiers/{id:guid}/{state}",async(Guid id,string state,HttpContext c,CashierService service,CancellationToken ct)=>
+            Results.Ok(await service.SetStateAsync(EndpointSupport.Actor(c),id,state,EndpointSupport.Key(c),ct)));
         g.MapGet("/campaigns",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/campaigns/{id:guid}",(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignAsync(EndpointSupport.Actor(c),id,ct));
         g.MapGet("/promotions",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignsAsync(EndpointSupport.Actor(c),ct));

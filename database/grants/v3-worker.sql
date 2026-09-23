@@ -24,6 +24,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."AuthorizedDevices",
     v3."AdminGrants",
     v3."BusinessWallets",
+    v3."CashierPreauthorizations",
     v3."CommercePermissions",
     v3."CreatorAllocations",
     v3."CreatorApplications",

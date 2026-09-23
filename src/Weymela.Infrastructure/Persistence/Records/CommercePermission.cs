@@ -12,7 +12,7 @@ public sealed class CommercePermission
     public Guid SubjectId { get; init; }
     public Guid? BusinessId { get; init; }
     public bool IsActive { get; set; }
-    public bool CanCheckout { get; init; }
+    public bool CanCheckout { get; set; }
     public CommercePermission(Guid userId, ActorRole role, Guid subjectId, Guid? businessId, bool isActive, bool canCheckout)
     { UserId = userId; Role = role; SubjectId = subjectId; BusinessId = businessId; IsActive = isActive; CanCheckout = canCheckout; }
 }

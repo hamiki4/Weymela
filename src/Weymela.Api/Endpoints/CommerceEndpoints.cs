@@ -36,6 +36,14 @@ internal static class CommerceEndpoints
                 publicCustomer.DisplayName,offer.ExpiresAtUtc,
                 offer.Source,offer.CustomerDiscountPercent));
         });
+        checkout.MapPost("/manual-resolve",async(ManualCheckoutLookupInput input,HttpContext c,CheckoutService service,CancellationToken ct)=>
+            Results.Ok(await service.ResolveManualAsync(EndpointSupport.Actor(c),input,ct)));
+        checkout.MapPost("/manual-confirm",async(ManualCheckoutConfirmInput input,HttpContext c,CheckoutService service,WorkspaceQueries queries,CancellationToken ct)=>
+        {
+            var actor=EndpointSupport.Actor(c);
+            var result=await service.ConfirmManualAsync(actor,input,EndpointSupport.Key(c),ct);
+            return await queries.CheckoutResultAsync(actor,result.SaleId,ct);
+        });
         checkout.MapPost("/confirm",async(CheckoutInput input,HttpContext c,CheckoutService service,WorkspaceQueries queries,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);

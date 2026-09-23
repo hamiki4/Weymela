@@ -25,6 +25,7 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
                 or "/api/auth/email/start" or "/api/auth/email/verify"
                 or "/api/auth/password/sign-in" or "/api/auth/password/recovery/verify"
                 or "/api/auth/password/reset" or "/api/auth/password/recovery/cancel"
+                or "/api/auth/cashier/activate"
                 // These server-to-server routes authenticate the configured product client
                 // with constant-time credential checks inside the endpoint boundary.
                 or "/api/integration/product/server/redeem"

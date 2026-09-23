@@ -114,7 +114,8 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             var subject = Guid.NewGuid(); Guid? business = null;
             if (row.RequestedRole == ActorRole.Business) { business = Guid.NewGuid(); subject = business.Value; db.BusinessWallets.Add(new BusinessWallet(business.Value)); }
             db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = subject, Role = row.RequestedRole, DisplayName = details.DisplayName, PublicId = details.PublicId, Region = details.Region ?? "", Category = details.Category ?? "" });
-            db.CommercePermissions.Add(new CommercePermission(row.UserId, row.RequestedRole, subject, business, true, false));
+            db.CommercePermissions.Add(new CommercePermission(row.UserId, row.RequestedRole, subject, business, true,
+                row.RequestedRole == ActorRole.Business));
         }
         db.OutboxMessages.Add(new OutboxMessage { EventType = approve ? "RoleEnrollmentApproved" : "RoleEnrollmentRejected", Payload = JsonSerializer.Serialize(new { row.Id, row.UserId, row.RequestedRole }), OccurredAtUtc = now });
         db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), approve ? "RoleEnrollmentApproved" : "RoleEnrollmentRejected", admin.UserId,

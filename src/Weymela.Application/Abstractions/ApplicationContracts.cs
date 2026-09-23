@@ -3,7 +3,11 @@ namespace Weymela.Application;
 public enum ActorRole { PlatformAdmin, OperationsAdmin, Business, Creator, Customer, Cashier }
 public sealed record Actor(Guid UserId, ActorRole Role, Guid? BusinessId = null, Guid? CreatorId = null, Guid? CustomerId = null);
 public enum FailureKind { Validation, InsufficientFunds, Forbidden, NotFound, ConcurrencyConflict, IdempotencyConflict }
-public sealed class ApplicationFailure(FailureKind kind, string message, Exception? innerException = null) : Exception(message, innerException) { public FailureKind Kind { get; } = kind; }
+public class ApplicationFailure(FailureKind kind, string message, Exception? innerException = null, string? code = null) : Exception(message, innerException)
+{
+    public FailureKind Kind { get; } = kind;
+    public string? Code { get; } = code;
+}
 public sealed record IdempotencyRecord(string Key, string OperationType, Guid ActorId, string RequestFingerprint, object? ResultReference, DateTime CreatedAtUtc);
 public interface IIdempotencyStore
 {

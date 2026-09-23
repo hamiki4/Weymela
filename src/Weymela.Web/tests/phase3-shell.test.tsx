@@ -41,7 +41,8 @@ describe("Phase 3 multi-profile shell", () => {
     expect(screen.queryByText("INTERNAL-ID")).not.toBeInTheDocument();
     expect(screen.queryByText("subject-secret")).not.toBeInTheDocument();
     if (role === "Business") {
-      expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/onboarding");
+      expect(within(screen.getByRole("navigation", { name: "Mobile navigation" }))
+        .getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
     } else {
       const addProfileLinks = screen.getAllByRole("link", { name: "Add a profile", hidden: true });
       expect(addProfileLinks).toHaveLength(role === "Creator" ? 1 : 2);
@@ -64,7 +65,11 @@ describe("Phase 3 multi-profile shell", () => {
       expect(within(mobile).getAllByRole("link")).toHaveLength(4);
       expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
     } else {
-      expect(within(mobile).getByRole("button", { name: "More navigation" })).toBeInTheDocument();
+      expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
+        "Home", "Promotions", "UGC", "Checkout",
+      ]);
+      expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
+      expect(within(mobile).getAllByRole("link")).toHaveLength(4);
     }
   });
 

@@ -1886,6 +1886,41 @@ td .button {
   gap: 0.75rem;
   margin-top: 0.85rem;
 }
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+.workspace-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--role-border);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+.workspace-card .card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.workspace-card h3,
+.workspace-card p {
+  overflow-wrap: anywhere;
+}
+.workspace-card h3 {
+  margin: 0;
+}
+.status-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--role-border);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--role-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
 .creator-how-you-earn {
   margin-top: 1.25rem;
   padding: 1rem;

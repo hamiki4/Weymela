@@ -42,6 +42,7 @@ public static class ServiceRegistration
         services.AddScoped<IAdminFinancialQueries>(sp => sp.GetRequiredService<FinancialQueries>());
         services.AddScoped<EmailAuthService>();
         services.AddScoped<PhoneAliasService>();
+        services.AddScoped<CashierService>();
         services.AddScoped<PasswordCredentialService>();
         services.AddScoped<RoleEnrollmentService>();
         services.AddScoped<AccountLegalOnboardingService>();

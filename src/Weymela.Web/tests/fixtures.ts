@@ -371,7 +371,9 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
         : path.endsWith("/resolve")
           ? {
               sessionId: "qr",
-              campaign: "Coffee stories",
+              offer: "Coffee stories",
+              source: "VIEW_AND_SALE_PROMOTION",
+              customerDiscountPercent: null,
               business,
               creator,
               customer: "Customer CU-100",

@@ -11,11 +11,14 @@ using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Operations;
 using Weymela.Application.Operations;
 using Weymela.Application.Web;
+using Weymela.Application;
 using Weymela.BrowserHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Claims;
 using Weymela.Api.Auth;
 using Weymela.Api.Endpoints;
+using Weymela.Domain;
+using Weymela.Infrastructure.Finance;
 
 // This executable owns its one disposable database/container. It never accepts an external connection string.
 await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
@@ -44,6 +47,7 @@ await using(var scope=app.Services.CreateAsyncScope())
 {
     var db=scope.ServiceProvider.GetRequiredService<WeymelaDbContext>();await db.Database.MigrateAsync();
     await DevelopmentWorkspaceSeed.SeedAsync(db,scope.ServiceProvider.GetRequiredService<DevelopmentDirectory>(),scope.ServiceProvider.GetRequiredService<DevelopmentViewProvider>(),TimeProvider.System);
+    await BrowserFixtureSeed.EnsureManualCheckoutCustomerAsync(db);
 }
 app.MapGet("/__test/email-code", (string identifier) =>
 {
@@ -51,6 +55,44 @@ app.MapGet("/__test/email-code", (string identifier) =>
     return code is null ? Results.NotFound() : Results.Ok(new { code });
 }).AllowAnonymous();
 app.MapGet("/__test/build-info", () => Results.Ok(new { revision = testBuildRevision })).AllowAnonymous();
+app.MapPost("/__test/qr/expired", async (TestQrMutation input, WeymelaDbContext db, CancellationToken ct) =>
+{
+    var session = await FindQrAsync(input.Token, db, ct);
+    if (session is null) return Results.NotFound();
+    var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    var issued = DateTime.UtcNow.AddMinutes(-6);
+    var expired = session.Source == OfferQrSource.UgcCustomerOffer
+        ? OfferQrSession.ForUgcCustomerOffer(session.CustomerId, session.UgcCustomerOfferId!.Value,
+            session.BusinessId, CheckoutService.HashToken(new SensitiveQrToken(token)), issued, "browser-expired-qr")
+        : new OfferQrSession(session.CustomerId, session.PromotionId!.Value, session.CreatorId!.Value,
+            session.CreatorAllocationId!.Value, session.BusinessId,
+            CheckoutService.HashToken(new SensitiveQrToken(token)), issued, "browser-expired-qr");
+    db.OfferQrSessions.Add(expired);
+    await db.SaveChangesAsync(ct);
+    return Results.Ok(new { token });
+}).AllowAnonymous();
+app.MapPost("/__test/qr/not-eligible", async (TestQrMutation input, WeymelaDbContext db, CancellationToken ct) =>
+{
+    var session = await FindQrAsync(input.Token, db, ct);
+    if (session is null) return Results.NotFound();
+    var now = DateTime.UtcNow;
+    if (session.PromotionId is { } promotionId)
+    {
+        var participation = await db.CreatorPromotionParticipations.SingleAsync(
+            x => x.CreatorAllocationId == session.CreatorAllocationId
+                && x.PromotionId == promotionId
+                && x.CreatorId == session.CreatorId, ct);
+        db.Entry(participation).Property(nameof(CreatorPromotionParticipation.Status)).CurrentValue = ParticipationStatus.Completed;
+    }
+    else if (session.UgcCustomerOfferId is { } offerId)
+    {
+        var offer = await db.UgcCustomerOffers.SingleAsync(x => x.Id == offerId, ct);
+        db.Entry(offer).Property("EndsAtUtc").CurrentValue = now.AddMinutes(-1);
+    }
+    await db.SaveChangesAsync(ct);
+    return Results.NoContent();
+}).AllowAnonymous();
 // Disposable BrowserHost-only clock control. It accepts no identity/session input,
 // resolves only the authenticated test account's HttpOnly credential, and is never
 // mapped by ApiHost in Pilot or Production.
@@ -104,3 +146,18 @@ if(!OperatingSystem.IsWindows())File.SetUnixFileMode(control,UnixFileMode.UserRe
 Console.WriteLine("Isolated V3 browser host ready. Control file: .artifacts/browser-host.json");
 await app.WaitForShutdownAsync();
 await worker;
+
+static async Task<OfferQrSession?> FindQrAsync(string token, WeymelaDbContext db, CancellationToken ct)
+{
+    try
+    {
+        var hash = CheckoutService.HashToken(new SensitiveQrToken(token));
+        return await db.OfferQrSessions.SingleOrDefaultAsync(x => x.TokenHash == hash, ct);
+    }
+    catch (ApplicationFailure)
+    {
+        return null;
+    }
+}
+
+sealed record TestQrMutation(string Token);

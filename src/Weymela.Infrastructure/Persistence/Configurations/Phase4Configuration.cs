@@ -55,6 +55,20 @@ internal static class Phase4Configuration
         var permission = model.Entity<CommercePermission>(); Mapping.Scalars(permission); permission.ToTable("CommercePermissions");
         permission.HasKey(x => new { x.UserId, x.Role, x.SubjectId });
         permission.HasIndex(x => new { x.SubjectId, x.Role, x.IsActive });
+        var cashier = model.Entity<CashierPreauthorization>(); Mapping.Scalars(cashier); cashier.ToTable("CashierPreauthorizations", t =>
+        {
+            t.HasCheckConstraint("CK_CashierPreauthorization_Attempts", "\"ActivationAttemptCount\" >= 0 AND \"ActivationAttemptCount\" <= 5");
+            t.HasCheckConstraint("CK_CashierPreauthorization_Activation", "(\"Status\" IN ('PendingActivation','Disabled') AND \"ActivatedAtUtc\" IS NULL AND \"UserId\" IS NULL) OR (\"Status\" IN ('Active','Disabled','Revoked') AND \"ActivatedAtUtc\" IS NOT NULL AND \"UserId\" IS NOT NULL)");
+        });
+        cashier.HasKey(x => x.Id);
+        cashier.Property(x => x.DisplayName).HasMaxLength(120);
+        cashier.Property(x => x.CanonicalPhone).HasMaxLength(20);
+        cashier.Property(x => x.PhoneIdentifierHash).HasMaxLength(64);
+        cashier.Property(x => x.ActivationCodeHash).HasMaxLength(128);
+        cashier.HasIndex(x => new { x.BusinessId, x.CanonicalPhone, x.Status });
+        cashier.HasIndex(x => new { x.PhoneIdentifierHash, x.Status });
+        cashier.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        Mapping.Version(cashier);
         model.Entity<PlatformSettlement>().Property<Guid?>("SettledBy");
     }
 }

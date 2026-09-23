@@ -47,10 +47,14 @@ public sealed class PasswordCredentialService(
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         try
         {
-            if (!await ValidBinding(identity, ct)
-                || await db.AuthIdentifiers.AsNoTracking().CountAsync(x => x.UserId == identity.UserId
-                    && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null, ct) != 1)
-                throw new ApplicationFailure(FailureKind.Forbidden, "Verify your email before securing your account.");
+            var verifiedEmail = await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == identity.UserId
+                && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null, ct);
+            var cashierPhone = await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == identity.UserId
+                && x.Kind == "Phone" && x.IsVerified, ct)
+                && await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == identity.UserId
+                    && x.Role == ActorRole.Cashier && x.IsActive && x.CanCheckout, ct);
+            if (!await ValidBinding(identity, ct) || (!verifiedEmail && !cashierPhone))
+                throw new ApplicationFailure(FailureKind.Forbidden, "Complete verified account sign-in before securing your account.");
 
             var phones = await db.AuthIdentifiers.AsTracking()
                 .Where(x => x.UserId == identity.UserId && x.Kind == "Phone").ToListAsync(ct);
@@ -276,8 +280,12 @@ public sealed class PasswordCredentialService(
     private async Task<bool> HasAuthoritativeIdentity(Guid userId, CancellationToken ct) =>
         await db.IdentityBindings.AsNoTracking().CountAsync(x => x.UserId == userId && x.IsActive
             && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId, ct) == 1
-        && await db.AuthIdentifiers.AsNoTracking().CountAsync(x => x.UserId == userId
-            && x.Kind == "Email" && x.IsVerified, ct) == 1;
+        && (await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && x.Kind == "Email" && x.IsVerified, ct)
+            || await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
+                && x.Kind == "Phone" && x.IsVerified, ct)
+            && await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == userId
+                && x.Role == ActorRole.Cashier && x.IsActive && x.CanCheckout, ct));
 
     private static string NormalizePhone(string phone)
     {

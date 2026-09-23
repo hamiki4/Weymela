@@ -22,26 +22,28 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await screenshot(page, "checkout-customer-issued");
   await login(context, "other-cashier");
   await open(page, "/checkout");
-  await page.getByText("Use a scanned code instead", { exact: true }).click();
-  await page.getByLabel("Scanned QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve Offer" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByText("Enter an opaque QR code", { exact: true }).click();
+  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
+  await page.getByRole("button", { name: "Resolve QR" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "This QR belongs to another business",
+  );
   await expect(
-    page.getByLabel("Purchase Amount", { exact: true }),
+    page.getByLabel("Total Purchase Amount", { exact: true }),
   ).toHaveCount(0);
   await login(context, "cashier");
   await open(page, "/checkout");
-  await page.getByText("Use a scanned code instead", { exact: true }).click();
-  await page.getByLabel("Scanned QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve Offer" }).click();
+  await page.getByText("Enter an opaque QR code", { exact: true }).click();
+  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
+  await page.getByRole("button", { name: "Resolve QR" }).click();
   await expect(
-    page.getByLabel("Purchase Amount", { exact: true }),
+    page.getByLabel("Total Purchase Amount", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Purchase Amount", { exact: true }).fill("1000");
+  await page.getByLabel("Total Purchase Amount", { exact: true }).fill("1000");
   await screenshot(page, "checkout-confirmation");
-  await page.getByRole("button", { name: "Confirm Purchase" }).click();
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Purchase confirmed", exact: true }),
+    page.getByRole("heading", { name: "Payment recorded", exact: true }),
   ).toBeVisible();
   await screenshot(page, "checkout-confirmed");
   await login(context, "customer");
@@ -113,26 +115,13 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
   await expect(
     page.getByLabel("QR camera preview", { exact: true }),
   ).toBeVisible();
-  await Promise.race([
-    page.waitForFunction(() => {
-      const video = document.querySelector<HTMLVideoElement>(
-        'video[aria-label="QR camera preview"]',
-      );
-      return Boolean(
-        video &&
-          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-          !video.paused,
-      );
-    }),
-    expect(page.getByLabel("Purchase Amount", { exact: true })).toBeVisible(),
-  ]);
   await expect(
-    page.getByLabel("Purchase Amount", { exact: true }),
+    page.getByLabel("Total Purchase Amount", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Purchase Amount", { exact: true }).fill("50");
-  await page.getByRole("button", { name: "Confirm Purchase" }).click();
+  await page.getByLabel("Total Purchase Amount", { exact: true }).fill("50");
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Purchase confirmed", exact: true }),
+    page.getByRole("heading", { name: "Payment recorded", exact: true }),
   ).toBeVisible();
 });
 
@@ -147,8 +136,8 @@ test("camera permission failure has a usable alternative", async ({
   await expect(page.getByRole("alert")).toContainText(
     "Camera permission was denied",
   );
-  await page.getByText("Use a scanned code instead", { exact: true }).click();
+  await page.getByText("Enter an opaque QR code", { exact: true }).click();
   await expect(
-    page.getByLabel("Scanned QR code", { exact: true }),
+    page.getByLabel("QR code", { exact: true }),
   ).toBeVisible();
 });

@@ -546,15 +546,52 @@ export interface Qr {
 }
 export interface CheckoutOffer {
   sessionId: string;
-  campaign: string;
-  business: { id: string; displayName: string };
-  creator: { id: string; publicId: string; displayName: string };
+  offer: string;
+  business: { displayName: string };
+  creator: { displayName: string } | null;
   customer: string;
   expiresAtUtc: string;
+  source: string;
+  customerDiscountPercent: number | null;
 }
 export interface SaleResult {
   saleId: string;
   purchaseAmount: Money;
   totalBusinessCharge: Money;
   createdAtUtc: string;
+}
+export interface Cashier {
+  id: string;
+  name: string;
+  maskedPhone: string;
+  status: "Pending Activation" | "Active" | "Disabled" | "Revoked" | string;
+  createdAtUtc: string;
+  activatedAtUtc: string | null;
+}
+export interface CashierCreated {
+  cashier: Cashier;
+  activationCode: string;
+}
+export interface CashierActivationResult {
+  token: { customToken: string; expiresAtUtc: string };
+}
+export interface ManualCheckoutChoice {
+  id: string;
+  source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;
+  label: string;
+  benefitPercent: number | null;
+}
+export interface ManualCheckoutResolution {
+  offers: ManualCheckoutChoice[];
+}
+export interface CheckoutSaleRow {
+  id: string;
+  offer: string;
+  source: string;
+  purchaseAmount: number;
+  customerDiscount: number;
+  customerPays: number;
+  platformFee?: number | null;
+  createdAtUtc: string;
+  cashier: string | null;
 }

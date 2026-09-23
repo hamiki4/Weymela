@@ -66,7 +66,15 @@ public sealed class TrustedIdentityService(WeymelaDbContext db, IIdentityTokenVe
                     var c = await directory.CreatorCardAsync(membership.SubjectId, ct); name = c.DisplayName; publicId = c.PublicId; break;
                 case ActorRole.Customer:
                     var u = await directory.CustomerCardAsync(membership.SubjectId, ct); name = u.DisplayName; publicId = u.PublicId; break;
-                case ActorRole.Cashier: name = "Cashier"; publicId = "Checkout"; break;
+                case ActorRole.Cashier:
+                    name = await db.CashierPreauthorizations.AsNoTracking()
+                        .Where(x => x.UserId == userId && x.BusinessId == membership.BusinessId
+                            && x.Status == CashierPreauthorizationStatus.Active)
+                        .OrderByDescending(x => x.ActivatedAtUtc)
+                        .Select(x => x.DisplayName)
+                        .FirstOrDefaultAsync(ct) ?? "Cashier";
+                    publicId = "Checkout";
+                    break;
                 case ActorRole.PlatformAdmin:
                 case ActorRole.OperationsAdmin:
                     name = await AdminDisplayName(userId, ct);

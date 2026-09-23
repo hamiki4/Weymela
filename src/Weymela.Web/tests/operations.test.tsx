@@ -8,6 +8,10 @@ import { ConnectionStatus } from "../src/app/ConnectionStatus";
 import { Checkout } from "../src/features/commerce/Checkout";
 import { mockApi } from "./fixtures";
 
+vi.mock("../src/app/Session", () => ({
+  useSession: () => ({ user: { role: "Business" } }),
+}));
+
 const decoder = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn() }));
 vi.mock("@zxing/browser", () => ({ BrowserQRCodeReader: class { decodeFromStream = decoder.start; } }));
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); decoder.start.mockReset(); decoder.stop.mockReset(); });

@@ -77,7 +77,7 @@ describe("Business workspace", () => {
   it("groups authoritative advertising fund balances", async () => {
     mount(<BusinessDashboard />);
     expect(
-      await screen.findByRole("heading", { name: "Advertising Funds" }),
+      await screen.findByRole("heading", { name: "Business Home" }),
     ).toBeVisible();
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
@@ -666,30 +666,24 @@ describe("Accepted commerce compatibility", () => {
     expect(screen.getByText("Show this QR to the cashier.")).toBeVisible();
     expect(api.writes[0]?.path).toBe("/customer/offers/offer/qr");
   });
-  it("provides scanner and a clearly unavailable manual lookup shell", () => {
+  it("provides scanner and an authoritative manual lookup fallback", () => {
     mount(<Checkout />);
     expect(screen.getByRole("button", { name: "Scan QR" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Manual Lookup Unavailable" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Enter Manually" })).toBeEnabled();
   });
   it("resolves the QR before showing only the purchase amount entry", async () => {
     const api = mockApi();
     mount(<Checkout />);
-    await userEvent.click(screen.getByText("Use a scanned code instead"));
-    await userEvent.type(screen.getByLabelText("Scanned QR code"), "opaque");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Resolve Offer" }),
-    );
-    expect(await screen.findByLabelText("Purchase Amount")).toBeVisible();
+    await userEvent.click(screen.getByText("Enter an opaque QR code"));
+    await userEvent.type(screen.getByLabelText("QR code"), "opaque");
+    await userEvent.click(screen.getByRole("button", { name: "Resolve QR" }));
+    expect(await screen.findByLabelText("Total Purchase Amount")).toBeVisible();
     expect(screen.queryByLabelText("Customer phone")).not.toBeInTheDocument();
     await userEvent.type(
-      screen.getByLabelText("Purchase Amount"),
+      screen.getByLabelText("Total Purchase Amount"),
       "1000",
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Confirm Purchase" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Submit" }));
     await waitFor(() =>
       expect(api.writes[1].body).toEqual({
         token: "opaque",

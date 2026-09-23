@@ -47,6 +47,8 @@ import { LockScreen } from "./LockScreen";
 import { SecuritySetup } from "./SecuritySetup";
 import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 import { LegalDocumentPage } from "./LegalDocumentPage";
+import { CashierActivation } from "./CashierActivation";
+import { BusinessCashiers } from "../features/business/BusinessCashiers";
 
 
 function Home() {
@@ -82,6 +84,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/sign-in" element={<SignIn />} />
+      <Route path="/cashier/activate" element={<CashierActivation />} />
       <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
@@ -153,6 +156,7 @@ export function App() {
         <Route path="/business/requests" element={<BusinessRequests />} />
         <Route path="/business/pricing" element={<BusinessPricingPage />} />
         <Route path="/business/ugc" element={<BusinessUgcPage />} />
+        <Route path="/business/cashiers" element={<BusinessCashiers />} />
       </Route>
       <Route
         element={

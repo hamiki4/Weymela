@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Weymela.Application.Operations;
 using Weymela.Domain;
 
 namespace Weymela.Application.Web;
@@ -102,7 +103,19 @@ public sealed record QrResponse(Guid Id, string? Token, DateTime ExpiresAtUtc, b
 public sealed record CheckoutOffer(Guid SessionId, string Offer, CustomerOfferBusiness Business, CustomerOfferCreator? Creator,
     string Customer, DateTime ExpiresAtUtc, string Source, decimal? CustomerDiscountPercent);
 public sealed record CheckoutSaleRow(Guid Id, string Offer, string Source, decimal PurchaseAmount,
-    decimal CustomerDiscount, decimal CustomerPays, decimal PlatformFee, DateTime CreatedAtUtc);
+    decimal CustomerDiscount, decimal CustomerPays, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee, DateTime CreatedAtUtc,
+    string? Cashier = null);
+
+public sealed record CashierView(Guid Id, string Name, string MaskedPhone, string Status,
+    DateTime CreatedAtUtc, DateTime? ActivatedAtUtc);
+public sealed record CashierCreated(CashierView Cashier, string ActivationCode);
+public sealed record CashierActivationResult(FirebaseCustomTokenResult Token);
+public sealed record CreateCashierInput(string Name, string Phone);
+public sealed record CashierActivationInput(string Phone, string ActivationCode);
+public sealed record ManualCheckoutLookupInput(string CreatorId, string CustomerPhone, Guid? OfferId = null);
+public sealed record ManualCheckoutChoice(Guid Id, string Source, string Label, decimal? BenefitPercent);
+public sealed record ManualCheckoutResolution(IReadOnlyList<ManualCheckoutChoice> Offers);
+public sealed record ManualCheckoutConfirmInput(string CreatorId, string CustomerPhone, Guid OfferId, decimal PurchaseAmount);
 
 public sealed record PromotionPlatformInput(string Platform, int Capacity);
 public sealed record CreateCampaignInput(string Title, string Description, string Type, decimal CampaignBudget, string? Requirements,

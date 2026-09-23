@@ -92,8 +92,8 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
         value: async () => {
           const canvas = document.createElement("canvas");
-          canvas.width = 1280;
-          canvas.height = 720;
+          canvas.width = 1600;
+          canvas.height = 1000;
           const ctx = canvas.getContext("2d")!;
           canvas.style.position = "fixed";
           canvas.style.left = "-10000px";
@@ -111,6 +111,7 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
           qrCanvas.width = image.naturalWidth;
           qrCanvas.height = image.naturalHeight;
           const qrContext = qrCanvas.getContext("2d")!;
+          qrContext.imageSmoothingEnabled = false;
           qrContext.drawImage(image, 0, 0);
           const qrPixels = qrContext.getImageData(
             0,
@@ -131,31 +132,114 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
             qrPixels.data[index + 3] = 255;
           }
           qrContext.putImageData(qrPixels, 0, 0);
+          if (qrCanvas.width !== qrCanvas.height) {
+            throw new Error("Synthetic QR image is not square");
+          }
+          const quietZonePixels = 80;
+          const sourceScale = 3;
+          const largeQrCanvas = document.createElement("canvas");
+          largeQrCanvas.width =
+            qrCanvas.width * sourceScale + quietZonePixels * 2;
+          largeQrCanvas.height = largeQrCanvas.width;
+          const framedQrContext = largeQrCanvas.getContext("2d")!;
+          framedQrContext.imageSmoothingEnabled = false;
+          framedQrContext.fillStyle = "white";
+          framedQrContext.fillRect(
+            0,
+            0,
+            largeQrCanvas.width,
+            largeQrCanvas.height,
+          );
+          const scaledQrPixels = framedQrContext.createImageData(
+            qrCanvas.width * sourceScale,
+            qrCanvas.height * sourceScale,
+          );
+          for (let sourceY = 0; sourceY < qrCanvas.height; sourceY += 1) {
+            for (let sourceX = 0; sourceX < qrCanvas.width; sourceX += 1) {
+              const sourceIndex = (sourceY * qrCanvas.width + sourceX) * 4;
+              for (let offsetY = 0; offsetY < sourceScale; offsetY += 1) {
+                for (let offsetX = 0; offsetX < sourceScale; offsetX += 1) {
+                  const targetX = sourceX * sourceScale + offsetX;
+                  const targetY = sourceY * sourceScale + offsetY;
+                  const targetIndex =
+                    (targetY * scaledQrPixels.width + targetX) * 4;
+                  scaledQrPixels.data[targetIndex] = qrPixels.data[sourceIndex];
+                  scaledQrPixels.data[targetIndex + 1] =
+                    qrPixels.data[sourceIndex + 1];
+                  scaledQrPixels.data[targetIndex + 2] =
+                    qrPixels.data[sourceIndex + 2];
+                  scaledQrPixels.data[targetIndex + 3] =
+                    qrPixels.data[sourceIndex + 3];
+                }
+              }
+            }
+          }
+          framedQrContext.putImageData(
+            scaledQrPixels,
+            quietZonePixels,
+            quietZonePixels,
+          );
+          const qrSize = largeQrCanvas.width;
+          const qrX = Math.floor((canvas.width - qrSize) / 2);
+          const qrY = Math.floor((canvas.height - qrSize) / 2);
           const state = ((
             window as Window & {
               __weymelaSyntheticCamera?: {
                 frameReady: boolean;
                 framesRendered: number;
                 trackEnded: boolean;
+                canvasWidth: number;
+                canvasHeight: number;
+                sourceWidth: number;
+                sourceHeight: number;
+                quietZone: number;
+                sourceScale: number;
+                qrFrameWidth: number;
+                qrFrameHeight: number;
+                qrDrawX: number;
+                qrDrawY: number;
+                qrDrawSize: number;
+                imageSmoothingEnabled: boolean;
               };
             }
           ).__weymelaSyntheticCamera ??= {
             frameReady: false,
             framesRendered: 0,
             trackEnded: false,
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            sourceWidth: qrCanvas.width,
+            sourceHeight: qrCanvas.height,
+            quietZone: quietZonePixels,
+            sourceScale,
+            qrFrameWidth: largeQrCanvas.width,
+            qrFrameHeight: largeQrCanvas.height,
+            qrDrawX: qrX,
+            qrDrawY: qrY,
+            qrDrawSize: qrSize,
+            imageSmoothingEnabled: false,
           });
           const drawFrame = () => {
-            const qrSize =
-              Math.floor(state.framesRendered / 30) % 2 === 0 ? 560 : 420;
+            const framedQrCanvas = largeQrCanvas;
+            const currentQrSize = framedQrCanvas.width;
+            const currentQrX = Math.floor((canvas.width - currentQrSize) / 2);
+            const currentQrY = Math.floor((canvas.height - currentQrSize) / 2);
+            state.qrFrameWidth = currentQrSize;
+            state.qrFrameHeight = currentQrSize;
+            state.qrDrawX = currentQrX;
+            state.qrDrawY = currentQrY;
+            state.qrDrawSize = currentQrSize;
+            state.quietZone = quietZonePixels;
+            state.sourceScale = sourceScale;
             ctx.fillStyle = "white";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(
-              qrCanvas,
-              (canvas.width - qrSize) / 2,
-              (canvas.height - qrSize) / 2,
-              qrSize,
-              qrSize,
+              framedQrCanvas,
+              currentQrX,
+              currentQrY,
+              currentQrSize,
+              currentQrSize,
             );
           };
           drawFrame();
@@ -167,18 +251,22 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
           const ready = new Promise<void>((resolve) => {
             resolveReady = resolve;
           });
-          const render = () => {
+          let lastFrameAt = -1000;
+          const render = (timestamp: number) => {
             if (!running) return;
-            drawFrame();
-            track.requestFrame();
-            state.framesRendered += 1;
-            if (state.framesRendered === 3) {
-              state.frameReady = true;
-              resolveReady();
+            if (timestamp - lastFrameAt >= 32) {
+              drawFrame();
+              track.requestFrame();
+              state.framesRendered += 1;
+              lastFrameAt = timestamp;
+              if (state.framesRendered === 3) {
+                state.frameReady = true;
+                resolveReady();
+              }
             }
             window.requestAnimationFrame(render);
           };
-          render();
+          render(0);
           track.addEventListener("ended", () => {
             running = false;
             canvas.remove();
@@ -251,9 +339,63 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
             frameReady: boolean;
             framesRendered: number;
             trackEnded: boolean;
+            canvasWidth: number;
+            canvasHeight: number;
+            sourceWidth: number;
+            sourceHeight: number;
+            quietZone: number;
+            sourceScale: number;
+            qrFrameWidth: number;
+            qrFrameHeight: number;
+            qrDrawX: number;
+            qrDrawY: number;
+            qrDrawSize: number;
+            imageSmoothingEnabled: boolean;
           };
         }
       ).__weymelaSyntheticCamera;
+      let videoFrame = null;
+      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+        const frameCanvas = document.createElement("canvas");
+        frameCanvas.width = video.videoWidth;
+        frameCanvas.height = video.videoHeight;
+        const frameContext = frameCanvas.getContext("2d")!;
+        frameContext.drawImage(video, 0, 0);
+        const framePixels = frameContext.getImageData(
+          0,
+          0,
+          frameCanvas.width,
+          frameCanvas.height,
+        );
+        let darkPixels = 0;
+        let minX = frameCanvas.width;
+        let minY = frameCanvas.height;
+        let maxX = -1;
+        let maxY = -1;
+        for (let index = 0; index < framePixels.data.length; index += 4) {
+          const luminance =
+            (framePixels.data[index] +
+              framePixels.data[index + 1] +
+              framePixels.data[index + 2]) /
+            3;
+          if (luminance < 128) {
+            darkPixels += 1;
+            const pixel = index / 4;
+            const x = pixel % frameCanvas.width;
+            const y = Math.floor(pixel / frameCanvas.width);
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+        videoFrame = {
+          width: frameCanvas.width,
+          height: frameCanvas.height,
+          darkPixels,
+          darkBounds: maxX >= 0 ? { minX, minY, maxX, maxY } : null,
+        };
+      }
       return {
         url: window.location.href,
         scannerVisible: Boolean(video),
@@ -275,6 +417,7 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
             }
           : null,
         syntheticCamera: state ?? null,
+        videoFrame,
       };
     });
     const diagnosticText = JSON.stringify(
@@ -301,7 +444,13 @@ test("camera permission failure has a usable alternative", async ({
   page,
   context,
 }) => {
-  await context.addInitScript(() => Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => { throw new DOMException("Denied", "NotAllowedError"); } }));
+  await context.addInitScript(() =>
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      value: async () => {
+        throw new DOMException("Denied", "NotAllowedError");
+      },
+    }),
+  );
   await login(context, "cashier");
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Scan QR", exact: true }).click();
@@ -309,7 +458,5 @@ test("camera permission failure has a usable alternative", async ({
     "Camera permission was denied",
   );
   await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await expect(
-    page.getByLabel("QR code", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByLabel("QR code", { exact: true })).toBeVisible();
 });

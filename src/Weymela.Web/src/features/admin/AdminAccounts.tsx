@@ -39,21 +39,22 @@ export function AdminAccounts() {
   const path = `/admin/accounts?${new URLSearchParams({ ...(role ? { role } : {}), ...(search ? { search } : {}) }).toString()}`;
   const resource = useResource<AdminAccountSummary[]>(path);
   const action = useAction();
-  const [form, setForm] = useState({ role: "Customer", email: "", phone: "", displayName: "", publicId: "", region: "", category: "" });
+  const [form, setForm] = useState({ role: "Customer", email: "", phone: "", displayName: "", publicId: "", region: "", category: "", reason: "" });
   const changeFilter = (nextRole: string) => setSearchParams(nextRole ? { role: nextRole, ...(search ? { search } : {}) } : search ? { search } : {});
   const submitSearch = () => setSearchParams({ ...(role ? { role } : {}), ...(draftSearch ? { search: draftSearch } : {}) });
   return <>
     <PageHeader eyebrow="Platform control · identity and access" title="Accounts" description="Global safe visibility and account preauthorization. Credentials and security material are never shown here." action={<Button onClick={() => setCreateOpen((value) => !value)}>+ Create Account</Button>} />
-    {created && <Notice><strong>Preauthorization created.</strong> Give the target user the one-time activation secret below. It is shown once and is not stored in Weymela.<div className="activation-secret"><code>{created.oneTimeActivationSecret ?? "Unavailable — create a new request."}</code><small>Expires {dateTime(created.expiresAtUtc)}</small></div></Notice>}
-    {createOpen && <Section title="Create / preauthorize account" description="The target establishes their own password and device PIN using the existing security flow.">
+    {created && <Notice><strong>Preauthorization created.</strong> Activation instructions were sent to the target's verified email address. The target must complete the existing verification, password, device PIN, and activation flow before the account becomes active.<small>Expires {dateTime(created.expiresAtUtc)}</small></Notice>}
+    {createOpen && <Section title="Create / preauthorize account" description="The target establishes their own password and device PIN using the existing security flow. Weymela sends activation instructions directly to the target.">
       <form className="filter-grid three" onSubmit={(event) => { event.preventDefault(); void action.run(async key => { const result = await post<AccountPreauthorizationResult>("/admin/accounts/preauthorize", { ...form, phone: form.phone || null, publicId: form.publicId || null, region: form.region || null, category: form.category || null }, key); setCreated(result); setCreateOpen(false); resource.reload(); }); }}>
-        <Field label="Account type"><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="Customer">Customer</option><option value="Creator">Creator</option><option value="Business">Business</option><option value="OperationsAdmin">Operations Admin</option></select></Field>
+        <Field label="Account type"><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="Customer">Customer</option><option value="Creator">Creator</option><option value="Business">Business</option><option value="OperationsAdmin">Operations Admin</option><option value="PlatformAdmin">Platform Admin</option></select></Field>
         <Field label="Email (required for a new identity)" help="Use an existing verified phone only when it already belongs to a Weymela identity with a verified email."><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
         <Field label="Phone (optional)"><input type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></Field>
         <Field label="Display name"><input required value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></Field>
-        {form.role !== "Customer" && form.role !== "OperationsAdmin" && <Field label="Public identifier"><input required value={form.publicId} onChange={(event) => setForm({ ...form, publicId: event.target.value })} /></Field>}
-        {form.role !== "Customer" && form.role !== "OperationsAdmin" && <Field label="Region"><input value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} /></Field>}
-        {form.role !== "Customer" && form.role !== "OperationsAdmin" && <Field label="Category"><input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></Field>}
+        {(form.role === "Creator" || form.role === "Business") && <Field label="Public identifier"><input required value={form.publicId} onChange={(event) => setForm({ ...form, publicId: event.target.value })} /></Field>}
+        {(form.role === "Creator" || form.role === "Business") && <Field label="Region"><input value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} /></Field>}
+        {(form.role === "Creator" || form.role === "Business") && <Field label="Category"><input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></Field>}
+        {form.role === "PlatformAdmin" && <Field label="Reason"><textarea required maxLength={500} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Required and recorded in the audit history" /></Field>}
         <div className="actions"><Button type="submit" disabled={action.busy}>{action.busy ? "Creating…" : "Create preauthorization"}</Button><Button variant="secondary" onClick={() => setCreateOpen(false)}>Cancel</Button></div>
       </form>{action.error && <Notice error>{action.error}</Notice>}
     </Section>}

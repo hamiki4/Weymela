@@ -15,13 +15,14 @@ namespace Weymela.Infrastructure.Identity;
 
 /// <summary>
 /// Stage A account authority. This service deliberately does not issue tokens,
-/// write passwords/PINs, create Cashiers, or create Platform Admins.
+/// write passwords/PINs, or create Cashiers. Administrative provisioning only
+/// stores a one-time activation hash and delivers the invitation to the target.
 /// </summary>
-public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvider clock)
+public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvider clock, IEmailCodeDelivery delivery)
 {
     public const int MaxDirectoryResults = 500;
     private static readonly ActorRole[] PreauthorizedRoles =
-        [ActorRole.Customer, ActorRole.Creator, ActorRole.Business, ActorRole.OperationsAdmin];
+        [ActorRole.Customer, ActorRole.Creator, ActorRole.Business, ActorRole.OperationsAdmin, ActorRole.PlatformAdmin];
     private static readonly ActorRole[] AllRoles = Enum.GetValues<ActorRole>();
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 
@@ -161,11 +162,15 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             audit, transactions, audit.Cast<object>().ToArray(), roleData);
     }
 
-    public async Task<AccountPreauthorizationResult> PreauthorizeAsync(Actor actor, AccountPreauthorizationInput input, string key, CancellationToken ct)
+    public Task<AccountPreauthorizationResult> PreauthorizeAsync(Actor actor, AccountPreauthorizationInput input, string key, CancellationToken ct)
+        => PreauthorizeAsync(AuthorityContext.ForAuthenticatedActor(actor), input, key, ct);
+
+    public async Task<AccountPreauthorizationResult> PreauthorizeAsync(AuthorityContext authority, AccountPreauthorizationInput input, string key, CancellationToken ct)
     {
-        DemandPlatform(actor);
+        await DemandPlatformAsync(authority, ct);
+        var actor = authority.CommandActor;
         if (!TryRole(input.Role, out var role, allowEmpty: false) || !PreauthorizedRoles.Contains(role))
-            throw new ApplicationFailure(FailureKind.Validation, "Only Customer, Creator, Business, or Operations Admin accounts can be preauthorized here.");
+            throw new ApplicationFailure(FailureKind.Validation, "Only Customer, Creator, Business, Operations Admin, or Platform Admin accounts can be preauthorized here.");
         if (string.IsNullOrWhiteSpace(key) || key.Length > 200) throw new ApplicationFailure(FailureKind.Validation, "A request reference is required.");
         var email = string.IsNullOrWhiteSpace(input.Email) ? null : EmailAuthService.NormalizeEmailAddress(input.Email);
         var phone = string.IsNullOrWhiteSpace(input.Phone) ? null : PhoneNumberNormalizer.Normalize(input.Phone);
@@ -179,14 +184,18 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var region = CleanOptional(input.Region, 80);
         var category = CleanOptional(input.Category, 80);
         var submission = CleanOptional(input.Submission, 3000);
-        var fingerprint = RequestFingerprint.Create(role.ToString(), email ?? "", phone ?? "", name, publicId ?? "", region ?? "", category ?? "", submission ?? "");
+        var reason = CleanOptional(input.Reason, 500);
+        if (role == ActorRole.PlatformAdmin && reason is null)
+            throw new ApplicationFailure(FailureKind.Validation, "Enter an explicit reason for Platform Admin provisioning.");
+        var fingerprint = RequestFingerprint.Create(role.ToString(), email ?? "", phone ?? "", name, publicId ?? "", region ?? "", category ?? "", submission ?? "", reason ?? "");
+        if (!delivery.Enabled) throw new AuthChallengeUnavailableException("Account activation delivery is temporarily unavailable.");
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var prior = await db.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(x => x.ActorId == actor.UserId && x.OperationType == "AccountPreauthorize" && x.Key == key, ct);
         if (prior is not null)
         {
             if (prior.RequestFingerprint != fingerprint) throw new ApplicationFailure(FailureKind.IdempotencyConflict, "This request reference was already used.");
             var priorRow = await db.AccountPreauthorizations.AsNoTracking().SingleAsync(x => x.Id == Guid.Parse(prior.ResultReference), ct);
-            return Result(priorRow, null);
+            return Result(priorRow);
         }
         var now = Now;
         var emailHash = email is null ? null : EmailAuthService.HashIdentifier(email);
@@ -198,8 +207,14 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var userId = emailIdentity?.UserId ?? phoneIdentity?.UserId ?? Guid.NewGuid();
         if (emailIdentity is not null && emailIdentity.UserId != userId || phoneIdentity is not null && phoneIdentity.UserId != userId)
             throw new ApplicationFailure(FailureKind.Validation, "The identity references cannot be safely combined.");
+        if (role == ActorRole.PlatformAdmin && userId == actor.UserId)
+            throw new ApplicationFailure(FailureKind.Forbidden, "A Platform Admin cannot provision a Platform Admin role for itself.", code: "PlatformAdminSelfProvisioningDenied");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == userId && x.Role == role, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This account already has that role.");
+        if (role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin
+            && await db.CommercePermissions.AnyAsync(x => x.UserId == userId
+                && x.IsActive && (x.Role == ActorRole.PlatformAdmin || x.Role == ActorRole.OperationsAdmin), ct))
+            throw new ApplicationFailure(FailureKind.Validation, "An active administrative role must be changed through its existing protected lifecycle.", code: "AdminRoleCollision");
         if (await db.AccountPreauthorizations.AnyAsync(x => x.UserId == userId && x.TargetRole == role && x.Status == AccountPreauthorizationStatus.Pending, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This account already has a pending preauthorization for that role.");
         if (emailIdentity is null && emailHash is not null)
@@ -212,7 +227,9 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             if (existingVerifiedEmail is null)
                 throw new ApplicationFailure(FailureKind.Validation, "A new account must have an email so the existing verification and password security flow can be used.");
             emailHash = existingVerifiedEmail.IdentifierHash;
+            email = existingVerifiedEmail.DeliveryAddress is null ? null : EmailAuthService.NormalizeEmailAddress(existingVerifiedEmail.DeliveryAddress);
         }
+        var deliveryAddress = email ?? throw new ApplicationFailure(FailureKind.Validation, "A verified email delivery address is required for account activation.");
         var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == userId, ct);
         if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled)
             throw new ApplicationFailure(FailureKind.Validation, "Reactivate the account before adding a profile.");
@@ -230,13 +247,18 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         if (lifecycle is null)
             db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = userId, Status = hasActivePermission ? AccountLifecycleStatus.Active : AccountLifecycleStatus.Pending, ChangedByUserId = actor.UserId, CreatedAtUtc = now, UpdatedAtUtc = now, Version = 1 });
         var correlation = Guid.NewGuid();
-        db.AccountRoleHistory.Add(new(Guid.NewGuid(), actor.UserId, userId, role, null, null, "Preauthorized", "PlatformAdmin preauthorization", now, correlation, preauth.Id));
-        db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "AccountPreauthorized", actor.UserId, null, null, null, correlation, now,
-            $"preauthorization={preauth.Id:D}", TargetUserId: userId, TargetRole: role, Operation: "preauthorize"));
-        db.OutboxMessages.Add(new OutboxMessage { EventType = "AccountPreauthorized", Payload = JsonSerializer.Serialize(new { preauth.Id, TargetUserId = userId, Role = role.ToString() }), OccurredAtUtc = now });
+        var eventType = role == ActorRole.PlatformAdmin ? "PlatformAdminAccountPreauthorized" : "AccountPreauthorized";
+        var auditReason = reason ?? "PlatformAdmin preauthorization";
+        db.AccountRoleHistory.Add(new(Guid.NewGuid(), actor.UserId, userId, role, null, null, "Preauthorized", auditReason, now, correlation, preauth.Id));
+        db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), eventType, actor.UserId, null, null, null, correlation, now,
+            $"preauthorization={preauth.Id:D}", TargetUserId: userId, TargetRole: role, Operation: "preauthorize", Reason: auditReason));
+        db.OutboxMessages.Add(new OutboxMessage { EventType = eventType, Payload = JsonSerializer.Serialize(new { preauth.Id, TargetUserId = userId, Role = role.ToString() }), OccurredAtUtc = now });
         db.IdempotencyRecords.Add(new(actor.UserId, "AccountPreauthorize", key, fingerprint, preauth.Id.ToString(), now));
+        // The raw invitation is sent only to the target mailbox. It is never
+        // returned to the administrator, persisted, logged, or audited.
+        await delivery.SendAsync(deliveryAddress, secret, EmailCodePurpose.AdminAccountActivation, ct);
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
-        return Result(preauth, secret);
+        return Result(preauth);
     }
 
     public async Task<AdminAccountDetail> ActivateAsync(Actor target, Guid preauthorizationId, string activationSecret, CancellationToken ct)
@@ -297,6 +319,11 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
                 db.CommercePermissions.Add(new CommercePermission(target.UserId, row.TargetRole, subject, null, true, false));
                 db.AdminGrants.Add(new AdminGrantRecord { UserId = target.UserId, DisplayName = row.DisplayName, Role = row.TargetRole, GrantedByUserId = row.CreatedByUserId, GrantedAtUtc = now });
                 break;
+            case ActorRole.PlatformAdmin:
+                subject = target.UserId;
+                db.CommercePermissions.Add(new CommercePermission(target.UserId, row.TargetRole, subject, null, true, false));
+                db.AdminGrants.Add(new AdminGrantRecord { UserId = target.UserId, DisplayName = row.DisplayName, Role = row.TargetRole, GrantedByUserId = row.CreatedByUserId, GrantedAtUtc = now });
+                break;
             default: throw new ApplicationFailure(FailureKind.Validation, "This account type cannot be activated here.");
         }
         db.RoleEnrollments.Add(new RoleEnrollmentRecord
@@ -317,7 +344,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         row.Status = AccountPreauthorizationStatus.Activated; row.ActivatedAtUtc = now; row.ActivationSecretHash = "";
         db.AccountRoleHistory.Add(new(Guid.NewGuid(), row.CreatedByUserId, target.UserId, row.TargetRole, subject, businessId, "Granted", "PlatformAdmin granted the preauthorized role/profile.", now, correlation, row.Id));
         db.AccountRoleHistory.Add(new(Guid.NewGuid(), row.CreatedByUserId, target.UserId, row.TargetRole, subject, businessId, "Activated", "Target established credentials and activated preauthorization.", now, correlation, row.Id));
-        db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "AccountPreauthorizationActivated", row.CreatedByUserId, businessId, null,
+        var activationEvent = row.TargetRole == ActorRole.PlatformAdmin ? "PlatformAdminAccountActivated" : "AccountPreauthorizationActivated";
+        db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), activationEvent, row.CreatedByUserId, businessId, null,
             row.TargetRole == ActorRole.Creator ? subject : null, correlation, now, $"preauthorization={row.Id:D}", TargetUserId: target.UserId,
             TargetRole: row.TargetRole, TargetSubjectId: subject, Operation: "activate"));
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
@@ -517,8 +545,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
     private static AdminCommerceTransaction Transaction(VerifiedSale x)
         => new(x.Id, x.CreatedAtUtc, x.PurchaseAmount.Amount, x.PurchaseAmount.Currency, x.Status.ToString(), x.BusinessId, x.CreatorId, x.CustomerId, x.CashierId);
 
-    private static AccountPreauthorizationResult Result(AccountPreauthorizationRecord row, string? secret)
-        => new(row.Id, row.UserId, row.TargetRole.ToString(), row.Status.ToString(), row.ExpiresAtUtc, secret);
+    private static AccountPreauthorizationResult Result(AccountPreauthorizationRecord row)
+        => new(row.Id, row.UserId, row.TargetRole.ToString(), row.Status.ToString(), row.ExpiresAtUtc, true);
 
     private static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     private static string HashSecret(string secret) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secret)));
@@ -537,4 +565,19 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
     private static string MaskEmail(string email) { var parts = email.Split('@'); var local = parts[0]; return (local.Length <= 2 ? local[0] + "*" : local[0] + new string('*', Math.Min(6, local.Length - 2)) + local[^1]) + "@" + parts[1]; }
     private static string MaskPhone(string phone) => phone.Length <= 4 ? "****" : new string('*', Math.Max(0, phone.Length - 4)) + phone[^4..];
     private static void DemandPlatform(Actor actor) { if (actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin access is required."); }
+
+    private async Task DemandPlatformAsync(AuthorityContext authority, CancellationToken ct)
+    {
+        if (authority.IsViewAsActive
+            || authority.RealActor.Role != ActorRole.PlatformAdmin
+            || !authority.Authority.IsPlatformAdmin
+            || authority.CommandActor.UserId == Guid.Empty)
+            throw new ApplicationFailure(FailureKind.Forbidden, "An active real Platform Admin authority is required.", code: "PlatformAdminAuthorityRequired");
+        var lifecycle = await db.AccountLifecycles.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == authority.CommandActor.UserId, ct);
+        if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked)
+            throw new ApplicationFailure(FailureKind.Forbidden, "The Platform Admin account is not active.", code: "PlatformAdminInactive");
+        if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == authority.CommandActor.UserId
+            && x.Role == ActorRole.PlatformAdmin && x.SubjectId == authority.CommandActor.UserId && x.IsActive, ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "The Platform Admin account is not active.", code: "PlatformAdminInactive");
+    }
 }

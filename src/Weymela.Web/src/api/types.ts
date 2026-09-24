@@ -159,7 +159,7 @@ export interface AdminAccountDetail {
   activity: AdminAuditItem[];
   roleData: AdminBusinessData | AdminCreatorData | AdminCustomerData | AdminCashierData | AdminAdminData | null;
 }
-export interface AccountPreauthorizationResult { preauthorizationId: string; userId: string; role: string; status: string; expiresAtUtc: string; oneTimeActivationSecret?: string | null; }
+export interface AccountPreauthorizationResult { preauthorizationId: string; userId: string; role: string; status: string; expiresAtUtc: string; activationInstructionsSent: boolean; }
 export interface Wallet {
   totalBalance: number;
   available: number;

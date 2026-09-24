@@ -1,7 +1,7 @@
 namespace Weymela.Application.Operations;
 
 public enum AuthIdentifierKind { Email, Phone }
-public enum EmailCodePurpose { Signup, DeviceEnrollment, PinRecovery, PasswordRecovery }
+public enum EmailCodePurpose { Signup, DeviceEnrollment, PinRecovery, PasswordRecovery, AdminAccountActivation }
 public enum PasswordRecoveryNextStep { PasswordReset, AccountSetup }
 public enum RoleEnrollmentStatus { Pending, Approved, Rejected }
 

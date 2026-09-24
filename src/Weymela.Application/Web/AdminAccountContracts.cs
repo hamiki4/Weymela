@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 using Weymela.Application;
 
 namespace Weymela.Application.Web;
@@ -13,7 +11,8 @@ public sealed record AccountPreauthorizationInput(
     string? Region = null,
     string? Category = null,
     string? Submission = null,
-    int? ExpiryDays = null);
+    int? ExpiryDays = null,
+    string? Reason = null);
 
 public sealed record AccountPreauthorizationResult(
     Guid PreauthorizationId,
@@ -21,7 +20,7 @@ public sealed record AccountPreauthorizationResult(
     string Role,
     string Status,
     DateTime ExpiresAtUtc,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OneTimeActivationSecret);
+    bool ActivationInstructionsSent);
 
 public sealed record AdminAccountSummary(
     Guid Id,

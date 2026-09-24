@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
+using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
@@ -41,13 +42,13 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Platform_admin_can_preauthorize_each_supported_role_but_not_platform_admin_or_cashier()
+    public async Task Platform_admin_can_preauthorize_each_supported_role_including_platform_admin_but_not_cashier()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
         db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
         await db.SaveChangesAsync();
-        var service = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
 
         foreach (var role in new[] { "Customer", "Creator", "Business", "OperationsAdmin" })
         {
@@ -55,15 +56,15 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
                 role, $"{role.ToLowerInvariant()}@example.test", null, $"{role} target",
                 role is "Creator" or "Business" ? $"{role.ToUpperInvariant()}-BOOTSTRAP" : null), $"preauth-{role}", default);
             Assert.Equal("Pending", result.Status);
-            Assert.NotNull(result.OneTimeActivationSecret);
+            Assert.True(result.ActivationInstructionsSent);
             var row = await db.AccountPreauthorizations.SingleAsync(x => x.Id == result.PreauthorizationId);
-            Assert.NotEqual(result.OneTimeActivationSecret, row.ActivationSecretHash);
-            Assert.DoesNotContain(result.OneTimeActivationSecret!, await db.AuditEvents.Select(x => x.Detail).ToListAsync());
+            Assert.NotEmpty(row.ActivationSecretHash);
+            Assert.DoesNotContain("ActivationSecret", await db.AuditEvents.Select(x => x.Detail).ToListAsync());
         }
 
-        var platform = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
-            new AccountPreauthorizationInput("PlatformAdmin", "new-platform@example.test", null, "Not allowed"), "platform", default));
-        Assert.Equal(FailureKind.Validation, platform.Kind);
+        var platform = await service.PreauthorizeAsync(admin,
+            new AccountPreauthorizationInput("PlatformAdmin", "new-platform@example.test", null, "Platform target", Reason: "Approved staffing change"), "platform", default);
+        Assert.Equal("PlatformAdmin", platform.Role);
         var cashier = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("Cashier", "new-cashier@example.test", null, "Not allowed"), "cashier", default));
         Assert.Equal(FailureKind.Validation, cashier.Kind);
@@ -79,7 +80,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
             new AuthIdentifierRecord { UserId = first, Kind = "Email", IdentifierHash = EmailAuthService.HashIdentifier("reuse@example.test"), DeliveryAddress = "reuse@example.test", IsVerified = true, CreatedAtUtc = Now },
             new AuthIdentifierRecord { UserId = second, Kind = "Phone", IdentifierHash = EmailAuthService.HashIdentifier("+251911111111"), DeliveryAddress = "+251911111111", IsVerified = false, CreatedAtUtc = Now });
         await db.SaveChangesAsync();
-        var service = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
         var reused = await service.PreauthorizeAsync(admin, new AccountPreauthorizationInput("Customer", "reuse@example.test", null, "Reuse"), "reuse", default);
         Assert.Equal(first, reused.UserId);
         db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = first, Kind = "Email", IdentifierHash = EmailAuthService.HashIdentifier("collision@example.test"), DeliveryAddress = "collision@example.test", IsVerified = true, CreatedAtUtc = Now });
@@ -87,6 +88,153 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var collision = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("Creator", "collision@example.test", "+251911111111", "Collision", "CREATOR-1"), "collision", default));
         Assert.Equal(FailureKind.Validation, collision.Kind);
+    }
+
+    [Fact]
+    public async Task Platform_admin_preauthorization_activates_only_platform_authority_and_is_audited()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
+        var preauth = await service.PreauthorizeAsync(admin,
+            new AccountPreauthorizationInput("PlatformAdmin", "new-admin@example.test", null, "New admin", Reason: "Approved staffing change"),
+            "platform-create", default);
+        Assert.True(preauth.ActivationInstructionsSent);
+        Assert.NotNull(delivery.Code);
+
+        var identity = await db.AuthIdentifiers.SingleAsync(x => x.UserId == preauth.UserId && x.Kind == "Email");
+        identity.IsVerified = true;
+        db.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = preauth.UserId, PasswordHash = "private-hash", WorkFactor = 100000, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
+        db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = preauth.UserId, CredentialKind = "Passkey", CredentialIdHash = "private-device", PinVerifier = "private-pin-verifier", EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        await db.SaveChangesAsync();
+
+        await service.ActivateAsync(new Actor(preauth.UserId, ActorRole.PlatformAdmin), preauth.PreauthorizationId, delivery.Code!, default);
+        var permissions = await db.CommercePermissions.Where(x => x.UserId == preauth.UserId && x.IsActive).ToListAsync();
+        var permission = Assert.Single(permissions);
+        Assert.Equal(ActorRole.PlatformAdmin, permission.Role);
+        Assert.Equal(preauth.UserId, permission.SubjectId);
+        Assert.Contains(await db.AdminGrants.ToListAsync(), x => x.UserId == preauth.UserId && x.Role == ActorRole.PlatformAdmin && x.IsActive);
+        Assert.Contains(await db.AuditEvents.ToListAsync(), x => x.EventType == "PlatformAdminAccountPreauthorized");
+        Assert.Contains(await db.AuditEvents.ToListAsync(), x => x.EventType == "PlatformAdminAccountActivated");
+        Assert.DoesNotContain(await db.AuditEvents.Select(x => x.Detail).ToListAsync(), x => x.Contains(delivery.Code!, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Operations_admin_activation_receives_only_operations_authority()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
+        var preauth = await service.PreauthorizeAsync(admin,
+            new AccountPreauthorizationInput("OperationsAdmin", "new-operations@example.test", null, "Operations target"),
+            "operations-create", default);
+        var identity = await db.AuthIdentifiers.SingleAsync(x => x.UserId == preauth.UserId && x.Kind == "Email");
+        identity.IsVerified = true;
+        db.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = preauth.UserId, PasswordHash = "private-hash", WorkFactor = 100000, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
+        db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = preauth.UserId, CredentialKind = "Passkey", CredentialIdHash = "private-device", PinVerifier = "private-pin-verifier", EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        await db.SaveChangesAsync();
+
+        await service.ActivateAsync(new Actor(preauth.UserId, ActorRole.OperationsAdmin), preauth.PreauthorizationId, delivery.Code!, default);
+        var permissions = await db.CommercePermissions.Where(x => x.UserId == preauth.UserId && x.IsActive).ToListAsync();
+        Assert.Equal(ActorRole.OperationsAdmin, Assert.Single(permissions).Role);
+        Assert.DoesNotContain(permissions, x => x.Role == ActorRole.PlatformAdmin);
+        Assert.Contains(await db.AdminGrants.ToListAsync(), x => x.UserId == preauth.UserId && x.Role == ActorRole.OperationsAdmin && x.IsActive);
+    }
+
+    [Fact]
+    public async Task Business_activation_preserves_can_checkout_true()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
+        var preauth = await service.PreauthorizeAsync(admin,
+            new AccountPreauthorizationInput("Business", "new-business@example.test", null, "New business", "BUSINESS-B2"),
+            "business-create", default);
+        var identity = await db.AuthIdentifiers.SingleAsync(x => x.UserId == preauth.UserId && x.Kind == "Email");
+        identity.IsVerified = true;
+        db.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = preauth.UserId, PasswordHash = "private-hash", WorkFactor = 100000, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
+        db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = preauth.UserId, CredentialKind = "Passkey", CredentialIdHash = "private-device", PinVerifier = "private-pin-verifier", EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        await db.SaveChangesAsync();
+
+        await service.ActivateAsync(new Actor(preauth.UserId, ActorRole.Business), preauth.PreauthorizationId, delivery.Code!, default);
+        var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == preauth.UserId && x.Role == ActorRole.Business);
+        Assert.True(permission.IsActive);
+        Assert.True(permission.CanCheckout);
+        Assert.Equal(permission.SubjectId, permission.BusinessId);
+        Assert.Single(await db.BusinessWallets.Where(x => x.BusinessId == permission.BusinessId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Only_an_active_real_platform_admin_can_use_the_provisioning_authority()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        var operations = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
+        db.CommercePermissions.AddRange(
+            new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false),
+            new(operations.UserId, ActorRole.OperationsAdmin, operations.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
+        var request = new AccountPreauthorizationInput("PlatformAdmin", "authority-target@example.test", null, "Authority target", Reason: "Approved staffing change");
+
+        foreach (var actor in new[]
+        {
+            operations,
+            new Actor(Guid.NewGuid(), ActorRole.Business),
+            new Actor(Guid.NewGuid(), ActorRole.Creator),
+            new Actor(Guid.NewGuid(), ActorRole.Customer),
+            new Actor(Guid.NewGuid(), ActorRole.Cashier)
+        })
+        {
+            var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(actor, request, $"denied-{actor.Role}", default));
+            Assert.Equal(FailureKind.Forbidden, failure.Kind);
+        }
+
+        var forged = new AuthorityContext(
+            new RealActor(operations),
+            EffectiveSubject.Real(new RealActor(operations)),
+            new AdministrativeAuthority(ActorRole.PlatformAdmin),
+            null);
+        var forgedFailure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(forged, request, "denied-forged", default));
+        Assert.Equal(FailureKind.Forbidden, forgedFailure.Kind);
+
+        var viewed = new EffectiveSubject(new Actor(Guid.NewGuid(), ActorRole.Business), true);
+        var support = new SupportSessionContext(Guid.NewGuid(), admin.UserId, viewed, Now.AddHours(1));
+        var viewAs = AuthorityContext.ForValidatedViewAs(new RealActor(admin), viewed, support, Now);
+        var viewAsFailure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(viewAs, request, "denied-view-as", default));
+        Assert.Equal(FailureKind.Forbidden, viewAsFailure.Kind);
+    }
+
+    [Fact]
+    public async Task Provisioning_is_idempotent_and_does_not_return_or_audit_the_activation_secret()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
+        var request = new AccountPreauthorizationInput("Customer", "idempotent@example.test", null, "Idempotent target");
+        var first = await service.PreauthorizeAsync(admin, request, "same-request", default);
+        var secret = delivery.Code;
+        var replay = await service.PreauthorizeAsync(admin, request, "same-request", default);
+        Assert.Equal(first.PreauthorizationId, replay.PreauthorizationId);
+        Assert.True(replay.ActivationInstructionsSent);
+        Assert.Equal(secret, delivery.Code);
+        Assert.Single(await db.AccountPreauthorizations.ToListAsync());
+        var conflict = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
+            request with { DisplayName = "Different target" }, "same-request", default));
+        Assert.Equal(FailureKind.IdempotencyConflict, conflict.Kind);
+        Assert.DoesNotContain(await db.AuditEvents.Select(x => x.Detail).ToListAsync(), x => x.Contains(secret!, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -105,15 +253,16 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         await new AccountLegalOnboardingService(db, new FixedTime(Now)).AcceptCurrentAsync(user,
             new AccountLegalConfirmation(new(terms.Id, terms.ContentHash, true), new(privacy.Id, privacy.ContentHash, true)), null, null, default);
         await db.SaveChangesAsync();
-        var service = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
         var preauth = await service.PreauthorizeAsync(admin, new AccountPreauthorizationInput("Customer", "activate@example.test", null, "Activated customer"), "activate", default);
-        var detail = await service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, preauth.OneTimeActivationSecret!, default);
+        var detail = await service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, delivery.Code!, default);
         var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Customer);
         Assert.True(permission.IsActive); Assert.False(permission.CanCheckout);
         Assert.Single(await db.CustomerProfiles.Where(x => x.UserId == user).ToListAsync());
         Assert.Empty((await db.AccountPreauthorizations.SingleAsync(x => x.Id == preauth.PreauthorizationId)).ActivationSecretHash);
         Assert.Equal(user, detail.Account.UserId);
-        await Assert.ThrowsAsync<ApplicationFailure>(() => service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, preauth.OneTimeActivationSecret!, default));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, delivery.Code!, default));
     }
 
     [Fact]
@@ -126,7 +275,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
             new(target, ActorRole.Creator, subject, null, true, false));
         db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = subject, Role = ActorRole.Creator, DisplayName = "Creator", PublicId = "CREATOR-1" });
         await db.SaveChangesAsync();
-        var service = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
         var forbidden = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ListAsync(new Actor(target, ActorRole.Creator), new(), default));
         Assert.Equal(FailureKind.Forbidden, forbidden.Kind);
         await service.ChangeLifecycleAsync(admin, target, new AccountLifecycleInput("suspend", "support review"), "suspend", default);
@@ -145,18 +294,19 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
         db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
         await db.SaveChangesAsync();
-        var preauth = await new PlatformAdminAccountService(db, new FixedTime(Now)).PreauthorizeAsync(admin,
+        var delivery = new CapturingDelivery();
+        var preauth = await new PlatformAdminAccountService(db, new FixedTime(Now), delivery).PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("Customer", "expiry@example.test", null, "Expiry target"), "expiry-preauth", default);
-        var expired = new PlatformAdminAccountService(db, new FixedTime(Now.AddDays(7)));
+        var expired = new PlatformAdminAccountService(db, new FixedTime(Now.AddDays(7)), delivery);
         var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => expired.ActivateAsync(
-            new Actor(preauth.UserId, ActorRole.Customer), preauth.PreauthorizationId, preauth.OneTimeActivationSecret!, default));
+            new Actor(preauth.UserId, ActorRole.Customer), preauth.PreauthorizationId, delivery.Code!, default));
         Assert.Equal(FailureKind.Forbidden, failure.Kind);
         Assert.Equal(AccountPreauthorizationStatus.Expired,
             (await db.AccountPreauthorizations.SingleAsync(x => x.Id == preauth.PreauthorizationId)).Status);
 
-        var pending = await new PlatformAdminAccountService(db, new FixedTime(Now)).PreauthorizeAsync(admin,
+        var pending = await new PlatformAdminAccountService(db, new FixedTime(Now), delivery).PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("Customer", "cancel@example.test", null, "Cancel target"), "cancel-preauth", default);
-        var cancelService = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var cancelService = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
         await cancelService.CancelPreauthorizationAsync(admin, pending.PreauthorizationId, "duplicate safety", "cancel-once", default);
         await cancelService.CancelPreauthorizationAsync(admin, pending.PreauthorizationId, "duplicate safety", "cancel-once", default);
         Assert.Single(await db.AccountRoleHistory.Where(x => x.ReferenceId == pending.PreauthorizationId && x.Action == "Cancelled").ToListAsync());
@@ -179,7 +329,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = target, Status = AccountLifecycleStatus.Active,
             ChangedByUserId = admin.UserId, CreatedAtUtc = Now, UpdatedAtUtc = Now, Version = 1 });
         await db.SaveChangesAsync();
-        var service = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
         var stale = await Assert.ThrowsAsync<ApplicationFailure>(() => service.RevokeProfileAsync(admin, target,
             new RevokeAccountProfileInput("Creator", subject, "stale revoke", ExpectedVersion: 0), "stale", default));
         Assert.Equal(FailureKind.ConcurrencyConflict, stale.Kind);
@@ -214,7 +364,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
             await using var context = database.Open();
             try
             {
-                await new PlatformAdminAccountService(context, new FixedTime(Now)).ChangeLifecycleAsync(admin, target,
+                await new PlatformAdminAccountService(context, new FixedTime(Now), new CapturingDelivery()).ChangeLifecycleAsync(admin, target,
                     new AccountLifecycleInput(action, $"concurrent {action}", version), $"concurrent-{action}", default);
                 return (true, null);
             }
@@ -238,7 +388,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
             new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false),
             new(other, ActorRole.PlatformAdmin, other, null, true, false));
         await db.SaveChangesAsync();
-        var service = new PlatformAdminAccountService(db, new FixedTime(Now));
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
         Assert.Contains(await service.ListAsync(admin, new AdminAccountFilterInput("PlatformAdmin"), default), x => x.UserId == admin.UserId);
         var lifecycle = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ChangeLifecycleAsync(admin, other,
             new AccountLifecycleInput("suspend", "not in Stage A"), "platform-suspend", default));
@@ -246,6 +396,17 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var revoke = await Assert.ThrowsAsync<ApplicationFailure>(() => service.RevokeProfileAsync(admin, other,
             new RevokeAccountProfileInput("PlatformAdmin", other, "not in Stage A"), "platform-revoke", default));
         Assert.Equal(FailureKind.Forbidden, revoke.Kind);
+    }
+
+    private sealed class CapturingDelivery : IEmailCodeDelivery
+    {
+        public bool Enabled => true;
+        public string? Code { get; private set; }
+        public Task SendAsync(string destination, string code, EmailCodePurpose purpose, CancellationToken ct)
+        {
+            Code = code;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FixedTime(DateTime value) : TimeProvider

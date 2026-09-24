@@ -40,7 +40,7 @@ internal static class AdminEndpoints
         accounts.MapGet("",([AsParameters] AdminAccountFilterInput filter,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),filter,ct));
         accounts.MapGet("/{id:guid}",(Guid id,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct));
         accounts.MapPost("/preauthorize",async(AccountPreauthorizationInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
-            Results.Ok(await service.PreauthorizeAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct)));
+            Results.Ok(await service.PreauthorizeAsync(EndpointSupport.Authority(c),input,EndpointSupport.Key(c),ct)));
         accounts.MapPost("/preauthorizations/{id:guid}/cancel",async(Guid id,AccountLifecycleInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.CancelPreauthorizationAsync(EndpointSupport.Actor(c),id,input.Reason,EndpointSupport.Key(c),ct)));
         accounts.MapPost("/{userId:guid}/lifecycle",async(Guid userId,AccountLifecycleInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>

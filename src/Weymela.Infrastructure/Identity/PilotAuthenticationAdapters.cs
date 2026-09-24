@@ -40,13 +40,14 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
 
     public async Task SendAsync(string destination, string code, EmailCodePurpose purpose, CancellationToken ct)
     {
-        Validate(destination, code);
+        Validate(destination, code, purpose);
         var subject = purpose switch
         {
             EmailCodePurpose.Signup => "Your Weymela verification code",
             EmailCodePurpose.DeviceEnrollment => "Your Weymela sign-in code",
             EmailCodePurpose.PinRecovery => "Your Weymela recovery code",
             EmailCodePurpose.PasswordRecovery => "Your Weymela password reset code",
+            EmailCodePurpose.AdminAccountActivation => "Your Weymela account activation instructions",
             _ => throw Unavailable()
         };
         var purposeText = purpose switch
@@ -55,6 +56,7 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
             EmailCodePurpose.DeviceEnrollment => "sign in to Weymela",
             EmailCodePurpose.PinRecovery => "recover your Weymela PIN",
             EmailCodePurpose.PasswordRecovery => "reset your Weymela password",
+            EmailCodePurpose.AdminAccountActivation => "activate the Weymela account requested for you by an administrator",
             _ => throw Unavailable()
         };
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
@@ -66,7 +68,9 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
             from = $"{options.ResendFromName} <{options.ResendFromAddress}>",
             to = new[] { destination },
             subject,
-            text = $"Use {code} to {purposeText}. This code expires in 10 minutes. If you did not request it, ignore this message."
+            text = purpose == EmailCodePurpose.AdminAccountActivation
+                ? $"Use the activation code in this message to {purposeText}. This invitation expires according to the administrator's activation window. If you did not expect it, ignore this message."
+                : $"Use {code} to {purposeText}. This code expires in 10 minutes. If you did not request it, ignore this message."
         });
         try
         {
@@ -99,11 +103,13 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
         catch (FormatException) { bytes = []; return false; }
     }
 
-    private static void Validate(string destination, string code)
+    private static void Validate(string destination, string code, EmailCodePurpose purpose)
     {
         if (destination.Length is < 4 or > 320 || destination.Any(char.IsControl)
             || !destination.Contains('@', StringComparison.Ordinal)
-            || code.Length != 6 || code.Any(c => c is < '0' or > '9'))
+            || (purpose == EmailCodePurpose.AdminAccountActivation
+                ? code.Length is < 40 or > 128 || code.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_')
+                : code.Length != 6 || code.Any(c => c is < '0' or > '9')))
             throw Unavailable();
     }
 

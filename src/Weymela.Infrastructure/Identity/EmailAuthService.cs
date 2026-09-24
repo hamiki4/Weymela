@@ -49,6 +49,8 @@ public sealed class EmailAuthService(
 
     public async Task<EmailCodeStartOutcome> StartAsync(string identifier, string? phone, EmailCodePurpose purpose, CancellationToken ct)
     {
+        if (purpose == EmailCodePurpose.AdminAccountActivation)
+            throw new AuthChallengeUnavailableException("Use the account activation invitation.");
         var normalizedIdentifier = NormalizeEmail(identifier);
         if (!string.IsNullOrWhiteSpace(phone))
             throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.");
@@ -138,6 +140,8 @@ public sealed class EmailAuthService(
     public async Task<FirebaseCustomTokenResult> VerifyAsync(string email, EmailCodePurpose purpose, string code, CancellationToken ct)
     {
         EnsureConfigured();
+        if (purpose == EmailCodePurpose.AdminAccountActivation)
+            throw new AuthChallengeUnavailableException("Use the account activation invitation.");
         if (purpose is EmailCodePurpose.PinRecovery or EmailCodePurpose.PasswordRecovery)
             throw new AuthChallengeUnavailableException("Use the secure recovery completion flow.");
         var normalizedIdentifier = NormalizeEmail(email);

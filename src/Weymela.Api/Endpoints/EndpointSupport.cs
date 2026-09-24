@@ -5,7 +5,10 @@ namespace Weymela.Api.Endpoints;
 
 internal static class EndpointSupport
 {
-    public static Actor Actor(HttpContext context)=>WorkspaceAuthentication.Actor(context.User);
+    public static AuthorityContext Authority(HttpContext context)=>WorkspaceAuthentication.Authority(context.User);
+    public static RealActor RealActor(HttpContext context)=>Authority(context).RealActor;
+    public static EffectiveSubject EffectiveSubject(HttpContext context)=>Authority(context).EffectiveSubject;
+    public static Actor Actor(HttpContext context)=>Authority(context).CommandActor;
     public static string Key(HttpContext context)
     {
         var value=context.Request.Headers["Idempotency-Key"].ToString();

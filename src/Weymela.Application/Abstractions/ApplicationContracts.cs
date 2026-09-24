@@ -2,6 +2,92 @@ using Weymela.Domain;
 namespace Weymela.Application;
 public enum ActorRole { PlatformAdmin, OperationsAdmin, Business, Creator, Customer, Cashier }
 public sealed record Actor(Guid UserId, ActorRole Role, Guid? BusinessId = null, Guid? CreatorId = null, Guid? CustomerId = null);
+public sealed record RealActor(Actor Identity)
+{
+    public Guid UserId => Identity.UserId;
+    public ActorRole Role => Identity.Role;
+}
+
+public sealed record EffectiveSubject(Actor Identity, bool IsViewed)
+{
+    public Guid UserId => Identity.UserId;
+    public ActorRole Role => Identity.Role;
+
+    public static EffectiveSubject Real(RealActor actor) => new(actor.Identity, false);
+    public static EffectiveSubject Viewed(Actor actor) => new(actor, true);
+}
+
+public sealed record AdministrativeAuthority(ActorRole Role)
+{
+    public bool IsPlatformAdmin => Role == ActorRole.PlatformAdmin;
+    public bool IsOperationsAdmin => Role == ActorRole.OperationsAdmin;
+    public bool IsAdmin => IsPlatformAdmin || IsOperationsAdmin;
+    public bool CanManagePlatform => IsPlatformAdmin;
+    public bool CanStartViewAs => IsPlatformAdmin;
+
+    public static AdministrativeAuthority For(RealActor actor) => new(actor.Role);
+
+    public static bool CanBeViewedAs(ActorRole role) => role is
+        ActorRole.Customer or ActorRole.Creator or ActorRole.Business or ActorRole.OperationsAdmin;
+}
+
+public static class AuthorityClaimTypes
+{
+    public const string RealActorUserId = "authority.real-actor-user-id";
+    public const string ViewedUserId = "authority.viewed-user-id";
+    public const string ViewedRole = "authority.viewed-role";
+    public const string ViewedBusinessId = "authority.viewed-business-id";
+    public const string ViewedCreatorId = "authority.viewed-creator-id";
+    public const string ViewedCustomerId = "authority.viewed-customer-id";
+    public const string EffectiveRole = "authority.effective-role";
+    public const string SupportSessionId = "authority.support-session-id";
+
+    public static bool IsReserved(string? type) => type is RealActorUserId or ViewedUserId or ViewedRole
+        or ViewedBusinessId or ViewedCreatorId or ViewedCustomerId or EffectiveRole or SupportSessionId;
+}
+
+public sealed record SupportSessionContext(Guid SessionId, Guid RealActorUserId,
+    EffectiveSubject ViewedSubject, DateTime ExpiresAtUtc)
+{
+    public bool IsActiveAt(DateTime nowUtc) => SessionId != Guid.Empty
+        && RealActorUserId != Guid.Empty
+        && ViewedSubject.IsViewed
+        && ExpiresAtUtc.Kind == DateTimeKind.Utc
+        && nowUtc.Kind == DateTimeKind.Utc
+        && ExpiresAtUtc > nowUtc;
+}
+
+public sealed record AuthorityContext(RealActor RealActor, EffectiveSubject EffectiveSubject,
+    AdministrativeAuthority Authority, SupportSessionContext? SupportSession)
+{
+    /// <summary>Commands must always use this actor, including during a future View As session.</summary>
+    public Actor CommandActor => RealActor.Identity;
+    public bool IsViewAsActive => SupportSession is not null;
+
+    public static AuthorityContext ForAuthenticatedActor(Actor actor)
+    {
+        var realActor = new RealActor(actor);
+        return new(realActor, EffectiveSubject.Real(realActor), AdministrativeAuthority.For(realActor), null);
+    }
+
+    /// <summary>
+    /// Creates a context only after a server-side support session has been validated.
+    /// The viewed subject never becomes the command actor.
+    /// </summary>
+    public static AuthorityContext ForValidatedViewAs(RealActor realActor, EffectiveSubject viewedSubject,
+        SupportSessionContext supportSession, DateTime nowUtc)
+    {
+        if (!AdministrativeAuthority.For(realActor).CanStartViewAs
+            || !viewedSubject.IsViewed
+            || !AdministrativeAuthority.CanBeViewedAs(viewedSubject.Role)
+            || supportSession.RealActorUserId != realActor.UserId
+            || supportSession.ViewedSubject.Identity != viewedSubject.Identity
+            || !supportSession.IsActiveAt(nowUtc))
+            throw new ApplicationFailure(FailureKind.Forbidden, "The administrative support session is invalid.", code: "InvalidAuthorityContext");
+
+        return new(realActor, viewedSubject, AdministrativeAuthority.For(realActor), supportSession);
+    }
+}
 public enum FailureKind { Validation, InsufficientFunds, Forbidden, NotFound, ConcurrencyConflict, IdempotencyConflict }
 public class ApplicationFailure(FailureKind kind, string message, Exception? innerException = null, string? code = null) : Exception(message, innerException)
 {

@@ -15,11 +15,14 @@ public static class WorkspaceAuthentication
     public const string Scheme="WeymelaV3";
     public static Actor Actor(ClaimsPrincipal user)
     {
+        if (user.Claims.Any(x => AuthorityClaimTypes.IsReserved(x.Type)))
+            throw new ApplicationFailure(FailureKind.Forbidden, "The authority context is not server-controlled.", code: "ForgedAuthorityContext");
         Guid? Read(string name)=>Guid.TryParse(user.FindFirstValue(name),out var id)?id:null;
         if(!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier),out var userId)||!Enum.TryParse<ActorRole>(user.FindFirstValue(ClaimTypes.Role),out var role))
             throw new ApplicationFailure(FailureKind.Forbidden,"Sign in to your workspace.");
         return new(userId,role,Read("business"),Read("creator"),Read("customer"));
     }
+    public static AuthorityContext Authority(ClaimsPrincipal user) => AuthorityContext.ForAuthenticatedActor(Actor(user));
     public static ClaimsPrincipal Principal(Actor actor,string name,string publicId)
     {
         List<Claim> claims=[new(ClaimTypes.NameIdentifier,actor.UserId.ToString()),new(ClaimTypes.Role,actor.Role.ToString()),new(ClaimTypes.Name,name),new("publicId",publicId)];
@@ -43,7 +46,10 @@ public sealed class ActiveWorkspaceHandler(WeymelaDbContext db) : AuthorizationH
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context,ActiveWorkspaceRequirement requirement)
     {
         if(context.User.Identity?.IsAuthenticated!=true)return;
-        var actor=WorkspaceAuthentication.Actor(context.User);
+        AuthorityContext authority;
+        try { authority = WorkspaceAuthentication.Authority(context.User); }
+        catch (ApplicationFailure) { return; }
+        var actor=authority.CommandActor;
         if(await db.AccountLifecycles.AsNoTracking().AnyAsync(x=>x.UserId==actor.UserId
             && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), CancellationToken.None)) return;
         var subject=actor.Role switch{ActorRole.Business=>actor.BusinessId,ActorRole.Creator=>actor.CreatorId,ActorRole.Customer=>actor.CustomerId,_=>actor.UserId};

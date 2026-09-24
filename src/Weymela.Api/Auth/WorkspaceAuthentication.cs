@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Api.Auth;
 
@@ -43,6 +44,8 @@ public sealed class ActiveWorkspaceHandler(WeymelaDbContext db) : AuthorizationH
     {
         if(context.User.Identity?.IsAuthenticated!=true)return;
         var actor=WorkspaceAuthentication.Actor(context.User);
+        if(await db.AccountLifecycles.AsNoTracking().AnyAsync(x=>x.UserId==actor.UserId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), CancellationToken.None)) return;
         var subject=actor.Role switch{ActorRole.Business=>actor.BusinessId,ActorRole.Creator=>actor.CreatorId,ActorRole.Customer=>actor.CustomerId,_=>actor.UserId};
         if(await db.CommercePermissions.AsNoTracking().AnyAsync(x=>x.UserId==actor.UserId&&x.Role==actor.Role&&x.SubjectId==subject&&x.IsActive
             &&(!requirement.Checkout||x.CanCheckout)

@@ -27,6 +27,9 @@ public sealed class TrustedIdentityService(WeymelaDbContext db, IIdentityTokenVe
         var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.Provider == verified.Provider
             && x.ProjectId == verified.ProjectId && x.ExternalSubject == verified.Subject && x.IsActive, ct);
         if (binding is null || verified.AuthenticatedAtUtc < binding.ValidAfterUtc) throw Denied();
+        if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == binding.UserId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "This account is not active.");
         var profiles = await ProfilesForUserAsync(binding.UserId, ct);
         // A verified account may exist before its first approved commerce profile.
         // Give it a restricted onboarding context; all commerce policies still require
@@ -111,6 +114,9 @@ public sealed class TrustedIdentityService(WeymelaDbContext db, IIdentityTokenVe
         var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == bindingId && x.UserId == userId
             && x.Version == bindingVersion && x.IsActive && x.ValidAfterUtc <= authenticatedAtUtc, ct);
         if (binding is null) throw Denied();
+        if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "This account is not active.");
         var profiles = await ProfilesForUserAsync(userId, ct);
         var selected = profiles.SingleOrDefault(x => x.Actor.Role == selection.Role && SubjectId(x.Actor) == selection.SubjectId
             && x.Actor.BusinessId == selection.BusinessId) ?? throw Denied();

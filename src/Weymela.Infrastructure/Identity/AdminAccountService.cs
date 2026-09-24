@@ -61,9 +61,19 @@ public sealed class AdminAccountService(WeymelaDbContext db, TimeProvider clock)
                 (x.Role == ActorRole.PlatformAdmin || x.Role == ActorRole.OperationsAdmin)).ToListAsync(token);
             if (existing.Any(x => x.IsActive && x.Role == role))
                 throw new ApplicationFailure(FailureKind.Validation, "This account already has that Admin role.");
+            if (existing.Any(x => x.Role == role))
+                throw new ApplicationFailure(FailureKind.Validation, "This Admin role was previously revoked and requires a new authorized lifecycle.", code: "RevokedAdminRole");
+            var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == identity.UserId, token);
+            if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked)
+                throw new ApplicationFailure(FailureKind.Validation, "This account is not eligible for a legacy Admin grant.", code: "AccountLifecycleBlocksGrant");
+            if (lifecycle?.Status == AccountLifecycleStatus.Pending)
+                throw new ApplicationFailure(FailureKind.Validation, "Complete the pending account activation before using the legacy Admin grant.", code: "PendingAccountActivation");
+            if (await db.AccountPreauthorizations.AnyAsync(x => x.UserId == identity.UserId && x.TargetRole == role && x.Status == AccountPreauthorizationStatus.Pending, token))
+                throw new ApplicationFailure(FailureKind.Validation, "A pending account preauthorization already exists for this Admin role.", code: "PendingAccountPreauthorization");
             if (existing.Any(x => x.IsActive && x.Role == ActorRole.PlatformAdmin) && role == ActorRole.OperationsAdmin)
                 await EnsureReplacementPlatformAdmin(identity.UserId, token);
-            foreach (var permission in existing.Where(x => x.IsActive)) permission.IsActive = false;
+            var replaced = existing.Where(x => x.IsActive).ToArray();
+            foreach (var permission in replaced) permission.IsActive = false;
             var target = existing.SingleOrDefault(x => x.Role == role && x.SubjectId == identity.UserId);
             if (target is null) db.CommercePermissions.Add(new CommercePermission(identity.UserId, role, identity.UserId, null, true, false));
             else target.IsActive = true;
@@ -76,6 +86,14 @@ public sealed class AdminAccountService(WeymelaDbContext db, TimeProvider clock)
             };
             db.AdminGrants.Add(grant);
             db.IdempotencyRecords.Add(new(actor.UserId, "GrantAdmin", key, fingerprint, grant.Id.ToString(), Now));
+            foreach (var old in replaced)
+                db.AccountRoleHistory.Add(new(Guid.NewGuid(), actor.UserId, identity.UserId, old.Role, old.SubjectId, old.BusinessId,
+                    "Revoked", "Legacy Admin grant replaced the previous active Admin role.", Now, Guid.NewGuid(), old.UserId));
+            db.AccountRoleHistory.Add(new(Guid.NewGuid(), actor.UserId, identity.UserId, role, identity.UserId, null,
+                "Granted", "Legacy Admin grant compatibility path.", Now, Guid.NewGuid(), grant.Id));
+            if (lifecycle is null)
+                db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = identity.UserId, Status = AccountLifecycleStatus.Active,
+                    ChangedByUserId = actor.UserId, CreatedAtUtc = Now, UpdatedAtUtc = Now, Version = 1 });
             Record(actor, "AdminGranted", identity.UserId, role, grant.Id);
             return grant.Id;
         }, ct);
@@ -115,7 +133,8 @@ public sealed class AdminAccountService(WeymelaDbContext db, TimeProvider clock)
     {
         var correlation = Guid.NewGuid();
         db.AuditEvents.Add(new(Guid.NewGuid(), type, actor.UserId, null, null, null, correlation, Now,
-            $"target={target:D};role={role};reference={reference:D}"));
+            $"target={target:D};role={role};reference={reference:D}", TargetUserId: target, TargetRole: role,
+            Operation: type == "AdminGranted" ? "grant-admin" : "revoke-admin"));
         db.OutboxMessages.Add(new OutboxMessage { EventType = type,
             Payload = JsonSerializer.Serialize(new { TargetUserId = target, Role = role.ToString(), Reference = reference }), OccurredAtUtc = Now });
     }

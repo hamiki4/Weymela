@@ -25,6 +25,9 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."AuthIdentifiers",
     v3."AuthorizedDevices",
     v3."AdminGrants",
+    v3."AccountLifecycles",
+    v3."AccountPreauthorizations",
+    v3."AccountRoleHistory",
     v3."BusinessWallets",
     v3."CommercePermissions",
     v3."CreatorAllocations",
@@ -103,6 +106,13 @@ GRANT SELECT, INSERT ON TABLE v3."AuditEvents" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."OutboxMessages" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."InAppNotifications" TO :"api_role";
 GRANT UPDATE ("ReadAtUtc", "Version") ON TABLE v3."InAppNotifications" TO :"api_role";
+
+GRANT SELECT, INSERT, UPDATE ON TABLE
+    v3."AccountLifecycles",
+    v3."AccountPreauthorizations"
+TO :"api_role";
+
+GRANT SELECT, INSERT ON TABLE v3."AccountRoleHistory" TO :"api_role";
 
 GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."AdminGrants",

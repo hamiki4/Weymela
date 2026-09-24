@@ -155,5 +155,37 @@ internal static class OperationalReadinessConfiguration
         handoff.HasOne<IdentityBinding>().WithMany().HasForeignKey(x => x.IdentityBindingId)
             .OnDelete(DeleteBehavior.Restrict);
         Mapping.Version(handoff);
+
+        var preauthorization = model.Entity<AccountPreauthorizationRecord>();
+        Mapping.Scalars(preauthorization); preauthorization.HasKey(x => x.Id);
+        preauthorization.ToTable("AccountPreauthorizations", t =>
+            t.HasCheckConstraint("CK_AccountPreauthorization_Expiry", "\"ExpiresAtUtc\" > \"CreatedAtUtc\" AND \"ActivationSecretExpiresAtUtc\" = \"ExpiresAtUtc\""));
+        preauthorization.Property(x => x.EmailIdentifierHash).HasMaxLength(64);
+        preauthorization.Property(x => x.PhoneIdentifierHash).HasMaxLength(64);
+        preauthorization.Property(x => x.DisplayName).HasMaxLength(120);
+        preauthorization.Property(x => x.PublicId).HasMaxLength(80);
+        preauthorization.Property(x => x.Region).HasMaxLength(80);
+        preauthorization.Property(x => x.Category).HasMaxLength(80);
+        preauthorization.Property(x => x.SubmissionJson).HasMaxLength(6000);
+        preauthorization.Property(x => x.ActivationSecretHash).HasMaxLength(128);
+        preauthorization.HasIndex(x => new { x.EmailIdentifierHash, x.TargetRole, x.Status });
+        preauthorization.HasIndex(x => new { x.UserId, x.TargetRole, x.Status });
+        Mapping.Version(preauthorization);
+
+        var lifecycle = model.Entity<AccountLifecycleRecord>();
+        Mapping.Scalars(lifecycle); lifecycle.HasKey(x => x.UserId);
+        lifecycle.ToTable("AccountLifecycles", t =>
+            t.HasCheckConstraint("CK_AccountLifecycle_Reason", "\"Reason\" IS NULL OR char_length(btrim(\"Reason\")) BETWEEN 1 AND 500"));
+        lifecycle.Property(x => x.Reason).HasMaxLength(500);
+        lifecycle.HasIndex(x => new { x.Status, x.UpdatedAtUtc });
+        Mapping.Version(lifecycle);
+
+        var roleHistory = model.Entity<AccountRoleHistoryRecord>();
+        Mapping.Scalars(roleHistory); roleHistory.HasKey(x => x.Id);
+        roleHistory.ToTable("AccountRoleHistory");
+        roleHistory.Property(x => x.Action).HasMaxLength(60);
+        roleHistory.Property(x => x.Reason).HasMaxLength(500);
+        roleHistory.HasIndex(x => new { x.TargetUserId, x.OccurredAtUtc });
+        roleHistory.HasIndex(x => new { x.ActorUserId, x.OccurredAtUtc });
     }
 }

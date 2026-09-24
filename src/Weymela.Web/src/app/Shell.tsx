@@ -29,6 +29,7 @@ const navigation: Record<Role, [string, string, string][]> = {
   ],
   PlatformAdmin: [
     ["/admin", "Dashboard", "home"],
+    ["/admin/accounts", "Accounts", "people"],
     ["/admin/businesses", "Businesses", "wallet"],
     ["/admin/creators", "Creators", "people"],
     ["/admin/role-enrollments", "Profile Requests", "people"],

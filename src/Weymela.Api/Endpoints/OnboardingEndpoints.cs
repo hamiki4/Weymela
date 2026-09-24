@@ -5,6 +5,7 @@ using Weymela.Api.Auth;
 using Weymela.Api.Security;
 using Weymela.Application;
 using Weymela.Application.Operations;
+using Weymela.Application.Web;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence;
 
@@ -28,6 +29,9 @@ internal static class OnboardingEndpoints
         });
         account.MapGet("/legal", async (HttpContext c, AccountLegalOnboardingService service, CancellationToken ct) =>
             Results.Ok(await service.StatusAsync(UserId(c), ct)));
+        account.MapPost("/account-preauthorizations/{id:guid}/activate", async (Guid id, AccountActivationInput input,
+            HttpContext c, PlatformAdminAccountService service, CancellationToken ct) =>
+            Results.Ok(await service.ActivateAsync(EndpointSupport.Actor(c), id, input.ActivationSecret, ct)));
         account.MapPost("/profile", async (ProfileRequest input, HttpContext c, RoleEnrollmentService service,
             WeymelaDbContext db, TrustedIdentityService identities, TimeProvider clock, CancellationToken ct) =>
         {

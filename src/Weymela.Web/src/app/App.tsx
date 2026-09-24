@@ -30,6 +30,7 @@ import {
   AdminDashboard,
   AdminRoleEnrollments,
 } from "../features/admin/AdminPages";
+import { AdminAccountDetail, AdminAccounts } from "../features/admin/AdminAccounts";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
 import {
@@ -184,6 +185,8 @@ export function App() {
           </RoleGate>
         }
       >
+        <Route path="/admin/accounts" element={<AdminAccounts />} />
+        <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
         <Route path="/admin/campaigns" element={<AdminCampaigns />} />
         <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
         <Route path="/admin/businesses" element={<AdminBusinesses />} />

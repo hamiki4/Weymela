@@ -1,4 +1,5 @@
 using Weymela.Domain;
+using Weymela.Application;
 
 namespace Weymela.Infrastructure.Persistence.Records;
 
@@ -13,7 +14,9 @@ public sealed record WalletEntry(Guid Id, Guid BusinessId, Guid? PromotionId, Mo
     Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null);
 public sealed record StoredIdempotencyRecord(Guid ActorId, string OperationType, string Key, string RequestFingerprint, string ResultReference, DateTime CreatedAtUtc);
 public sealed record AuditEvent(Guid Id, string EventType, Guid ActorId, Guid? BusinessId, Guid? PromotionId, Guid? CreatorId, Guid CorrelationId, DateTime OccurredAtUtc, string Detail,
-    Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null);
+    Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null, Guid? SupportSessionId = null,
+    Guid? TargetUserId = null, ActorRole? TargetRole = null, Guid? TargetSubjectId = null,
+    string? Operation = null, string? Reason = null);
 public sealed class OutboxMessage
 {
     public Guid Id { get; init; } = Guid.NewGuid();

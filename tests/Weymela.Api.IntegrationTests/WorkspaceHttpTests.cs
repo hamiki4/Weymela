@@ -26,12 +26,28 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [InlineData("admin","/api/admin/platform")]
     [InlineData("admin","/api/admin/notifications")]
     [InlineData("admin","/api/admin/audit")]
+    [InlineData("admin","/api/admin/accounts")]
     [InlineData("customer","/api/customer/offers")]
     [InlineData("customer","/api/customer/transactions")]
     [InlineData("customer","/api/customer/cashback")]
     [InlineData("customer","/api/customer/history")]
     public async Task Role_workspace_loads_from_real_persistence(string persona,string path)
     {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login(persona);Assert.NotNull(await c.GetJson(path));}
+
+    [Fact]
+    public async Task Platform_admin_account_directory_and_detail_are_safe()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres); using var c = await f.Login("admin");
+        var rows = await c.GetJson("/api/admin/accounts");
+        Assert.NotEmpty(rows.AsArray());
+        var text = rows.ToJsonString();
+        foreach (var secret in new[] { "passwordHash", "pinVerifier", "activationSecretHash", "firebaseToken", "sessionToken" })
+            Assert.DoesNotContain(secret, text, StringComparison.OrdinalIgnoreCase);
+        var userId = rows[0]!["userId"]?.GetValue<string>() ?? rows[0]!["id"]!.GetValue<string>();
+        var detail = await c.GetJson($"/api/admin/accounts/{userId}");
+        foreach (var secret in new[] { "passwordHash", "pinVerifier", "activationSecretHash", "firebaseToken", "sessionToken" })
+            Assert.DoesNotContain(secret, detail.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+    }
 
     [Theory]
     [InlineData("creator","/api/business/wallet")]

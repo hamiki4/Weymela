@@ -278,7 +278,9 @@ public sealed class PasswordCredentialService(
             && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId, ct);
 
     private async Task<bool> HasAuthoritativeIdentity(Guid userId, CancellationToken ct) =>
-        await db.IdentityBindings.AsNoTracking().CountAsync(x => x.UserId == userId && x.IsActive
+        !await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), ct)
+        && await db.IdentityBindings.AsNoTracking().CountAsync(x => x.UserId == userId && x.IsActive
             && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId, ct) == 1
         && (await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
             && x.Kind == "Email" && x.IsVerified, ct)

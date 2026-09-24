@@ -62,6 +62,8 @@ internal static class OperationalConfiguration
         audit.HasIndex(x => x.CorrelationId); audit.HasIndex(x => new { x.PromotionId, x.OccurredAtUtc });
         audit.HasIndex(x => new { x.UgcOpportunityId, x.OccurredAtUtc });
         audit.HasIndex(x => new { x.UgcCustomerOfferId, x.OccurredAtUtc });
+        audit.HasIndex(x => new { x.TargetUserId, x.OccurredAtUtc });
+        audit.HasIndex(x => new { x.SupportSessionId, x.OccurredAtUtc });
         var outbox = model.Entity<OutboxMessage>(); Mapping.Scalars(outbox); outbox.HasKey(x => x.Id); outbox.ToTable("OutboxMessages");
         outbox.Property(x => x.Payload).HasColumnType("jsonb");
         outbox.HasIndex(x => x.OccurredAtUtc).HasFilter("\"ProcessedAtUtc\" IS NULL");

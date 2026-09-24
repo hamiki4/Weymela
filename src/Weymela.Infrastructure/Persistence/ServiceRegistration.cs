@@ -46,6 +46,7 @@ public static class ServiceRegistration
         services.AddScoped<PasswordCredentialService>();
         services.AddScoped<RoleEnrollmentService>();
         services.AddScoped<AccountLegalOnboardingService>();
+        services.AddScoped<PlatformAdminAccountService>();
         services.TryAddSingleton<IEmailCodeDelivery, DisabledEmailCodeDelivery>();
         services.TryAddSingleton<IFirebaseCustomTokenIssuer, DisabledFirebaseCustomTokenIssuer>();
         // Host must provide IVerifiedViewProvider and IPublicIdentityDirectory.

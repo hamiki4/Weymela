@@ -50,6 +50,63 @@ public sealed class AdminAccountServiceTests(PostgresFixture fixture)
             service.RevokeAsync(replacement, state.TargetUser, "revoke-new-last", default))).Kind);
     }
 
+    [Fact]
+    public async Task Legacy_grant_does_not_reactivate_blocked_or_pending_stage_a_accounts()
+    {
+        foreach (var blocked in new[] { AccountLifecycleStatus.Suspended, AccountLifecycleStatus.Disabled,
+            AccountLifecycleStatus.Cancelled, AccountLifecycleStatus.Revoked, AccountLifecycleStatus.Pending })
+        {
+            var state = await Setup(); await using var db = state.Database.Open();
+            db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = state.TargetUser, Status = blocked,
+                ChangedByUserId = state.Platform.UserId, CreatedAtUtc = Now, UpdatedAtUtc = Now, Version = 1 });
+            if (blocked == AccountLifecycleStatus.Pending)
+            {
+                db.AccountPreauthorizations.Add(new AccountPreauthorizationRecord
+                {
+                    UserId = state.TargetUser, TargetRole = ActorRole.OperationsAdmin, EmailIdentifierHash = EmailAuthService.HashIdentifier(state.TargetEmail),
+                    DisplayName = "Mimi Kibru", CreatedByUserId = state.Platform.UserId, CreatedAtUtc = Now,
+                    ExpiresAtUtc = Now.AddDays(7), ActivationSecretExpiresAtUtc = Now.AddDays(7), ActivationSecretHash = "private-hash", Version = 1
+                });
+            }
+            await db.SaveChangesAsync();
+            var service = new AdminAccountService(db, new FixedTime(Now));
+            var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.GrantAsync(state.Platform,
+                new AdminGrantInput(state.TargetEmail, "Operations Admin"), $"blocked-{blocked}", default));
+            Assert.Equal(FailureKind.Validation, failure.Kind);
+        }
+    }
+
+    [Fact]
+    public async Task Legacy_grant_does_not_reactivate_a_previously_revoked_admin_role()
+    {
+        var state = await Setup(); await using var db = state.Database.Open();
+        db.CommercePermissions.Add(new(state.TargetUser, ActorRole.OperationsAdmin, state.TargetUser, null, false, false));
+        await db.SaveChangesAsync();
+        var service = new AdminAccountService(db, new FixedTime(Now));
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.GrantAsync(state.Platform,
+            new AdminGrantInput(state.TargetEmail, "Operations Admin"), "revoked-role", default));
+        Assert.Equal(FailureKind.Validation, failure.Kind);
+        Assert.Equal("RevokedAdminRole", failure.Code);
+    }
+
+    [Fact]
+    public async Task Legacy_grant_cannot_bypass_an_active_account_pending_admin_preauthorization()
+    {
+        var state = await Setup(); await using var db = state.Database.Open();
+        db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = state.TargetUser, Status = AccountLifecycleStatus.Active,
+            ChangedByUserId = state.Platform.UserId, CreatedAtUtc = Now, UpdatedAtUtc = Now, Version = 1 });
+        db.AccountPreauthorizations.Add(new AccountPreauthorizationRecord
+        {
+            UserId = state.TargetUser, TargetRole = ActorRole.OperationsAdmin, EmailIdentifierHash = EmailAuthService.HashIdentifier(state.TargetEmail),
+            DisplayName = "Mimi Kibru", CreatedByUserId = state.Platform.UserId, CreatedAtUtc = Now,
+            ExpiresAtUtc = Now.AddDays(7), ActivationSecretExpiresAtUtc = Now.AddDays(7), ActivationSecretHash = "private-hash", Version = 1
+        });
+        await db.SaveChangesAsync();
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => new AdminAccountService(db, new FixedTime(Now)).GrantAsync(state.Platform,
+            new AdminGrantInput(state.TargetEmail, "Operations Admin"), "pending-preauth", default));
+        Assert.Equal("PendingAccountPreauthorization", failure.Code);
+    }
+
     private async Task<State> Setup()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();

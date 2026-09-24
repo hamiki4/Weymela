@@ -37,7 +37,16 @@ internal static class AdminEndpoints
         g.MapGet("/ugc",(HttpContext c,UgcService service,CancellationToken ct)=>service.AdminAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc/{id:guid}",(Guid id,HttpContext c,UgcService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct));
         var accounts=g.MapGroup("/accounts").RequireAuthorization("PlatformAdmin");
-        accounts.MapGet("",(HttpContext c,AdminAccountService service,CancellationToken ct)=>service.GetAsync(EndpointSupport.Actor(c),ct));
+        accounts.MapGet("",([AsParameters] AdminAccountFilterInput filter,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),filter,ct));
+        accounts.MapGet("/{id:guid}",(Guid id,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct));
+        accounts.MapPost("/preauthorize",async(AccountPreauthorizationInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
+            Results.Ok(await service.PreauthorizeAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct)));
+        accounts.MapPost("/preauthorizations/{id:guid}/cancel",async(Guid id,AccountLifecycleInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.CancelPreauthorizationAsync(EndpointSupport.Actor(c),id,input.Reason,EndpointSupport.Key(c),ct)));
+        accounts.MapPost("/{userId:guid}/lifecycle",async(Guid userId,AccountLifecycleInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.ChangeLifecycleAsync(EndpointSupport.Actor(c),userId,input,EndpointSupport.Key(c),ct)));
+        accounts.MapPost("/{userId:guid}/profiles/revoke",async(Guid userId,RevokeAccountProfileInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.RevokeProfileAsync(EndpointSupport.Actor(c),userId,input,EndpointSupport.Key(c),ct)));
         accounts.MapPost("",async(AdminGrantInput input,HttpContext c,AdminAccountService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.GrantAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct)));
         accounts.MapPost("/{userId:guid}/revoke",async(Guid userId,HttpContext c,AdminAccountService service,CancellationToken ct)=>

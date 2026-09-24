@@ -2895,3 +2895,7 @@ td .button {
 .overview-highlight .button {
   margin-top: 5px;
 }
+.account-row-status { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; justify-content: flex-end; }
+.account-row-status small { color: var(--muted); }
+.activation-secret { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: .75rem; }
+.activation-secret code { padding: .55rem .7rem; border-radius: .5rem; background: var(--surface-strong, #f1ede7); word-break: break-all; }

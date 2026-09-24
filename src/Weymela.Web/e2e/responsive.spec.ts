@@ -45,6 +45,7 @@ for (const viewport of viewports)
         "admin",
         [
           "/admin",
+          "/admin/accounts",
           "/admin/campaigns",
           "/admin/settings",
           "/admin/payouts",

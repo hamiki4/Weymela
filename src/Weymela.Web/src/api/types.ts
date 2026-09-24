@@ -98,6 +98,68 @@ export interface Activity {
   atUtc: string;
   reference: string;
 }
+
+export interface AdminAccountSummary {
+  id: string;
+  userId: string | null;
+  name: string;
+  role: string;
+  status: string;
+  approvalState: string | null;
+  safeIdentifier: string;
+  association: string | null;
+  lastActivityAtUtc: string | null;
+  canManage: boolean;
+  canViewAs: boolean;
+}
+export interface AdminAuditItem {
+  id: string;
+  operation: string;
+  action: string;
+  occurredAtUtc: string;
+  actorUserId: string;
+  targetUserId: string | null;
+  targetRole: string | null;
+  targetSubjectId: string | null;
+  correlationId: string;
+}
+export interface AdminAccountProfile {
+  subjectId: string;
+  role: string;
+  displayName: string;
+  publicId: string;
+  region: string | null;
+  category: string | null;
+  active: boolean;
+  businessId: string | null;
+}
+export interface AdminCommerceTransaction {
+  id: string;
+  occurredAtUtc: string;
+  purchaseAmount: number;
+  currency: string;
+  status: string;
+  businessId: string;
+  creatorId: string | null;
+  customerId: string | null;
+  cashierId: string | null;
+}
+export interface AdminBusinessData { availableWallet: number | null; reservedWallet: number | null; promotions: number; ugcOpportunities: number; ugcCustomerOffers: number; cashiers: number; deposits: number; transactions: number; }
+export interface AdminCreatorSocialProfile { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null; }
+export interface AdminCreatorData { promotionRequests: number; allocations: number; contentSubmissions: number; liveParticipations: number; earnings: number | null; payouts: number; socialProfiles: AdminCreatorSocialProfile[]; }
+export interface AdminCustomerData { cashback: number | null; purchases: number; qrHistory: number; payouts: number; }
+export interface AdminCashierData { businessId: string | null; businessName: string | null; activationState: string; transactionsProcessed: number; }
+export interface AdminAdminData { role: string; active: boolean; grantedAtUtc: string | null; roleHistoryEntries: number; }
+export interface AdminAccountDetail {
+  account: AdminAccountSummary;
+  roles: string[];
+  profiles: AdminAccountProfile[];
+  audit: AdminAuditItem[];
+  transactions: AdminCommerceTransaction[];
+  activity: AdminAuditItem[];
+  roleData: AdminBusinessData | AdminCreatorData | AdminCustomerData | AdminCashierData | AdminAdminData | null;
+}
+export interface AccountPreauthorizationResult { preauthorizationId: string; userId: string; role: string; status: string; expiresAtUtc: string; oneTimeActivationSecret?: string | null; }
 export interface Wallet {
   totalBalance: number;
   available: number;

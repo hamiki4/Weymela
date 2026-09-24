@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import QRCode from "qrcode";
 import { login, open, screenshot } from "./helpers";
 
 test("real QR rejects wrong Business then confirms the same offer at its Business", async ({
@@ -81,14 +82,29 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
     .getByRole("link", { name: "Get Offer", exact: true })
     .first()
     .click();
+  const issuing = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/qr") && response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Get Offer", exact: true }).click();
+  const qr = (await (await issuing).json()) as { token: string };
   const image = page.getByRole("img", { name: "Offer QR for the cashier" });
   await expect(image).toBeVisible();
   await expect(image).toHaveAttribute("src", /^data:image\/png;base64,/);
-  const src = await image.getAttribute("src");
+  const qrVariants = Array.from({ length: 8 }, (_, maskPattern) => {
+    const generatedQr = QRCode.create(qr.token, {
+      errorCorrectionLevel: "M",
+      maskPattern: maskPattern as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7,
+    });
+    return {
+      moduleCount: generatedQr.modules.size,
+      modules: Array.from(generatedQr.modules.data, (value) => value === 1),
+    };
+  });
+  const moduleCount = qrVariants[0].moduleCount;
   // Synthetic camera frames exercise the actual ZXing decoder. No API/finance response is mocked.
   await context.addInitScript(
-    ({ src }) => {
+    ({ moduleCount, qrVariants }) => {
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
         value: async () => {
           const canvas = document.createElement("canvas");
@@ -99,87 +115,16 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
           canvas.style.left = "-10000px";
           canvas.style.top = "0";
           document.body.append(canvas);
-          const image = new Image();
-          image.decoding = "sync";
-          await new Promise<void>((resolve, reject) => {
-            image.onload = () => resolve();
-            image.onerror = () =>
-              reject(new Error("Synthetic QR image failed to load"));
-            image.src = src!;
-          });
-          const qrCanvas = document.createElement("canvas");
-          qrCanvas.width = image.naturalWidth;
-          qrCanvas.height = image.naturalHeight;
-          const qrContext = qrCanvas.getContext("2d")!;
-          qrContext.imageSmoothingEnabled = false;
-          qrContext.drawImage(image, 0, 0);
-          const qrPixels = qrContext.getImageData(
-            0,
-            0,
-            qrCanvas.width,
-            qrCanvas.height,
+          const quietZoneModules = 4;
+          const sourceScale = Math.min(
+            16,
+            Math.floor(
+              Math.min(canvas.width, canvas.height) /
+                (moduleCount + quietZoneModules * 2 + 8),
+            ),
           );
-          for (let index = 0; index < qrPixels.data.length; index += 4) {
-            const luminance =
-              (qrPixels.data[index] +
-                qrPixels.data[index + 1] +
-                qrPixels.data[index + 2]) /
-              3;
-            const value = luminance < 128 ? 0 : 255;
-            qrPixels.data[index] = value;
-            qrPixels.data[index + 1] = value;
-            qrPixels.data[index + 2] = value;
-            qrPixels.data[index + 3] = 255;
-          }
-          qrContext.putImageData(qrPixels, 0, 0);
-          if (qrCanvas.width !== qrCanvas.height) {
-            throw new Error("Synthetic QR image is not square");
-          }
-          const quietZonePixels = 80;
-          const sourceScale = 3;
-          const largeQrCanvas = document.createElement("canvas");
-          largeQrCanvas.width =
-            qrCanvas.width * sourceScale + quietZonePixels * 2;
-          largeQrCanvas.height = largeQrCanvas.width;
-          const framedQrContext = largeQrCanvas.getContext("2d")!;
-          framedQrContext.imageSmoothingEnabled = false;
-          framedQrContext.fillStyle = "white";
-          framedQrContext.fillRect(
-            0,
-            0,
-            largeQrCanvas.width,
-            largeQrCanvas.height,
-          );
-          const scaledQrPixels = framedQrContext.createImageData(
-            qrCanvas.width * sourceScale,
-            qrCanvas.height * sourceScale,
-          );
-          for (let sourceY = 0; sourceY < qrCanvas.height; sourceY += 1) {
-            for (let sourceX = 0; sourceX < qrCanvas.width; sourceX += 1) {
-              const sourceIndex = (sourceY * qrCanvas.width + sourceX) * 4;
-              for (let offsetY = 0; offsetY < sourceScale; offsetY += 1) {
-                for (let offsetX = 0; offsetX < sourceScale; offsetX += 1) {
-                  const targetX = sourceX * sourceScale + offsetX;
-                  const targetY = sourceY * sourceScale + offsetY;
-                  const targetIndex =
-                    (targetY * scaledQrPixels.width + targetX) * 4;
-                  scaledQrPixels.data[targetIndex] = qrPixels.data[sourceIndex];
-                  scaledQrPixels.data[targetIndex + 1] =
-                    qrPixels.data[sourceIndex + 1];
-                  scaledQrPixels.data[targetIndex + 2] =
-                    qrPixels.data[sourceIndex + 2];
-                  scaledQrPixels.data[targetIndex + 3] =
-                    qrPixels.data[sourceIndex + 3];
-                }
-              }
-            }
-          }
-          framedQrContext.putImageData(
-            scaledQrPixels,
-            quietZonePixels,
-            quietZonePixels,
-          );
-          const qrSize = largeQrCanvas.width;
+          const quietZonePixels = quietZoneModules * sourceScale;
+          const qrSize = (moduleCount + quietZoneModules * 2) * sourceScale;
           const qrX = Math.floor((canvas.width - qrSize) / 2);
           const qrY = Math.floor((canvas.height - qrSize) / 2);
           const state = ((
@@ -190,8 +135,7 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
                 trackEnded: boolean;
                 canvasWidth: number;
                 canvasHeight: number;
-                sourceWidth: number;
-                sourceHeight: number;
+                moduleCount: number;
                 quietZone: number;
                 sourceScale: number;
                 qrFrameWidth: number;
@@ -208,39 +152,37 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
             trackEnded: false,
             canvasWidth: canvas.width,
             canvasHeight: canvas.height,
-            sourceWidth: qrCanvas.width,
-            sourceHeight: qrCanvas.height,
+            moduleCount,
             quietZone: quietZonePixels,
             sourceScale,
-            qrFrameWidth: largeQrCanvas.width,
-            qrFrameHeight: largeQrCanvas.height,
+            qrFrameWidth: qrSize,
+            qrFrameHeight: qrSize,
             qrDrawX: qrX,
             qrDrawY: qrY,
             qrDrawSize: qrSize,
             imageSmoothingEnabled: false,
           });
           const drawFrame = () => {
-            const framedQrCanvas = largeQrCanvas;
-            const currentQrSize = framedQrCanvas.width;
-            const currentQrX = Math.floor((canvas.width - currentQrSize) / 2);
-            const currentQrY = Math.floor((canvas.height - currentQrSize) / 2);
-            state.qrFrameWidth = currentQrSize;
-            state.qrFrameHeight = currentQrSize;
-            state.qrDrawX = currentQrX;
-            state.qrDrawY = currentQrY;
-            state.qrDrawSize = currentQrSize;
-            state.quietZone = quietZonePixels;
-            state.sourceScale = sourceScale;
+            const variant =
+              qrVariants[
+                Math.floor(state.framesRendered / 30) % qrVariants.length
+              ];
+            ctx.imageSmoothingEnabled = false;
             ctx.fillStyle = "white";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(
-              framedQrCanvas,
-              currentQrX,
-              currentQrY,
-              currentQrSize,
-              currentQrSize,
-            );
+            ctx.fillStyle = "black";
+            for (let row = 0; row < moduleCount; row += 1) {
+              for (let column = 0; column < moduleCount; column += 1) {
+                if (variant.modules[row * moduleCount + column]) {
+                  ctx.fillRect(
+                    qrX + (column + quietZoneModules) * sourceScale,
+                    qrY + (row + quietZoneModules) * sourceScale,
+                    sourceScale,
+                    sourceScale,
+                  );
+                }
+              }
+            }
           };
           drawFrame();
           const stream = canvas.captureStream(0);
@@ -277,7 +219,7 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
         },
       });
     },
-    { src },
+    { moduleCount, qrVariants },
   );
   await login(context, "business");
   await open(page, "/checkout");
@@ -341,8 +283,7 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
             trackEnded: boolean;
             canvasWidth: number;
             canvasHeight: number;
-            sourceWidth: number;
-            sourceHeight: number;
+            moduleCount: number;
             quietZone: number;
             sourceScale: number;
             qrFrameWidth: number;

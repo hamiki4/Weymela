@@ -14,6 +14,8 @@ BUILD = ROOT / 'tools/ci/build-image.sh'
 BASE = 'nginx:stable-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c'
 APK_SHA256 = '8306e5bb577696c9069fe1dfd9e1dcc39d2d481c6a1b0e707fd03c3e21aa6aa2'
 APK_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libuuid-2.42.3-r1.apk'
+LIBEXPAT_SHA256 = '2e56946bc495cbed9eb1ad70859a79cba9db6420016453e065a0628848b32c7e'
+LIBEXPAT_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk'
 
 
 class ShellFixture(unittest.TestCase):
@@ -26,7 +28,7 @@ class ShellFixture(unittest.TestCase):
         self.calls_file = self.root / 'calls.jsonl'
         self.env = {**os.environ, 'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
                     'WEB_TEST_CALLS': str(self.calls_file), 'WEB_TEST_FAIL': '',
-                    'WEB_TEST_PACKAGE': 'libuuid-2.42.3-r1', 'WEB_TEST_EXISTING': '',
+                    'WEB_TEST_PACKAGE': 'libuuid-2.42.3-r1\nlibexpat-2.8.5-r0', 'WEB_TEST_EXISTING': '',
                     'GITHUB_ACTIONS': 'true', 'GITHUB_REF': 'refs/heads/main',
                     'GITHUB_SHA': 'a' * 40, 'GITHUB_REPOSITORY_OWNER': 'HamiKi4',
                     'GITHUB_REPOSITORY': 'hamiki4/WeymelaV3', 'GITHUB_RUN_ID': '456',
@@ -91,13 +93,21 @@ class RuntimePackagePatchTests(ShellFixture):
         result = self.run_install()
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
-        self.assertEqual([call['tool'] for call in calls], ['wget', 'sha256sum', 'apk', 'apk', 'rm'])
+        self.assertEqual([call['tool'] for call in calls],
+                         ['wget', 'sha256sum', 'apk', 'apk', 'rm',
+                          'wget', 'sha256sum', 'apk', 'apk', 'rm'])
         self.assertEqual(calls[0]['args'], ['-O', '/tmp/weymela-libuuid-2.42.3-r1.apk', APK_URL])
         self.assertEqual(calls[1]['args'], ['-c', '-'])
         self.assertEqual(calls[1]['stdin'], APK_SHA256 + '  /tmp/weymela-libuuid-2.42.3-r1.apk\n')
         self.assertEqual(calls[2]['args'], ['add', '--no-cache', '--no-network', '/tmp/weymela-libuuid-2.42.3-r1.apk'])
         self.assertEqual(calls[3]['args'], ['info', '--installed', 'libuuid=2.42.3-r1'])
         self.assertEqual(calls[4]['args'], ['/tmp/weymela-libuuid-2.42.3-r1.apk'])
+        self.assertEqual(calls[5]['args'], ['-O', '/tmp/weymela-libexpat-2.8.5-r0.apk', LIBEXPAT_URL])
+        self.assertEqual(calls[6]['args'], ['-c', '-'])
+        self.assertEqual(calls[6]['stdin'], LIBEXPAT_SHA256 + '  /tmp/weymela-libexpat-2.8.5-r0.apk\n')
+        self.assertEqual(calls[7]['args'], ['add', '--no-cache', '--no-network', '/tmp/weymela-libexpat-2.8.5-r0.apk'])
+        self.assertEqual(calls[8]['args'], ['info', '--installed', 'libexpat=2.8.5-r0'])
+        self.assertEqual(calls[9]['args'], ['/tmp/weymela-libexpat-2.8.5-r0.apk'])
 
     def test_download_failure_cannot_install_package(self):
         self.assertNotEqual(self.run_install('wget').returncode, 0)
@@ -184,6 +194,7 @@ class HostedRuntimeGateTests(ShellFixture):
                                   '--security-opt', 'no-new-privileges', '--entrypoint', '/sbin/apk',
                                   built[built.index('--tag') + 1], 'info', '-v'])
         self.assertIn('libuuid-2.42.3-r1\n', (self.root / '.artifacts/release/web-runtime-packages.txt').read_text())
+        self.assertIn('libexpat-2.8.5-r0\n', (self.root / '.artifacts/release/web-runtime-packages.txt').read_text())
         self.assertTrue((self.root / 'output').read_text().startswith('image=ghcr.io/'))
 
     def test_runtime_identity_gate_failure_blocks_build_outputs(self):
@@ -199,6 +210,11 @@ class HostedRuntimeGateTests(ShellFixture):
 
     def test_r0_is_insufficient_for_cve_2026_78408(self):
         result = self.run_build(WEB_TEST_PACKAGE='libuuid-2.42.3-r0')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'output').exists())
+
+    def test_vulnerable_libexpat_cannot_emit_successful_build_outputs(self):
+        result = self.run_build(WEB_TEST_PACKAGE='libuuid-2.42.3-r1\nlibexpat-2.8.4-r0')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / 'output').exists())
 

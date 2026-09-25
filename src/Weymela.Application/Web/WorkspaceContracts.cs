@@ -148,6 +148,7 @@ public sealed record TokenInput(string Token);
 public sealed record CheckoutInput(string Token, decimal PurchaseAmount);
 public sealed record ConfirmPaymentInput(string Reference);
 public sealed record SettlementInput(decimal Amount, string Reference);
+public sealed record ViewAsStartInput(Guid ViewedUserId, string? Reason = null);
 
 public sealed record UgcPlatformRequirementInput(string Platform, string Format, long? MinimumAudience);
 public sealed record CreateUgcInput(string Title, string? Slogan, string ContentType, string Instructions,

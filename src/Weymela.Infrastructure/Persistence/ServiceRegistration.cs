@@ -32,7 +32,7 @@ public static class ServiceRegistration
         services.AddScoped<CreatorEarningsRepository>();
         services.AddScoped<CustomerCashbackRepository>();
         services.AddScoped<PlatformRevenueRepository>();
-        services.AddSingleton(TimeProvider.System);
+        services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<ICommerceAccessPolicy, CommerceAccessPolicy>();
         services.AddScoped<CheckoutService>();
         services.AddScoped<PayoutService>();
@@ -47,6 +47,7 @@ public static class ServiceRegistration
         services.AddScoped<RoleEnrollmentService>();
         services.AddScoped<AccountLegalOnboardingService>();
         services.AddScoped<PlatformAdminAccountService>();
+        services.AddScoped<ViewAsService>();
         services.TryAddSingleton<IEmailCodeDelivery, DisabledEmailCodeDelivery>();
         services.TryAddSingleton<IFirebaseCustomTokenIssuer, DisabledFirebaseCustomTokenIssuer>();
         // Host must provide IVerifiedViewProvider and IPublicIdentityDirectory.

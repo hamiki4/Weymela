@@ -44,6 +44,7 @@ VALUES
     ('api', 'v3', 'CommercePermissions', true, true, true),
     ('api', 'v3', 'PublicWorkspaceProfiles', true, true, false),
     ('api', 'v3', 'RoleEnrollments', true, true, true),
+    ('api', 'v3', 'SupportSessions', true, true, true),
     ('api', 'v3', 'BusinessWallets', true, true, true),
     ('api', 'v3', 'CustomerCashbackAccounts', true, true, true),
     ('api', 'v3', 'CustomerProfiles', true, true, false),

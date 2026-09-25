@@ -125,6 +125,17 @@ public sealed record AuthorityContext(RealActor RealActor, EffectiveSubject Effe
         return new(realActor, viewedSubject, AdministrativeAuthority.For(realActor), supportSession);
     }
 }
+
+public sealed record ViewAsSessionView(
+    Guid SupportSessionId,
+    Guid ViewedUserId,
+    string ViewedRole,
+    Guid? ViewedBusinessId,
+    Guid? ViewedCreatorId,
+    Guid? ViewedCustomerId,
+    DateTime CreatedAtUtc,
+    DateTime ExpiresAtUtc);
+
 public enum FailureKind { Validation, InsufficientFunds, Forbidden, NotFound, ConcurrencyConflict, IdempotencyConflict }
 public class ApplicationFailure(FailureKind kind, string message, Exception? innerException = null, string? code = null) : Exception(message, innerException)
 {

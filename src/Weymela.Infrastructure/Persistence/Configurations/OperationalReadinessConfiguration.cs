@@ -187,5 +187,29 @@ internal static class OperationalReadinessConfiguration
         roleHistory.Property(x => x.Reason).HasMaxLength(500);
         roleHistory.HasIndex(x => new { x.TargetUserId, x.OccurredAtUtc });
         roleHistory.HasIndex(x => new { x.ActorUserId, x.OccurredAtUtc });
+
+        var support = model.Entity<SupportSessionRecord>();
+        Mapping.Scalars(support);
+        support.HasKey(x => x.Id);
+        support.ToTable("SupportSessions", t =>
+        {
+            t.HasCheckConstraint("CK_SupportSession_Lifetime",
+                "\"ExpiresAtUtc\" > \"CreatedAtUtc\" AND \"ExpiresAtUtc\" <= \"CreatedAtUtc\" + INTERVAL '15 minutes'");
+            t.HasCheckConstraint("CK_SupportSession_EndedAt",
+                "\"EndedAtUtc\" IS NULL OR \"EndedAtUtc\" >= \"CreatedAtUtc\"");
+            t.HasCheckConstraint("CK_SupportSession_ViewedRole",
+                "\"ViewedRole\" IN ('Customer','Creator','Business','OperationsAdmin')");
+            t.HasCheckConstraint("CK_SupportSession_Scope",
+                "(\"ViewedRole\" = 'Business' AND \"ViewedBusinessId\" IS NOT NULL AND \"ViewedCreatorId\" IS NULL AND \"ViewedCustomerId\" IS NULL) OR " +
+                "(\"ViewedRole\" = 'Creator' AND \"ViewedBusinessId\" IS NULL AND \"ViewedCreatorId\" IS NOT NULL AND \"ViewedCustomerId\" IS NULL) OR " +
+                "(\"ViewedRole\" = 'Customer' AND \"ViewedBusinessId\" IS NULL AND \"ViewedCreatorId\" IS NULL AND \"ViewedCustomerId\" IS NOT NULL) OR " +
+                "(\"ViewedRole\" = 'OperationsAdmin' AND \"ViewedBusinessId\" IS NULL AND \"ViewedCreatorId\" IS NULL AND \"ViewedCustomerId\" IS NULL)");
+        });
+        support.Property(x => x.SessionIdentifierHash).HasMaxLength(64);
+        support.HasIndex(x => x.SessionIdentifierHash).IsUnique();
+        support.HasIndex(x => new { x.RealActorUserId, x.EndedAtUtc }).IsUnique().HasFilter("\"EndedAtUtc\" IS NULL");
+        support.HasIndex(x => new { x.RealActorUserId, x.CreatedAtUtc });
+        support.HasIndex(x => new { x.ViewedUserId, x.CreatedAtUtc });
+        Mapping.Version(support);
     }
 }

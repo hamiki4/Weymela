@@ -61,18 +61,30 @@ public static class ApiHost
         LiveAuthentication.Add(builder.Services,options);
         EndpointSecurity.AddLimits(builder.Services,options);
         builder.Services.AddCors(o=>o.AddPolicy("V3Origins",p=>{if(options.AllowedOrigins.Length>0)p.WithOrigins(options.AllowedOrigins).WithMethods("GET","POST","OPTIONS").WithHeaders("Content-Type","X-Weymela-Request","X-Weymela-Profile","X-Weymela-Activity","Idempotency-Key","X-Correlation-ID").WithExposedHeaders("Retry-After","X-Correlation-ID").AllowCredentials();}));
+        builder.Services.AddHttpContextAccessor();
         if(options.TrustedProxies.Length>0)builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o=>
         {o.ForwardedHeaders=Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor|Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;o.ForwardLimit=1;o.KnownIPNetworks.Clear();o.KnownProxies.Clear();foreach(var proxy in options.TrustedProxies)o.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));});
         builder.Services.AddAuthorization(o=>
         {
-            foreach(var role in Enum.GetValues<ActorRole>())o.AddPolicy(role.ToString(),p=>p.RequireAuthenticatedUser().RequireRole(role.ToString()).AddRequirements(new ActiveWorkspaceRequirement()));
-            o.AddPolicy("Workspace",p=>p.RequireAuthenticatedUser().AddRequirements(new ActiveWorkspaceRequirement()));
+            var allRoles = new HashSet<ActorRole>(Enum.GetValues<ActorRole>());
+            foreach(var role in Enum.GetValues<ActorRole>())
+                o.AddPolicy(role.ToString(),p=>p.RequireAuthenticatedUser()
+                    .AddRequirements(new WorkspaceRoleRequirement(new HashSet<ActorRole> { role }, role == ActorRole.PlatformAdmin))
+                    .AddRequirements(new ActiveWorkspaceRequirement()));
+            o.AddPolicy("Workspace",p=>p.RequireAuthenticatedUser()
+                .AddRequirements(new WorkspaceRoleRequirement(allRoles))
+                .AddRequirements(new ActiveWorkspaceRequirement()));
             o.AddPolicy("AdminOperations",p=>p.RequireAuthenticatedUser()
-                .RequireRole(ActorRole.PlatformAdmin.ToString(),ActorRole.OperationsAdmin.ToString())
+                .AddRequirements(new WorkspaceRoleRequirement(new HashSet<ActorRole>
+                    { ActorRole.PlatformAdmin, ActorRole.OperationsAdmin }))
                 .AddRequirements(new ActiveWorkspaceRequirement()));
             o.AddPolicy("VerifiedAccount", p => p.RequireAuthenticatedUser());
-            o.AddPolicy("Checkout",p=>p.RequireAuthenticatedUser().RequireRole(ActorRole.Business.ToString(),ActorRole.Cashier.ToString()).AddRequirements(new ActiveWorkspaceRequirement(checkout:true)));
+            o.AddPolicy("Checkout",p=>p.RequireAuthenticatedUser()
+                .AddRequirements(new WorkspaceRoleRequirement(new HashSet<ActorRole>
+                    { ActorRole.Business, ActorRole.Cashier }))
+                .AddRequirements(new ActiveWorkspaceRequirement(checkout:true)));
         });
+        builder.Services.AddScoped<IAuthorizationHandler,WorkspaceRoleHandler>();
         builder.Services.AddScoped<IAuthorizationHandler,ActiveWorkspaceHandler>();
         var app=builder.Build();
         if(options.EnvironmentName=="Pilot")
@@ -93,9 +105,9 @@ public static class ApiHost
         }
         if(options.TrustedProxies.Length>0)app.UseForwardedHeaders();
         app.UseRouting();
-        app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
+        app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseMiddleware<SupportSessionMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();app.MapViewAsEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

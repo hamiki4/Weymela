@@ -69,7 +69,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."Promotions",
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
-    v3."SupportSessions",
+    v3."RetiredSupportSessions",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
     v3."UgcCustomerOfferBudgetEntries",
@@ -105,7 +105,6 @@ GRANT SELECT, INSERT, UPDATE ON TABLE v3."DeviceSessions" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."ProductHandoffTransactions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."IdempotencyRecords" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."AuditEvents" TO :"api_role";
-GRANT SELECT, INSERT, UPDATE ON TABLE v3."SupportSessions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."OutboxMessages" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."InAppNotifications" TO :"api_role";
 GRANT UPDATE ("ReadAtUtc", "Version") ON TABLE v3."InAppNotifications" TO :"api_role";

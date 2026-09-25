@@ -70,7 +70,6 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<AccountPreauthorizationRecord> AccountPreauthorizations => Set<AccountPreauthorizationRecord>();
     public DbSet<AccountLifecycleRecord> AccountLifecycles => Set<AccountLifecycleRecord>();
     public DbSet<AccountRoleHistoryRecord> AccountRoleHistory => Set<AccountRoleHistoryRecord>();
-    public DbSet<SupportSessionRecord> SupportSessions => Set<SupportSessionRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {

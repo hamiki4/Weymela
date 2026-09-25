@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Weymela.Application;
 using Weymela.Domain;
@@ -12,6 +14,42 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
 {
+    [Fact] public async Task Retiring_support_sessions_preserves_rows_and_audit_correlation_without_runtime_table()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20260925203153_AddPlatformPromotionalFunding");
+
+        var sessionId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var viewedId = Guid.NewGuid();
+        var createdAt = new DateTime(2026, 9, 25, 12, 0, 0, DateTimeKind.Utc);
+        var expiresAt = createdAt.AddMinutes(10);
+        var hash = new string('A', 64);
+        var role = "OperationsAdmin";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO v3."SupportSessions" ("Id", "RealActorUserId", "ViewedUserId", "ViewedRole",
+                "SessionIdentifierHash", "CreatedAtUtc", "ExpiresAtUtc", "Version")
+            VALUES ({sessionId}, {actorId}, {viewedId}, {role}, {hash}, {createdAt}, {expiresAt}, {1L})
+            """);
+        var auditId = Guid.NewGuid();
+        db.AuditEvents.Add(new AuditEvent(auditId, "ViewAsStarted", actorId, null, null, null,
+            Guid.NewGuid(), createdAt, "Historical support context", SupportSessionId: sessionId));
+        await db.SaveChangesAsync();
+
+        await migrator.MigrateAsync();
+        Assert.True(await db.Database.SqlQueryRaw<bool>(
+            "SELECT to_regclass('v3.\"SupportSessions\"') IS NULL AS \"Value\"").SingleAsync());
+        Assert.Equal(1L, await db.Database.SqlQueryRaw<long>(
+            "SELECT count(*) AS \"Value\" FROM v3.\"RetiredSupportSessions\"").SingleAsync());
+        Assert.Equal(hash, await db.Database.SqlQueryRaw<string>(
+            "SELECT \"SessionIdentifierHash\" AS \"Value\" FROM v3.\"RetiredSupportSessions\"").SingleAsync());
+        Assert.Equal(sessionId, (await db.AuditEvents.SingleAsync(x => x.Id == auditId)).SupportSessionId);
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync(
+            "UPDATE v3.\"RetiredSupportSessions\" SET \"Version\" = 2"));
+        Assert.Null(db.Model.FindEntityType("Weymela.Infrastructure.Persistence.Records.SupportSessionRecord"));
+    }
     [Fact] public async Task Admin_query_reads_real_journal_attributed_creator_financial_metrics()
     {
         var s=await Phase4Scenario.Create(fixture);await s.Refresh(7400);await s.Redeem(await s.Issue());
@@ -124,9 +162,9 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         var migrations=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates","20260922161742_AddCreatorPromotionContentSubmissions","20260922184111_AddPromotionLiveDurationSnapshots","20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout","20260924034537_AddAdminAccountAuthorityFoundation","20260925010921_AddViewAsSupportSessions","20260925203153_AddPlatformPromotionalFunding"},migrations);
+        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates","20260922161742_AddCreatorPromotionContentSubmissions","20260922184111_AddPromotionLiveDurationSnapshots","20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout","20260924034537_AddAdminAccountAuthorityFoundation","20260925010921_AddViewAsSupportSessions","20260925203153_AddPlatformPromotionalFunding","20260925212120_RetireSupportSessions"},migrations);
         Assert.False(db.Database.HasPendingModelChanges());
-        foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(CreatorPromotionContentSubmission),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint),typeof(UgcOpportunity),typeof(UgcAssignment),typeof(AdminGrantRecord),typeof(AccountPreauthorizationRecord),typeof(AccountLifecycleRecord),typeof(SupportSessionRecord)})
+        foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(CreatorPromotionContentSubmission),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint),typeof(UgcOpportunity),typeof(UgcAssignment),typeof(AdminGrantRecord),typeof(AccountPreauthorizationRecord),typeof(AccountLifecycleRecord)})
         { var model=db.Model.FindEntityType(entity)!;Assert.True(model.FindProperty("xmin")!.IsConcurrencyToken);Assert.True(model.FindProperty("Version")!.IsConcurrencyToken); }
         Assert.Equal(18,db.Model.FindEntityType(typeof(PayoutRecord))!.FindProperty(nameof(PayoutRecord.Amount))!.GetPrecision());
         Assert.Equal(2,db.Model.FindEntityType(typeof(ViewRewardReceipt))!.FindProperty(nameof(ViewRewardReceipt.BusinessCharge))!.GetScale());

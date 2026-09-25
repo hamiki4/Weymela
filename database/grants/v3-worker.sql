@@ -66,6 +66,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."Promotions",
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
+    v3."RetiredSupportSessions",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
     v3."UgcCustomerOfferBudgetEntries",

@@ -84,6 +84,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var workerConnection = RuntimeConnection(database.ConnectionString, workerRole, workerPassword);
         var backupConnection = RuntimeConnection(database.ConnectionString, backupRole, backupPassword);
         await AssertApiCanReadAuditEventsAsync(apiConnection);
+        await AssertInsufficientPrivilegeAsync(apiConnection,
+            "SELECT * FROM v3.\"RetiredSupportSessions\"",
+            "API must not read retired support-session security evidence");
+        await AssertInsufficientPrivilegeAsync(workerConnection,
+            "SELECT * FROM v3.\"RetiredSupportSessions\"",
+            "Worker must not read retired support-session security evidence");
         var account = await ExerciseApiFlowsAsync(apiConnection, adminUserId);
         var workerSeed = await SeedWorkerFlowAsync(database, account.CreatorId, account.CreatorUserId);
         await ExerciseWorkerFlowsAsync(workerConnection, workerSeed);
@@ -252,7 +258,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(20, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(21, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -533,7 +539,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout",
             "20260924034537_AddAdminAccountAuthorityFoundation",
             "20260925010921_AddViewAsSupportSessions",
-            "20260925203153_AddPlatformPromotionalFunding"
+            "20260925203153_AddPlatformPromotionalFunding",
+            "20260925212120_RetireSupportSessions"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','v3') AND c.relkind='S'";
@@ -630,7 +637,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(20L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(21L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

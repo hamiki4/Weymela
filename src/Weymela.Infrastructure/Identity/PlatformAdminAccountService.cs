@@ -71,7 +71,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             var preauth = preauthorizations.LastOrDefault(x => x.UserId == group.Key.UserId && x.TargetRole == group.Key.Role);
             var enrollment = enrollments.Where(x => x.UserId == group.Key.UserId && x.RequestedRole == group.Key.Role)
                 .OrderByDescending(x => x.SubmittedAtUtc).FirstOrDefault();
-            result.Add(Summary(group.Key.UserId, group.Key.Role, lifecycle, group.ToList(), identifiers, profiles, customers, grants,
+            var allUserPermissions = permissions.Where(x => x.UserId == group.Key.UserId).ToList();
+            result.Add(Summary(group.Key.UserId, group.Key.Role, lifecycle, group.ToList(), allUserPermissions, identifiers, profiles, customers, grants,
                 activity.GetValueOrDefault(group.Key.UserId), preauth, enrollment));
         }
         foreach (var preauth in preauthorizations.Where(x => requestedRole is null || x.TargetRole == requestedRole))
@@ -80,7 +81,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             var preauthEmail = identifiers.FirstOrDefault(x => x.UserId == preauth.UserId && x.Kind == "Email")?.DeliveryAddress;
             if (!Matches(filter.Search, preauth.DisplayName, preauthEmail, preauth.PublicId)) continue;
             var lifecycle = lifecycles.GetValueOrDefault(preauth.UserId);
-            result.Add(Summary(preauth.UserId, preauth.TargetRole, lifecycle, [], identifiers, profiles, customers, grants,
+            result.Add(Summary(preauth.UserId, preauth.TargetRole, lifecycle, [], [], identifiers, profiles, customers, grants,
                 activity.GetValueOrDefault(preauth.UserId), preauth, null) with { Id = preauth.Id });
         }
         // Cashiers remain Business-owned. Their pending and active records are
@@ -133,7 +134,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var enrollment = await db.RoleEnrollments.AsNoTracking().Where(x => x.UserId == userId && x.RequestedRole == detailRole)
             .OrderByDescending(x => x.SubmittedAtUtc).FirstOrDefaultAsync(ct);
         var summary = Summary(userId, detailRole, lifecycles,
-            permissionRows, identifiers, profiles, customers, grants, null, preauth, enrollment);
+            permissionRows, permissionRows, identifiers, profiles, customers, grants, null, preauth, enrollment);
         if (preauth is not null && permissionRows.Count == 0) summary = summary with { Id = preauth.Id };
         var safeProfiles = profiles.Select(x => new AdminAccountProfile(x.SubjectId, x.Role.ToString(), x.DisplayName, x.PublicId,
             x.Region, x.Category, permissionRows.Any(p => p.Role == x.Role && p.SubjectId == x.SubjectId && p.IsActive),
@@ -522,6 +523,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             .OrderByDescending(x => x.OccurredAtUtc).Take(100).Select(x => new AdminAuditItem(x.Id, x.Operation ?? x.EventType, x.EventType, x.OccurredAtUtc, x.ActorId, x.TargetUserId, x.TargetRole == null ? null : x.TargetRole.ToString(), x.TargetSubjectId, x.CorrelationId)).ToListAsync(ct);
 
     private static AdminAccountSummary Summary(Guid userId, ActorRole role, AccountLifecycleRecord? lifecycle, IReadOnlyList<CommercePermission> permissions,
+        IReadOnlyList<CommercePermission> allUserPermissions,
         IReadOnlyList<AuthIdentifierRecord> identifiers, IReadOnlyList<PublicWorkspaceProfile> profiles, IReadOnlyList<CustomerProfileRecord> customers,
         IReadOnlyList<AdminGrantRecord> grants, DateTime? activity, AccountPreauthorizationRecord? preauth, RoleEnrollmentRecord? enrollment)
     {
@@ -536,10 +538,18 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var identifier = email is null ? "Verified Weymela account" : MaskEmail(email);
         var approval = preauth?.Status == AccountPreauthorizationStatus.Pending ? "Pending"
             : role is ActorRole.Business or ActorRole.Creator ? enrollment?.Status.ToString() ?? "Not recorded" : "Active";
+        var activePermissions = allUserPermissions.Where(x => x.IsActive).ToArray();
+        var viewablePermissions = activePermissions.Where(x => AdministrativeAuthority.CanBeViewedAs(x.Role)).ToArray();
+        var canViewAs = AdministrativeAuthority.CanBeViewedAs(role)
+            && lifecycle?.Status is not (AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled
+                or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked)
+            && !activePermissions.Any(x => x.Role is ActorRole.PlatformAdmin or ActorRole.Cashier)
+            && viewablePermissions.Length == 1
+            && viewablePermissions[0].Role == role;
         return new(userId, userId, name, role.ToString(), status, approval, identifier,
             permissions.FirstOrDefault(x => x.Role == role)?.BusinessId?.ToString("D"), activity ?? preauth?.CreatedAtUtc,
             role is not (ActorRole.Cashier or ActorRole.PlatformAdmin)
-                && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending), false);
+                && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending), canViewAs);
     }
 
     private static AdminCommerceTransaction Transaction(VerifiedSale x)

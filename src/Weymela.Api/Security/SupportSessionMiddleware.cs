@@ -31,12 +31,22 @@ internal sealed class SupportSessionMiddleware(RequestDelegate next)
             return;
         }
 
+        // View As control routes must remain usable with an ended or expired
+        // cookie so the server can reject/reconcile it and clear the browser
+        // state. All actual workspace requests still resolve and enforce the
+        // active support session below.
+        if (ControlRoutes.Contains(EndpointSecurity.Operation(context)))
+        {
+            await next(context);
+            return;
+        }
+
         var real = WorkspaceAuthentication.Authority(context.User).RealActor;
         var authority = await service.ResolveActiveAsync(real, cookie, context.RequestAborted);
         context.Items[WorkspaceAuthentication.AuthorityContextItem] = authority;
 
         var route = EndpointSecurity.Operation(context);
-        if (HttpMethods.IsOptions(context.Request.Method) || ControlRoutes.Contains(route))
+        if (HttpMethods.IsOptions(context.Request.Method))
         {
             await next(context);
             return;

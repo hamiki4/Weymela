@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type {
   AccountPreauthorizationResult,
@@ -18,6 +18,7 @@ import {
   Section,
 } from "../../ui/components";
 import { dateTime } from "../../ui/format";
+import { ViewAsEntry } from "../../app/ViewAs";
 
 const tabs = [
   ["", "All"],
@@ -68,11 +69,12 @@ export function AdminAccounts() {
 
 function AccountRow({ row }: { row: AdminAccountSummary }) {
   const detailId = row.status === "Pending" ? row.id : (row.userId ?? row.id);
-  return <article className="amount-row account-row"><div><strong>{row.name}</strong><small>{row.role} · {row.safeIdentifier}{row.association ? ` · ${row.association}` : ""}</small></div><div className="account-row-status"><Badge status={row.status} />{row.approvalState && <small>{row.approvalState}</small>}<Link className="button secondary" to={`/admin/accounts/${detailId}?mode=view`}>View</Link>{row.canManage && <Link className="button primary" to={`/admin/accounts/${detailId}?mode=manage`}>Manage</Link>}</div></article>;
+  return <article className="amount-row account-row"><div><strong>{row.name}</strong><small>{row.role} · {row.safeIdentifier}{row.association ? ` · ${row.association}` : ""}</small></div><div className="account-row-status"><Badge status={row.status} />{row.approvalState && <small>{row.approvalState}</small>}<Link className="button secondary" to={`/admin/accounts/${detailId}?mode=view`}>View</Link>{row.canManage && <Link className="button primary" to={`/admin/accounts/${detailId}?mode=manage`}>Manage</Link>}{row.canViewAs && row.userId && <ViewAsEntry viewedUserId={row.userId} displayName={row.name} role={row.role} returnTo={`/admin/accounts/${detailId}?mode=view`} />}</div></article>;
 }
 
 export function AdminAccountDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const resource = useResource<AccountDetail>(`/admin/accounts/${id}`);
   const action = useAction();
@@ -80,17 +82,17 @@ export function AdminAccountDetail() {
   const manage = searchParams.get("mode") === "manage";
   return <>
     <Link className="back-link" to="/admin/accounts">← Accounts</Link>
-    <Resource resource={resource}>{(detail) => <AccountDetailContent detail={detail} manage={manage} reason={reason} setReason={setReason} action={action} reload={resource.reload} />}</Resource>
+    <Resource resource={resource}>{(detail) => <AccountDetailContent detail={detail} manage={manage} reason={reason} setReason={setReason} action={action} reload={resource.reload} returnTo={`${location.pathname}${location.search}`} />}</Resource>
   </>;
 }
 
-function AccountDetailContent({ detail, manage, reason, setReason, action, reload }: { detail: AccountDetail; manage: boolean; reason: string; setReason: (value: string) => void; action: ReturnType<typeof useAction>; reload: () => void }) {
+function AccountDetailContent({ detail, manage, reason, setReason, action, reload, returnTo }: { detail: AccountDetail; manage: boolean; reason: string; setReason: (value: string) => void; action: ReturnType<typeof useAction>; reload: () => void; returnTo: string }) {
   const account = detail.account;
   const roleData = detail.roleData as Record<string, unknown> | null;
   const targetId = account.userId ?? account.id;
   const lifecycle = (next: string) => { if (!reason.trim()) return; void action.run(async key => { if (account.status === "Pending") await post(`/admin/accounts/preauthorizations/${account.id}/cancel`, { action: "cancel", reason: reason.trim() }, key); else await post(`/admin/accounts/${targetId}/lifecycle`, { action: next, reason: reason.trim() }, key); setReason(""); reload(); }); };
   return <>
-    <PageHeader eyebrow={`${account.role} · ${account.safeIdentifier}`} title={account.name} description={`${account.status}${account.approvalState ? ` · ${account.approvalState}` : ""}`} action={manage && account.canManage ? <Badge status={account.status} /> : account.canManage ? <Link className="button secondary" to={`/admin/accounts/${account.id}?mode=manage`}>Manage</Link> : undefined} />
+    <PageHeader eyebrow={`${account.role} · ${account.safeIdentifier}`} title={account.name} description={`${account.status}${account.approvalState ? ` · ${account.approvalState}` : ""}`} action={<>{account.canViewAs && <ViewAsEntry viewedUserId={targetId} displayName={account.name} role={account.role} returnTo={returnTo} />}{manage && account.canManage ? <Badge status={account.status} /> : account.canManage ? <Link className="button secondary" to={`/admin/accounts/${account.id}?mode=manage`}>Manage</Link> : undefined}</>} />
     <div className="two-column">
       <Section title="Overview"><div className="stack-list">{detail.roles.map((role) => <div className="amount-row" key={role}><strong>{role}</strong><Badge status={account.status} /></div>)}{detail.profiles.map((profile) => <div className="amount-row" key={profile.subjectId}><div><strong>{profile.displayName}</strong><small>{profile.role} · {profile.publicId}{profile.region ? ` · ${profile.region}` : ""}</small></div><Badge status={profile.active ? "Active" : "Inactive"} /></div>)}</div>{manage && account.canManage && <><Field label="Reason for lifecycle action"><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required and recorded in the audit history" /></Field><div className="actions">{account.status === "Pending" ? <Button disabled={action.busy} onClick={() => lifecycle("cancel")}>Cancel preauthorization</Button> : <><Button disabled={action.busy || account.status === "Suspended"} onClick={() => lifecycle("suspend")}>Suspend</Button><Button variant="secondary" disabled={action.busy || account.status === "Disabled"} onClick={() => lifecycle("disable")}>Disable</Button><Button variant="secondary" disabled={action.busy || account.status === "Active"} onClick={() => lifecycle("reactivate")}>Reactivate</Button></>}</div>{action.error && <Notice error>{action.error}</Notice>}</>}</Section>
       <Section title="Role-specific information">{roleData ? <div className="stack-list">{Object.entries(roleData).map(([key, value]) => <div className="amount-row" key={key}><span>{label(key)}</span><strong>{displayValue(key, value)}</strong></div>)}</div> : <Empty title="No role projection" message="This account has no role-specific projection available." />}</Section>

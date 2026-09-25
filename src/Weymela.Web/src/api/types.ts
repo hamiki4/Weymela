@@ -17,6 +17,17 @@ export interface SessionUser {
   profiles?: SessionProfile[];
   activeProfileKey?: string | null;
 }
+export type ViewAsRole = "Customer" | "Creator" | "Business" | "OperationsAdmin";
+export interface ViewAsSession {
+  supportSessionId: string;
+  viewedUserId: string;
+  viewedRole: ViewAsRole;
+  viewedBusinessId: string | null;
+  viewedCreatorId: string | null;
+  viewedCustomerId: string | null;
+  createdAtUtc: string;
+  expiresAtUtc: string;
+}
 export interface SessionProfile {
   role: Role;
   subjectId: string;

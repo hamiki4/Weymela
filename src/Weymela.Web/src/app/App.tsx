@@ -70,10 +70,10 @@ export function App() {
       && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
     return <LockScreen />;
   if (!session.loading && session.user) {
-    if (session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
+    if (!session.viewAs && session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
       if (location.pathname !== "/security-setup")
         return <AccountRedirect to="/security-setup" />;
-    } else if (session.accountSecurity?.passwordEnrolled) {
+    } else if (!session.viewAs && session.accountSecurity?.passwordEnrolled) {
       if (location.pathname === "/security-setup")
         return <AccountRedirect to={accountEntryPath(session.user, session.accountSecurity, session.deviceEnrollment)} />;
       const state = session.deviceEnrollment?.state ?? "Unavailable";

@@ -11,6 +11,7 @@ import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { ViewAsBanner } from "./ViewAs";
 
 const navigation: Record<Role, [string, string, string][]> = {
   Business: [
@@ -91,7 +92,7 @@ export function Brand() {
   );
 }
 export function Shell({ children }: { children?: ReactNode }) {
-  const { user, signOut, switchProfile } = useSession();
+  const { user, signOut, switchProfile, viewAs } = useSession();
   const accountMenu = useRef<HTMLDialogElement>(null);
   const moreMenu = useRef<HTMLDialogElement>(null);
   const navigate = useNavigate();
@@ -163,7 +164,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <Brand />
         </Link>
         <p className="nav-eyebrow">{roles[user.role]} workspace</p>
-        {user.profiles && user.profiles.length > 0 && (
+        {!viewAs && user.profiles && user.profiles.length > 0 && (
           <ProfileSwitcher
             profiles={user.profiles}
             activeKey={user.activeProfileKey}
@@ -215,14 +216,14 @@ export function Shell({ children }: { children?: ReactNode }) {
             <small>{roles[user.role]}</small>
           </div>
         </div>
-        {user.profiles && user.profiles.length > 0 && (
+        {!viewAs && user.profiles && user.profiles.length > 0 && (
           <ProfileSwitcher
             profiles={user.profiles}
             activeKey={user.activeProfileKey}
             onSwitch={switchProfile}
           />
         )}
-        {isPublicProfile && user.role !== "Business" && (
+        {!viewAs && isPublicProfile && user.role !== "Business" && (
           <Link
             className="account-menu-link"
             to="/onboarding"
@@ -261,6 +262,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         </dialog>
       )}
       <div className="workspace">
+        <ViewAsBanner />
         <header className="topbar">
           {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") && (
             <Link className="topbar-brand" to={roleHome[user.role]} aria-label={`Weymela ${roles[user.role]} home`}>

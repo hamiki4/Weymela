@@ -26,8 +26,20 @@ internal static class ViewAsEndpoints
         });
 
         group.MapGet("/current", async (HttpContext context, ViewAsService service, RuntimeOptions options,
-            CancellationToken ct) => Results.Ok(await service.CurrentAsync(EndpointSupport.RealActor(context),
-                context.Request.Cookies[SupportSessionCookie.Name(options.DevelopmentIdentity)], ct)));
+            CancellationToken ct) =>
+        {
+            try
+            {
+                return Results.Ok(await service.CurrentAsync(EndpointSupport.RealActor(context),
+                    context.Request.Cookies[SupportSessionCookie.Name(options.DevelopmentIdentity)], ct));
+            }
+            catch (ApplicationFailure failure) when (failure.Code == "InvalidViewAsSession")
+            {
+                context.Response.Cookies.Delete(SupportSessionCookie.Name(options.DevelopmentIdentity),
+                    SupportSessionCookie.DeleteOptions(options.DevelopmentIdentity));
+                return Results.Json(new { code = failure.Code, message = failure.Message }, statusCode: StatusCodes.Status403Forbidden);
+            }
+        });
 
         group.MapPost("/end", async (HttpContext context, ViewAsService service, RuntimeOptions options,
             CancellationToken ct) =>

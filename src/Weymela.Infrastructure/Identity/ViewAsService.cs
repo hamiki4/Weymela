@@ -86,7 +86,10 @@ public sealed class ViewAsService(WeymelaDbContext db, TimeProvider clock)
         if (string.IsNullOrWhiteSpace(cookieValue)) return null;
         var row = await LoadByCookieAsync(real.UserId, cookieValue, ct);
         if (row.EndedAtUtc is not null || row.ExpiresAtUtc <= Now)
+        {
+            if (row.EndedAtUtc is null) await ExpireAsync(row, Guid.NewGuid(), ct);
             throw InvalidSession();
+        }
         await EnsureRealActorStillActiveAsync(real, ct);
         await EnsureTargetStillActiveAsync(row, ct);
         return View(row);

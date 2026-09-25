@@ -75,6 +75,7 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
             throw Denied();
         }
         _ = binding;
+        if (await AccountBlockedAsync(request.UserId, ct)) throw Denied();
         if (!Enum.IsDefined(request.Role) || request.Role == ActorRole.Cashier) throw Denied();
         var purpose = NormalizePurpose(request.Purpose);
         Guid? subject = request.ProfileSubjectId;
@@ -225,6 +226,7 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
     {
         EnsureEnabled(true);
         if (!Enum.TryParse<ActorRole>(request.Role, true, out var role)) return new(false, "Invalid", request.IdentityBindingVersion);
+        if (await AccountBlockedAsync(request.UserId, ct)) return new(false, "Revoked", request.IdentityBindingVersion);
         var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == request.IdentityBindingId
             && x.UserId == request.UserId && x.Version == request.IdentityBindingVersion && x.IsActive, ct);
         if (binding is null) return new(false, "Revoked", request.IdentityBindingVersion);
@@ -262,6 +264,7 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
         if (lifecycle is not ("PENDING" or "ACTIVE" or "REJECTED" or "CORRECTION_REQUESTED"))
             throw new ApplicationFailure(FailureKind.Validation, "The product profile lifecycle is invalid.");
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        if (await AccountBlockedAsync(request.UserId, ct)) throw Denied();
         var current = await db.CommercePermissions.SingleOrDefaultAsync(x => x.UserId == request.UserId
             && x.Role == role && x.SubjectId == request.ExternalSubjectId && x.IsActive, ct);
         if (current is not null)
@@ -372,6 +375,12 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
         await transaction.CommitAsync(ct);
         return new(request.ExternalSubjectId, lifecycle, created);
     }
+
+    private Task<bool> AccountBlockedAsync(Guid userId, CancellationToken ct) =>
+        db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                || x.Status == AccountLifecycleStatus.Cancelled || x.Status == AccountLifecycleStatus.Revoked
+                || x.Status == AccountLifecycleStatus.Closed), ct);
 
     private async Task SynchronizeCreatorSocialProfilesAsync(Guid creatorId,
         IReadOnlyList<ProductCreatorSocialProfileSynchronization> input, DateTime now, CancellationToken ct)

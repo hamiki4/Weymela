@@ -54,7 +54,7 @@ public sealed class AdminAccountServiceTests(PostgresFixture fixture)
     public async Task Legacy_grant_does_not_reactivate_blocked_or_pending_stage_a_accounts()
     {
         foreach (var blocked in new[] { AccountLifecycleStatus.Suspended, AccountLifecycleStatus.Disabled,
-            AccountLifecycleStatus.Cancelled, AccountLifecycleStatus.Revoked, AccountLifecycleStatus.Pending })
+            AccountLifecycleStatus.Cancelled, AccountLifecycleStatus.Revoked, AccountLifecycleStatus.Closed, AccountLifecycleStatus.Pending })
         {
             var state = await Setup(); await using var db = state.Database.Open();
             db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = state.TargetUser, Status = blocked,

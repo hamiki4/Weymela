@@ -225,10 +225,15 @@ internal static class AuthEndpoints
             return Results.NoContent();
         }).RequireAuthorization("VerifiedAccount").AddEndpointFilter<ValidatedInputFilter>();
         if(!development)return;
-        app.MapPost("/api/development/session",async(DevelopmentSignIn input,HttpContext c,DevelopmentDirectory directory,IConfiguration configuration)=>
+        app.MapPost("/api/development/session",async(DevelopmentSignIn input,HttpContext c,DevelopmentDirectory directory,IConfiguration configuration,WeymelaDbContext db,CancellationToken ct)=>
         {
             if(!WorkspaceAuthentication.MatchesKey(configuration["V3:DevelopmentAccessKey"]??"",input.AccessKey))return Results.Unauthorized();
             var persona=directory.Personas.SingleOrDefault(x=>x.Alias==input.Alias);if(persona is null)return Results.Unauthorized();
+            if(await db.AccountLifecycles.AsNoTracking().AnyAsync(x=>x.UserId==persona.Actor.UserId
+                && (x.Status==Weymela.Infrastructure.Persistence.Records.AccountLifecycleStatus.Suspended
+                    || x.Status==Weymela.Infrastructure.Persistence.Records.AccountLifecycleStatus.Disabled
+                    || x.Status==Weymela.Infrastructure.Persistence.Records.AccountLifecycleStatus.Revoked
+                    || x.Status==Weymela.Infrastructure.Persistence.Records.AccountLifecycleStatus.Closed),ct))return Results.Unauthorized();
             await c.SignInAsync(WorkspaceAuthentication.Scheme,WorkspaceAuthentication.Principal(persona.Actor,persona.Name,persona.PublicId));
             return Results.NoContent();
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();

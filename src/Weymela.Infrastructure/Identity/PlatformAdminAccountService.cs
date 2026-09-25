@@ -254,6 +254,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == userId, ct);
         if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled)
             throw new ApplicationFailure(FailureKind.Validation, "Reactivate the account before adding a profile.");
+        if (lifecycle?.Status is AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked or AccountLifecycleStatus.Closed)
+            throw new ApplicationFailure(FailureKind.Forbidden, "A terminal account cannot receive a new profile.", code: "TerminalAccount");
         var hasActivePermission = await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == userId && x.IsActive, ct);
         var lifetime = Math.Clamp(input.ExpiryDays ?? 7, 1, 30);
         var preauthorizationId = Guid.NewGuid();
@@ -310,7 +312,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             || !await db.AuthorizedDevices.AsNoTracking().AnyAsync(x => x.UserId == target.UserId && x.RevokedAtUtc == null && x.PinVerifier != null, ct))
             throw new ApplicationFailure(FailureKind.Forbidden, "Verify the account and establish the password and device PIN before activation.");
         var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == target.UserId, ct);
-        if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled)
+        if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked or AccountLifecycleStatus.Closed)
             throw new ApplicationFailure(FailureKind.Forbidden, "This account is not eligible for activation.");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == target.UserId && x.Role == row.TargetRole, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This account already has a profile for that role.");
@@ -425,34 +427,66 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
     public Task<Guid> ChangeLifecycleAsync(Actor actor, Guid userId, AccountLifecycleInput input, string key, CancellationToken ct)
     {
         DemandPlatform(actor); var action = input.Action.Trim().ToLowerInvariant();
-        if (action is not ("suspend" or "disable" or "reactivate") || string.IsNullOrWhiteSpace(input.Reason) || input.Reason.Trim().Length > 500)
+        if (action is not ("lock" or "unlock" or "deactivate" or "reactivate" or "close" or "suspend" or "disable")
+            || string.IsNullOrWhiteSpace(input.Reason) || input.Reason.Trim().Length > 500)
             throw new ApplicationFailure(FailureKind.Validation, "Choose a lifecycle action and enter a reason.");
+        if (action == "close" && !input.ConfirmClose)
+            throw new ApplicationFailure(FailureKind.Validation, "Confirm permanent account closure before continuing.", code: "CloseConfirmationRequired");
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 200)
+            throw new ApplicationFailure(FailureKind.Validation, "A request reference is required.");
+        var reason = input.Reason.Trim();
+        var fingerprint = RequestFingerprint.Create(userId.ToString("D"), action, reason, input.ExpectedVersion?.ToString() ?? "", input.ConfirmClose.ToString());
         return new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
+            var prior = await db.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(x => x.ActorId == actor.UserId
+                && x.OperationType == "AccountLifecycle" && x.Key == key, token);
+            if (prior is not null)
+            {
+                if (prior.RequestFingerprint != fingerprint)
+                    throw new ApplicationFailure(FailureKind.IdempotencyConflict, "This request reference was already used.");
+                return Guid.Parse(prior.ResultReference);
+            }
             var permissions = await db.CommercePermissions.AsTracking().Where(x => x.UserId == userId).ToListAsync(token);
             if (permissions.Count == 0) throw new ApplicationFailure(FailureKind.NotFound, "Account not found.");
-            if (permissions.Any(x => x.Role == ActorRole.PlatformAdmin))
-                throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin accounts are read-only in the Stage A account-management API.", code: "PlatformAdminLifecycleDenied");
             var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == userId, token);
             if (input.ExpectedVersion is not null && (lifecycle is null || lifecycle.Version != input.ExpectedVersion))
                 throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "The account changed. Refresh before trying again.");
             var currentStatus = lifecycle?.Status ?? AccountLifecycleStatus.Active;
-            var desired = action switch { "suspend" => AccountLifecycleStatus.Suspended, "disable" => AccountLifecycleStatus.Disabled, _ => AccountLifecycleStatus.Active };
-            if (!AccountLifecyclePolicy.TryTransition(currentStatus, action, out var policyDesired) || policyDesired != desired)
+            if (!AccountLifecyclePolicy.TryTransition(currentStatus, action, out var desired))
                 throw new ApplicationFailure(FailureKind.Validation, $"Cannot {action} an account in {currentStatus} state.", code: "InvalidLifecycleTransition");
+            if (currentStatus == AccountLifecycleStatus.Active && desired != AccountLifecycleStatus.Active
+                && permissions.Any(x => x.Role == ActorRole.PlatformAdmin && x.IsActive))
+                await PlatformAdminSafety.RequireReplacementAsync(db, userId, token);
             var now = Now;
-            if (lifecycle is null) db.AccountLifecycles.Add(lifecycle = new AccountLifecycleRecord { UserId = userId, Status = desired, Reason = input.Reason.Trim(), ChangedByUserId = actor.UserId, CreatedAtUtc = now, UpdatedAtUtc = now, Version = 1 });
-            else { lifecycle.Status = desired; lifecycle.Reason = input.Reason.Trim(); lifecycle.ChangedByUserId = actor.UserId; lifecycle.UpdatedAtUtc = now; }
+            if (lifecycle is null) db.AccountLifecycles.Add(lifecycle = new AccountLifecycleRecord { UserId = userId, Status = desired, Reason = reason, ChangedByUserId = actor.UserId, CreatedAtUtc = now, UpdatedAtUtc = now, Version = 1 });
+            else { lifecycle.Status = desired; lifecycle.Reason = reason; lifecycle.ChangedByUserId = actor.UserId; lifecycle.UpdatedAtUtc = now; }
+            if (desired == AccountLifecycleStatus.Closed)
+            {
+                // Leave every row and foreign-key reference intact, but make the
+                // identity ineligible for future role-based product activity.
+                foreach (var permission in permissions) permission.IsActive = false;
+                foreach (var binding in await db.IdentityBindings.AsTracking().Where(x => x.UserId == userId && x.IsActive).ToListAsync(token))
+                    binding.IsActive = false;
+                foreach (var session in await db.DeviceSessions.AsTracking().Where(x => x.UserId == userId && x.RevokedAtUtc == null).ToListAsync(token))
+                    session.RevokedAtUtc = now;
+                foreach (var grant in await db.AdminGrants.AsTracking().Where(x => x.UserId == userId && x.IsActive).ToListAsync(token))
+                { grant.IsActive = false; grant.RevokedByUserId = actor.UserId; grant.RevokedAtUtc = now; }
+                foreach (var cashier in await db.CashierPreauthorizations.AsTracking().Where(x => x.UserId == userId
+                    && x.Status != CashierPreauthorizationStatus.Revoked).ToListAsync(token))
+                { cashier.Status = CashierPreauthorizationStatus.Revoked; cashier.DisabledAtUtc = now; cashier.Version++; }
+            }
             var correlation = Guid.NewGuid();
-            var historyAction = action switch { "suspend" => "Suspended", "disable" => "Disabled", _ => "Reactivated" };
+            var historyAction = action switch { "suspend" => "Suspended", "disable" => "Disabled", "lock" => "Locked",
+                "unlock" => "Unlocked", "deactivate" => "Deactivated", "close" => "Closed", _ => "Reactivated" };
             foreach (var permission in permissions)
             {
                 db.AccountRoleHistory.Add(new(Guid.NewGuid(), actor.UserId, userId, permission.Role, permission.SubjectId, permission.BusinessId,
-                    historyAction, input.Reason.Trim(), now, correlation));
+                    historyAction, reason, now, correlation));
                 db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), $"Account{historyAction}", actor.UserId, permission.BusinessId, null,
                     permission.Role == ActorRole.Creator ? permission.SubjectId : null, correlation, now, "account-lifecycle", TargetUserId: userId,
-                    TargetRole: permission.Role, TargetSubjectId: permission.SubjectId, Operation: action, Reason: input.Reason.Trim()));
+                    TargetRole: permission.Role, TargetSubjectId: permission.SubjectId, Operation: action, Reason: reason));
             }
+            db.IdempotencyRecords.Add(new(actor.UserId, "AccountLifecycle", key, fingerprint, userId.ToString("D"), now));
             return userId;
         }, ct);
     }
@@ -469,6 +503,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             var permission = await db.CommercePermissions.AsTracking().SingleOrDefaultAsync(x => x.UserId == userId && x.Role == role && (input.SubjectId == null || x.SubjectId == input.SubjectId) && x.IsActive, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Active account profile not found.");
             var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == userId, token);
+            if (lifecycle?.Status is AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked or AccountLifecycleStatus.Closed)
+                throw new ApplicationFailure(FailureKind.Forbidden, "A terminal account cannot be changed.", code: "TerminalAccount");
             if (input.ExpectedVersion is not null && (lifecycle is null || lifecycle.Version != input.ExpectedVersion))
                 throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "The account changed. Refresh before trying again.");
             permission.IsActive = false;
@@ -561,15 +597,18 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var customer = customers.FirstOrDefault(x => x.UserId == userId);
         var email = identifiers.FirstOrDefault(x => x.UserId == userId && x.Kind == "Email" && x.DeliveryAddress != null)?.DeliveryAddress;
         var status = lifecycle?.Status.ToString() ?? (permissions.Any(x => x.IsActive) ? "Active" : "Inactive");
-        if (preauth?.Status == AccountPreauthorizationStatus.Pending && permissions.All(x => !x.IsActive)) status = "Pending";
-        if (preauth is not null && preauth.Status != AccountPreauthorizationStatus.Pending && permissions.All(x => !x.IsActive)) status = preauth.Status.ToString();
+        if (lifecycle is null || lifecycle.Status == AccountLifecycleStatus.Pending)
+        {
+            if (preauth?.Status == AccountPreauthorizationStatus.Pending && permissions.All(x => !x.IsActive)) status = "Pending";
+            if (preauth is not null && preauth.Status != AccountPreauthorizationStatus.Pending && permissions.All(x => !x.IsActive)) status = preauth.Status.ToString();
+        }
         var name = profile?.DisplayName ?? grant?.DisplayName ?? customer?.PreferredName ?? preauth?.DisplayName ?? NameFromEmail(email);
         var identifier = email is null ? "Verified Weymela account" : MaskEmail(email);
         var approval = preauth?.Status == AccountPreauthorizationStatus.Pending ? "Pending"
             : role is ActorRole.Business or ActorRole.Creator ? enrollment?.Status.ToString() ?? "Not recorded" : "Active";
         return new(userId, userId, name, role.ToString(), status, approval, identifier,
             permissions.FirstOrDefault(x => x.Role == role)?.BusinessId?.ToString("D"), activity ?? preauth?.CreatedAtUtc,
-            role is not (ActorRole.Cashier or ActorRole.PlatformAdmin)
+            role != ActorRole.Cashier && status is not ("Closed" or "Revoked" or "Cancelled")
                 && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending));
     }
 
@@ -604,7 +643,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             || authority.CommandActor.UserId == Guid.Empty)
             throw new ApplicationFailure(FailureKind.Forbidden, "An active real Platform Admin authority is required.", code: "PlatformAdminAuthorityRequired");
         var lifecycle = await db.AccountLifecycles.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == authority.CommandActor.UserId, ct);
-        if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked)
+        if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked or AccountLifecycleStatus.Closed)
             throw new ApplicationFailure(FailureKind.Forbidden, "The Platform Admin account is not active.", code: "PlatformAdminInactive");
         if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == authority.CommandActor.UserId
             && x.Role == ActorRole.PlatformAdmin && x.SubjectId == authority.CommandActor.UserId && x.IsActive, ct))

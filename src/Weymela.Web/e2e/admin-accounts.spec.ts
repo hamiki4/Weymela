@@ -113,3 +113,36 @@ test("legacy View As cookie does not change the authenticated actor", async ({ p
   await expect(page.locator("body")).not.toContainText("ADMIN VIEW MODE");
   await expect(page.getByRole("link", { name: "Admins" })).toBeVisible();
 });
+
+test("Platform Admin manages Customer lock and deactivation from the account page", async ({ page, context }) => {
+  await login(context, "admin");
+  const target = id(7);
+  try {
+    await open(page, `/admin/accounts/${target}?role=Customer&mode=manage`);
+    const reason = page.getByLabel("Reason for lifecycle action");
+    await reason.fill("Browser account review");
+    await page.getByRole("button", { name: "Lock", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Unlock", exact: true })).toBeVisible();
+    await reason.fill("Browser review complete");
+    await page.getByRole("button", { name: "Unlock", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
+    await reason.fill("Browser temporary deactivation");
+    await page.getByRole("button", { name: "Deactivate", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Reactivate", exact: true })).toBeVisible();
+    await reason.fill("Browser account restored");
+    await page.getByRole("button", { name: "Reactivate", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Close Account", exact: true })).toBeDisabled();
+  } finally {
+    const response = await context.request.get(`/api/admin/accounts/${target}`);
+    if (response.ok()) {
+      const detail = await response.json() as { account: { status: string } };
+      const action = detail.account.status === "Suspended" ? "unlock"
+        : detail.account.status === "Disabled" ? "reactivate" : null;
+      if (action) await context.request.post(`/api/admin/accounts/${target}/lifecycle`, {
+        headers: { "X-Weymela-Request": "1", "Idempotency-Key": `browser-cleanup-${Date.now()}` },
+        data: { action, reason: "Restore BrowserHost fixture after account-management test" },
+      });
+    }
+  }
+});

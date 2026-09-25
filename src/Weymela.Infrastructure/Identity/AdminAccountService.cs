@@ -64,7 +64,7 @@ public sealed class AdminAccountService(WeymelaDbContext db, TimeProvider clock)
             if (existing.Any(x => x.Role == role))
                 throw new ApplicationFailure(FailureKind.Validation, "This Admin role was previously revoked and requires a new authorized lifecycle.", code: "RevokedAdminRole");
             var lifecycle = await db.AccountLifecycles.AsTracking().SingleOrDefaultAsync(x => x.UserId == identity.UserId, token);
-            if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked)
+            if (lifecycle?.Status is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked or AccountLifecycleStatus.Closed)
                 throw new ApplicationFailure(FailureKind.Validation, "This account is not eligible for a legacy Admin grant.", code: "AccountLifecycleBlocksGrant");
             if (lifecycle?.Status == AccountLifecycleStatus.Pending)
                 throw new ApplicationFailure(FailureKind.Validation, "Complete the pending account activation before using the legacy Admin grant.", code: "PendingAccountActivation");
@@ -126,8 +126,7 @@ public sealed class AdminAccountService(WeymelaDbContext db, TimeProvider clock)
     { if (actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin access is required."); }
     private async Task EnsureReplacementPlatformAdmin(Guid removing, CancellationToken ct)
     {
-        if (await db.CommercePermissions.CountAsync(x => x.Role == ActorRole.PlatformAdmin && x.IsActive && x.UserId != removing, ct) == 0)
-            throw new ApplicationFailure(FailureKind.Validation, "Grant another Platform Admin before removing the last active Platform Admin.");
+        await PlatformAdminSafety.RequireReplacementAsync(db, removing, ct);
     }
     private void Record(Actor actor, string type, Guid target, ActorRole role, Guid reference)
     {

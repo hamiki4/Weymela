@@ -80,7 +80,7 @@ public sealed class ActiveWorkspaceHandler(IHttpContextAccessor accessor, Weymel
         catch (ApplicationFailure) { return; }
         var actor=authority.CommandActor;
         if(await db.AccountLifecycles.AsNoTracking().AnyAsync(x=>x.UserId==actor.UserId
-            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), CancellationToken.None)) return;
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), CancellationToken.None)) return;
         var subject=actor.Role switch{ActorRole.Business=>actor.BusinessId,ActorRole.Creator=>actor.CreatorId,ActorRole.Customer=>actor.CustomerId,_=>actor.UserId};
         if(await db.CommercePermissions.AsNoTracking().AnyAsync(x=>x.UserId==actor.UserId&&x.Role==actor.Role&&x.SubjectId==subject&&x.IsActive
             &&(!requirement.Checkout||x.CanCheckout)

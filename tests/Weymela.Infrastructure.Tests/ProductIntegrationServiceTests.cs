@@ -117,6 +117,40 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Closed_account_cannot_issue_redeem_or_synchronize_product_authority()
+    {
+        var database = await fixture.CreateAsync();
+        var clock = new ManualClock(Start);
+        var seeded = await SeedIdentityAsync(database, clock, acceptLegal: true);
+        ProductHandoffIssueResult issued;
+        await using (var db = database.Open())
+            issued = await Service(db, clock).IssueAsync(new(seeded.UserId, seeded.BindingId, 1, Start,
+                ActorRole.Customer, ProductHandoffPurposes.ProfileOnboarding, "v2-pilot-callback",
+                null, null, Guid.NewGuid()), new string('c', 43), default);
+        await using (var db = database.Open())
+        {
+            db.AccountLifecycles.Add(new AccountLifecycleRecord { UserId = seeded.UserId,
+                Status = AccountLifecycleStatus.Closed, Reason = "account owner request", ChangedByUserId = Guid.NewGuid(),
+                CreatedAtUtc = Start, UpdatedAtUtc = Start, Version = 1 });
+            await db.SaveChangesAsync();
+        }
+        await using (var db = database.Open())
+        {
+            var service = Service(db, clock);
+            var authority = await service.AuthorityAsync(new(seeded.UserId, seeded.BindingId, 1,
+                "Customer", null, null, ProductHandoffPurposes.ProfileOnboarding), default);
+            Assert.False(authority.Active);
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.RedeemAsync(issued.Code, "v2-pilot-callback", default));
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.IssueAsync(new(seeded.UserId, seeded.BindingId, 1, Start,
+                ActorRole.Customer, ProductHandoffPurposes.ProfileOnboarding, "v2-pilot-callback",
+                null, null, Guid.NewGuid()), new string('d', 43), default));
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,
+                "Customer", Guid.NewGuid(), null, "Closed Customer", "ACTIVE", "closed-sync"), default));
+            Assert.Null((await db.ProductHandoffTransactions.SingleAsync()).ConsumedAtUtc);
+        }
+    }
+
+    [Fact]
     public async Task Profile_synchronization_is_idempotent_and_pending_roles_do_not_gain_active_authority()
     {
         var database = await fixture.CreateAsync();

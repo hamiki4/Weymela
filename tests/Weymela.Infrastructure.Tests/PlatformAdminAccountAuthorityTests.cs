@@ -4,6 +4,7 @@ using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence.Records;
 using Xunit;
 
@@ -18,11 +19,17 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
     [InlineData(AccountLifecycleStatus.Pending, "activate", AccountLifecycleStatus.Active, true)]
     [InlineData(AccountLifecycleStatus.Pending, "cancel", AccountLifecycleStatus.Cancelled, true)]
     [InlineData(AccountLifecycleStatus.Active, "suspend", AccountLifecycleStatus.Suspended, true)]
+    [InlineData(AccountLifecycleStatus.Active, "lock", AccountLifecycleStatus.Suspended, true)]
     [InlineData(AccountLifecycleStatus.Active, "disable", AccountLifecycleStatus.Disabled, true)]
+    [InlineData(AccountLifecycleStatus.Active, "deactivate", AccountLifecycleStatus.Disabled, true)]
+    [InlineData(AccountLifecycleStatus.Active, "close", AccountLifecycleStatus.Closed, true)]
     [InlineData(AccountLifecycleStatus.Active, "revoke", AccountLifecycleStatus.Revoked, true)]
     [InlineData(AccountLifecycleStatus.Suspended, "disable", AccountLifecycleStatus.Disabled, true)]
+    [InlineData(AccountLifecycleStatus.Suspended, "unlock", AccountLifecycleStatus.Active, true)]
+    [InlineData(AccountLifecycleStatus.Suspended, "close", AccountLifecycleStatus.Closed, true)]
     [InlineData(AccountLifecycleStatus.Suspended, "reactivate", AccountLifecycleStatus.Active, true)]
     [InlineData(AccountLifecycleStatus.Disabled, "reactivate", AccountLifecycleStatus.Active, true)]
+    [InlineData(AccountLifecycleStatus.Disabled, "close", AccountLifecycleStatus.Closed, true)]
     [InlineData(AccountLifecycleStatus.Active, "activate", AccountLifecycleStatus.Active, false)]
     [InlineData(AccountLifecycleStatus.Active, "reactivate", AccountLifecycleStatus.Active, false)]
     [InlineData(AccountLifecycleStatus.Suspended, "suspend", AccountLifecycleStatus.Suspended, false)]
@@ -33,6 +40,9 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
     [InlineData(AccountLifecycleStatus.Cancelled, "suspend", AccountLifecycleStatus.Cancelled, false)]
     [InlineData(AccountLifecycleStatus.Revoked, "reactivate", AccountLifecycleStatus.Revoked, false)]
     [InlineData(AccountLifecycleStatus.Revoked, "suspend", AccountLifecycleStatus.Revoked, false)]
+    [InlineData(AccountLifecycleStatus.Closed, "unlock", AccountLifecycleStatus.Closed, false)]
+    [InlineData(AccountLifecycleStatus.Closed, "reactivate", AccountLifecycleStatus.Closed, false)]
+    [InlineData(AccountLifecycleStatus.Closed, "close", AccountLifecycleStatus.Closed, false)]
     public void Account_lifecycle_policy_has_no_implicit_or_terminal_transitions(AccountLifecycleStatus current, string action,
         AccountLifecycleStatus expected, bool valid)
     {
@@ -276,6 +286,15 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
         var forbidden = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ListAsync(new Actor(target, ActorRole.Creator), new(), default));
         Assert.Equal(FailureKind.Forbidden, forbidden.Kind);
+        var operations = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
+        foreach (var role in new[] { "Customer", "Creator", "Business", "OperationsAdmin", "PlatformAdmin" })
+        {
+            var denied = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(operations,
+                new AccountPreauthorizationInput(role, $"{role}@example.test", null, "Unauthorized account"), $"operations-{role}", default));
+            Assert.Equal(FailureKind.Forbidden, denied.Kind);
+        }
+        Assert.Equal(FailureKind.Forbidden, (await Assert.ThrowsAsync<ApplicationFailure>(() => service.ChangeLifecycleAsync(
+            operations, target, new AccountLifecycleInput("lock", "not authorized"), "operations-lock", default))).Kind);
         await service.ChangeLifecycleAsync(admin, target, new AccountLifecycleInput("suspend", "support review"), "suspend", default);
         Assert.Equal(AccountLifecycleStatus.Suspended, (await db.AccountLifecycles.SingleAsync(x => x.UserId == target)).Status);
         Assert.Contains(await db.AccountRoleHistory.Where(x => x.TargetUserId == target).ToListAsync(), x => x.Action == "Suspended" && x.ActorUserId == admin.UserId);
@@ -378,7 +397,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Platform_admin_is_visible_but_stage_a_generic_mutations_are_denied()
+    public async Task Platform_admin_lifecycle_preserves_the_last_active_authority()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin); var other = Guid.NewGuid();
@@ -388,12 +407,108 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
         var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
         Assert.Contains(await service.ListAsync(admin, new AdminAccountFilterInput("PlatformAdmin"), default), x => x.UserId == admin.UserId);
-        var lifecycle = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ChangeLifecycleAsync(admin, other,
-            new AccountLifecycleInput("suspend", "not in Stage A"), "platform-suspend", default));
-        Assert.Equal(FailureKind.Forbidden, lifecycle.Kind);
+        await service.ChangeLifecycleAsync(admin, other,
+            new AccountLifecycleInput("lock", "reviewing authority"), "platform-lock", default);
+        Assert.Equal(AccountLifecycleStatus.Suspended, (await db.AccountLifecycles.SingleAsync(x => x.UserId == other)).Status);
+        foreach (var action in new[] { "lock", "deactivate", "close" })
+        {
+            var last = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ChangeLifecycleAsync(admin, admin.UserId,
+                new AccountLifecycleInput(action, "requested authority change", ConfirmClose: action == "close"), $"platform-{action}-last", default));
+            Assert.Equal("LastActivePlatformAdmin", last.Code);
+        }
+        await service.ChangeLifecycleAsync(admin, other,
+            new AccountLifecycleInput("unlock", "review complete"), "platform-unlock", default);
         var revoke = await Assert.ThrowsAsync<ApplicationFailure>(() => service.RevokeProfileAsync(admin, other,
             new RevokeAccountProfileInput("PlatformAdmin", other, "not in Stage A"), "platform-revoke", default));
         Assert.Equal(FailureKind.Forbidden, revoke.Kind);
+    }
+
+    [Fact]
+    public async Task Close_requires_confirmation_and_preserves_permissions_identity_and_history()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin); var target = Guid.NewGuid(); var subject = Guid.NewGuid();
+        db.CommercePermissions.AddRange(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false),
+            new(target, ActorRole.Customer, subject, null, true, false));
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = subject, Role = ActorRole.Customer, DisplayName = "Closed Customer", PublicId = "CU-CLOSED" });
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = target, Kind = "Email", IdentifierHash = EmailAuthService.HashIdentifier("closed@example.test"),
+            DeliveryAddress = "closed@example.test", IsVerified = true, CreatedAtUtc = Now });
+        db.IdentityBindings.Add(new IdentityBinding { UserId = target, Provider = "Firebase", ProjectId = "isolated-v3-test",
+            ExternalSubject = target.ToString("N"), IsActive = true, ValidAfterUtc = Now.AddHours(-1), Version = 1 });
+        await db.SaveChangesAsync();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery());
+        var missing = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ChangeLifecycleAsync(admin, target,
+            new AccountLifecycleInput("close", "customer request"), "close-missing", default));
+        Assert.Equal("CloseConfirmationRequired", missing.Code);
+        await service.ChangeLifecycleAsync(admin, target,
+            new AccountLifecycleInput("close", "customer request", ConfirmClose: true), "close-confirmed", default);
+        Assert.Equal(AccountLifecycleStatus.Closed, (await db.AccountLifecycles.SingleAsync(x => x.UserId == target)).Status);
+        Assert.False((await db.CommercePermissions.SingleAsync(x => x.UserId == target)).IsActive);
+        Assert.True(await db.AuthIdentifiers.AnyAsync(x => x.UserId == target));
+        Assert.False((await db.IdentityBindings.SingleAsync(x => x.UserId == target)).IsActive);
+        Assert.True(await db.PublicWorkspaceProfiles.AnyAsync(x => x.SubjectId == subject));
+        Assert.Contains(await db.AccountRoleHistory.Where(x => x.TargetUserId == target).ToListAsync(), x => x.Action == "Closed" && x.Reason == "customer request");
+        Assert.Contains(await db.AuditEvents.Where(x => x.TargetUserId == target).ToListAsync(), x => x.EventType == "AccountClosed");
+        var retry = await service.ChangeLifecycleAsync(admin, target,
+            new AccountLifecycleInput("close", "customer request", ConfirmClose: true), "close-confirmed", default);
+        Assert.Equal(target, retry);
+        Assert.Single(await db.AuditEvents.Where(x => x.TargetUserId == target && x.EventType == "AccountClosed").ToListAsync());
+        var reopen = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ChangeLifecycleAsync(admin, target,
+            new AccountLifecycleInput("reactivate", "not allowed"), "reopen", default));
+        Assert.Equal("InvalidLifecycleTransition", reopen.Code);
+        var preauthorize = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
+            new AccountPreauthorizationInput("Creator", "closed@example.test", null, "Closed Creator", "CR-CLOSED"), "new-role", default));
+        Assert.Equal("TerminalAccount", preauthorize.Code);
+    }
+
+    [Fact]
+    public async Task Concurrent_platform_admin_closures_leave_one_active_authority()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var first = Guid.NewGuid(); var second = Guid.NewGuid();
+        db.CommercePermissions.AddRange(new(first, ActorRole.PlatformAdmin, first, null, true, false),
+            new(second, ActorRole.PlatformAdmin, second, null, true, false));
+        db.AccountLifecycles.AddRange(
+            new AccountLifecycleRecord { UserId = first, Status = AccountLifecycleStatus.Active, ChangedByUserId = first, CreatedAtUtc = Now, UpdatedAtUtc = Now, Version = 1 },
+            new AccountLifecycleRecord { UserId = second, Status = AccountLifecycleStatus.Active, ChangedByUserId = second, CreatedAtUtc = Now, UpdatedAtUtc = Now, Version = 1 });
+        await db.SaveChangesAsync();
+        async Task<bool> Attempt(Guid actorId)
+        {
+            await using var context = database.Open();
+            try
+            {
+                await new PlatformAdminAccountService(context, new FixedTime(Now), new CapturingDelivery()).ChangeLifecycleAsync(
+                    new Actor(actorId, ActorRole.PlatformAdmin), actorId,
+                    new AccountLifecycleInput("close", "planned rotation", ConfirmClose: true), $"close-{actorId:N}", default);
+                return true;
+            }
+            catch (ApplicationFailure failure) when (failure.Kind is FailureKind.Validation or FailureKind.ConcurrencyConflict) { return false; }
+        }
+        var outcomes = await Task.WhenAll(Attempt(first), Attempt(second));
+        Assert.Single(outcomes, succeeded => succeeded);
+        var active = await db.AccountLifecycles.AsNoTracking().CountAsync(x => x.Status == AccountLifecycleStatus.Active);
+        Assert.Equal(1, active);
+    }
+
+    [Fact]
+    public async Task Closing_the_only_business_owner_blocks_existing_cashier_checkout_authority()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        var owner = Guid.NewGuid(); var business = Guid.NewGuid(); var cashier = Guid.NewGuid();
+        db.CommercePermissions.AddRange(
+            new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false),
+            new(owner, ActorRole.Business, business, business, true, true),
+            new(cashier, ActorRole.Cashier, cashier, business, true, true));
+        await db.SaveChangesAsync();
+        var scanner = new Actor(cashier, ActorRole.Cashier, business);
+        await new CommerceAccessPolicy(db).EnsureScannerAsync(scanner, business, default);
+        await new PlatformAdminAccountService(db, new FixedTime(Now), new CapturingDelivery()).ChangeLifecycleAsync(admin, owner,
+            new AccountLifecycleInput("close", "business owner closure", ConfirmClose: true), "business-close", default);
+        Assert.Equal(FailureKind.Forbidden, (await Assert.ThrowsAsync<ApplicationFailure>(() =>
+            new CommerceAccessPolicy(db).EnsureScannerAsync(scanner, business, default))).Kind);
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == cashier && x.IsActive));
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == owner && !x.IsActive));
     }
 
     private sealed class CapturingDelivery : IEmailCodeDelivery

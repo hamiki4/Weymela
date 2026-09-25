@@ -103,6 +103,10 @@ public sealed class DeviceEnrollmentService(WeymelaDbContext db, RuntimeOptions 
 
     private async Task EnsureVerifiedAccountAsync(Guid userId, CancellationToken ct)
     {
+        if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "This account is not active.");
         var verifiedEmail = userId != Guid.Empty && await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
             && x.Kind == "Email" && x.IsVerified, ct);
         var verifiedCashierPhone = userId != Guid.Empty && await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId

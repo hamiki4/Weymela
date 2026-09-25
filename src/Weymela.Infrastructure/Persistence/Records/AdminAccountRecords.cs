@@ -20,7 +20,8 @@ public enum AccountLifecycleStatus
     Suspended,
     Disabled,
     Cancelled,
-    Revoked
+    Revoked,
+    Closed
 }
 
 /// <summary>
@@ -38,8 +39,12 @@ public static class AccountLifecyclePolicy
             "activate" when current == AccountLifecycleStatus.Pending => Set(AccountLifecycleStatus.Active, out desired),
             "cancel" when current == AccountLifecycleStatus.Pending => Set(AccountLifecycleStatus.Cancelled, out desired),
             "suspend" when current == AccountLifecycleStatus.Active => Set(AccountLifecycleStatus.Suspended, out desired),
+            "lock" when current == AccountLifecycleStatus.Active => Set(AccountLifecycleStatus.Suspended, out desired),
             "disable" when current is AccountLifecycleStatus.Active or AccountLifecycleStatus.Suspended => Set(AccountLifecycleStatus.Disabled, out desired),
+            "deactivate" when current is AccountLifecycleStatus.Active or AccountLifecycleStatus.Suspended => Set(AccountLifecycleStatus.Disabled, out desired),
+            "unlock" when current == AccountLifecycleStatus.Suspended => Set(AccountLifecycleStatus.Active, out desired),
             "reactivate" when current is AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled => Set(AccountLifecycleStatus.Active, out desired),
+            "close" when current is AccountLifecycleStatus.Active or AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled => Set(AccountLifecycleStatus.Closed, out desired),
             "revoke" when current == AccountLifecycleStatus.Active => Set(AccountLifecycleStatus.Revoked, out desired),
             _ => false
         };

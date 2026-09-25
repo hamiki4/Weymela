@@ -222,6 +222,10 @@ public sealed class PasswordCredentialService(
                 $"SELECT *, xmin FROM v3.\"PasswordCredentials\" WHERE \"UserId\" = {challenge.UserId.Value} FOR UPDATE")
                 .SingleOrDefaultAsync(ct);
             if (emailIdentifier is null || credential is null) throw new PasswordRecoveryTransactionInvalidException();
+            if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == credential.UserId
+                && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                    || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct))
+                throw new PasswordRecoveryTransactionInvalidException();
 
             credential.PasswordHash = verifier;
             credential.Algorithm = PasswordCredentialHasher.Algorithm;
@@ -279,7 +283,7 @@ public sealed class PasswordCredentialService(
 
     private async Task<bool> HasAuthoritativeIdentity(Guid userId, CancellationToken ct) =>
         !await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
-            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), ct)
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct)
         && await db.IdentityBindings.AsNoTracking().CountAsync(x => x.UserId == userId && x.IsActive
             && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId, ct) == 1
         && (await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId

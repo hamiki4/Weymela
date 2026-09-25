@@ -8,6 +8,7 @@ using Weymela.Application.Operations;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
+using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Api.Auth;
 
@@ -42,12 +43,17 @@ public static class LiveAuthentication
                 OnRedirectToAccessDenied = c => { c.Response.StatusCode = 403; return Task.CompletedTask; },
                 OnValidatePrincipal = async c =>
                 {
+                    if (!Guid.TryParse(c.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId))
+                    { c.RejectPrincipal(); return; }
+                    var db = c.HttpContext.RequestServices.GetRequiredService<WeymelaDbContext>();
+                    if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
+                        && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                            || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), c.HttpContext.RequestAborted))
+                    { c.RejectPrincipal(); return; }
                     if (options.DevelopmentIdentity && c.Principal?.FindFirst("identity-binding") is null) return;
                     if (!Guid.TryParse(c.Principal?.FindFirst("identity-binding")?.Value, out var id)
                         || !long.TryParse(c.Principal.FindFirst("identity-version")?.Value, out var version)
-                        || !Guid.TryParse(c.Principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId)
                         || !DateTime.TryParseExact(c.Principal.FindFirst("authenticated-at")?.Value,"O",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.RoundtripKind,out var authAt)) { c.RejectPrincipal(); return; }
-                    var db = c.HttpContext.RequestServices.GetRequiredService<WeymelaDbContext>();
                     if (!await db.IdentityBindings.AsNoTracking().AnyAsync(x => x.Id == id && x.UserId == userId && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId && x.Version == version && x.ValidAfterUtc<=authAt && x.IsActive, c.HttpContext.RequestAborted)) c.RejectPrincipal();
                 }
             };

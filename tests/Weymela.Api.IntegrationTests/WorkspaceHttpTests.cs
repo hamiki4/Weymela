@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Infrastructure.Development;
+using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
 using Xunit;
 
@@ -154,7 +155,10 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [Fact] public async Task Operations_admin_cannot_mutate_admin_grants_financial_settings_or_platform_money()
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("operations-admin");
-        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts/preauthorize",new{email="verified@example.com",displayName="Target",role="OperationsAdmin"})).StatusCode);
+        foreach (var role in new[] { "Customer", "Creator", "Business", "OperationsAdmin", "PlatformAdmin" })
+            Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts/preauthorize",new{email="verified@example.com",displayName="Target",role})).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post($"/api/admin/accounts/{DevelopmentDirectory.Id(7)}/lifecycle",new{action="close",reason="forbidden",confirmClose=true})).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post($"/api/admin/accounts/{DevelopmentDirectory.Id(1)}/revoke",new{})).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/financial-settings",new{})).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/platform/settlements",new{amount=1,reference="forbidden"})).StatusCode);
     }
@@ -175,4 +179,45 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
 
     [Fact] public async Task Disabled_account_loses_access_even_with_existing_cookie()
     {await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("creator");await using var db=f.Database.Open();await db.Database.ExecuteSqlRawAsync("UPDATE v3.\"CommercePermissions\" SET \"IsActive\" = false WHERE \"Role\" = 'Creator'");Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync("/api/creator/home")).StatusCode);}
+
+    [Fact]
+    public async Task Account_lifecycle_blocks_old_and_new_sessions_and_keeps_history_after_close()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        using var admin = await f.Login("admin"); using var customer = await f.Login("customer");
+        var target = DevelopmentDirectory.Id(7);
+        await using var db = f.Database.Open();
+        var financialBefore = await db.FinancialJournals.CountAsync();
+        var transactionBefore = await db.VerifiedSales.CountAsync();
+        var profileBefore = await db.CustomerProfiles.CountAsync(x => x.UserId == target);
+        Assert.Equal(HttpStatusCode.OK, (await customer.GetAsync("/api/session")).StatusCode);
+
+        await admin.PostJson($"/api/admin/accounts/{target}/lifecycle", new { action = "lock", reason = "security review" });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await customer.GetAsync("/api/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await customer.GetAsync("/api/customer/offers")).StatusCode);
+        using (var fresh = f.Anonymous())
+            Assert.Equal(HttpStatusCode.Unauthorized, (await fresh.PostAsJsonAsync("/api/development/session", new { alias = "customer", accessKey = f.AccessKey })).StatusCode);
+
+        await admin.PostJson($"/api/admin/accounts/{target}/lifecycle", new { action = "unlock", reason = "review complete" });
+        Assert.Equal(HttpStatusCode.OK, (await customer.GetAsync("/api/session")).StatusCode);
+        await admin.PostJson($"/api/admin/accounts/{target}/lifecycle", new { action = "deactivate", reason = "inactive account" });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await customer.GetAsync("/api/session")).StatusCode);
+        await admin.PostJson($"/api/admin/accounts/{target}/lifecycle", new { action = "reactivate", reason = "return approved" });
+        Assert.Equal(HttpStatusCode.OK, (await customer.GetAsync("/api/session")).StatusCode);
+
+        var unconfirmed = await admin.Post($"/api/admin/accounts/{target}/lifecycle", new { action = "close", reason = "account owner request" });
+        Assert.Equal(HttpStatusCode.BadRequest, unconfirmed.StatusCode);
+        await admin.PostJson($"/api/admin/accounts/{target}/lifecycle", new { action = "close", reason = "account owner request", confirmClose = true });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await customer.GetAsync("/api/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await customer.GetAsync("/api/customer/transactions")).StatusCode);
+        Assert.Equal(AccountLifecycleStatus.Closed, (await db.AccountLifecycles.SingleAsync(x => x.UserId == target)).Status);
+        Assert.False((await db.CommercePermissions.SingleAsync(x => x.UserId == target && x.Role == Weymela.Application.ActorRole.Customer)).IsActive);
+        var closedDetail = await admin.GetJson($"/api/admin/accounts/{target}?role=Customer");
+        Assert.Equal("Closed", closedDetail["account"]!["status"]!.GetValue<string>());
+        Assert.False(closedDetail["account"]!["canManage"]!.GetValue<bool>());
+        Assert.Equal(profileBefore, await db.CustomerProfiles.CountAsync(x => x.UserId == target));
+        Assert.Equal(financialBefore, await db.FinancialJournals.CountAsync());
+        Assert.Equal(transactionBefore, await db.VerifiedSales.CountAsync());
+        Assert.Contains(await db.AccountRoleHistory.Where(x => x.TargetUserId == target).ToListAsync(), x => x.Action == "Closed");
+    }
 }

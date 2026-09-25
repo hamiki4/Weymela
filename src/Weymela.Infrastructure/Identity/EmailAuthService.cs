@@ -162,6 +162,10 @@ public sealed class EmailAuthService(
         }
         if (challenge.UserId is null) throw new AuthChallengeInvalidException();
         var userId = challenge.UserId.Value;
+        if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == userId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct))
+            throw new AuthChallengeInvalidException();
         var emailHash = challenge.EmailIdentifierHash ?? challenge.IdentifierHash;
         var emailIdentifier = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == emailHash, ct);
         if (purpose == EmailCodePurpose.Signup)
@@ -210,6 +214,10 @@ public sealed class EmailAuthService(
         var identifier = await db.AuthIdentifiers.AsNoTracking().SingleOrDefaultAsync(x => x.Kind == "Email"
             && x.IdentifierHash == identifierHash && x.UserId == challenge.UserId && x.IsVerified, ct);
         if (identifier is null) throw new AuthChallengeInvalidException();
+        if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == challenge.UserId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct))
+            throw new AuthChallengeInvalidException();
 
         var earlierGrants = await db.EmailAuthChallenges.AsTracking()
             .Where(x => x.Id != challenge.Id && x.UserId == challenge.UserId

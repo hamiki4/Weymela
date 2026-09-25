@@ -13,7 +13,6 @@ namespace Weymela.Api.Auth;
 public static class WorkspaceAuthentication
 {
     public const string Scheme="WeymelaV3";
-    public const string AuthorityContextItem = "WeymelaV3.AuthorityContext";
     public static Actor Actor(ClaimsPrincipal user)
     {
         if (user.Claims.Any(x => AuthorityClaimTypes.IsReserved(x.Type)))
@@ -24,10 +23,7 @@ public static class WorkspaceAuthentication
         return new(userId,role,Read("business"),Read("creator"),Read("customer"));
     }
     public static AuthorityContext Authority(ClaimsPrincipal user) => AuthorityContext.ForAuthenticatedActor(Actor(user));
-    public static AuthorityContext Authority(HttpContext context)
-        => context.Items.TryGetValue(AuthorityContextItem, out var value) && value is AuthorityContext authority
-            ? authority
-            : Authority(context.User);
+    public static AuthorityContext Authority(HttpContext context) => Authority(context.User);
     public static ClaimsPrincipal Principal(Actor actor,string name,string publicId)
     {
         List<Claim> claims=[new(ClaimTypes.NameIdentifier,actor.UserId.ToString()),new(ClaimTypes.Role,actor.Role.ToString()),new(ClaimTypes.Name,name),new("publicId",publicId)];
@@ -45,10 +41,9 @@ public static class WorkspaceAuthentication
     }
 }
 
-public sealed class WorkspaceRoleRequirement(IReadOnlySet<ActorRole> roles, bool realActorOnly = false) : IAuthorizationRequirement
+public sealed class WorkspaceRoleRequirement(IReadOnlySet<ActorRole> roles) : IAuthorizationRequirement
 {
     public IReadOnlySet<ActorRole> Roles { get; } = roles;
-    public bool RealActorOnly { get; } = realActorOnly;
 }
 
 public sealed class WorkspaceRoleHandler(IHttpContextAccessor accessor)
@@ -61,10 +56,7 @@ public sealed class WorkspaceRoleHandler(IHttpContextAccessor accessor)
         try
         {
             var authority = WorkspaceAuthentication.Authority(http);
-            var role = requirement.RealActorOnly || !authority.IsViewAsActive
-                ? authority.RealActor.Role
-                : authority.EffectiveSubject.Role;
-            if (requirement.Roles.Contains(role) && (!requirement.RealActorOnly || !authority.IsViewAsActive))
+            if (requirement.Roles.Contains(authority.RealActor.Role))
                 context.Succeed(requirement);
         }
         catch (ApplicationFailure) { }
@@ -86,7 +78,7 @@ public sealed class ActiveWorkspaceHandler(IHttpContextAccessor accessor, Weymel
                 : WorkspaceAuthentication.Authority(context.User);
         }
         catch (ApplicationFailure) { return; }
-        var actor=authority.IsViewAsActive ? authority.EffectiveSubject.Identity : authority.CommandActor;
+        var actor=authority.CommandActor;
         if(await db.AccountLifecycles.AsNoTracking().AnyAsync(x=>x.UserId==actor.UserId
             && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled || x.Status == AccountLifecycleStatus.Revoked), CancellationToken.None)) return;
         var subject=actor.Role switch{ActorRole.Business=>actor.BusinessId,ActorRole.Creator=>actor.CreatorId,ActorRole.Customer=>actor.CustomerId,_=>actor.UserId};

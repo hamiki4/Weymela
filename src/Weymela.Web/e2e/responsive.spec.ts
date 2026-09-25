@@ -45,15 +45,15 @@ for (const viewport of viewports)
         "admin",
         [
           "/admin",
-          "/admin/accounts",
+          "/admin/customers",
           "/admin/campaigns",
           "/admin/settings",
           "/admin/payouts",
           "/admin/businesses",
           "/admin/creators",
+          "/admin/admins",
           "/admin/platform",
           "/admin/notifications",
-          "/admin/audit",
         ],
       ],
       ["customer", ["/customer/offers", "/customer/discover", "/customer/transactions", "/customer/cashback"]],
@@ -81,6 +81,7 @@ for (const viewport of viewports)
           `${viewport.width}-${path.slice(1).replaceAll("/", "-")}`,
         );
         if (role === "business") {
+          await expect(page.locator("main")).not.toContainText(/NaN\s*ETB|NaN/i);
           await expect(
             page.getByRole("button", {
               name: /End Campaign|End Promotion|Decrease Budget/,

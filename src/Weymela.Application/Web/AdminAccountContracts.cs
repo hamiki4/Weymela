@@ -32,8 +32,7 @@ public sealed record AdminAccountSummary(
     string SafeIdentifier,
     string? Association,
     DateTime? LastActivityAtUtc,
-    bool CanManage,
-    bool CanViewAs = false);
+    bool CanManage);
 
 public sealed record AdminAuditItem(
     Guid Id,
@@ -121,4 +120,3 @@ public sealed record AccountLifecycleInput(string Action, string Reason, long? E
 public sealed record RevokeAccountProfileInput(string Role, Guid? SubjectId, string Reason, long? ExpectedVersion = null);
 
 public sealed record AdminAccountFilterInput(string? Role = null, string? Status = null, string? Search = null, string? Approval = null);
-public sealed record AccountActivationInput(string ActivationSecret);

@@ -64,7 +64,6 @@ function authenticatedRequests(path: string) {
   if (path === "/session") return Promise.resolve(user);
   if (path === "/account/security") return Promise.resolve({ passwordEnrolled: true, phoneEnrolled: true });
   if (path === "/device/enrollment") return Promise.resolve({ state: "Enrolled", expiresAtUtc: null });
-  if (path === "/admin/view-as/current") return Promise.resolve(null);
   return Promise.reject(new Error(`Unexpected request: ${path}`));
 }
 
@@ -104,10 +103,10 @@ describe("authoritative session refresh ordering", () => {
     renderSession();
     await waitFor(() => expect(screen.getByLabelText("session-state")).toHaveTextContent("authenticated"));
     expect(mocks.request.mock.calls.map(([path]) => path)).toEqual([
-      "/device/access", "/session", "/account/security", "/device/enrollment", "/admin/view-as/current",
+      "/device/access", "/session", "/account/security", "/device/enrollment",
     ]);
     await new Promise((resolve) => window.setTimeout(resolve, 20));
-    expect(mocks.request).toHaveBeenCalledTimes(5);
+    expect(mocks.request).toHaveBeenCalledTimes(4);
   });
 
   it("does not let an older unauthenticated completion clear a newer authenticated refresh", async () => {

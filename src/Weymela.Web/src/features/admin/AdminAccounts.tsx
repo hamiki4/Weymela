@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type {
   AccountPreauthorizationResult,
@@ -18,88 +18,87 @@ import {
   Section,
 } from "../../ui/components";
 import { dateTime } from "../../ui/format";
-import { ViewAsEntry } from "../../app/ViewAs";
+type AccountArea = "Customer" | "Creator" | "Business" | "Admin";
+const areaTitle: Record<AccountArea, string> = { Customer: "Customers", Creator: "Creators", Business: "Businesses", Admin: "Admins" };
+const areaPath: Record<AccountArea, string> = { Customer: "/admin/customers", Creator: "/admin/creators", Business: "/admin/businesses", Admin: "/admin/admins" };
 
-const tabs = [
-  ["", "All"],
-  ["Customer", "Customers"],
-  ["Creator", "Creators"],
-  ["Business", "Businesses"],
-  ["Cashier", "Cashiers"],
-  ["OperationsAdmin", "Operations Admins"],
-  ["PlatformAdmin", "Platform Admins"],
-] as const;
-
-export function AdminAccounts() {
+export function AdminAccounts({ area }: { area: AccountArea }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const role = searchParams.get("role") ?? "";
   const search = searchParams.get("search") ?? "";
+  const status = searchParams.get("status") ?? "";
+  const approval = searchParams.get("approval") ?? "";
   const [draftSearch, setDraftSearch] = useState(search);
   const [createOpen, setCreateOpen] = useState(false);
   const [created, setCreated] = useState<AccountPreauthorizationResult | null>(null);
-  const path = `/admin/accounts?${new URLSearchParams({ ...(role ? { role } : {}), ...(search ? { search } : {}) }).toString()}`;
+  const path = `/admin/accounts?${new URLSearchParams({ role: area, ...(search ? { search } : {}), ...(status ? { status } : {}), ...(approval ? { approval } : {}) }).toString()}`;
   const resource = useResource<AdminAccountSummary[]>(path);
   const action = useAction();
-  const [form, setForm] = useState({ role: "Customer", email: "", phone: "", displayName: "", publicId: "", region: "", category: "", reason: "" });
-  const changeFilter = (nextRole: string) => setSearchParams(nextRole ? { role: nextRole, ...(search ? { search } : {}) } : search ? { search } : {});
-  const submitSearch = () => setSearchParams({ ...(role ? { role } : {}), ...(draftSearch ? { search: draftSearch } : {}) });
+  const [form, setForm] = useState({ role: area === "Admin" ? "OperationsAdmin" : area, email: "", phone: "", displayName: "", publicId: "", region: "", category: "", reason: "" });
+  useEffect(() => { setForm({ role: area === "Admin" ? "OperationsAdmin" : area, email: "", phone: "", displayName: "", publicId: "", region: "", category: "", reason: "" }); setCreated(null); setCreateOpen(false); }, [area]);
+  const submitSearch = () => setSearchParams({ ...(status ? { status } : {}), ...(approval ? { approval } : {}), ...(draftSearch ? { search: draftSearch } : {}) });
   return <>
-    <PageHeader eyebrow="Platform control · identity and access" title="Accounts" description="Global safe visibility and account preauthorization. Credentials and security material are never shown here." action={<Button onClick={() => setCreateOpen((value) => !value)}>+ Create Account</Button>} />
+    <PageHeader title={areaTitle[area]} action={<Button onClick={() => setCreateOpen((value) => !value)}>+ Create {area}</Button>} />
     {created && <Notice><strong>Preauthorization created.</strong> Activation instructions were sent to the target's verified email address. The target must complete the existing verification, password, device PIN, and activation flow before the account becomes active.<small>Expires {dateTime(created.expiresAtUtc)}</small></Notice>}
-    {createOpen && <Section title="Create / preauthorize account" description="The target establishes their own password and device PIN using the existing security flow. Weymela sends activation instructions directly to the target.">
+    {createOpen && <Section title={`Create ${area}`} description="Weymela sends activation instructions directly to the recipient. They set their own password and device PIN.">
       <form className="filter-grid three" onSubmit={(event) => { event.preventDefault(); void action.run(async key => { const result = await post<AccountPreauthorizationResult>("/admin/accounts/preauthorize", { ...form, phone: form.phone || null, publicId: form.publicId || null, region: form.region || null, category: form.category || null }, key); setCreated(result); setCreateOpen(false); resource.reload(); }); }}>
-        <Field label="Account type"><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="Customer">Customer</option><option value="Creator">Creator</option><option value="Business">Business</option><option value="OperationsAdmin">Operations Admin</option><option value="PlatformAdmin">Platform Admin</option></select></Field>
+        {area === "Admin" && <Field label="Admin type"><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="OperationsAdmin">Operations Admin</option><option value="PlatformAdmin">Platform Admin</option></select></Field>}
         <Field label="Email (required for a new identity)" help="Use an existing verified phone only when it already belongs to a Weymela identity with a verified email."><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
         <Field label="Phone (optional)"><input type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></Field>
         <Field label="Display name"><input required value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></Field>
         {(form.role === "Creator" || form.role === "Business") && <Field label="Public identifier"><input required value={form.publicId} onChange={(event) => setForm({ ...form, publicId: event.target.value })} /></Field>}
         {(form.role === "Creator" || form.role === "Business") && <Field label="Region"><input value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} /></Field>}
         {(form.role === "Creator" || form.role === "Business") && <Field label="Category"><input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></Field>}
-        {form.role === "PlatformAdmin" && <Field label="Reason"><textarea required maxLength={500} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Required and recorded in the audit history" /></Field>}
+        {form.role === "PlatformAdmin" && <Field label="Reason"><textarea required maxLength={500} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Required for this administrative action" /></Field>}
         <div className="actions"><Button type="submit" disabled={action.busy}>{action.busy ? "Creating…" : "Create preauthorization"}</Button><Button variant="secondary" onClick={() => setCreateOpen(false)}>Cancel</Button></div>
       </form>{action.error && <Notice error>{action.error}</Notice>}
     </Section>}
-    <Section title="Account directory" description="Search is applied by the server to normalized identity and safe profile fields.">
-      <div className="tabs" role="tablist" aria-label="Account role filter">{tabs.map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={role === value} onClick={() => changeFilter(value)}>{label}</button>)}</div>
-      <div className="filter-grid two"><Field label="Search"><input type="search" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submitSearch(); }} placeholder="Name, safe identifier, association" /></Field><div className="actions"><Button onClick={submitSearch}>Search</Button></div></div>
-      <Resource resource={resource}>{(rows) => rows.length === 0 ? <Empty title="No accounts match" message="Try another role or search term." icon="people" /> : <div className="stack-list">{rows.map((row) => <AccountRow key={`${row.id}-${row.role}`} row={row} />)}</div>}</Resource>
+    <Section title={`${areaTitle[area]} list`}>
+      <div className="filter-grid three"><Field label="Search"><input type="search" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submitSearch(); }} placeholder="Name or identifier" /></Field><Field label="Status"><select value={status} onChange={(event) => setSearchParams({ ...(search ? { search } : {}), ...(approval ? { approval } : {}), ...(event.target.value ? { status: event.target.value } : {}) })}><option value="">All statuses</option><option value="Pending">Pending</option><option value="Active">Active</option><option value="Suspended">Suspended</option><option value="Disabled">Disabled</option><option value="Inactive">Inactive</option></select></Field>{(area === "Creator" || area === "Business") && <Field label="Approval"><select value={approval} onChange={(event) => setSearchParams({ ...(search ? { search } : {}), ...(status ? { status } : {}), ...(event.target.value ? { approval: event.target.value } : {}) })}><option value="">All approvals</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Rejected">Rejected</option></select></Field>}<div className="actions"><Button onClick={submitSearch}>Search</Button></div></div>
+      <Resource resource={resource}>{(rows) => rows.length === 0 ? <Empty title={`No ${areaTitle[area].toLowerCase()} match`} message="Try another filter or search term." icon="people" /> : <div className="stack-list">{rows.map((row) => <AccountRow key={`${row.id}-${row.role}`} row={row} />)}</div>}</Resource>
     </Section>
   </>;
 }
 
 function AccountRow({ row }: { row: AdminAccountSummary }) {
   const detailId = row.status === "Pending" ? row.id : (row.userId ?? row.id);
-  return <article className="amount-row account-row"><div><strong>{row.name}</strong><small>{row.role} · {row.safeIdentifier}{row.association ? ` · ${row.association}` : ""}</small></div><div className="account-row-status"><Badge status={row.status} />{row.approvalState && <small>{row.approvalState}</small>}<Link className="button secondary" to={`/admin/accounts/${detailId}?mode=view`}>View</Link>{row.canManage && <Link className="button primary" to={`/admin/accounts/${detailId}?mode=manage`}>Manage</Link>}{row.canViewAs && row.userId && <ViewAsEntry viewedUserId={row.userId} displayName={row.name} role={row.role} returnTo={`/admin/accounts/${detailId}?mode=view`} />}</div></article>;
+  return <article className="amount-row account-row"><div><strong>{row.name}</strong><small>{row.role} · {row.safeIdentifier}{row.association ? ` · ${row.association}` : ""}</small></div><div className="account-row-status"><Badge status={row.status} />{row.approvalState && <small>{row.approvalState}</small>}<Link className="button secondary" to={`/admin/accounts/${detailId}?role=${row.role}&mode=view`}>View</Link>{row.canManage && <Link className="button primary" to={`/admin/accounts/${detailId}?role=${row.role}&mode=manage`}>Manage</Link>}</div></article>;
 }
 
 export function AdminAccountDetail() {
   const { id } = useParams();
-  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const resource = useResource<AccountDetail>(`/admin/accounts/${id}`);
+  const requestedRole = searchParams.get("role");
+  const resource = useResource<AccountDetail>(`/admin/accounts/${id}${requestedRole ? `?role=${encodeURIComponent(requestedRole)}` : ""}`);
   const action = useAction();
   const [reason, setReason] = useState("");
   const manage = searchParams.get("mode") === "manage";
   return <>
-    <Link className="back-link" to="/admin/accounts">← Accounts</Link>
-    <Resource resource={resource}>{(detail) => <AccountDetailContent detail={detail} manage={manage} reason={reason} setReason={setReason} action={action} reload={resource.reload} returnTo={`${location.pathname}${location.search}`} />}</Resource>
+    <Link className="back-link" to={areaPath[resource.data?.account.role === "Customer" ? "Customer" : resource.data?.account.role === "Creator" ? "Creator" : resource.data?.account.role === "Business" ? "Business" : "Admin"]}>← Back to list</Link>
+    <Resource resource={resource}>{(detail) => <AccountDetailContent detail={detail} manage={manage} reason={reason} setReason={setReason} action={action} reload={resource.reload} />}</Resource>
   </>;
 }
 
-function AccountDetailContent({ detail, manage, reason, setReason, action, reload, returnTo }: { detail: AccountDetail; manage: boolean; reason: string; setReason: (value: string) => void; action: ReturnType<typeof useAction>; reload: () => void; returnTo: string }) {
+function AccountDetailContent({ detail, manage, reason, setReason, action, reload }: { detail: AccountDetail; manage: boolean; reason: string; setReason: (value: string) => void; action: ReturnType<typeof useAction>; reload: () => void }) {
   const account = detail.account;
   const roleData = detail.roleData as Record<string, unknown> | null;
   const targetId = account.userId ?? account.id;
   const lifecycle = (next: string) => { if (!reason.trim()) return; void action.run(async key => { if (account.status === "Pending") await post(`/admin/accounts/preauthorizations/${account.id}/cancel`, { action: "cancel", reason: reason.trim() }, key); else await post(`/admin/accounts/${targetId}/lifecycle`, { action: next, reason: reason.trim() }, key); setReason(""); reload(); }); };
   return <>
-    <PageHeader eyebrow={`${account.role} · ${account.safeIdentifier}`} title={account.name} description={`${account.status}${account.approvalState ? ` · ${account.approvalState}` : ""}`} action={<>{account.canViewAs && <ViewAsEntry viewedUserId={targetId} displayName={account.name} role={account.role} returnTo={returnTo} />}{manage && account.canManage ? <Badge status={account.status} /> : account.canManage ? <Link className="button secondary" to={`/admin/accounts/${account.id}?mode=manage`}>Manage</Link> : undefined}</>} />
+    <PageHeader eyebrow={`${account.role} · ${account.safeIdentifier}`} title={account.name} description={`${account.status}${account.approvalState ? ` · ${account.approvalState}` : ""}`} action={manage && account.canManage ? <Badge status={account.status} /> : account.canManage ? <Link className="button secondary" to={`/admin/accounts/${account.id}?role=${account.role}&mode=manage`}>Manage</Link> : undefined} />
     <div className="two-column">
-      <Section title="Overview"><div className="stack-list">{detail.roles.map((role) => <div className="amount-row" key={role}><strong>{role}</strong><Badge status={account.status} /></div>)}{detail.profiles.map((profile) => <div className="amount-row" key={profile.subjectId}><div><strong>{profile.displayName}</strong><small>{profile.role} · {profile.publicId}{profile.region ? ` · ${profile.region}` : ""}</small></div><Badge status={profile.active ? "Active" : "Inactive"} /></div>)}</div>{manage && account.canManage && <><Field label="Reason for lifecycle action"><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required and recorded in the audit history" /></Field><div className="actions">{account.status === "Pending" ? <Button disabled={action.busy} onClick={() => lifecycle("cancel")}>Cancel preauthorization</Button> : <><Button disabled={action.busy || account.status === "Suspended"} onClick={() => lifecycle("suspend")}>Suspend</Button><Button variant="secondary" disabled={action.busy || account.status === "Disabled"} onClick={() => lifecycle("disable")}>Disable</Button><Button variant="secondary" disabled={action.busy || account.status === "Active"} onClick={() => lifecycle("reactivate")}>Reactivate</Button></>}</div>{action.error && <Notice error>{action.error}</Notice>}</>}</Section>
+      <Section title="Overview"><div className="stack-list">{detail.roles.map((role) => <div className="amount-row" key={role}><strong>{role}</strong><Badge status={account.status} /></div>)}{detail.profiles.map((profile) => <div className="amount-row" key={profile.subjectId}><div><strong>{profile.displayName}</strong><small>{profile.role} · {profile.publicId}{profile.region ? ` · ${profile.region}` : ""}</small></div><Badge status={profile.active ? "Active" : "Inactive"} /></div>)}</div>{manage && account.canManage && <><Field label="Reason for lifecycle action"><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required for this change" /></Field><div className="actions">{account.status === "Pending" ? <Button disabled={action.busy} onClick={() => lifecycle("cancel")}>Cancel preauthorization</Button> : <><Button disabled={action.busy || account.status === "Suspended"} onClick={() => lifecycle("suspend")}>Suspend</Button><Button variant="secondary" disabled={action.busy || account.status === "Disabled"} onClick={() => lifecycle("disable")}>Disable</Button><Button variant="secondary" disabled={action.busy || account.status === "Active"} onClick={() => lifecycle("reactivate")}>Reactivate</Button></>}</div>{action.error && <Notice error>{action.error}</Notice>}</>}</Section>
       <Section title="Role-specific information">{roleData ? <div className="stack-list">{Object.entries(roleData).map(([key, value]) => <div className="amount-row" key={key}><span>{label(key)}</span><strong>{displayValue(key, value)}</strong></div>)}</div> : <Empty title="No role projection" message="This account has no role-specific projection available." />}</Section>
     </div>
     {detail.transactions.length > 0 && <Section title="Commerce activity"><div className="stack-list">{detail.transactions.map((transaction) => <div className="amount-row" key={transaction.id}><div><strong>{transaction.purchaseAmount.toLocaleString()} {transaction.currency}</strong><small>{dateTime(transaction.occurredAtUtc)} · {transaction.status}</small></div><span>{transaction.businessId}</span></div>)}</div></Section>}
-    <Section title="Audit history" description="Safe structured activity only. Credential and token material is excluded.">{detail.audit.length === 0 ? <Empty title="No recorded audit activity" message="Administrative activity will appear here when it exists." icon="document" /> : <div className="stack-list">{detail.audit.map((item) => <div className="amount-row" key={item.id}><div><strong>{item.action}</strong><small>{item.operation} · {dateTime(item.occurredAtUtc)}</small></div><small>{item.targetRole ?? "Account"}</small></div>)}</div>}</Section>
+    {detail.profiles.find(x => x.role === "Business")?.subjectId && <BusinessCashiers businessId={detail.profiles.find(x => x.role === "Business")!.subjectId} />}
   </>;
+}
+
+function BusinessCashiers({ businessId }: { businessId: string }) {
+  const resource = useResource<AdminAccountSummary[]>(`/admin/accounts/businesses/${businessId}/cashiers`);
+  return <Section title="Cashier Management" description="Cashiers are invited and managed by this Business.">
+    <Resource resource={resource}>{rows => rows.length ? <div className="stack-list">{rows.map(row => <AccountRow key={row.id} row={row} />)}</div> : <Empty title="No Cashiers" message="This Business has not added Cashiers." />}</Resource>
+  </Section>;
 }
 
 function label(value: string) { return value.replace(/([A-Z])/g, " $1").replace(/^./, (value) => value.toUpperCase()); }

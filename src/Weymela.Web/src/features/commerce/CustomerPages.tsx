@@ -318,7 +318,7 @@ function CustomerOfferBrowser({
       <section className="customer-offer-section" aria-labelledby="customer-offers-title">
         <div className="customer-offer-section-heading">
           <div>
-            <p className="eyebrow">{discover ? "Browse what is live" : "For your next outing"}</p>
+            <p className="eyebrow">Promotions</p>
             <h2 id="customer-offers-title">{discover ? "Discover Promotions" : "Recommended Promotions"}</h2>
           </div>
           <span className="customer-offer-count">
@@ -377,18 +377,12 @@ export function CustomerOffers({ discover = false }: CustomerOffersProps = {}) {
     <div className="customer-home-page">
       {discover ? (
         <PageHeader
-          eyebrow="Find your next favorite place"
           title="Discover Promotions"
-          description="Browse active Customer offers and Creator-led promotions from eligible Businesses."
         />
       ) : (
         <header className="customer-home-hero">
           <div>
-            <p className="eyebrow">Your Weymela day starts here</p>
-            <h1>Good to see you, {firstName}.</h1>
-            <p className="lead">
-              Browse eligible local offers and find something to enjoy.
-            </p>
+            <h1>Offers for {firstName}</h1>
           </div>
           <span className="customer-hero-mark" aria-hidden="true">
             <Icon name="sparkle" size={32} />

@@ -1,5 +1,5 @@
 export const amount = (value: number) =>
-  new Intl.NumberFormat("en-ET", {
+  typeof value !== "number" || !Number.isFinite(value) ? "Unavailable" : new Intl.NumberFormat("en-ET", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);

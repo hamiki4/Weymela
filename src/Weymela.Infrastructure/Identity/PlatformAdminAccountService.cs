@@ -29,14 +29,15 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
     public async Task<IReadOnlyList<AdminAccountSummary>> ListAsync(Actor actor, AdminAccountFilterInput filter, CancellationToken ct)
     {
         DemandPlatform(actor);
+        var adminRoles = string.Equals(filter.Role, "Admin", StringComparison.OrdinalIgnoreCase);
         ActorRole? requestedRole = null;
-        if (!string.IsNullOrWhiteSpace(filter.Role))
+        if (!adminRoles && !string.IsNullOrWhiteSpace(filter.Role))
         {
             if (!TryRole(filter.Role, out var parsedRole, allowEmpty: false))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose a supported account role.");
             requestedRole = parsedRole;
         }
-        if (filter.Role is not null && requestedRole is null)
+        if (filter.Role is not null && requestedRole is null && !adminRoles)
             throw new ApplicationFailure(FailureKind.Validation, "Choose a supported account role.");
         if (!string.IsNullOrWhiteSpace(filter.Status) && !Enum.TryParse<AccountLifecycleStatus>(filter.Status, true, out _)
             && !string.Equals(filter.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
@@ -61,6 +62,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         foreach (var group in permissions.GroupBy(x => new { x.UserId, x.Role }))
         {
             if (requestedRole is not null && group.Key.Role != requestedRole) continue;
+            if (adminRoles && group.Key.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) continue;
             var groupProfile = profiles.FirstOrDefault(p => p.Role == group.Key.Role && group.Select(x => x.SubjectId).Contains(p.SubjectId));
             var groupGrant = grants.Where(x => x.UserId == group.Key.UserId && x.Role == group.Key.Role).OrderByDescending(x => x.GrantedAtUtc).FirstOrDefault();
             var groupCustomer = customers.FirstOrDefault(x => x.UserId == group.Key.UserId);
@@ -75,7 +77,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             result.Add(Summary(group.Key.UserId, group.Key.Role, lifecycle, group.ToList(), allUserPermissions, identifiers, profiles, customers, grants,
                 activity.GetValueOrDefault(group.Key.UserId), preauth, enrollment));
         }
-        foreach (var preauth in preauthorizations.Where(x => requestedRole is null || x.TargetRole == requestedRole))
+        foreach (var preauth in preauthorizations.Where(x => (requestedRole is null || x.TargetRole == requestedRole)
+            && (!adminRoles || x.TargetRole is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)))
         {
             if (permissions.Any(x => x.UserId == preauth.UserId && x.Role == preauth.TargetRole)) continue;
             var preauthEmail = identifiers.FirstOrDefault(x => x.UserId == preauth.UserId && x.Kind == "Email")?.DeliveryAddress;
@@ -86,7 +89,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         }
         // Cashiers remain Business-owned. Their pending and active records are
         // visible here, but no PlatformAdmin write action is attached to them.
-        if (requestedRole is null or ActorRole.Cashier)
+        if (!adminRoles && requestedRole is (null or ActorRole.Cashier))
         {
             var cashiers = await db.CashierPreauthorizations.AsNoTracking().OrderBy(x => x.DisplayName).ToListAsync(ct);
             var businessNames = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business)
@@ -105,7 +108,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
                 if (!Matches(filter.Search, cashier.DisplayName, identifier, businessNames.GetValueOrDefault(cashier.BusinessId))) continue;
                 result.Add(new(cashier.Id, cashier.UserId, cashier.DisplayName, ActorRole.Cashier.ToString(), status,
                     status == "Active" ? "Active" : status, identifier, businessNames.GetValueOrDefault(cashier.BusinessId),
-                    cashier.ActivatedAtUtc, false, false));
+                    cashier.ActivatedAtUtc, false));
             }
         }
         return result.Where(x => StatusMatches(x.Status, filter.Status))
@@ -113,7 +116,10 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             .OrderBy(x => x.Name).ThenBy(x => x.Role).Take(MaxDirectoryResults).ToArray();
     }
 
-    public async Task<AdminAccountDetail> DetailAsync(Actor actor, Guid id, CancellationToken ct)
+    public Task<AdminAccountDetail> DetailAsync(Actor actor, Guid id, CancellationToken ct)
+        => DetailAsync(actor, id, null, ct);
+
+    public async Task<AdminAccountDetail> DetailAsync(Actor actor, Guid id, string? requestedRole, CancellationToken ct)
     {
         DemandPlatform(actor);
         var permissionRows = await db.CommercePermissions.AsNoTracking().Where(x => x.UserId == id).ToListAsync(ct);
@@ -130,7 +136,9 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var profiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => permissionRows.Select(p => p.SubjectId).Contains(x.SubjectId)).ToListAsync(ct);
         var customers = await db.CustomerProfiles.AsNoTracking().Where(x => x.UserId == userId).ToListAsync(ct);
         var grants = await db.AdminGrants.AsNoTracking().Where(x => x.UserId == userId).ToListAsync(ct);
-        var detailRole = permissionRows.FirstOrDefault()?.Role ?? preauth!.TargetRole;
+        var detailRole = permissionRows.FirstOrDefault(x => string.Equals(x.Role.ToString(), requestedRole, StringComparison.OrdinalIgnoreCase))?.Role
+            ?? (preauth is not null && string.Equals(preauth.TargetRole.ToString(), requestedRole, StringComparison.OrdinalIgnoreCase) ? (ActorRole?)preauth.TargetRole : null)
+            ?? permissionRows.FirstOrDefault()?.Role ?? preauth!.TargetRole;
         var enrollment = await db.RoleEnrollments.AsNoTracking().Where(x => x.UserId == userId && x.RequestedRole == detailRole)
             .OrderByDescending(x => x.SubmittedAtUtc).FirstOrDefaultAsync(ct);
         var summary = Summary(userId, detailRole, lifecycles,
@@ -144,14 +152,13 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         object? roleData = null;
         if (permissionRows.Count == 0 && preauth is not null)
             roleData = null;
-        else if (permissionRows.Any(x => x.Role == ActorRole.Business) || preauth?.TargetRole == ActorRole.Business)
+        else if (detailRole == ActorRole.Business)
             roleData = await BusinessDataAsync(userId, permissionRows, ct);
-        else if (permissionRows.Any(x => x.Role == ActorRole.Creator) || preauth?.TargetRole == ActorRole.Creator)
+        else if (detailRole == ActorRole.Creator)
             roleData = await CreatorDataAsync(userId, permissionRows, ct);
-        else if (permissionRows.Any(x => x.Role == ActorRole.Customer) || preauth?.TargetRole == ActorRole.Customer)
+        else if (detailRole == ActorRole.Customer)
             roleData = await CustomerDataAsync(userId, permissionRows, ct);
-        else if (permissionRows.Any(x => x.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)
-            || preauth?.TargetRole is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)
+        else if (detailRole is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)
         {
             var role = permissionRows.FirstOrDefault(x => x.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)?.Role
                 ?? preauth!.TargetRole;
@@ -161,6 +168,19 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         }
         return new(summary, permissionRows.Select(x => x.Role.ToString()).Distinct().OrderBy(x => x).ToArray(), safeProfiles,
             audit, transactions, audit.Cast<object>().ToArray(), roleData);
+    }
+
+    public async Task<IReadOnlyList<AdminAccountSummary>> BusinessCashiersAsync(Actor actor, Guid businessId, CancellationToken ct)
+    {
+        DemandPlatform(actor);
+        var businessName = await db.PublicWorkspaceProfiles.AsNoTracking()
+            .Where(x => x.SubjectId == businessId && x.Role == ActorRole.Business)
+            .Select(x => x.DisplayName).SingleOrDefaultAsync(ct)
+            ?? throw new ApplicationFailure(FailureKind.NotFound, "Business not found.");
+        var rows = await db.CashierPreauthorizations.AsNoTracking().Where(x => x.BusinessId == businessId)
+            .OrderBy(x => x.DisplayName).Take(MaxDirectoryResults).ToListAsync(ct);
+        return rows.Select(x => new AdminAccountSummary(x.Id, x.UserId, x.DisplayName, ActorRole.Cashier.ToString(),
+            x.Status.ToString(), x.Status.ToString(), MaskPhone(x.CanonicalPhone), businessName, x.ActivatedAtUtc, false)).ToArray();
     }
 
     public Task<AccountPreauthorizationResult> PreauthorizeAsync(Actor actor, AccountPreauthorizationInput input, string key, CancellationToken ct)
@@ -236,9 +256,11 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             throw new ApplicationFailure(FailureKind.Validation, "Reactivate the account before adding a profile.");
         var hasActivePermission = await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == userId && x.IsActive, ct);
         var lifetime = Math.Clamp(input.ExpiryDays ?? 7, 1, 30);
-        var secret = NewSecret();
+        var preauthorizationId = Guid.NewGuid();
+        var secret = $"{preauthorizationId:N}-{NewSecret()}";
         var preauth = new AccountPreauthorizationRecord
         {
+            Id = preauthorizationId,
             UserId = userId, TargetRole = role, EmailIdentifierHash = emailHash, PhoneIdentifierHash = phoneHash,
             DisplayName = name, PublicId = publicId, Region = region, Category = category, SubmissionJson = submission,
             CreatedByUserId = actor.UserId, CreatedAtUtc = now, ExpiresAtUtc = now.AddDays(lifetime),
@@ -262,7 +284,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         return Result(preauth);
     }
 
-    public async Task<AdminAccountDetail> ActivateAsync(Actor target, Guid preauthorizationId, string activationSecret, CancellationToken ct)
+    public async Task<AdminAccountDetail> ActivateAsync(Actor target, Guid preauthorizationId, string activationSecret, CancellationToken ct,
+        AccountLegalConfirmation? accountLegal = null, string? ipReference = null, string? userAgentReference = null)
     {
         if (target.UserId == Guid.Empty || string.IsNullOrWhiteSpace(activationSecret)) throw new ApplicationFailure(FailureKind.Validation, "Activation could not be completed.");
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -296,7 +319,13 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         switch (row.TargetRole)
         {
             case ActorRole.Customer:
-                var legal = await new AccountLegalOnboardingService(db, clock).StatusAsync(target.UserId, ct);
+                var legalService = new AccountLegalOnboardingService(db, clock);
+                var legal = await legalService.StatusAsync(target.UserId, ct);
+                if (!legal.Current && accountLegal is not null)
+                {
+                    await legalService.AcceptCurrentAsync(target.UserId, accountLegal, ipReference, userAgentReference, ct);
+                    legal = legal with { Current = true };
+                }
                 if (!legal.Current) throw new ApplicationFailure(FailureKind.Validation, "Accept the current Terms of Service and Privacy Policy before activating the Customer profile.");
                 subject = await NewCustomerIdAsync(ct);
                 db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = subject, Role = row.TargetRole, DisplayName = row.DisplayName, PublicId = $"CU-{Guid.NewGuid():N}"[..15] });
@@ -468,7 +497,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var businessName = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.SubjectId == cashier.BusinessId && x.Role == ActorRole.Business).Select(x => x.DisplayName).SingleOrDefaultAsync(ct);
         var count = cashier.UserId is null ? 0 : await db.VerifiedSales.AsNoTracking().CountAsync(x => x.CashierId == cashier.UserId, ct);
         var transactions = cashier.UserId is null ? [] : await db.VerifiedSales.AsNoTracking().Where(x => x.CashierId == cashier.UserId).OrderByDescending(x => x.CreatedAtUtc).Take(100).ToListAsync(ct);
-        var summary = new AdminAccountSummary(cashier.Id, cashier.UserId, cashier.DisplayName, ActorRole.Cashier.ToString(), cashier.Status.ToString(), cashier.Status.ToString(), MaskPhone(cashier.CanonicalPhone), businessName, cashier.ActivatedAtUtc, false, false);
+        var summary = new AdminAccountSummary(cashier.Id, cashier.UserId, cashier.DisplayName, ActorRole.Cashier.ToString(), cashier.Status.ToString(), cashier.Status.ToString(), MaskPhone(cashier.CanonicalPhone), businessName, cashier.ActivatedAtUtc, false);
         var mapped = transactions.Select(Transaction).ToArray();
         var audit = cashier.UserId is null ? [] : await SafeAuditAsync(cashier.UserId.Value, [], [cashier.BusinessId], ct);
         return new(summary, [ActorRole.Cashier.ToString()], [], audit, mapped, audit.Cast<object>().ToArray(), new AdminCashierData(cashier.BusinessId, businessName, cashier.Status.ToString(), count));
@@ -528,9 +557,9 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         IReadOnlyList<AdminGrantRecord> grants, DateTime? activity, AccountPreauthorizationRecord? preauth, RoleEnrollmentRecord? enrollment)
     {
         var profile = permissions.Where(x => x.Role == role).Select(x => profiles.FirstOrDefault(p => p.SubjectId == x.SubjectId && p.Role == role)).FirstOrDefault(x => x is not null);
-        var grant = grants.Where(x => x.Role == role).OrderByDescending(x => x.GrantedAtUtc).FirstOrDefault();
+        var grant = grants.Where(x => x.UserId == userId && x.Role == role).OrderByDescending(x => x.GrantedAtUtc).FirstOrDefault();
         var customer = customers.FirstOrDefault(x => x.UserId == userId);
-        var email = identifiers.FirstOrDefault(x => x.Kind == "Email" && x.DeliveryAddress != null)?.DeliveryAddress;
+        var email = identifiers.FirstOrDefault(x => x.UserId == userId && x.Kind == "Email" && x.DeliveryAddress != null)?.DeliveryAddress;
         var status = lifecycle?.Status.ToString() ?? (permissions.Any(x => x.IsActive) ? "Active" : "Inactive");
         if (preauth?.Status == AccountPreauthorizationStatus.Pending && permissions.All(x => !x.IsActive)) status = "Pending";
         if (preauth is not null && preauth.Status != AccountPreauthorizationStatus.Pending && permissions.All(x => !x.IsActive)) status = preauth.Status.ToString();
@@ -538,18 +567,10 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var identifier = email is null ? "Verified Weymela account" : MaskEmail(email);
         var approval = preauth?.Status == AccountPreauthorizationStatus.Pending ? "Pending"
             : role is ActorRole.Business or ActorRole.Creator ? enrollment?.Status.ToString() ?? "Not recorded" : "Active";
-        var activePermissions = allUserPermissions.Where(x => x.IsActive).ToArray();
-        var viewablePermissions = activePermissions.Where(x => AdministrativeAuthority.CanBeViewedAs(x.Role)).ToArray();
-        var canViewAs = AdministrativeAuthority.CanBeViewedAs(role)
-            && lifecycle?.Status is not (AccountLifecycleStatus.Suspended or AccountLifecycleStatus.Disabled
-                or AccountLifecycleStatus.Cancelled or AccountLifecycleStatus.Revoked)
-            && !activePermissions.Any(x => x.Role is ActorRole.PlatformAdmin or ActorRole.Cashier)
-            && viewablePermissions.Length == 1
-            && viewablePermissions[0].Role == role;
         return new(userId, userId, name, role.ToString(), status, approval, identifier,
             permissions.FirstOrDefault(x => x.Role == role)?.BusinessId?.ToString("D"), activity ?? preauth?.CreatedAtUtc,
             role is not (ActorRole.Cashier or ActorRole.PlatformAdmin)
-                && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending), canViewAs);
+                && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending));
     }
 
     private static AdminCommerceTransaction Transaction(VerifiedSale x)
@@ -578,8 +599,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
 
     private async Task DemandPlatformAsync(AuthorityContext authority, CancellationToken ct)
     {
-        if (authority.IsViewAsActive
-            || authority.RealActor.Role != ActorRole.PlatformAdmin
+        if (authority.RealActor.Role != ActorRole.PlatformAdmin
             || !authority.Authority.IsPlatformAdmin
             || authority.CommandActor.UserId == Guid.Empty)
             throw new ApplicationFailure(FailureKind.Forbidden, "An active real Platform Admin authority is required.", code: "PlatformAdminAuthorityRequired");

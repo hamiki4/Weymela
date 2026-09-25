@@ -11,7 +11,6 @@ import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
-import { ViewAsBanner } from "./ViewAs";
 
 const navigation: Record<Role, [string, string, string][]> = {
   Business: [
@@ -30,23 +29,22 @@ const navigation: Record<Role, [string, string, string][]> = {
   ],
   PlatformAdmin: [
     ["/admin", "Dashboard", "home"],
-    ["/admin/accounts", "Accounts", "people"],
-    ["/admin/businesses", "Businesses", "wallet"],
+    ["/admin/customers", "Customers", "people"],
     ["/admin/creators", "Creators", "people"],
-    ["/admin/role-enrollments", "Profile Requests", "people"],
+    ["/admin/businesses", "Businesses", "wallet"],
+    ["/admin/admins", "Admins", "people"],
     ["/admin/campaigns", "Campaigns", "campaign"],
-    ["/admin/settings", "Financial Settings", "settings"],
     ["/admin/payouts", "Payouts", "money"],
+    ["/admin/settings", "Financial Settings", "settings"],
     ["/admin/platform", "Platform Revenue", "chart"],
     ["/admin/notifications", "Notifications", "bell"],
-    ["/admin/audit", "Audit", "document"],
   ],
   OperationsAdmin: [
     ["/admin/operations", "Home", "home"],
     ["/admin/role-enrollments", "Profile Requests", "people"],
-    ["/admin/businesses", "Businesses", "business"],
-    ["/admin/creators", "Creators", "people"],
-    ["/admin/customers", "Customers", "people"],
+    ["/admin/operations/businesses", "Businesses", "business"],
+    ["/admin/operations/creators", "Creators", "people"],
+    ["/admin/operations/customers", "Customers", "people"],
     ["/admin/campaigns", "Campaigns", "campaign"],
     ["/admin/ugc", "UGC", "sparkle"],
     ["/admin/payouts", "Payouts", "money"],
@@ -92,7 +90,7 @@ export function Brand() {
   );
 }
 export function Shell({ children }: { children?: ReactNode }) {
-  const { user, signOut, switchProfile, viewAs } = useSession();
+  const { user, signOut, switchProfile } = useSession();
   const accountMenu = useRef<HTMLDialogElement>(null);
   const moreMenu = useRef<HTMLDialogElement>(null);
   const navigate = useNavigate();
@@ -164,7 +162,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <Brand />
         </Link>
         <p className="nav-eyebrow">{roles[user.role]} workspace</p>
-        {!viewAs && user.profiles && user.profiles.length > 0 && (
+        {user.profiles && user.profiles.length > 0 && (
           <ProfileSwitcher
             profiles={user.profiles}
             activeKey={user.activeProfileKey}
@@ -216,14 +214,14 @@ export function Shell({ children }: { children?: ReactNode }) {
             <small>{roles[user.role]}</small>
           </div>
         </div>
-        {!viewAs && user.profiles && user.profiles.length > 0 && (
+        {user.profiles && user.profiles.length > 0 && (
           <ProfileSwitcher
             profiles={user.profiles}
             activeKey={user.activeProfileKey}
             onSwitch={switchProfile}
           />
         )}
-        {!viewAs && isPublicProfile && user.role !== "Business" && (
+        {isPublicProfile && user.role !== "Business" && (
           <Link
             className="account-menu-link"
             to="/onboarding"
@@ -262,7 +260,6 @@ export function Shell({ children }: { children?: ReactNode }) {
         </dialog>
       )}
       <div className="workspace">
-        <ViewAsBanner />
         <header className="topbar">
           {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") && (
             <Link className="topbar-brand" to={roleHome[user.role]} aria-label={`Weymela ${roles[user.role]} home`}>
@@ -272,6 +269,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <span className="workspace-label">
             {roles[user.role]} <span className="muted">/ Weymela</span>
           </span>
+          {user.role === "PlatformAdmin" && <strong className="topbar-identity">{user.displayName}</strong>}
           <div className="topbar-right">
             <Link
               className="button button-quiet"

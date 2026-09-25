@@ -17,6 +17,7 @@ internal static class OnboardingEndpoints
         string? Category, string? Submission, Guid? ProposedBusinessId = null,
         AccountLegalConfirmation? AccountLegal = null);
     private sealed record ReviewRequest(bool Approve, string? Reason, long ExpectedVersion);
+    private sealed record AccountActivationInput(string ActivationSecret, AccountLegalConfirmation? AccountLegal = null);
 
     public static void MapOnboardingEndpoints(this WebApplication app)
     {
@@ -31,7 +32,8 @@ internal static class OnboardingEndpoints
             Results.Ok(await service.StatusAsync(UserId(c), ct)));
         account.MapPost("/account-preauthorizations/{id:guid}/activate", async (Guid id, AccountActivationInput input,
             HttpContext c, PlatformAdminAccountService service, CancellationToken ct) =>
-            Results.Ok(await service.ActivateAsync(EndpointSupport.Actor(c), id, input.ActivationSecret, ct)));
+            Results.Ok(await service.ActivateAsync(EndpointSupport.Actor(c), id, input.ActivationSecret, ct,
+                input.AccountLegal, c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString())));
         account.MapPost("/profile", async (ProfileRequest input, HttpContext c, RoleEnrollmentService service,
             WeymelaDbContext db, TrustedIdentityService identities, TimeProvider clock, CancellationToken ct) =>
         {

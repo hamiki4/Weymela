@@ -612,8 +612,8 @@ test("server idle lock requires the authorized-device PIN and propagates across 
   await page.getByRole("button", { name: "Unlock", exact: true }).click();
   expect((await unlocked).status()).toBe(200);
   await expect(page).toHaveURL(/\/customer\/offers/);
-  await expect(page.getByRole("heading", { name: /Good to see you,/ })).toBeVisible();
-  await expect(second.getByRole("heading", { name: /Good to see you,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
+  await expect(second.getByRole("heading", { name: /Offers for/ })).toBeVisible();
   await second.close();
 });
 
@@ -663,8 +663,8 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
     await page.getByRole("button", { name: "Recover device" }).click();
     expect((await completed).status()).toBe(200);
     await expect(page).toHaveURL(/\/customer\/offers/);
-    await expect(page.getByRole("heading", { name: /Good to see you,/ })).toBeVisible();
-    await expect(otherTab.getByRole("heading", { name: /Good to see you,/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
+    await expect(otherTab.getByRole("heading", { name: /Offers for/ })).toBeVisible();
 
     const oldAccess = await oldContext.request.get("/api/device/access");
     expect(oldAccess.status()).toBe(200);
@@ -682,7 +682,7 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
       && new URL(response.url()).pathname === "/api/device/unlock");
     await page.getByRole("button", { name: "Unlock" }).click();
     expect((await newPin).status()).toBe(200);
-    await expect(page.getByRole("heading", { name: /Good to see you,/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
   } finally {
     await otherTab.close();
     await oldContext.close();
@@ -713,7 +713,7 @@ test("recovery-required device can complete verified-email PIN recovery", async 
   await page.getByRole("button", { name: "Recover device" }).click();
   expect((await completed).status()).toBe(200);
   await expect(page).toHaveURL(/\/customer\/offers/);
-  await expect(page.getByRole("heading", { name: /Good to see you,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
 });
 
 test("customer-to-creator choice uses a phase-safe purple shell", async ({ page, context }) => {

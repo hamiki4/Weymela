@@ -8,15 +8,6 @@ public sealed record RealActor(Actor Identity)
     public ActorRole Role => Identity.Role;
 }
 
-public sealed record EffectiveSubject(Actor Identity, bool IsViewed)
-{
-    public Guid UserId => Identity.UserId;
-    public ActorRole Role => Identity.Role;
-
-    public static EffectiveSubject Real(RealActor actor) => new(actor.Identity, false);
-    public static EffectiveSubject Viewed(Actor actor) => new(actor, true);
-}
-
 public enum AdministrativeCapability
 {
     OperationsWorkspace,
@@ -37,8 +28,7 @@ public enum AdministrativeCapability
     PlatformReconciliation,
     PlatformAccountManagement,
     PlatformRoleGrant,
-    ProtectedPlatformVariables,
-    ViewAs
+    ProtectedPlatformVariables
 }
 
 public sealed record AdministrativeAuthority(ActorRole Role)
@@ -47,7 +37,6 @@ public sealed record AdministrativeAuthority(ActorRole Role)
     public bool IsOperationsAdmin => Role == ActorRole.OperationsAdmin;
     public bool IsAdmin => IsPlatformAdmin || IsOperationsAdmin;
     public bool CanManagePlatform => IsPlatformAdmin;
-    public bool CanStartViewAs => IsPlatformAdmin;
 
     public bool Allows(AdministrativeCapability capability) => IsPlatformAdmin ||
         IsOperationsAdmin && capability is
@@ -64,8 +53,6 @@ public sealed record AdministrativeAuthority(ActorRole Role)
 
     public static AdministrativeAuthority For(RealActor actor) => new(actor.Role);
 
-    public static bool CanBeViewedAs(ActorRole role) => role is
-        ActorRole.Customer or ActorRole.Creator or ActorRole.Business or ActorRole.OperationsAdmin;
 }
 
 public static class AuthorityClaimTypes
@@ -83,58 +70,16 @@ public static class AuthorityClaimTypes
         or ViewedBusinessId or ViewedCreatorId or ViewedCustomerId or EffectiveRole or SupportSessionId;
 }
 
-public sealed record SupportSessionContext(Guid SessionId, Guid RealActorUserId,
-    EffectiveSubject ViewedSubject, DateTime ExpiresAtUtc)
+public sealed record AuthorityContext(RealActor RealActor, AdministrativeAuthority Authority)
 {
-    public bool IsActiveAt(DateTime nowUtc) => SessionId != Guid.Empty
-        && RealActorUserId != Guid.Empty
-        && ViewedSubject.IsViewed
-        && ExpiresAtUtc.Kind == DateTimeKind.Utc
-        && nowUtc.Kind == DateTimeKind.Utc
-        && ExpiresAtUtc > nowUtc;
-}
-
-public sealed record AuthorityContext(RealActor RealActor, EffectiveSubject EffectiveSubject,
-    AdministrativeAuthority Authority, SupportSessionContext? SupportSession)
-{
-    /// <summary>Commands must always use this actor, including during a future View As session.</summary>
     public Actor CommandActor => RealActor.Identity;
-    public bool IsViewAsActive => SupportSession is not null;
 
     public static AuthorityContext ForAuthenticatedActor(Actor actor)
     {
         var realActor = new RealActor(actor);
-        return new(realActor, EffectiveSubject.Real(realActor), AdministrativeAuthority.For(realActor), null);
-    }
-
-    /// <summary>
-    /// Creates a context only after a server-side support session has been validated.
-    /// The viewed subject never becomes the command actor.
-    /// </summary>
-    public static AuthorityContext ForValidatedViewAs(RealActor realActor, EffectiveSubject viewedSubject,
-        SupportSessionContext supportSession, DateTime nowUtc)
-    {
-        if (!AdministrativeAuthority.For(realActor).CanStartViewAs
-            || !viewedSubject.IsViewed
-            || !AdministrativeAuthority.CanBeViewedAs(viewedSubject.Role)
-            || supportSession.RealActorUserId != realActor.UserId
-            || supportSession.ViewedSubject.Identity != viewedSubject.Identity
-            || !supportSession.IsActiveAt(nowUtc))
-            throw new ApplicationFailure(FailureKind.Forbidden, "The administrative support session is invalid.", code: "InvalidAuthorityContext");
-
-        return new(realActor, viewedSubject, AdministrativeAuthority.For(realActor), supportSession);
+        return new(realActor, AdministrativeAuthority.For(realActor));
     }
 }
-
-public sealed record ViewAsSessionView(
-    Guid SupportSessionId,
-    Guid ViewedUserId,
-    string ViewedRole,
-    Guid? ViewedBusinessId,
-    Guid? ViewedCreatorId,
-    Guid? ViewedCustomerId,
-    DateTime CreatedAtUtc,
-    DateTime ExpiresAtUtc);
 
 public enum FailureKind { Validation, InsufficientFunds, Forbidden, NotFound, ConcurrencyConflict, IdempotencyConflict }
 public class ApplicationFailure(FailureKind kind, string message, Exception? innerException = null, string? code = null) : Exception(message, innerException)

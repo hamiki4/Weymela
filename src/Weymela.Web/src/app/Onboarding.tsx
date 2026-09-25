@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
 import { actorRoleNameFromWire } from "../api/actorRoleContract";
 import type { AccountLegalStatus, SessionProfile } from "../api/types";
@@ -76,6 +76,7 @@ function LegacyOnboarding() {
   return <main className="main-content page-shell section-kicker-space onboarding-page">
     <PageHeader eyebrow="Your Weymela account" title="How do you want to use Weymela?"
       action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
+    <p>Received an invitation from Weymela? <Link to="/account/activate">Activate your account</Link>.</p>
     <Resource resource={status}>{(data) => {
       const pending = new Set(data.profiles.filter((item) => item.status === "Pending" || item.status === 0)
         .map((item) => publicRole(item.role)));

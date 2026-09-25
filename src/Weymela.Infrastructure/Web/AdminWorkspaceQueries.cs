@@ -198,7 +198,6 @@ public sealed partial class WorkspaceQueries
         foreach(var m in credits.OrderBy(x=>x.At)) { var before=balance;balance+=m.Amount;if(balance<threshold)since=null;else if(before<threshold)since=m.At>effective?m.At:effective; }
         return since;
     }
-    public Task<IReadOnlyList<ActivityItem>> AuditAsync(Actor actor,CancellationToken ct) { DemandPlatformAdmin(actor);return History(null,ct); }
     public async Task<IReadOnlyList<ActivityItem>> NotificationsAsync(Actor actor,CancellationToken ct)
     {
         DemandCapability(actor, AdministrativeCapability.OperationsWorkspace);

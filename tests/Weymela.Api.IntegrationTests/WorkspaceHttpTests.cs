@@ -25,7 +25,6 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [InlineData("admin","/api/admin/payouts")]
     [InlineData("admin","/api/admin/platform")]
     [InlineData("admin","/api/admin/notifications")]
-    [InlineData("admin","/api/admin/audit")]
     [InlineData("admin","/api/admin/accounts")]
     [InlineData("customer","/api/customer/offers")]
     [InlineData("customer","/api/customer/transactions")]
@@ -47,6 +46,17 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         var detail = await c.GetJson($"/api/admin/accounts/{userId}");
         foreach (var secret in new[] { "passwordHash", "pinVerifier", "activationSecretHash", "firebaseToken", "sessionToken" })
             Assert.DoesNotContain(secret, detail.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("/api/admin/view-as/start")]
+    [InlineData("/api/admin/view-as/current")]
+    [InlineData("/api/admin/view-as/end")]
+    [InlineData("/api/admin/audit")]
+    public async Task Retired_admin_product_routes_are_not_mapped(string path)
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres); using var c = await f.Login("admin");
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync(path)).StatusCode);
     }
 
     [Theory]
@@ -126,7 +136,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         var operationalDetails=(await c.GetJson("/api/admin/operations")).ToJsonString();
         foreach(var forbidden in new[]{"financialWritesEnabled","depositMode","socialMode"})
             Assert.DoesNotContain(forbidden,operationalDetails,StringComparison.OrdinalIgnoreCase);
-        foreach(var path in new[]{"/api/admin/home","/api/admin/accounts","/api/admin/financial-settings","/api/admin/platform","/api/admin/audit","/api/admin/reconciliation"})
+        foreach(var path in new[]{"/api/admin/home","/api/admin/accounts","/api/admin/financial-settings","/api/admin/platform","/api/admin/reconciliation"})
             Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync(path)).StatusCode);
     }
 
@@ -144,7 +154,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [Fact] public async Task Operations_admin_cannot_mutate_admin_grants_financial_settings_or_platform_money()
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("operations-admin");
-        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts",new{email="verified@example.com",role="OperationsAdmin"})).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts/preauthorize",new{email="verified@example.com",displayName="Target",role="OperationsAdmin"})).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/financial-settings",new{})).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/platform/settlements",new{amount=1,reference="forbidden"})).StatusCode);
     }
@@ -154,9 +164,9 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     public async Task Normal_profiles_cannot_access_new_admin_product_endpoints(string persona)
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login(persona);
-        foreach(var path in new[]{"/api/admin/home","/api/admin/audit","/api/admin/promotions","/api/admin/ugc","/api/admin/accounts","/api/admin/financial-settings"})
+        foreach(var path in new[]{"/api/admin/home","/api/admin/promotions","/api/admin/ugc","/api/admin/accounts","/api/admin/financial-settings"})
             Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync(path)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts",new{email="verified@example.com",role="OperationsAdmin"})).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/accounts/preauthorize",new{email="verified@example.com",displayName="Target",role="OperationsAdmin"})).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await c.Post("/api/admin/financial-settings",new{})).StatusCode);
     }
 

@@ -65,6 +65,12 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var platform = await service.PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("PlatformAdmin", "new-platform@example.test", null, "Platform target", Reason: "Approved staffing change"), "platform", default);
         Assert.Equal("PlatformAdmin", platform.Role);
+        var admins = await service.ListAsync(admin, new AdminAccountFilterInput(Role: "Admin"), default);
+        Assert.NotEmpty(admins);
+        Assert.All(admins, item => Assert.Contains(item.Role, new[] { "PlatformAdmin", "OperationsAdmin" }));
+        var invitedPlatform = Assert.Single(admins, item => item.Id == platform.PreauthorizationId);
+        Assert.Equal("Platform target", invitedPlatform.Name);
+        Assert.StartsWith("n", invitedPlatform.SafeIdentifier, StringComparison.Ordinal);
         var cashier = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("Cashier", "new-cashier@example.test", null, "Not allowed"), "cashier", default));
         Assert.Equal(FailureKind.Validation, cashier.Kind);
@@ -201,17 +207,9 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
 
         var forged = new AuthorityContext(
             new RealActor(operations),
-            EffectiveSubject.Real(new RealActor(operations)),
-            new AdministrativeAuthority(ActorRole.PlatformAdmin),
-            null);
+            new AdministrativeAuthority(ActorRole.PlatformAdmin));
         var forgedFailure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(forged, request, "denied-forged", default));
         Assert.Equal(FailureKind.Forbidden, forgedFailure.Kind);
-
-        var viewed = new EffectiveSubject(new Actor(Guid.NewGuid(), ActorRole.Business), true);
-        var support = new SupportSessionContext(Guid.NewGuid(), admin.UserId, viewed, Now.AddHours(1));
-        var viewAs = AuthorityContext.ForValidatedViewAs(new RealActor(admin), viewed, support, Now);
-        var viewAsFailure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(viewAs, request, "denied-view-as", default));
-        Assert.Equal(FailureKind.Forbidden, viewAsFailure.Kind);
     }
 
     [Fact]
@@ -226,6 +224,7 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var request = new AccountPreauthorizationInput("Customer", "idempotent@example.test", null, "Idempotent target");
         var first = await service.PreauthorizeAsync(admin, request, "same-request", default);
         var secret = delivery.Code;
+        Assert.StartsWith($"{first.PreauthorizationId:N}-", secret, StringComparison.Ordinal);
         var replay = await service.PreauthorizeAsync(admin, request, "same-request", default);
         Assert.Equal(first.PreauthorizationId, replay.PreauthorizationId);
         Assert.True(replay.ActivationInstructionsSent);
@@ -250,16 +249,15 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var terms = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.TermsOfService, "1", "terms", Now.AddHours(-1));
         var privacy = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.PrivacyPolicy, "1", "privacy", Now.AddHours(-1));
         db.LegalDocumentVersions.AddRange(terms, privacy); await db.SaveChangesAsync();
-        await new AccountLegalOnboardingService(db, new FixedTime(Now)).AcceptCurrentAsync(user,
-            new AccountLegalConfirmation(new(terms.Id, terms.ContentHash, true), new(privacy.Id, privacy.ContentHash, true)), null, null, default);
-        await db.SaveChangesAsync();
         var delivery = new CapturingDelivery();
         var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
         var preauth = await service.PreauthorizeAsync(admin, new AccountPreauthorizationInput("Customer", "activate@example.test", null, "Activated customer"), "activate", default);
-        var detail = await service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, delivery.Code!, default);
+        var confirmation = new AccountLegalConfirmation(new(terms.Id, terms.ContentHash, true), new(privacy.Id, privacy.ContentHash, true));
+        var detail = await service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, delivery.Code!, default, confirmation);
         var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Customer);
         Assert.True(permission.IsActive); Assert.False(permission.CanCheckout);
         Assert.Single(await db.CustomerProfiles.Where(x => x.UserId == user).ToListAsync());
+        Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == user));
         Assert.Empty((await db.AccountPreauthorizations.SingleAsync(x => x.Id == preauth.PreauthorizationId)).ActivationSecretHash);
         Assert.Equal(user, detail.Account.UserId);
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.ActivateAsync(new Actor(user, ActorRole.Customer), preauth.PreauthorizationId, delivery.Code!, default));

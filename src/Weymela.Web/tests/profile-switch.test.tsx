@@ -55,8 +55,6 @@ function sessionServer(switchStatus = 200) {
       return Response.json({ passwordEnrolled: true, phoneEnrolled: true });
     if (input === "/api/device/enrollment" && !init?.method)
       return Response.json({ state: "Enrolled", expiresAtUtc: "2026-10-14T00:00:00Z" });
-    if (input === "/api/admin/view-as/current" && !init?.method)
-      return Response.json(null);
     if (input === "/api/session/switch-profile" && init?.method === "POST") {
       if (switchStatus !== 200) return Response.json({ message: "Switch rejected." }, { status: switchStatus });
       const requested = JSON.parse(String(init.body)) as SessionProfile;

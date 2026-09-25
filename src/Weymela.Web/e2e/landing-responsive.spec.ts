@@ -12,6 +12,7 @@ async function openPublicLanding(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Welcome to Weymela" }),
   ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Activate a Cashier account" })).toHaveCount(0);
 }
 
 for (const viewport of [
@@ -35,7 +36,6 @@ for (const viewport of [
     const measurements = await page.evaluate(() => {
       const hero = document.querySelector<HTMLElement>(".sign-in-story")!;
       const form = document.querySelector<HTMLElement>(".sign-in-form")!;
-      const mark = document.querySelector<HTMLElement>(".story-mark")!;
       const logo = document.querySelector<HTMLImageElement>(
         ".sign-in-story .brand-wordmark",
       )!;
@@ -84,7 +84,6 @@ for (const viewport of [
         sectionsOverlap: heroBox.bottom > formBox.top + 1,
         clipped,
         outsideHero,
-        markIgnoresPointer: getComputedStyle(mark).pointerEvents === "none",
         approvedLogoLoaded:
           logo.currentSrc.endsWith("/brand/weymela-wordmark.png") &&
           brandMark.currentSrc.endsWith("/brand/weymela-mark.png") &&
@@ -97,52 +96,33 @@ for (const viewport of [
       `landing ${viewport.width}x${viewport.height} hero occupancy ${(measurements.occupancy * 100).toFixed(1)}%`,
     );
 
-    expect(measurements.occupancy).toBeGreaterThanOrEqual(0.25);
-    expect(measurements.occupancy).toBeLessThanOrEqual(0.31);
+    expect(measurements.occupancy).toBeGreaterThan(0);
+    expect(measurements.occupancy).toBeLessThan(0.25);
     expect(measurements.actionsAboveFold).toBe(true);
     expect(measurements.controlsUsable).toBe(true);
     expect(measurements.horizontalOverflow).toBe(false);
     expect(measurements.sectionsOverlap).toBe(false);
     expect(measurements.clipped).toBe(false);
     expect(measurements.outsideHero).toBe(false);
-    expect(measurements.markIgnoresPointer).toBe(true);
     expect(measurements.approvedLogoLoaded).toBe(true);
     const branding = measurements.brandedText.join(" ").replace(/\s+/g, " ");
-    expect(branding).toContain("Good stories. Real connections.");
-    expect(branding.replaceAll(" ", "")).toContain("Aplacetogrowtogether.");
-    expect(branding).toContain(
-      "Bring your business, creativity and community closer.",
-    );
+    expect(branding).not.toContain("Good stories. Real connections.");
+    expect(branding).not.toContain("A place to grow together.");
   });
 }
 
-test("public landing preserves the desktop split presentation", async ({
+test("public landing remains focused on desktop", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openPublicLanding(page);
 
   const measurements = await page.evaluate(() => {
-    const hero = document.querySelector<HTMLElement>(".sign-in-story")!;
-    const form = document.querySelector<HTMLElement>(".sign-in-form")!;
-    const title = hero.querySelector<HTMLElement>("h1")!;
-    const heroBox = hero.getBoundingClientRect();
-    const formBox = form.getBoundingClientRect();
     return {
-      heroWidthRatio: heroBox.width / window.innerWidth,
-      heroHeightRatio: heroBox.height / window.innerHeight,
-      formStartsAfterHero: formBox.left >= heroBox.right - 1,
-      titleSize: Number.parseFloat(getComputedStyle(title).fontSize),
       horizontalOverflow:
         document.documentElement.scrollWidth > window.innerWidth + 1,
     };
   });
-
-  expect(measurements.heroWidthRatio).toBeGreaterThanOrEqual(0.49);
-  expect(measurements.heroWidthRatio).toBeLessThanOrEqual(0.51);
-  expect(measurements.heroHeightRatio).toBeGreaterThanOrEqual(0.99);
-  expect(measurements.formStartsAfterHero).toBe(true);
-  expect(measurements.titleSize).toBeGreaterThanOrEqual(70);
   expect(measurements.horizontalOverflow).toBe(false);
   await expect(
     page.getByRole("button", { name: "Create account", exact: true }),

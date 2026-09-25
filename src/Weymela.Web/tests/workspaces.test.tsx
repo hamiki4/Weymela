@@ -188,7 +188,7 @@ describe("Business workspace", () => {
         ...detail,
         campaign: { ...campaign, status: "Draft" },
       },
-      "/business/wallet": { ...wallet, available: 100 },
+      "/business/wallet": { ...wallet, totalBalance: 6100, available: 100 },
     });
     mount(
       <BusinessCampaignDetail />,

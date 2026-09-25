@@ -69,7 +69,7 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
             to = new[] { destination },
             subject,
             text = purpose == EmailCodePurpose.AdminAccountActivation
-                ? $"Use the activation code in this message to {purposeText}. This invitation expires according to the administrator's activation window. If you did not expect it, ignore this message."
+                ? $"A Weymela account was prepared for you. Open /account/activate in Weymela, then sign in or create an account with this email. Verify your email and set your own password and device PIN. Enter this one-time activation code there: {code}. The invitation expires according to the administrator's activation window. Do not share this code. If you did not expect it, ignore this message."
                 : $"Use {code} to {purposeText}. This code expires in 10 minutes. If you did not request it, ignore this message."
         });
         try

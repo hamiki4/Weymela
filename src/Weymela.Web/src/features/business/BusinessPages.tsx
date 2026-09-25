@@ -169,16 +169,7 @@ export function BusinessDashboard() {
               )}
             </Section>
             <div className="overview-highlight">
-              <p className="eyebrow">Make something meaningful</p>
-              <h2>
-                Your Business.
-                <br />
-                Their creativity.
-              </h2>
-              <p>
-                Set your Promotion Budget, work with the right Creators and build
-                stories people connect with.
-              </p>
+              <h2>Create a Promotion</h2>
               <ActionLink to="/business/campaigns/new" secondary icon="plus">
                 Create Promotion
               </ActionLink>

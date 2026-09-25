@@ -69,7 +69,7 @@ public static class ApiHost
             var allRoles = new HashSet<ActorRole>(Enum.GetValues<ActorRole>());
             foreach(var role in Enum.GetValues<ActorRole>())
                 o.AddPolicy(role.ToString(),p=>p.RequireAuthenticatedUser()
-                    .AddRequirements(new WorkspaceRoleRequirement(new HashSet<ActorRole> { role }, role == ActorRole.PlatformAdmin))
+                    .AddRequirements(new WorkspaceRoleRequirement(new HashSet<ActorRole> { role }))
                     .AddRequirements(new ActiveWorkspaceRequirement()));
             o.AddPolicy("Workspace",p=>p.RequireAuthenticatedUser()
                 .AddRequirements(new WorkspaceRoleRequirement(allRoles))
@@ -105,9 +105,20 @@ public static class ApiHost
         }
         if(options.TrustedProxies.Length>0)app.UseForwardedHeaders();
         app.UseRouting();
-        app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseMiddleware<SupportSessionMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
+        // Retire legacy View As cookies without consulting the removed session table.
+        app.Use(async (context, next) =>
+        {
+            const string developmentCookie = "WeymelaV3.SupportSession";
+            const string productionCookie = "__Host-WeymelaV3.SupportSession";
+            if (context.Request.Cookies.ContainsKey(developmentCookie))
+                context.Response.Cookies.Delete(developmentCookie, new CookieOptions { Path = "/", HttpOnly = true, SameSite = SameSiteMode.Strict });
+            if (context.Request.Cookies.ContainsKey(productionCookie))
+                context.Response.Cookies.Delete(productionCookie, new CookieOptions { Path = "/", HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict });
+            await next(context);
+        });
+        app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();app.MapViewAsEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

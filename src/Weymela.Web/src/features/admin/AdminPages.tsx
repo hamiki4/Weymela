@@ -45,7 +45,7 @@ import { useSession } from "../../app/Session";
 export function OperationsDashboard() {
   const resource = useResource<OperationsHome>("/admin/operations/home");
   return <Resource resource={resource}>{(d) => <>
-    <PageHeader eyebrow="Operations workspace" title="Keep Weymela moving." description="Review accounts, campaigns, customer activity and payout work that needs an operational decision." />
+    <PageHeader title="Operations Dashboard" />
     <div className="metric-grid four">
       <Metric label="Profile requests" value={count(d.pendingReviews)} icon="people" />
       <Metric label="Active campaigns" value={count(d.activeCampaigns)} icon="campaign" />
@@ -61,9 +61,9 @@ export function OperationsDashboard() {
       </Section>
       <Section title="Operational visibility">
         <div className="actions">
-          <ActionLink to="/admin/businesses" secondary>Businesses</ActionLink>
-          <ActionLink to="/admin/creators" secondary>Creators</ActionLink>
-          <ActionLink to="/admin/customers" secondary>Customers</ActionLink>
+          <ActionLink to="/admin/operations/businesses" secondary>Businesses</ActionLink>
+          <ActionLink to="/admin/operations/creators" secondary>Creators</ActionLink>
+          <ActionLink to="/admin/operations/customers" secondary>Customers</ActionLink>
           <ActionLink to="/admin/campaigns" secondary>Campaigns</ActionLink>
           <ActionLink to="/admin/ugc" secondary>UGC</ActionLink>
         </div>
@@ -149,11 +149,9 @@ export function AdminDashboard() {
       {(d) => (
         <>
           <PageHeader
-            eyebrow="Platform control tower"
-            title="A clear view of Weymela."
-            description="Campaign activity, financial oversight and the people making it happen."
+            title="Dashboard"
             action={
-              <ActionLink to="/admin/campaigns">Explore Campaigns</ActionLink>
+              <ActionLink to="/admin/campaigns">Campaigns</ActionLink>
             }
           />
           <div className="metric-grid four">
@@ -465,7 +463,7 @@ export function AdminCampaignDetail() {
                     ]}
                   />
                 </Section>
-                <Section title="Campaign audit / history">
+                <Section title="Campaign history">
                   <ActivityList items={d.history} />
                 </Section>
               </div>
@@ -653,29 +651,19 @@ export function AdminCreators() {
     </>
   );
 }
-export function AdminActivity({
-  notifications = false,
-}: {
-  notifications?: boolean;
-}) {
-  const resource = useResource<Activity[]>(
-    notifications ? "/admin/notifications" : "/admin/audit",
-  );
+export function AdminActivity() {
+  const resource = useResource<Activity[]>("/admin/notifications");
   return (
     <>
       <PageHeader
         eyebrow="Operational visibility"
-        title={notifications ? "Notifications" : "Audit"}
-        description={
-          notifications
-            ? "Recent recorded platform events. This is a read-only activity feed; opening it does not change notification delivery state."
-            : "Significant recorded actions with timestamps and audit references."
-        }
+        title="Notifications"
+        description="Recent platform notifications."
       />
       <Resource resource={resource}>
         {(items) => (
           <Section
-            title={notifications ? "Latest platform activity" : "Audit history"}
+            title="Latest platform activity"
           >
             <ActivityList items={items} />
           </Section>

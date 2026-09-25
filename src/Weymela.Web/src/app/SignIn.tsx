@@ -196,11 +196,6 @@ function FirebaseSignIn({
             >
               Sign in
             </button>
-            <p>
-              <a className="text-link" href="/cashier/activate">
-                Activate a Cashier account
-              </a>
-            </p>
           </div>
         </section>
       ) : null}
@@ -560,14 +555,6 @@ export function SignIn() {
     <main className="sign-in">
       <div className="sign-in-story">
         <Brand />
-        <p className="eyebrow">Good stories. Real connections.</p>
-        <h1>
-          A place to
-          <br />
-          grow together.
-        </h1>
-        <p>Bring your business, creativity and community closer.</p>
-        <img className="story-mark" src="/brand/weymela-mark.png" alt="" />
       </div>
       <div className="sign-in-form">
         <Resource resource={mode}>

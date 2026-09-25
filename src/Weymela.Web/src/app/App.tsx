@@ -52,6 +52,7 @@ import { SecuritySetup } from "./SecuritySetup";
 import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 import { LegalDocumentPage } from "./LegalDocumentPage";
 import { CashierActivation } from "./CashierActivation";
+import { AccountActivation } from "./AccountActivation";
 import { BusinessCashiers } from "../features/business/BusinessCashiers";
 
 
@@ -75,10 +76,10 @@ export function App() {
       && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
     return <LockScreen />;
   if (!session.loading && session.user) {
-    if (!session.viewAs && session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
+    if (session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
       if (location.pathname !== "/security-setup")
         return <AccountRedirect to="/security-setup" />;
-    } else if (!session.viewAs && session.accountSecurity?.passwordEnrolled) {
+    } else if (session.accountSecurity?.passwordEnrolled) {
       if (location.pathname === "/security-setup")
         return <AccountRedirect to={accountEntryPath(session.user, session.accountSecurity, session.deviceEnrollment)} />;
       const state = session.deviceEnrollment?.state ?? "Unavailable";
@@ -94,6 +95,7 @@ export function App() {
       <Route path="/" element={<Home />} />
       <Route path="/sign-in" element={<SignIn />} />
       <Route path="/cashier/activate" element={<CashierActivation />} />
+      <Route path="/account/activate" element={<AccountActivation />} />
       <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
@@ -198,15 +200,18 @@ export function App() {
           </RoleGate>
         }
       >
-        <Route path="/admin/accounts" element={<AdminAccounts />} />
+        <Route path="/admin/accounts" element={<Navigate to="/admin/customers" replace />} />
         <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
+        <Route path="/admin/customers" element={<AdminAccounts area="Customer" />} />
+        <Route path="/admin/creators" element={<AdminAccounts area="Creator" />} />
+        <Route path="/admin/businesses" element={<AdminAccounts area="Business" />} />
+        <Route path="/admin/admins" element={<AdminAccounts area="Admin" />} />
         <Route path="/admin/settings" element={<AdminFinancialSettings />} />
         <Route
           path="/admin/financial-settings"
           element={<Navigate to="/admin/settings" replace />}
         />
         <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
-        <Route path="/admin/audit" element={<AdminActivity />} />
       </Route>
       <Route
         element={
@@ -217,12 +222,12 @@ export function App() {
       >
         <Route path="/admin/campaigns" element={<AdminCampaigns />} />
         <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
-        <Route path="/admin/businesses" element={<AdminBusinesses />} />
-        <Route path="/admin/creators" element={<AdminCreators />} />
-        <Route path="/admin/customers" element={<OperationsCustomers />} />
+        <Route path="/admin/operations/businesses" element={<AdminBusinesses />} />
+        <Route path="/admin/operations/creators" element={<AdminCreators />} />
+        <Route path="/admin/operations/customers" element={<OperationsCustomers />} />
         <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
         <Route path="/admin/payouts" element={<AdminPayouts />} />
-        <Route path="/admin/notifications" element={<AdminActivity notifications />} />
+        <Route path="/admin/notifications" element={<AdminActivity />} />
       </Route>
       <Route path="/admin/ugc" element={<RoleGate roles={["OperationsAdmin"]}><Shell><OperationsUgc /></Shell></RoleGate>} />
       <Route

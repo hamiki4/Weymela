@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type { Cashier, CashierCreated } from "../../api/types";
 import {
@@ -47,7 +48,7 @@ export function BusinessCashiers() {
       {created?.activationCode ? (
         <Notice>
           <strong>Cashier created.</strong> Give this temporary activation code
-          to {created.cashier.name}: <strong>{created.activationCode}</strong>
+          to {created.cashier.name}: <strong>{created.activationCode}</strong>. Ask them to open <Link to="/cashier/activate">Cashier activation</Link> on their own device.
         </Notice>
       ) : null}
       {action.error ? <Notice error>{action.error}</Notice> : null}

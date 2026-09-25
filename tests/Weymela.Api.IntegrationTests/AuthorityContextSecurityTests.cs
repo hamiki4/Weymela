@@ -8,7 +8,7 @@ namespace Weymela.Api.IntegrationTests;
 public sealed class AuthorityContextSecurityTests
 {
     [Fact]
-    public void Client_supplied_view_as_claims_are_rejected_before_authority_resolution()
+    public void Client_supplied_reserved_authority_claims_are_rejected_before_authority_resolution()
     {
         var principal = new ClaimsPrincipal(new ClaimsIdentity([
             new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
@@ -24,7 +24,7 @@ public sealed class AuthorityContextSecurityTests
     }
 
     [Fact]
-    public void Server_principal_has_no_viewed_subject_and_preserves_normal_authentication()
+    public void Server_principal_preserves_normal_real_actor_authentication()
     {
         var actor = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
 
@@ -33,6 +33,5 @@ public sealed class AuthorityContextSecurityTests
 
         Assert.Equal(actor, context.RealActor.Identity);
         Assert.Equal(actor, context.CommandActor);
-        Assert.False(context.IsViewAsActive);
     }
 }

@@ -339,7 +339,6 @@ export const routes: Record<string, unknown> = {
     history: [],
   },
   "/admin/notifications": [],
-  "/admin/audit": [],
   "/customer/offers": [offer],
   "/customer/transactions": [],
   "/customer/cashback": {

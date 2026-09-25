@@ -3,113 +3,113 @@ import { layout, login, open } from "./helpers";
 
 const id = (number: number) => `00000000-0000-4000-8000-${number.toString().padStart(12, "0")}`;
 
-async function enterViewAs(
-  page: import("@playwright/test").Page,
-  context: import("@playwright/test").BrowserContext,
-  target: { number: number; name: string; role: string; home: string; next: string },
-) {
+test("Platform Admin has role-specific account areas and can preauthorize an Admin", async ({ page, context }) => {
   await login(context, "admin");
-  const detailPath = `/admin/accounts/${id(target.number)}?mode=view`;
-  await open(page, detailPath);
-  await expect(page.getByRole("button", { name: "View As", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "View As", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: `View as ${target.name}?` });
-  await expect(dialog).toContainText(`read-only Admin View of this ${target.role}`);
-  const startRequest = page.waitForRequest((request) => request.url().endsWith("/api/admin/view-as/start"));
-  await dialog.getByRole("button", { name: "View As", exact: true }).click();
-  const request = await startRequest;
-  expect(request.postDataJSON()).toEqual({ viewedUserId: id(target.number) });
-  await expect(page).toHaveURL(new RegExp(`${target.home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
-  await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toContainText("ADMIN VIEW MODE");
-  await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toContainText(`Viewing: ${target.name}`);
-  await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toContainText(`Role: ${target.role}`);
-  await expect(page.getByRole("button", { name: "Exit View Mode", exact: true })).toBeVisible();
-  return { detailPath };
-}
-
-test("PlatformAdmin can inspect the account directory and preauthorize a Platform Admin", async ({ page, context }) => {
-  await login(context, "admin");
-  await open(page, "/admin/accounts");
-  await expect(page.getByRole("heading", { name: "Accounts", exact: true })).toBeVisible();
-  for (const tab of ["All", "Customers", "Creators", "Businesses", "Cashiers", "Operations Admins", "Platform Admins"])
-    await expect(page.getByRole("tab", { name: tab, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "+ Create Account" }).click();
-  await page.getByLabel("Account type").selectOption("PlatformAdmin");
+  await open(page, "/admin");
+  await expect(page.locator(".topbar-identity")).not.toBeEmpty();
+  await expect(page.locator(".topbar-identity")).not.toContainText("@");
+  await expect(page.getByRole("link", { name: "Audit", exact: true })).toHaveCount(0);
+  for (const [path, title, action] of [
+    ["/admin/customers", "Customers", "Customer"], ["/admin/creators", "Creators", "Creator"],
+    ["/admin/businesses", "Businesses", "Business"], ["/admin/admins", "Admins", "Admin"],
+  ]) {
+    await open(page, path);
+    await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: `+ Create ${action}` })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View As" })).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "+ Create Admin" }).click();
+  await page.getByLabel("Admin type").selectOption("PlatformAdmin");
   await page.getByLabel("Email (required for a new identity)").fill(`browser-admin-${Date.now()}@example.com`);
   await page.getByLabel("Display name").fill("Browser Platform Admin");
   await page.getByLabel("Reason").fill("Browser security authority test");
   await page.getByRole("button", { name: "Create preauthorization" }).click();
   await expect(page.getByRole("status")).toContainText("Preauthorization created");
-  await expect(page.locator(".activation-secret code")).toHaveCount(0);
-  await expect(page.getByRole("status")).toContainText("Activation instructions were sent");
-  await expect(page.locator("main")).not.toContainText(/password hash|pin verifier|firebase token/i);
+  await expect(page.locator("main")).not.toContainText(/password hash|pin verifier|firebase token|activation code/i);
   await layout(page);
 });
 
-test("OperationsAdmin cannot access the PlatformAdmin Accounts authority", async ({ page, context }) => {
+test("recipient activates a Platform Admin-created Customer with own credentials and consent", async ({ page, context }) => {
+  await login(context, "admin");
+  await open(page, "/admin/customers");
+  const suffix = Date.now().toString();
+  const email = `invited-${suffix}@example.com`;
+  const phone = `+2519${suffix.slice(-8)}`;
+  const password = `Recipient passphrase ${suffix}`;
+  await page.getByRole("button", { name: "+ Create Customer" }).click();
+  await page.getByLabel("Email (required for a new identity)").fill(email);
+  await page.getByLabel("Display name").fill("Invited Customer");
+  await page.getByRole("button", { name: "Create preauthorization" }).click();
+  await expect(page.getByRole("status")).toContainText("Preauthorization created");
+  const invitation = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(email)}`);
+  expect(invitation.status()).toBe(200);
+  const { code: activationSecret } = await invitation.json() as { code: string };
+  expect(activationSecret).toMatch(/^[0-9a-f]{32}-[A-Za-z0-9_-]{43}$/i);
+  expect((await context.request.post("/api/session/sign-out", { headers: { "X-Weymela-Request": "1" } })).status()).toBe(204);
+
+  const start = await context.request.post("/api/auth/email/start", {
+    headers: { "X-Weymela-Request": "1" }, data: { identifier: email, phone: null, purpose: "Signup" },
+  });
+  expect(start.status()).toBe(202);
+  const verification = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(email)}`);
+  expect(verification.status()).toBe(200);
+  const { code } = await verification.json() as { code: string };
+  const verified = await context.request.post("/api/auth/email/verify", {
+    headers: { "X-Weymela-Request": "1" }, data: { identifier: email, purpose: "Signup", code },
+  });
+  expect(verified.status()).toBe(200);
+  const { customToken } = await verified.json() as { customToken: string };
+  const session = await context.request.post("/api/auth/firebase/session", {
+    headers: { "X-Weymela-Request": "1" }, data: { idToken: customToken },
+  });
+  expect(session.status()).toBe(204);
+  const secured = await context.request.post("/api/account/password-credential", {
+    headers: { "X-Weymela-Request": "1" }, data: { phone, password, confirmPassword: password },
+  });
+  expect(secured.status()).toBe(204);
+  const device = await context.request.post("/api/device/enrollment", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `invited-device-${suffix}` },
+    data: { pin: "01234", confirmPin: "01234" },
+  });
+  expect(device.status()).toBe(200);
+
+  await open(page, "/account/activate");
+  await page.getByLabel("Activation code").fill(activationSecret);
+  await page.getByRole("checkbox", { name: /Terms of Service/ }).check();
+  await page.getByRole("button", { name: "Activate account" }).click();
+  await expect(page.getByRole("status")).toContainText("Your account is active");
+  expect((await context.request.post("/api/session/sign-out", { headers: { "X-Weymela-Request": "1" } })).status()).toBe(204);
+  const passwordSignIn = await context.request.post("/api/auth/password/sign-in", {
+    headers: { "X-Weymela-Request": "1" }, data: { phone, password },
+  });
+  expect(passwordSignIn.status()).toBe(200);
+  const loginToken = (await passwordSignIn.json() as { customToken: string }).customToken;
+  expect((await context.request.post("/api/auth/firebase/session", {
+    headers: { "X-Weymela-Request": "1" }, data: { idToken: loginToken },
+  })).status()).toBe(204);
+  expect((await context.request.get("/api/session")).status()).toBe(200);
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
+});
+
+test("Operations Admin cannot create accounts or enter Platform Admin account areas", async ({ page, context }) => {
   await login(context, "operations-admin");
   expect((await context.request.get("/api/admin/accounts")).status()).toBe(403);
-  expect((await context.request.get("/api/admin/accounts/00000000-0000-0000-0000-000000000001")).status()).toBe(403);
-  await page.goto("/admin/accounts");
+  expect((await context.request.get(`/api/admin/accounts/${id(1)}`)).status()).toBe(403);
+  expect((await context.request.get(`/api/admin/accounts/businesses/${id(2)}/cashiers`)).status()).toBe(403);
+  await page.goto("/admin/admins");
   await expect(page).toHaveURL(/\/unauthorized$/);
-  await expect(page.getByRole("heading", { name: /Workspace unavailable/i })).toBeVisible();
-  await expect(page.locator("body")).not.toContainText("Account directory");
-});
-
-test("OperationsAdmin can use the operational workspace without Platform controls", async ({ page, context }) => {
-  await login(context, "operations-admin");
   await open(page, "/admin/operations");
-  await expect(page.getByRole("heading", { name: "Keep Weymela moving." })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Home", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Payouts", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Financial Settings", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Platform Revenue", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Accounts", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Financial Settings" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Platform Revenue" })).toHaveCount(0);
   await layout(page);
 });
 
-test.describe("PlatformAdmin B5 View As experience", () => {
-  test("views Customer read-only, restores after refresh, and exits server-side", async ({ page, context }) => {
-    const target = { number: 7, name: "Hana", role: "Customer", home: "/customer/offers", next: "/customer/discover" };
-    const { detailPath } = await enterViewAs(page, context, target);
-    await page.getByRole("link", { name: "Discover", exact: true }).click();
-    await expect(page).toHaveURL(/\/customer\/discover$/);
-    await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toContainText("ADMIN VIEW MODE");
-    await page.reload();
-    await expect(page).toHaveURL(/\/customer\/discover$/);
-    await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toContainText("Viewing: Hana");
-    await page.getByRole("button", { name: "Exit View Mode", exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`${detailPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
-    await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Accounts", exact: true })).toBeVisible();
-  });
-
-  test("routes Creator, Business, and Operations Admin to their existing workspaces", async ({ page, context }) => {
-    for (const target of [
-      { number: 4, name: "Bella", role: "Creator", home: "/creator", next: "/creator/discover" },
-      { number: 2, name: "Abc Coffee", role: "Business", home: "/business", next: "/business/campaigns" },
-      { number: 11, name: "Weymela account", role: "Operations Admin", home: "/admin/operations", next: "/admin/businesses" },
-    ]) {
-      await enterViewAs(page, context, target);
-      await page.goto(target.next);
-      await expect(page).toHaveURL(new RegExp(`${target.next.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
-      await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toContainText("ADMIN VIEW MODE");
-      if (target.role === "Operations Admin") {
-        await expect(page.getByRole("link", { name: "Accounts", exact: true })).toHaveCount(0);
-        await expect(page.getByRole("link", { name: "Financial Settings", exact: true })).toHaveCount(0);
-        await expect(page.getByRole("link", { name: "Platform Revenue", exact: true })).toHaveCount(0);
-      }
-      await page.getByRole("button", { name: "Exit View Mode", exact: true }).click();
-      await expect(page).toHaveURL(/\/admin\/accounts\/.*\?mode=view$/);
-      await expect(page.getByRole("complementary", { name: "Admin View Mode" })).toHaveCount(0);
-    }
-  });
-
-  test("does not offer View As for Platform Admin or Cashier accounts", async ({ page, context }) => {
-    await login(context, "admin");
-    for (const number of [1, 9]) {
-      await open(page, `/admin/accounts/${id(number)}?mode=view`);
-      await expect(page.getByRole("button", { name: "View As", exact: true })).toHaveCount(0);
-    }
-  });
+test("legacy View As cookie does not change the authenticated actor", async ({ page, context }) => {
+  await login(context, "admin");
+  await open(page, "/admin");
+  await context.addCookies([{ name: "WeymelaV3.SupportSession", value: id(7), url: new URL(page.url()).origin }]);
+  await open(page, "/admin");
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("ADMIN VIEW MODE");
+  await expect(page.getByRole("link", { name: "Admins" })).toBeVisible();
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { validateWalletContract } from "./walletContract";
 
 export class ApiError extends Error {
   constructor(
@@ -59,11 +60,7 @@ export async function request<T>(
     const error = await response.json().catch(() => ({}));
     const apiError = new ApiError(
       response.status,
-      error.code === "ViewAsReadOnly"
-        ? "This action is unavailable in Admin View Mode."
-        : error.code === "InvalidViewAsSession"
-          ? "Admin View Mode expired. Returning to the Platform Admin workspace."
-          : error.message ??
+      error.message ??
         (error.code === "ProfileContextChanged"
           ? "This workspace changed in another tab. Refresh before submitting again."
           : response.status === 401
@@ -74,10 +71,6 @@ export async function request<T>(
       error.code,
       error.retryAfterSeconds,
     );
-    if (typeof window !== "undefined" && error.code === "InvalidViewAsSession") {
-      invalidateResourceCache();
-      window.dispatchEvent(new Event("weymela-view-as-expired"));
-    }
     if (typeof window !== "undefined" && ["SessionLocked", "PinCooldown", "PinRecoveryRequired", "FullAuthenticationRequired"].includes(error.code)) {
       window.dispatchEvent(new CustomEvent("weymela-device-access", { detail: { state: error.state ?? error.code } }));
       if (typeof BroadcastChannel !== "undefined") {
@@ -90,7 +83,9 @@ export async function request<T>(
   }
   if (response.status === 204) return undefined as T;
   const body = await response.text();
-  return (body ? JSON.parse(body) : null) as T;
+  const payload = body ? JSON.parse(body) : null;
+  if (path === "/business/home" || path === "/business/wallet") validateWalletContract(payload);
+  return payload as T;
 }
 export function post<T = { id: string }>(
   path: string,

@@ -58,6 +58,24 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         Assert.DoesNotContain(ApiKey, request.Body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Admin_activation_email_contains_the_secret_and_recipient_route_only()
+    {
+        var handler = new RecordingHandler(_ => Success());
+        using var delivery = new ResendEmailCodeDelivery(Options(), handler);
+        var secret = $"{Guid.NewGuid():N}-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO012";
+
+        await delivery.SendAsync("recipient@example.com", secret, EmailCodePurpose.AdminAccountActivation, default);
+
+        var request = Assert.Single(handler.Requests);
+        using var payload = JsonDocument.Parse(request.Body);
+        var body = payload.RootElement.GetProperty("text").GetString()!;
+        Assert.Contains(secret, body, StringComparison.Ordinal);
+        Assert.Contains("/account/activate", body, StringComparison.Ordinal);
+        Assert.Contains("own password and device PIN", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, payload.RootElement.GetProperty("subject").GetString()!, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("provider")]
     [InlineData("timeout")]

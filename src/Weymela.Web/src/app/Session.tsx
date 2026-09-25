@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { ApiError, invalidateResourceCache, post, request } from "../api/client";
-import type { AccountSecurityStatus, DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser, ViewAsSession } from "../api/types";
+import type { AccountSecurityStatus, DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
 export const roleHome: Record<Role, string> = {
@@ -38,20 +38,7 @@ interface SessionContextValue {
   completePinRecovery: (identifier: string, code: string, newPin: string, confirmPin: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchProfile: (profile: SessionProfile) => Promise<SessionUser>;
-  viewAs: ViewAsState | null;
-  viewAsNotice: string | null;
-  startViewAs: (viewedUserId: string, displayName: string, returnTo: string) => Promise<ViewAsSession>;
-  endViewAs: () => Promise<void>;
 }
-export interface ViewAsState {
-  session: ViewAsSession;
-  displayName: string;
-  returnTo: string;
-}
-const viewAsDisplayNameKey = "weymela.view-as.display-name";
-const viewAsReturnPathKey = "weymela.view-as.return-path";
-const safeAdminReturnPath = (path: string | null | undefined) =>
-  path && path.startsWith("/admin/accounts") ? path : "/admin/accounts";
 const Context = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -67,19 +54,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [resolution, setResolution] = useState<SessionResolution>("resolving");
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [viewAs, setViewAs] = useState<ViewAsState | null>(null);
-  const [viewAsNotice, setViewAsNotice] = useState<string | null>(null);
-  const viewAsRef = useRef<ViewAsState | null>(null);
-  const handlingViewAsExpiry = useRef(false);
-  const pendingViewAsNavigation = useRef<string | null>(null);
-  const updateViewAs = (next: ViewAsState | null) => {
-    viewAsRef.current = next;
-    setViewAs(next);
-  };
-  const clearViewAsMetadata = () => {
-    window.sessionStorage.removeItem(viewAsDisplayNameKey);
-    window.sessionStorage.removeItem(viewAsReturnPathKey);
-  };
   const clearSessionState = () => {
     invalidateResourceCache();
     setUser(null);
@@ -88,8 +62,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAccountSecurity(null);
     accessState.current = null;
     window.sessionStorage.removeItem("weymela.profile-key");
-    clearViewAsMetadata();
-    updateViewAs(null);
   };
   const refresh = async () => {
     const generation = ++refreshGeneration.current;
@@ -98,37 +70,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadFailed(false);
     try {
-      let currentViewAs: ViewAsSession | null = null;
-      const viewAsBootstrapHint = Boolean(
-        viewAsRef.current
-        || window.sessionStorage.getItem(viewAsDisplayNameKey)
-        || window.sessionStorage.getItem(viewAsReturnPathKey),
-      );
-      if (viewAsBootstrapHint) {
-        try {
-          currentViewAs = await request<ViewAsSession | null>("/admin/view-as/current");
-        } catch (error) {
-          if (!(error instanceof ApiError && error.code === "InvalidViewAsSession")) throw error;
-          clearViewAsMetadata();
-          setViewAsNotice("Admin View Mode expired. You are back in the Platform Admin workspace.");
-        }
-      }
-      if (!isCurrent()) return;
       let next: SessionUser;
       let security: AccountSecurityStatus | null;
       let enrollment: DeviceEnrollmentStatus | null;
-      if (currentViewAs) {
-        // B4 deliberately blocks device/security bootstrap reads while the
-        // support session is active. The server-authoritative session and
-        // workspace responses are sufficient to enter the existing workspace.
-        next = await request<SessionUser>("/session");
-        if (!isCurrent()) return;
-        security = next.developmentMode
-          ? { passwordEnrolled: true, phoneEnrolled: true }
-          : accountSecurity;
-        enrollment = deviceEnrollment;
-      } else {
-        const access = await request<DeviceAccessStatus>("/device/access");
+      const access = await request<DeviceAccessStatus>("/device/access");
         if (!isCurrent()) return;
         const previousAccess = accessState.current;
         accessState.current = access.state;
@@ -156,32 +101,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           enrollment = { state: "Unavailable", expiresAtUtc: null };
         }
         if (!isCurrent()) return;
-        // An un-enrolled device cannot have an active View As session and the
-        // B4 device gate intentionally rejects this control read. Defer it
-        // until the normal workspace bootstrap is unlocked.
-        if (access.state === "Unlocked") {
-          try {
-            currentViewAs = await request<ViewAsSession | null>("/admin/view-as/current");
-          } catch (error) {
-            if (!(error instanceof ApiError && error.code === "InvalidViewAsSession")) throw error;
-            clearViewAsMetadata();
-            setViewAsNotice("Admin View Mode expired. You are back in the Platform Admin workspace.");
-          }
-        }
-      }
-      if (!isCurrent()) return;
-      if (currentViewAs) {
-        const restored: ViewAsState = {
-          session: currentViewAs,
-          displayName: window.sessionStorage.getItem(viewAsDisplayNameKey) ?? "Viewed account",
-          returnTo: safeAdminReturnPath(window.sessionStorage.getItem(viewAsReturnPathKey)),
-        };
-        window.sessionStorage.setItem(viewAsReturnPathKey, restored.returnTo);
-        updateViewAs(restored);
-      } else {
-        updateViewAs(null);
-        clearViewAsMetadata();
-      }
       setUser(next);
       setAccountSecurity(security);
       if (enrollment) setDeviceEnrollment(enrollment);
@@ -199,29 +118,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => {
     void refresh();
-  }, []);
-  useEffect(() => {
-    const target = pendingViewAsNavigation.current;
-    if (!target || loading || !user) return;
-    if (target.startsWith("/admin/accounts") && viewAs) return;
-    if (!target.startsWith("/admin/accounts") && !viewAs) return;
-    pendingViewAsNavigation.current = null;
-    navigate(target, { replace: true });
-  }, [loading, navigate, user, viewAs]);
-  useEffect(() => {
-    const expired = () => {
-      if (handlingViewAsExpiry.current) return;
-      handlingViewAsExpiry.current = true;
-      const returnTo = safeAdminReturnPath(viewAsRef.current?.returnTo);
-      invalidateResourceCache();
-      updateViewAs(null);
-      clearViewAsMetadata();
-      setViewAsNotice("Admin View Mode expired. You are back in the Platform Admin workspace.");
-      pendingViewAsNavigation.current = returnTo;
-      void refresh().finally(() => { handlingViewAsExpiry.current = false; });
-    };
-    window.addEventListener("weymela-view-as-expired", expired);
-    return () => window.removeEventListener("weymela-view-as-expired", expired);
   }, []);
   useEffect(() => {
     const accessChanged = () => void refresh();
@@ -331,34 +227,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
     return next;
   };
-  const startViewAs = async (viewedUserId: string, displayName: string, returnTo: string) => {
-    const started = await post<ViewAsSession>("/admin/view-as/start", { viewedUserId });
-    invalidateResourceCache();
-    const next: ViewAsState = {
-      session: started,
-      displayName,
-      returnTo: safeAdminReturnPath(returnTo),
-    };
-    window.sessionStorage.setItem(viewAsDisplayNameKey, displayName);
-    window.sessionStorage.setItem(viewAsReturnPathKey, next.returnTo);
-    setViewAsNotice(null);
-    updateViewAs(next);
-    pendingViewAsNavigation.current = roleHome[started.viewedRole];
-    await refresh();
-    return started;
-  };
-  const endViewAs = async () => {
-    const returnTo = safeAdminReturnPath(viewAsRef.current?.returnTo);
-    await post<void>("/admin/view-as/end", {});
-    invalidateResourceCache();
-    updateViewAs(null);
-    clearViewAsMetadata();
-    setViewAsNotice(null);
-    pendingViewAsNavigation.current = returnTo;
-    await refresh();
-  };
   return (
-    <Context.Provider value={{ user, resolution, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile, viewAs, viewAsNotice, startViewAs, endViewAs }}>
+    <Context.Provider value={{ user, resolution, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );

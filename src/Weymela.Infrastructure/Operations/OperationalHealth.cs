@@ -66,4 +66,21 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
             notificationFailures = await db.InAppNotifications.CountAsync(x => x.PushState == Persistence.Records.PushDeliveryState.Failed, ct),
             metrics = OperationalTelemetry.Snapshot(), options.DepositMode, options.SocialMode, options.FinancialWritesEnabled };
     }
+
+    public async Task<object> OperationsDetailsAsync(CancellationToken ct)
+    {
+        var ready = await ReadinessAsync(ct);
+        var checkpoint = await db.WorkerCheckpoints.AsNoTracking().SingleOrDefaultAsync(x => x.Name == "operational-worker", ct);
+        return new
+        {
+            readiness = ready.Status,
+            worker = new { options.WorkerEnabled, checkpoint?.LastSeenAtUtc, checkpoint?.LastSuccessAtUtc, checkpoint?.LastErrorCode },
+            outboxBacklog = await db.OutboxMessages.CountAsync(x => x.ProcessedAtUtc == null && x.FailedAtUtc == null, ct),
+            oldestPendingOutboxAtUtc = await db.OutboxMessages.Where(x => x.ProcessedAtUtc == null && x.FailedAtUtc == null)
+                .Select(x => (DateTime?)x.OccurredAtUtc).MinAsync(ct),
+            outboxFailures = await db.OutboxMessages.CountAsync(x => x.FailedAtUtc != null, ct),
+            notificationFailures = await db.InAppNotifications.CountAsync(x => x.PushState == Persistence.Records.PushDeliveryState.Failed, ct),
+            metrics = OperationalTelemetry.Snapshot()
+        };
+    }
 }

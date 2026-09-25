@@ -8,6 +8,12 @@ import type {
   BusinessOversight,
   CampaignRow,
   CreatorOversight,
+  OperationsBusinessView,
+  OperationsCampaignView,
+  OperationsCreatorView,
+  OperationsCustomerView,
+  OperationsHome,
+  OperationsUgcView,
 } from "../../api/types";
 import {
   ActionLink,
@@ -34,6 +40,98 @@ import {
   promotionTypeCode,
 } from "../../ui/format";
 import { CampaignTable } from "../business/BusinessPages";
+import { useSession } from "../../app/Session";
+
+export function OperationsDashboard() {
+  const resource = useResource<OperationsHome>("/admin/operations/home");
+  return <Resource resource={resource}>{(d) => <>
+    <PageHeader eyebrow="Operations workspace" title="Keep Weymela moving." description="Review accounts, campaigns, customer activity and payout work that needs an operational decision." />
+    <div className="metric-grid four">
+      <Metric label="Profile requests" value={count(d.pendingReviews)} icon="people" />
+      <Metric label="Active campaigns" value={count(d.activeCampaigns)} icon="campaign" />
+      <Metric label="Creator payouts" value={count(d.pendingCreatorPayouts)} icon="money" />
+      <Metric label="Customer payouts" value={count(d.pendingCustomerPayouts)} icon="wallet" />
+    </div>
+    <div className="two-column">
+      <Section title="Operational queues">
+        <div className="actions">
+          <ActionLink to="/admin/role-enrollments">Review profile requests</ActionLink>
+          <ActionLink to="/admin/payouts" secondary>Process payouts</ActionLink>
+        </div>
+      </Section>
+      <Section title="Operational visibility">
+        <div className="actions">
+          <ActionLink to="/admin/businesses" secondary>Businesses</ActionLink>
+          <ActionLink to="/admin/creators" secondary>Creators</ActionLink>
+          <ActionLink to="/admin/customers" secondary>Customers</ActionLink>
+          <ActionLink to="/admin/campaigns" secondary>Campaigns</ActionLink>
+          <ActionLink to="/admin/ugc" secondary>UGC</ActionLink>
+        </div>
+      </Section>
+    </div>
+  </>}</Resource>;
+}
+
+export function OperationsBusinesses() {
+  const resource = useResource<OperationsBusinessView[]>("/admin/businesses");
+  return <><PageHeader eyebrow="Business operations" title="Businesses" description="Operational Business status and campaign activity. Wallet balances remain restricted to Platform Admin." />
+    <Resource resource={resource}>{(rows) => <Section title="Business accounts"><DataTable rows={rows} rowKey={(r) => r.business.id} label="Operational Business accounts" columns={[
+      { label: "Business", cell: (r) => <><strong>{r.business.displayName}</strong><small>{r.business.region}</small></> },
+      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+      { label: "Active Campaigns", cell: (r) => count(r.activeCampaigns), numeric: true },
+      { label: "Last Deposit", cell: (r) => date(r.lastDepositUtc) },
+    ]} card={(r) => <><div className="card-head"><h3>{r.business.displayName}</h3><Badge status={r.status} /></div><p>{r.business.region}</p><p className="fine-print">{count(r.activeCampaigns)} active campaigns · Last deposit {date(r.lastDepositUtc)}</p></>} empty={<Empty title="No Business accounts yet" message="Approved Business accounts appear here." />} /></Section>}</Resource>
+  </>;
+}
+
+export function OperationsCreators() {
+  const resource = useResource<OperationsCreatorView[]>("/admin/creators");
+  return <><PageHeader eyebrow="Creator operations" title="Creators" description="Operational Creator status and campaign participation. Payout amounts are handled in the payout queue." />
+    <Resource resource={resource}>{(rows) => <Section title="Creator accounts"><DataTable rows={rows} rowKey={(r) => r.creator.id} label="Operational Creator accounts" columns={[
+      { label: "Creator", cell: (r) => <Person person={r.creator} /> },
+      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+      { label: "Active Campaigns", cell: (r) => count(r.activeCampaigns), numeric: true },
+      { label: "Payout Queue", cell: (r) => <Badge status={r.payoutEligible ? "Eligible" : "No pending payout"} /> },
+    ]} card={(r) => <><div className="card-head"><Person person={r.creator} /><Badge status={r.status} /></div><p>{count(r.activeCampaigns)} active campaigns</p><Badge status={r.payoutEligible ? "Eligible for payout" : "No pending payout"} /></>} empty={<Empty title="No Creator accounts yet" message="Approved Creators appear here." icon="people" />} /></Section>}</Resource>
+  </>;
+}
+
+export function OperationsCustomers() {
+  const resource = useResource<OperationsCustomerView[]>("/admin/customers");
+  return <><PageHeader eyebrow="Customer operations" title="Customers" description="Operational Customer status for support and account review." />
+    <Resource resource={resource}>{(rows) => <Section title="Customer accounts"><DataTable rows={rows} rowKey={(r) => r.customer.id} label="Operational Customer accounts" columns={[
+      { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong><small>{r.customer.publicId}</small></> },
+      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+    ]} card={(r) => <div className="card-head"><div><strong>{r.customer.displayName}</strong><small>{r.customer.publicId}</small></div><Badge status={r.status} /></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
+  </>;
+}
+
+export function OperationsCampaigns() {
+  const resource = useResource<OperationsCampaignView[]>("/admin/campaigns");
+  return <><PageHeader eyebrow="Campaign operations" title="Campaigns" description="Operational promotion status and participation without Platform financial totals." />
+    <Resource resource={resource}>{(rows) => <Section title="Campaign activity"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational campaigns" columns={[
+      { label: "Campaign", cell: (r) => <><strong>{r.title}</strong><small>{r.publicId}</small></> },
+      { label: "Business", cell: (r) => r.business },
+      { label: "Type", cell: (r) => r.type },
+      { label: "Creators", cell: (r) => count(r.creatorCount), numeric: true },
+      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+      { label: "Window", cell: (r) => `${date(r.startUtc)} – ${date(r.endUtc)}` },
+    ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><Badge status={r.status} /></div><p>{r.business} · {r.type}</p><p className="fine-print">{count(r.creatorCount)} creators · {date(r.startUtc)} – {date(r.endUtc)}</p></>} empty={<Empty title="No campaigns yet" message="Campaigns appear here as Businesses create them." icon="campaign" />} /></Section>}</Resource>
+  </>;
+}
+
+export function OperationsUgc() {
+  const resource = useResource<OperationsUgcView[]>("/admin/ugc");
+  return <><PageHeader eyebrow="UGC operations" title="UGC" description="Operational UGC opportunities and delivery status. Global UGC financial configuration remains restricted." />
+    <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
+      { label: "Opportunity", cell: (r) => <><strong>{r.title}</strong><small>{r.business}</small></> },
+      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+      { label: "Creators", cell: (r) => `${r.approvedCreators}/${r.creatorsNeeded}` },
+      { label: "Due", cell: (r) => date(r.dueDateUtc) },
+      { label: "Offer", cell: (r) => r.customerOfferStatus ?? "None" },
+    ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><Badge status={r.status} /></div><p>{r.business} · {r.approvedCreators}/{r.creatorsNeeded} creators</p><p className="fine-print">Due {date(r.dueDateUtc)} · Customer offer {r.customerOfferStatus ?? "None"}</p></>} empty={<Empty title="No UGC opportunities yet" message="UGC opportunities appear here for operational support." icon="sparkle" />} /></Section>}</Resource>
+  </>;
+}
 
 export function AdminRoleEnrollments() {
   const resource = useResource<EnrollmentRow[]>("/admin/role-enrollments");
@@ -105,6 +203,8 @@ export function AdminDashboard() {
   );
 }
 export function AdminCampaigns() {
+  const { user } = useSession();
+  if (user?.role === "OperationsAdmin") return <OperationsCampaigns />;
   const resource = useResource<CampaignRow[]>("/admin/campaigns");
   const [filters, set] = useState({
     business: "",
@@ -221,6 +321,8 @@ export function AdminCampaigns() {
   );
 }
 export function AdminCampaignDetail() {
+  const { user } = useSession();
+  if (user?.role === "OperationsAdmin") return <OperationsCampaigns />;
   const { id } = useParams();
   const resource = useResource<AdminCampaign>(`/admin/campaigns/${id}`);
   return (
@@ -375,6 +477,8 @@ export function AdminCampaignDetail() {
   );
 }
 export function AdminBusinesses() {
+  const { user } = useSession();
+  if (user?.role === "OperationsAdmin") return <OperationsBusinesses />;
   const resource = useResource<BusinessOversight[]>("/admin/businesses");
   return (
     <>
@@ -460,6 +564,8 @@ export function AdminBusinesses() {
   );
 }
 export function AdminCreators() {
+  const { user } = useSession();
+  if (user?.role === "OperationsAdmin") return <OperationsCreators />;
   const resource = useResource<CreatorOversight[]>("/admin/creators");
   return (
     <>

@@ -73,9 +73,17 @@ public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal Minimu
 public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCampaigns, EarningsWorkspace Earnings);
 public sealed record AdminHome(int Businesses, int Creators, int ActiveCampaigns, decimal CampaignSpend, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> Activity);
+public sealed record OperationsHome(int PendingReviews, int Businesses, int Creators, int Customers,
+    int ActiveCampaigns, int PendingCreatorPayouts, int PendingCustomerPayouts);
 public sealed record BusinessOversight(BusinessCard Business, string Status, decimal TotalBalance, decimal Available, decimal Reserved,
     int ActiveCampaigns, DateTime? LastDepositUtc);
 public sealed record CreatorOversight(CreatorCard Creator, string Status, int ActiveCampaigns, decimal AvailableEarnings, bool PayoutEligible);
+public sealed record OperationsBusinessView(BusinessCard Business, string Status, int ActiveCampaigns, DateTime? LastDepositUtc);
+public sealed record OperationsCreatorView(CreatorCard Creator, string Status, int ActiveCampaigns, bool PayoutEligible);
+public sealed record OperationsCustomerView(CustomerCard Customer, string Status);
+public sealed record OperationsCampaignView(Guid Id, string PublicId, Guid BusinessId, string Business, string Title,
+    string Type, int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version,
+    int PromotionLiveDurationDays, string? Slogan = null, string? Location = null);
 public sealed record AdminCreatorRow(CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining, long BaselineViews,
     long LatestVerifiedViews, long VerifiedViews, long RewardedViews, decimal ViewEarnings, int VerifiedSales, decimal SaleCommission,
     decimal CustomerCashback, decimal PlatformRevenue, string Status);
@@ -93,6 +101,11 @@ public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name,
     DateTime? EligibleSinceUtc, string Status);
 public sealed record PayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers,
     decimal PlatformAccrued, decimal PlatformSettled, decimal PlatformUnsettled, IReadOnlyList<PayoutItem> History);
+public sealed record OperationsPayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators,
+    IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History);
+public sealed record OperationsUgcView(Guid Id, Guid BusinessId, string Business, string Title, string Status,
+    int CreatorsNeeded, int ApprovedCreators, DateTime DueDateUtc, string? Location, int CurrentRevision,
+    string? CustomerOfferStatus = null);
 public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl,
     decimal? Latitude = null, decimal? Longitude = null);
 public sealed record CustomerOfferCreator(string DisplayName);

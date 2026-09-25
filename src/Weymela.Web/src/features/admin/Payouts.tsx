@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { post, useAction, useResource } from "../../api/client";
 import type {
+  OperationsPayoutWorkspace,
   PayoutWorkspace,
   PlatformSummary,
   QueueRow,
 } from "../../api/types";
+import { useSession } from "../../app/Session";
 import {
   Badge,
   Button,
@@ -118,6 +120,8 @@ export function PlatformSettlement({
   );
 }
 export function AdminPayouts() {
+  const { user } = useSession();
+  if (user?.role === "OperationsAdmin") return <OperationsPayouts />;
   const resource = useResource<PayoutWorkspace>("/admin/payouts");
   const [tab, setTab] = useState("Creators");
   const [filter, setFilter] = useState("All");
@@ -385,6 +389,50 @@ export function AdminPayouts() {
       </Dialog>
     </>
   );
+}
+
+export function OperationsPayouts() {
+  const resource = useResource<OperationsPayoutWorkspace>("/admin/payouts");
+  const [tab, setTab] = useState("Creators");
+  const [selected, select] = useState<{ kind: string; row: QueueRow } | null>(null);
+  const [reference, setReference] = useState("");
+  const [confirmed, confirm] = useState(false);
+  const action = useAction();
+  const [message, setMessage] = useState("");
+  const choose = (row: QueueRow) => {
+    select({ row, kind: tab === "Creators" ? "Creator" : "Customer" });
+    setReference("");
+    confirm(false);
+  };
+  return <>
+    <PageHeader eyebrow="Operations payouts" title="Payouts" description="Process legitimate Creator and Customer payouts. Platform settlement and financial oversight are not available in this workspace." />
+    <Tabs label="Payout workspaces" value={tab} onChange={setTab} items={["Creators", "Customers", "History"].map((value) => ({ value, label: value }))} />
+    {message && <Notice>{message}</Notice>}
+    <Resource resource={resource}>{(data) => <>
+      {["Creators", "Customers"].includes(tab) && <Section title={`${tab} payout queue`} action={<Currency />}>
+        <DataTable rows={tab === "Creators" ? data.creators : data.customers} rowKey={(r) => r.subjectId} label={`${tab} payout queue`} columns={[
+          { label: tab === "Creators" ? "Creator" : "Customer", cell: (r) => r.name },
+          { label: "Available", cell: (r) => amount(r.available), numeric: true },
+          { label: "Threshold", cell: (r) => amount(r.threshold), numeric: true },
+          { label: "Pay Amount", cell: (r) => amount(r.payAmount), numeric: true },
+          { label: "Status", cell: (r) => <Badge status={r.status} /> },
+          { label: "Action", cell: (r) => <Button variant="secondary" onClick={() => choose(r)}>Mark Paid</Button> },
+        ]} card={(r) => <><div className="card-head"><h3>{r.name}</h3><Badge status={r.status} /></div><FundsGrid values={[["Available", r.available], ["Threshold", r.threshold], ["Pay Amount", r.payAmount]]} /><Button variant="secondary" onClick={() => choose(r)}>Mark Paid</Button></>} empty={<Empty title="No eligible payouts right now" message="Payouts appear when an account reaches the effective threshold." icon="wallet" />} />
+      </Section>}
+      {tab === "History" && <Section title="Payout history" action={<Currency />}><DataTable rows={data.history} rowKey={(r) => r.id} label="Operations payout history" columns={[
+        { label: "Type", cell: (r) => r.kind }, { label: "Name", cell: (r) => r.name }, { label: "Amount", cell: (r) => amount(r.amount), numeric: true },
+        { label: "Status", cell: (r) => <Badge status={r.status} /> }, { label: "Date", cell: (r) => date(r.paidAtUtc ?? r.eligibleAtUtc) },
+        { label: "Reference", cell: (r) => r.reference ?? "Awaiting confirmation" },
+      ]} card={(r) => <><div className="card-head"><strong>{r.name} · {r.kind}</strong><Badge status={r.status} /></div><p>{amount(r.amount)} · {date(r.paidAtUtc ?? r.eligibleAtUtc)}</p><p className="fine-print">{r.reference ?? "Awaiting confirmation"}</p></>} empty={<Empty title="No payout history" message="Recorded Creator and Customer payouts appear here." icon="document" />} /></Section>}
+    </>}</Resource>
+    <Dialog title={selected ? `Confirm payment to ${selected.row.name}` : "Confirm payment"} open={!!selected} onClose={() => { if (!action.busy) select(null); }}>
+      <p>Pay Amount: <strong>{amount(selected?.row.payAmount ?? 0)}</strong></p>
+      <p className="fine-print">This records an external payment; it does not send money. Only the server-authorized payout amount is paid.</p>
+      <form onSubmit={(e) => { e.preventDefault(); void action.run(async (key) => { let payoutId = selected!.row.payoutId; if (!payoutId) payoutId = (await post<{ id: string }>(`/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`, {}, `${key}:prepare`)).id; await post(`/admin/payouts/${payoutId}/paid`, { reference }, `${key}:paid`); select(null); setMessage("Payment confirmed. The remaining balance carries forward."); resource.reload(); }); }}>
+        <fieldset disabled={action.busy}><Field label="Payment reference"><input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={200} required /></Field><label className="check-line"><input type="checkbox" required checked={confirmed} onChange={(e) => confirm(e.target.checked)} /> I confirm this payment has been completed externally.</label>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !confirmed || !reference}>{action.busy ? "Recording…" : "Confirm Paid"}</Button></fieldset>
+      </form>
+    </Dialog>
+  </>;
 }
 export function AdminPlatformRevenue() {
   const resource = useResource<PlatformSummary>("/admin/platform");

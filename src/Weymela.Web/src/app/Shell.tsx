@@ -40,7 +40,17 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/notifications", "Notifications", "bell"],
     ["/admin/audit", "Audit", "document"],
   ],
-  OperationsAdmin: [],
+  OperationsAdmin: [
+    ["/admin/operations", "Home", "home"],
+    ["/admin/role-enrollments", "Profile Requests", "people"],
+    ["/admin/businesses", "Businesses", "business"],
+    ["/admin/creators", "Creators", "people"],
+    ["/admin/customers", "Customers", "people"],
+    ["/admin/campaigns", "Campaigns", "campaign"],
+    ["/admin/ugc", "UGC", "sparkle"],
+    ["/admin/payouts", "Payouts", "money"],
+    ["/admin/notifications", "Notifications", "bell"],
+  ],
   Customer: [
     ["/customer/offers", "Home", "home"],
     ["/customer/discover", "Discover", "search"],

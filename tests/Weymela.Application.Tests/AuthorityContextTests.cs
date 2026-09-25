@@ -35,6 +35,41 @@ public sealed class AuthorityContextTests
     }
 
     [Fact]
+    public void Operations_capability_matrix_allows_operations_and_denies_platform_control()
+    {
+        var operations = AdministrativeAuthority.For(new RealActor(new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin)));
+        var platform = AdministrativeAuthority.For(new RealActor(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin)));
+
+        Assert.All(new[]
+        {
+            AdministrativeCapability.OperationsWorkspace,
+            AdministrativeCapability.AccountReview,
+            AdministrativeCapability.DepositReview,
+            AdministrativeCapability.BusinessOperationalVisibility,
+            AdministrativeCapability.CreatorOperationalVisibility,
+            AdministrativeCapability.CustomerOperationalVisibility,
+            AdministrativeCapability.CampaignOperationalVisibility,
+            AdministrativeCapability.UgcOperationalVisibility,
+            AdministrativeCapability.CreatorPayoutProcessing,
+            AdministrativeCapability.CustomerPayoutProcessing
+        }, capability => Assert.True(operations.Allows(capability)));
+        Assert.All(new[]
+        {
+            AdministrativeCapability.PlatformDashboard,
+            AdministrativeCapability.PlatformFinancialReports,
+            AdministrativeCapability.PlatformFinancialConfiguration,
+            AdministrativeCapability.PlatformFinancialConfigurationHistory,
+            AdministrativeCapability.PlatformSettlement,
+            AdministrativeCapability.PlatformReconciliation,
+            AdministrativeCapability.PlatformAccountManagement,
+            AdministrativeCapability.PlatformRoleGrant,
+            AdministrativeCapability.ProtectedPlatformVariables,
+            AdministrativeCapability.ViewAs
+        }, capability => Assert.False(operations.Allows(capability)));
+        Assert.All(Enum.GetValues<AdministrativeCapability>(), capability => Assert.True(platform.Allows(capability)));
+    }
+
+    [Fact]
     public void Validated_view_context_never_changes_the_command_actor()
     {
         var real = new RealActor(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin));

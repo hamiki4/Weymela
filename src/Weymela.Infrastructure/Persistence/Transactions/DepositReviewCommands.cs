@@ -12,7 +12,8 @@ public sealed partial class FinancialCommands
     public Task<Guid> ReviewDepositAsync(Actor admin, Guid id, DepositReview review, string key, CancellationToken ct = default) =>
         new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
-            if (admin.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin) || !await db.CommercePermissions.AnyAsync(x => x.UserId == admin.UserId && x.Role == admin.Role && x.IsActive, token))
+            if (!AdministrativeAuthority.For(new RealActor(admin)).Allows(AdministrativeCapability.DepositReview)
+                || !await db.CommercePermissions.AnyAsync(x => x.UserId == admin.UserId && x.Role == admin.Role && x.IsActive, token))
                 throw new ApplicationFailure(FailureKind.Forbidden, "Authorized Admin approval is required.");
             InputRules.Id(id); var reference = InputRules.Reference(review.ConfirmationReference, "confirmation reference").ToUpperInvariant();
             var fingerprint = RequestFingerprint.Create(id.ToString(), review.Approve.ToString(), reference);

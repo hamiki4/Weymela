@@ -73,7 +73,7 @@ internal static class OnboardingEndpoints
 
         var admin = app.MapGroup("/api/admin/role-enrollments").RequireAuthorization("AdminOperations")
             .AddEndpointFilter<ValidatedInputFilter>();
-        admin.MapGet("", (RoleEnrollmentService service, CancellationToken ct) => service.PendingAsync(ct));
+        admin.MapGet("", (HttpContext c, RoleEnrollmentService service, CancellationToken ct) => service.PendingAsync(EndpointSupport.Actor(c), ct));
         admin.MapPost("/{id:guid}/review", async (Guid id, ReviewRequest input, HttpContext c, RoleEnrollmentService service, CancellationToken ct) =>
             Results.Ok(await service.ReviewAsync(EndpointSupport.Actor(c), id, input.Approve, input.Reason, input.ExpectedVersion, EndpointSupport.Key(c), ct)));
     }

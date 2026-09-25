@@ -17,6 +17,30 @@ public sealed record EffectiveSubject(Actor Identity, bool IsViewed)
     public static EffectiveSubject Viewed(Actor actor) => new(actor, true);
 }
 
+public enum AdministrativeCapability
+{
+    OperationsWorkspace,
+    AccountReview,
+    DepositReview,
+    BusinessOperationalVisibility,
+    CreatorOperationalVisibility,
+    CustomerOperationalVisibility,
+    CampaignOperationalVisibility,
+    UgcOperationalVisibility,
+    CreatorPayoutProcessing,
+    CustomerPayoutProcessing,
+    PlatformDashboard,
+    PlatformFinancialReports,
+    PlatformFinancialConfiguration,
+    PlatformFinancialConfigurationHistory,
+    PlatformSettlement,
+    PlatformReconciliation,
+    PlatformAccountManagement,
+    PlatformRoleGrant,
+    ProtectedPlatformVariables,
+    ViewAs
+}
+
 public sealed record AdministrativeAuthority(ActorRole Role)
 {
     public bool IsPlatformAdmin => Role == ActorRole.PlatformAdmin;
@@ -24,6 +48,19 @@ public sealed record AdministrativeAuthority(ActorRole Role)
     public bool IsAdmin => IsPlatformAdmin || IsOperationsAdmin;
     public bool CanManagePlatform => IsPlatformAdmin;
     public bool CanStartViewAs => IsPlatformAdmin;
+
+    public bool Allows(AdministrativeCapability capability) => IsPlatformAdmin ||
+        IsOperationsAdmin && capability is
+            AdministrativeCapability.OperationsWorkspace or
+            AdministrativeCapability.AccountReview or
+            AdministrativeCapability.DepositReview or
+            AdministrativeCapability.BusinessOperationalVisibility or
+            AdministrativeCapability.CreatorOperationalVisibility or
+            AdministrativeCapability.CustomerOperationalVisibility or
+            AdministrativeCapability.CampaignOperationalVisibility or
+            AdministrativeCapability.UgcOperationalVisibility or
+            AdministrativeCapability.CreatorPayoutProcessing or
+            AdministrativeCapability.CustomerPayoutProcessing;
 
     public static AdministrativeAuthority For(RealActor actor) => new(actor.Role);
 

@@ -29,3 +29,15 @@ test("OperationsAdmin cannot access the PlatformAdmin Accounts authority", async
   await expect(page.getByRole("heading", { name: /Workspace unavailable/i })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Account directory");
 });
+
+test("OperationsAdmin can use the operational workspace without Platform controls", async ({ page, context }) => {
+  await login(context, "operations-admin");
+  await open(page, "/admin/operations");
+  await expect(page.getByRole("heading", { name: "Keep Weymela moving." })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Home", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Payouts", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Financial Settings", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Platform Revenue", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Accounts", exact: true })).toHaveCount(0);
+  await layout(page);
+});

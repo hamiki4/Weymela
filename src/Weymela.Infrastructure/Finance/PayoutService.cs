@@ -49,7 +49,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
     public Task<Guid> MarkPaidAsync(Actor actor, Guid payoutId, string paymentReference, string key, CancellationToken ct = default) =>
         new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
-            DemandAdmin(actor);
+            DemandPayoutProcessor(actor);
             if (string.IsNullOrWhiteSpace(paymentReference) || paymentReference.Length > 200)
                 throw new ApplicationFailure(FailureKind.Validation, "External payment confirmation reference is required.");
             var reference = paymentReference.Trim(); var op = new FinancialOperation(db);
@@ -58,6 +58,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
             if (replay is not null) return Guid.Parse(replay);
             var payout = await db.PayoutRecords.SingleOrDefaultAsync(x => x.Id == payoutId, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Payout not found.");
+            DemandPayoutConfirmation(actor, payout.Beneficiary);
             if (payout.Status != PayoutStatus.Eligible) throw new ApplicationFailure(FailureKind.Validation, "Payout has already been paid.");
             if (payout.Beneficiary == PayoutBeneficiary.Creator)
                 (await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == payout.CreatorId, token)).Pay(payout.Amount, clock.GetUtcNow().UtcDateTime, Guid.NewGuid());
@@ -98,9 +99,20 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
             return settlement.Id;
         }, ct);
 
-    internal static void DemandAdmin(Actor actor)
+    private static void DemandPayoutConfirmation(Actor actor, PayoutBeneficiary beneficiary)
     {
-        if (actor.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) throw new ApplicationFailure(FailureKind.Forbidden, "Admin permission is required.");
+        var capability = beneficiary == PayoutBeneficiary.Customer
+            ? AdministrativeCapability.CustomerPayoutProcessing
+            : AdministrativeCapability.CreatorPayoutProcessing;
+        if (!AdministrativeAuthority.For(new RealActor(actor)).Allows(capability))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Admin payout permission is required.");
+    }
+    private static void DemandPayoutProcessor(Actor actor)
+    {
+        var authority = AdministrativeAuthority.For(new RealActor(actor));
+        if (!authority.Allows(AdministrativeCapability.CreatorPayoutProcessing)
+            && !authority.Allows(AdministrativeCapability.CustomerPayoutProcessing))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Admin payout permission is required.");
     }
     internal static void DemandPlatformAdmin(Actor actor)
     { if (actor.Role != ActorRole.PlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin permission is required."); }

@@ -93,12 +93,19 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     public async Task<IReadOnlyList<RoleEnrollmentSummary>> MineAsync(Guid userId, CancellationToken ct)
         => (await db.RoleEnrollments.AsNoTracking().Where(x => x.UserId == userId).OrderByDescending(x => x.SubmittedAtUtc).ToListAsync(ct)).Select(Summary).ToList();
 
-    public async Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(CancellationToken ct)
-        => (await db.RoleEnrollments.AsNoTracking().Where(x => x.Status == RoleEnrollmentStatus.Pending).OrderBy(x => x.SubmittedAtUtc).ToListAsync(ct)).Select(Summary).ToList();
+    public async Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(Actor admin, CancellationToken ct)
+    {
+        if (!AdministrativeAuthority.For(new RealActor(admin)).Allows(AdministrativeCapability.AccountReview)) throw Denied();
+        return (await db.RoleEnrollments.AsNoTracking().Where(x => x.Status == RoleEnrollmentStatus.Pending)
+            .OrderBy(x => x.SubmittedAtUtc).ToListAsync(ct)).Select(Summary).ToList();
+    }
+
+    public Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(CancellationToken ct)
+        => PendingAsync(new Actor(Guid.Empty, ActorRole.PlatformAdmin), ct);
 
     public async Task<RoleEnrollmentSummary> ReviewAsync(Actor admin, Guid id, bool approve, string? reason, long expectedVersion, string idempotencyKey, CancellationToken ct)
     {
-        if (admin.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) throw Denied();
+        if (!AdministrativeAuthority.For(new RealActor(admin)).Allows(AdministrativeCapability.AccountReview)) throw Denied();
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 200) throw new ApplicationFailure(FailureKind.Validation, "A request reference is required.");
         await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
         var row = await db.RoleEnrollments.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new ApplicationFailure(FailureKind.NotFound, "Profile request not found.");

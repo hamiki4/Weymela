@@ -438,7 +438,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 || await db.UgcAssignments.AsNoTracking().AnyAsync(x => x.UgcOpportunityId == id && x.CreatorId == actor.CreatorId, ct);
             if (!creatorHasContext) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC opportunity is not available to the active Creator.");
         }
-        else DemandAdmin(actor);
+        else DemandPlatformAdmin(actor);
         var business = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && x.SubjectId == opportunity.BusinessId).Select(x => x.DisplayName).SingleAsync(ct);
         var requestRows = await db.UgcCreatorRequests.AsNoTracking().Where(x => x.UgcOpportunityId == id).OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
         if (isCreator) requestRows = requestRows.Where(x => x.CreatorId == actor.CreatorId).ToList();
@@ -459,12 +459,27 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
 
     public async Task<IReadOnlyList<UgcCard>> AdminAsync(Actor actor, CancellationToken ct)
     {
-        DemandAdmin(actor);
+        DemandPlatformAdmin(actor);
         var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
         var ids = rows.Select(x => x.BusinessId).Distinct().ToArray();
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && ids.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         var offers = await db.UgcCustomerOffers.AsNoTracking().ToDictionaryAsync(x => x.UgcOpportunityId, ct);
         return rows.Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), null, offers.GetValueOrDefault(x.Id), true)).ToArray();
+    }
+
+    public async Task<IReadOnlyList<OperationsUgcView>> OperationsAsync(Actor actor, CancellationToken ct)
+    {
+        if (!AdministrativeAuthority.For(new RealActor(actor)).Allows(AdministrativeCapability.UgcOperationalVisibility))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Operations UGC access is required.");
+        var rows = await db.UgcOpportunities.AsNoTracking().OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        var businessIds = rows.Select(x => x.BusinessId).Distinct().ToArray();
+        var names = await db.PublicWorkspaceProfiles.AsNoTracking()
+            .Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId))
+            .ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
+        var offers = await db.UgcCustomerOffers.AsNoTracking().ToDictionaryAsync(x => x.UgcOpportunityId, ct);
+        return rows.Select(x => new OperationsUgcView(x.Id, x.BusinessId, names.GetValueOrDefault(x.BusinessId, "Business"),
+            x.Title, x.Status.ToString(), x.CreatorCapacity, x.ApprovedCreatorCount, x.DueDateUtc, x.Location,
+            x.CurrentRevision, offers.GetValueOrDefault(x.Id)?.Status.ToString())).ToArray();
     }
 
     private async Task<IReadOnlyList<UgcAssignmentView>> AssignmentViews(IReadOnlyCollection<UgcAssignment> rows, CancellationToken ct)
@@ -504,8 +519,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             !await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == ActorRole.Creator && x.SubjectId == actor.CreatorId && x.IsActive, ct))
             throw new ApplicationFailure(FailureKind.Forbidden, "This Creator workspace is not available to you.");
     }
-    private static void DemandAdmin(Actor actor)
-    { if (actor.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) throw new ApplicationFailure(FailureKind.Forbidden, "Admin access is required."); }
+    private static void DemandPlatformAdmin(Actor actor)
+    { if (!AdministrativeAuthority.For(new RealActor(actor)).Allows(AdministrativeCapability.PlatformFinancialReports)) throw new ApplicationFailure(FailureKind.Forbidden, "Platform Admin access is required."); }
     private static void Own(Actor actor, UgcOpportunity opportunity)
     { if (actor.BusinessId != opportunity.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC opportunity belongs to another Business."); }
 

@@ -29,6 +29,9 @@ import {
   AdminCreators,
   AdminDashboard,
   AdminRoleEnrollments,
+  OperationsCustomers,
+  OperationsDashboard,
+  OperationsUgc,
 } from "../features/admin/AdminPages";
 import { AdminAccountDetail, AdminAccounts } from "../features/admin/AdminAccounts";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
@@ -104,6 +107,11 @@ export function App() {
           <Shell><AdminDashboard /></Shell>
         </RoleGate>
       } />
+      <Route path="/admin/operations" element={
+        <RoleGate roles={["OperationsAdmin"]}>
+          <Shell><OperationsDashboard /></Shell>
+        </RoleGate>
+      } />
       <Route path="/customer/offers" element={
         <RoleGate roles={["Customer"]}>
           <Shell><CustomerOffers /></Shell>
@@ -122,7 +130,7 @@ export function App() {
         path="/legal/privacy-policy"
         element={<LegalDocumentPage kind="privacy" />}
       />
-      <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin"]}><Shell /></RoleGate>}>
+      <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><Shell /></RoleGate>}>
         <Route path="/notifications" element={<Inbox />} />
       </Route>
       <Route
@@ -187,24 +195,31 @@ export function App() {
       >
         <Route path="/admin/accounts" element={<AdminAccounts />} />
         <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
-        <Route path="/admin/campaigns" element={<AdminCampaigns />} />
-        <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
-        <Route path="/admin/businesses" element={<AdminBusinesses />} />
-        <Route path="/admin/creators" element={<AdminCreators />} />
-        <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
         <Route path="/admin/settings" element={<AdminFinancialSettings />} />
         <Route
           path="/admin/financial-settings"
           element={<Navigate to="/admin/settings" replace />}
         />
-        <Route path="/admin/payouts" element={<AdminPayouts />} />
         <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
-        <Route
-          path="/admin/notifications"
-          element={<AdminActivity notifications />}
-        />
         <Route path="/admin/audit" element={<AdminActivity />} />
       </Route>
+      <Route
+        element={
+          <RoleGate roles={["PlatformAdmin", "OperationsAdmin"]}>
+            <Shell />
+          </RoleGate>
+        }
+      >
+        <Route path="/admin/campaigns" element={<AdminCampaigns />} />
+        <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
+        <Route path="/admin/businesses" element={<AdminBusinesses />} />
+        <Route path="/admin/creators" element={<AdminCreators />} />
+        <Route path="/admin/customers" element={<OperationsCustomers />} />
+        <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
+        <Route path="/admin/payouts" element={<AdminPayouts />} />
+        <Route path="/admin/notifications" element={<AdminActivity notifications />} />
+      </Route>
+      <Route path="/admin/ugc" element={<RoleGate roles={["OperationsAdmin"]}><Shell><OperationsUgc /></Shell></RoleGate>} />
       <Route
         element={
           <RoleGate roles={["Customer"]}>

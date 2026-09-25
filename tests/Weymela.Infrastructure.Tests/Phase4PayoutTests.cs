@@ -73,6 +73,18 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         Assert.Equal("Paid",payout.Status);
         Assert.NotNull(payout.PaidAtUtc);
     }
+    [Fact]
+    public async Task Operations_admin_can_process_creator_and_customer_payouts_without_platform_settlement_authority()
+    {
+        var s=await Phase4Scenario.Create(fixture,allocation:30000,budget:40000);await s.Redeem(await s.Issue(),270000);
+        await using var db=s.Database.Open();var service=s.Payouts(db);var operations=new Actor(Guid.NewGuid(),ActorRole.OperationsAdmin);
+        var creator=await service.PrepareAsync(operations,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value,"operations-creator-prepare");
+        var customer=await service.PrepareAsync(operations,PayoutBeneficiary.Customer,s.Customer.CustomerId!.Value,"operations-customer-prepare");
+        await service.MarkPaidAsync(operations,creator,"operations-creator-paid","operations-creator-confirm");
+        await service.MarkPaidAsync(operations,customer,"operations-customer-paid","operations-customer-confirm");
+        Assert.All(await db.PayoutRecords.ToListAsync(), payout => Assert.Equal(PayoutStatus.Paid, payout.Status));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.SettlePlatformAsync(operations,new Money(1),"forbidden","operations-settlement"));
+    }
     [Fact] public async Task Customer_cashback_projection_uses_service_eligibility_and_exposes_prepared_state_safely()
     {
         var s=await Phase4Scenario.Create(fixture,allocation:30000,budget:40000);

@@ -367,6 +367,15 @@ export interface AdminHome {
   platformRevenue: number;
   activity: Activity[];
 }
+export interface OperationsHome {
+  pendingReviews: number;
+  businesses: number;
+  creators: number;
+  customers: number;
+  activeCampaigns: number;
+  pendingCreatorPayouts: number;
+  pendingCustomerPayouts: number;
+}
 export interface BusinessOversight {
   business: BusinessCard;
   status: string;
@@ -382,6 +391,38 @@ export interface CreatorOversight {
   activeCampaigns: number;
   availableEarnings: number;
   payoutEligible: boolean;
+}
+export interface OperationsBusinessView {
+  business: BusinessCard;
+  status: string;
+  activeCampaigns: number;
+  lastDepositUtc: string | null;
+}
+export interface OperationsCreatorView {
+  creator: CreatorCard;
+  status: string;
+  activeCampaigns: number;
+  payoutEligible: boolean;
+}
+export interface OperationsCustomerView {
+  customer: { id: string; displayName: string; publicId: string };
+  status: string;
+}
+export interface OperationsCampaignView {
+  id: string;
+  publicId: string;
+  businessId: string;
+  business: string;
+  title: string;
+  type: string;
+  creatorCount: number;
+  startUtc: string;
+  endUtc: string;
+  status: string;
+  version: number;
+  promotionLiveDurationDays: number;
+  slogan: string | null;
+  location: string | null;
 }
 export interface AdminCreator {
   creator: CreatorCard;
@@ -542,6 +583,24 @@ export interface PayoutWorkspace {
   platformSettled: number;
   platformUnsettled: number;
   history: Payout[];
+}
+export interface OperationsPayoutWorkspace {
+  creators: QueueRow[];
+  customers: QueueRow[];
+  history: Payout[];
+}
+export interface OperationsUgcView {
+  id: string;
+  businessId: string;
+  business: string;
+  title: string;
+  status: string;
+  creatorsNeeded: number;
+  approvedCreators: number;
+  dueDateUtc: string;
+  location: string | null;
+  currentRevision: number;
+  customerOfferStatus: string | null;
 }
 export interface Money {
   amount: number;

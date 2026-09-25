@@ -121,10 +121,24 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [Fact] public async Task Operations_admin_can_use_operational_areas_but_not_platform_configuration()
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("operations-admin");
-        foreach(var path in new[]{"/api/admin/home","/api/admin/promotions","/api/admin/ugc","/api/admin/businesses","/api/admin/creators","/api/admin/payouts","/api/admin/notifications"})
+        foreach(var path in new[]{"/api/admin/operations/home","/api/admin/promotions","/api/admin/ugc","/api/admin/businesses","/api/admin/creators","/api/admin/customers","/api/admin/payouts","/api/admin/notifications","/api/admin/role-enrollments"})
             Assert.Equal(HttpStatusCode.OK,(await c.GetAsync(path)).StatusCode);
-        foreach(var path in new[]{"/api/admin/accounts","/api/admin/financial-settings","/api/admin/audit","/api/admin/reconciliation"})
+        var operationalDetails=(await c.GetJson("/api/admin/operations")).ToJsonString();
+        foreach(var forbidden in new[]{"financialWritesEnabled","depositMode","socialMode"})
+            Assert.DoesNotContain(forbidden,operationalDetails,StringComparison.OrdinalIgnoreCase);
+        foreach(var path in new[]{"/api/admin/home","/api/admin/accounts","/api/admin/financial-settings","/api/admin/platform","/api/admin/audit","/api/admin/reconciliation"})
             Assert.Equal(HttpStatusCode.Forbidden,(await c.GetAsync(path)).StatusCode);
+    }
+
+    [Fact] public async Task Operations_admin_receives_safe_operational_projections_without_platform_financial_totals()
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);using var c=await f.Login("operations-admin");
+        var businesses=(await c.GetJson("/api/admin/businesses")).ToJsonString();
+        var creators=(await c.GetJson("/api/admin/creators")).ToJsonString();
+        var payouts=(await c.GetJson("/api/admin/payouts")).ToJsonString();
+        foreach(var forbidden in new[]{"totalBalance","availableBalance","reservedBalance","platformAccrued","platformSettled","platformUnsettled","PlatformSettled"})
+            Assert.DoesNotContain(forbidden,businesses+creators+payouts,StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Platform",payouts,StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact] public async Task Operations_admin_cannot_mutate_admin_grants_financial_settings_or_platform_money()

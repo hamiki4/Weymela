@@ -127,4 +127,12 @@ describe("Phase 3 multi-profile shell", () => {
     expect(document.querySelector(".workspace-label")).toHaveTextContent("Platform Admin / Weymela");
     expect(screen.queryByRole("link", { name: "Add a profile" })).not.toBeInTheDocument();
   });
+
+  it("gives Operations Admin an operational navigation without platform controls", () => {
+    setup("OperationsAdmin", "/admin/operations");
+    const navigation = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(within(navigation).getByRole("link", { name: "Home" })).toHaveAttribute("href", "/admin/operations");
+    expect(within(navigation).getByRole("link", { name: "Payouts" })).toHaveAttribute("href", "/admin/payouts");
+    expect(within(navigation).queryByRole("link", { name: /Financial Settings|Platform Revenue|Audit|Accounts/ })).not.toBeInTheDocument();
+  });
 });

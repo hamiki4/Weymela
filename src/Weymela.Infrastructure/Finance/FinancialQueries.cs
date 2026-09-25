@@ -10,7 +10,7 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
 {
     public async Task<PlatformSettlementSummary> PlatformAsync(Actor actor, CancellationToken ct = default)
     {
-        PayoutService.DemandAdmin(actor);
+        PayoutService.DemandPlatformAdmin(actor);
         var summary = await new PlatformRevenueRepository(db).SummaryAsync(ct);
         var history = await db.PlatformSettlements.AsNoTracking().OrderByDescending(x => x.SettledAtUtc)
             .Select(x => new PlatformSettlementInfo(x.Id, x.Amount, x.Reference, x.SettledAtUtc, EF.Property<Guid?>(x, "SettledBy"))).ToListAsync(ct);
@@ -30,7 +30,7 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
     }
     public async Task<AdminCampaignFinance> CampaignAsync(Actor actor, Guid campaignId, CancellationToken ct = default)
     {
-        PayoutService.DemandAdmin(actor);
+        PayoutService.DemandPlatformAdmin(actor);
         var p = await Campaign(campaignId, ct);
         var result = new List<AdminCreatorFinance>();
         foreach (var a in p.Allocations)

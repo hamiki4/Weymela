@@ -18,10 +18,13 @@ public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDire
             !await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == actor.Role && x.SubjectId == actor.BusinessId && x.IsActive,ct))
             throw new ApplicationFailure(FailureKind.Forbidden,"This Business workspace is not available to you.");
     }
-    private static void DemandAdmin(Actor actor)
-    { if(!AdministrativeAuthority.For(new RealActor(actor)).IsAdmin) throw new ApplicationFailure(FailureKind.Forbidden,"Admin access is required."); }
     private static void DemandPlatformAdmin(Actor actor)
     { if(!AdministrativeAuthority.For(new RealActor(actor)).IsPlatformAdmin) throw new ApplicationFailure(FailureKind.Forbidden,"Platform Admin access is required."); }
+    internal static void DemandCapability(Actor actor, AdministrativeCapability capability)
+    {
+        if (!AdministrativeAuthority.For(new RealActor(actor)).Allows(capability))
+            throw new ApplicationFailure(FailureKind.Forbidden, "This administrative capability is not available to this role.");
+    }
     private Task DemandCreator(Actor actor, CancellationToken ct) => Access.EnsureCreatorAsync(actor, actor.CreatorId ?? Guid.Empty,ct);
     internal static string PromotionTypeLabel(PromotionType value)=>value==PromotionType.ViewOnly?"View Only":"View & Sale";
     internal static string PromotionStatusLabel(PromotionStatus value)=>value switch{PromotionStatus.Published=>"Open",PromotionStatus.BudgetExhausted=>"Ended",_=>value.ToString()};

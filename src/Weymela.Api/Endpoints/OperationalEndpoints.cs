@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Weymela.Api.Security;
+using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Deposits;
 using Weymela.Infrastructure.Notifications;
@@ -31,7 +32,13 @@ internal static class OperationalEndpoints
         business.MapGet("/deposit-requests",(HttpContext c,DepositService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
         business.MapPost("/deposit-requests",(DepositSubmission input,HttpContext c,DepositService service,CancellationToken ct)=>service.SubmitAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct));
         var admin=app.MapGroup("/api/admin").RequireAuthorization("AdminOperations").AddEndpointFilter<ValidatedInputFilter>();
-        admin.MapGet("/operations",(OperationalHealth health,CancellationToken ct)=>health.DetailsAsync(ct));
+        admin.MapGet("/operations",async(HttpContext c,OperationalHealth health,CancellationToken ct)=>
+        {
+            var actor=EndpointSupport.Actor(c);
+            return actor.Role==ActorRole.OperationsAdmin
+                ? Results.Ok(await health.OperationsDetailsAsync(ct))
+                : Results.Ok(await health.DetailsAsync(ct));
+        });
         admin.MapGet("/reconciliation",(HttpContext c,ReconciliationService service,CancellationToken ct)=>service.CheckAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         admin.MapGet("/deposit-requests",async(WeymelaDbContext db,CancellationToken ct)=>
             await db.DepositRequests.AsNoTracking().OrderBy(x=>x.Status).ThenBy(x=>x.SubmittedAtUtc).Take(100)

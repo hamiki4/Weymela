@@ -45,7 +45,7 @@ public static class ApiHost
         builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();builder.Services.AddScoped<DeviceAccessService>();builder.Services.AddScoped<DevicePinRecoveryService>();
         builder.Services.AddScoped<ProductIntegrationService>();
         builder.Services.AddScoped<AdminAccountService>();
-        builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();
+        builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();builder.Services.AddScoped<AdminPromotionalFundingService>();
         builder.Services.TryAddSingleton<INotificationPushProvider,DisabledPushProvider>();
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());
         if(development)

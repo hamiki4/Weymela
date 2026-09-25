@@ -24,7 +24,7 @@ public sealed record SessionProfile(string Role, Guid SubjectId, Guid? BusinessI
 public sealed record SessionUser(string Role, string DisplayName, string PublicId, bool DevelopmentMode, bool CanCheckout,
     IReadOnlyList<SessionProfile>? Profiles = null, string? ActiveProfileKey = null);
 public sealed record ActivityItem(Guid Id, string Title, DateTime AtUtc, string Reference);
-public sealed record WalletMovement(Guid Id, string Label, decimal Amount, DateTime AtUtc, string Reference);
+public sealed record WalletMovement(Guid Id, string Label, decimal Amount, DateTime AtUtc, string Reference, string? Reason = null);
 public sealed record WalletWorkspace(decimal TotalBalance, decimal Available, decimal Reserved, long Version, IReadOnlyList<WalletMovement> History);
 public sealed record BusinessHome(BusinessCard Business, WalletWorkspace Wallet, int ActiveCampaigns, int CreatorRequests, int ConfirmedSales);
 public sealed record BusinessPrice(string Type, int Views, decimal BusinessPays, decimal SaleCostPercent, decimal? MinimumCampaignBudget);

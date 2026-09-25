@@ -76,6 +76,10 @@ public sealed record AdminBusinessData(
     int Deposits,
     int Transactions);
 
+public sealed record AdminPromotionalFundingInput(decimal Amount, string Reason);
+public sealed record AdminPromotionalFundingReceipt(Guid Id, Guid BusinessId, decimal Amount, string Reason,
+    Guid PlatformAdminUserId, string PlatformAdminDisplayName, DateTime CreatedAtUtc, Guid CorrelationId, Guid JournalId);
+
 public sealed record AdminCreatorSocialProfile(
     Guid Id,
     string Platform,

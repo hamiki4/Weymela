@@ -12,6 +12,9 @@ public sealed record UgcCustomerOfferReservation(Guid UgcCustomerOfferId, Guid B
 public sealed record UgcCustomerOfferBudgetEntry(Guid Id, Guid UgcCustomerOfferId, Guid? SaleId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc);
 public sealed record WalletEntry(Guid Id, Guid BusinessId, Guid? PromotionId, Money Amount, string Movement, Guid JournalId, DateTime CreatedAtUtc,
     Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null);
+public sealed record PlatformPromotionalFundingRecord(Guid Id, Guid BusinessId, Money Amount, string Reason,
+    Guid PlatformAdminUserId, string PlatformAdminDisplayNameSnapshot, DateTime CreatedAtUtc, Guid CorrelationId,
+    string IdempotencyKey, string RequestFingerprint, Guid JournalId);
 public sealed record StoredIdempotencyRecord(Guid ActorId, string OperationType, string Key, string RequestFingerprint, string ResultReference, DateTime CreatedAtUtc);
 public sealed record AuditEvent(Guid Id, string EventType, Guid ActorId, Guid? BusinessId, Guid? PromotionId, Guid? CreatorId, Guid CorrelationId, DateTime OccurredAtUtc, string Detail,
     Guid? UgcOpportunityId = null, Guid? UgcCustomerOfferId = null, Guid? SupportSessionId = null,

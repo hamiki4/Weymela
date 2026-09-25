@@ -54,6 +54,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."OutboxMessages",
     v3."PasswordCredentials",
     v3."PayoutRecords",
+    v3."PlatformPromotionalFundings",
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",
     v3."PricingSnapshots",
@@ -127,6 +128,8 @@ REVOKE EXECUTE ON FUNCTION v3.guard_creator_promotion_content_revision() FROM PU
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_platform_promotional_funding_account() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.check_admin_promotional_funding() FROM PUBLIC, :"worker_role";
 
 GRANT EXECUTE ON FUNCTION v3.guard_outbox_envelope() TO :"worker_role";
 GRANT EXECUTE ON FUNCTION v3.guard_notification_identity() TO :"worker_role";

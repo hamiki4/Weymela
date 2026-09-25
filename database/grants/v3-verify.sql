@@ -84,6 +84,7 @@ VALUES
     ('api', 'v3', 'FinancialConfigurationVersions', true, true, false),
     ('api', 'v3', 'FinancialJournals', true, true, false),
     ('api', 'v3', 'FinancialJournalLines', true, true, false),
+    ('api', 'v3', 'PlatformPromotionalFundings', true, true, false),
     ('api', 'v3', 'PlatformRevenueEntries', true, true, false),
     ('api', 'v3', 'PlatformSettlements', true, true, false),
     ('api', 'v3', 'PricingSnapshots', true, true, false),

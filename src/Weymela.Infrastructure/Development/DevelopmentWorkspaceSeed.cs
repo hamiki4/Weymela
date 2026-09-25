@@ -23,6 +23,8 @@ public static class DevelopmentWorkspaceSeed
             db.CommercePermissions.Add(new(a.UserId,a.Role,subject,a.BusinessId,true,a.Role is ActorRole.Business or ActorRole.Cashier));
             if(a.Role==ActorRole.Business)db.BusinessWallets.Add(new(a.BusinessId!.Value));
         }
+        db.AdminGrants.Add(new AdminGrantRecord { UserId=admin.UserId, Role=ActorRole.PlatformAdmin,
+            DisplayName=directory.Get("admin").Name, GrantedByUserId=admin.UserId, GrantedAtUtc=now });
         var config=Guid.NewGuid();var version=Guid.NewGuid();db.FinancialConfigurations.Add(new(config,"PlatformPricing"));
         db.FinancialConfigurationVersions.Add(new(version,config,1,admin.UserId,now.AddDays(-1),
             new(PromotionType.ViewOnly,3000,new Money(300),new Money(200),new Money(100),3m,4m,3m,now.AddDays(-1),version),

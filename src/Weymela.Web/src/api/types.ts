@@ -170,6 +170,7 @@ export interface Wallet {
     amount: number;
     atUtc: string;
     reference: string;
+    reason?: string | null;
   }[];
 }
 export interface BusinessHome {

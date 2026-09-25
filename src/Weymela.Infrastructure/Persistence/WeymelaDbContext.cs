@@ -9,6 +9,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
 {
     public DbSet<BusinessWallet> BusinessWallets => Set<BusinessWallet>();
     public DbSet<WalletEntry> WalletEntries => Set<WalletEntry>();
+    public DbSet<PlatformPromotionalFundingRecord> PlatformPromotionalFundings => Set<PlatformPromotionalFundingRecord>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
     public DbSet<PromotionPlatform> PromotionPlatforms => Set<PromotionPlatform>();
     public DbSet<UgcOpportunity> UgcOpportunities => Set<UgcOpportunity>();
@@ -132,7 +133,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     }
 
     private static bool IsImmutable(object entity) => entity is FinancialJournal or FinancialJournalLine or
-        WalletEntry or PromotionReservation or PromotionBudgetEntry or UgcReservation or UgcBudgetEntry or UgcCustomerOfferReservation or UgcCustomerOfferBudgetEntry or UgcRevision or StoredIdempotencyRecord or AuditEvent or AccountRoleHistoryRecord or
+        WalletEntry or PlatformPromotionalFundingRecord or PromotionReservation or PromotionBudgetEntry or UgcReservation or UgcBudgetEntry or UgcCustomerOfferReservation or UgcCustomerOfferBudgetEntry or UgcRevision or StoredIdempotencyRecord or AuditEvent or AccountRoleHistoryRecord or
         PricingSnapshot or FinancialConfigurationVersion or LegalDocumentVersion or LegalAcceptance or
         CreatorEarningEntry or CustomerCashbackEntry or PlatformRevenueEntry or PlatformSettlement or VerifiedSale or UgcCustomerOfferSale or PromotionViewVerification or ViewRewardReceipt;
 }

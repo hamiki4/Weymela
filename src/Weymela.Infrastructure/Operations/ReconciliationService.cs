@@ -37,6 +37,14 @@ public sealed class ReconciliationService(WeymelaDbContext db)
                 coalesce((SELECT sum("Amount") FROM entries WHERE "Account"='PlatformRevenue' AND "Type"='Credit'),0), coalesce((SELECT sum("Amount") FROM v3."PlatformRevenueEntries"),0)
               UNION ALL SELECT 'PlatformSettled', NULL::uuid,
                 coalesce((SELECT sum("Amount") FROM entries WHERE "Account"='PlatformRevenue' AND "Type"='Debit'),0), coalesce((SELECT sum("Amount") FROM v3."PlatformSettlements"),0)
+              UNION ALL SELECT 'PlatformPromotionalFundingDebit', NULL::uuid,
+                coalesce((SELECT sum("Amount") FROM v3."PlatformPromotionalFundings"),0),
+                coalesce((SELECT sum(l."Amount") FROM v3."FinancialJournalLines" l JOIN v3."FinancialJournals" j ON j."Id"=l."JournalId"
+                  WHERE j."SourceType"='AdminPromotionalFunding' AND l."Account"='PlatformPromotionalFunding' AND l."Type"='Debit'),0)
+              UNION ALL SELECT 'PlatformPromotionalFundingCredit', NULL::uuid,
+                coalesce((SELECT sum("Amount") FROM v3."PlatformPromotionalFundings"),0),
+                coalesce((SELECT sum(l."Amount") FROM v3."FinancialJournalLines" l JOIN v3."FinancialJournals" j ON j."Id"=l."JournalId"
+                  WHERE j."SourceType"='AdminPromotionalFunding' AND l."Account"='BusinessAvailable' AND l."Type"='Credit'),0)
             ) SELECT * FROM balances WHERE "Expected"<>"Actual" LIMIT 100
             """).ToListAsync(ct);
     }

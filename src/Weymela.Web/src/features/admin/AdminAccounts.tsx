@@ -12,12 +12,14 @@ import {
   Button,
   Empty,
   Field,
+  MoneyInput,
   Notice,
   PageHeader,
   Resource,
   Section,
 } from "../../ui/components";
-import { dateTime } from "../../ui/format";
+import { amount, dateTime } from "../../ui/format";
+interface PromotionalFundingReceipt { id: string; businessId: string; amount: number; reason: string; platformAdminUserId: string; platformAdminDisplayName: string; createdAtUtc: string; correlationId: string; journalId: string; }
 type AccountArea = "Customer" | "Creator" | "Business" | "Admin";
 const areaTitle: Record<AccountArea, string> = { Customer: "Customers", Creator: "Creators", Business: "Businesses", Admin: "Admins" };
 const areaPath: Record<AccountArea, string> = { Customer: "/admin/customers", Creator: "/admin/creators", Business: "/admin/businesses", Admin: "/admin/admins" };
@@ -83,6 +85,8 @@ function AccountDetailContent({ detail, manage, reason, setReason, confirmClose,
   const account = detail.account;
   const roleData = detail.roleData as Record<string, unknown> | null;
   const targetId = account.userId ?? account.id;
+  const businessId = detail.profiles.find(x => x.role === "Business")?.subjectId
+    ?? (account.role === "Business" ? account.association : null);
   const lifecycle = (next: string) => { if (!reason.trim() || (next === "close" && !confirmClose)) return; void action.run(async key => { if (account.status === "Pending") await post(`/admin/accounts/preauthorizations/${account.id}/cancel`, { action: "cancel", reason: reason.trim() }, key); else await post(`/admin/accounts/${targetId}/lifecycle`, { action: next, reason: reason.trim(), confirmClose: next === "close" }, key); setReason(""); setConfirmClose(false); reload(); }); };
   return <>
     <PageHeader eyebrow={`${account.role} · ${account.safeIdentifier}`} title={account.name} description={`${displayStatus(account.status)}${account.approvalState ? ` · ${account.approvalState}` : ""}`} action={manage && account.canManage ? <Badge status={displayStatus(account.status)} /> : account.canManage ? <Link className="button secondary" to={`/admin/accounts/${account.id}?role=${account.role}&mode=manage`}>Manage</Link> : undefined} />
@@ -91,8 +95,30 @@ function AccountDetailContent({ detail, manage, reason, setReason, confirmClose,
       <Section title="Role-specific information">{roleData ? <div className="stack-list">{Object.entries(roleData).map(([key, value]) => <div className="amount-row" key={key}><span>{label(key)}</span><strong>{displayValue(key, value)}</strong></div>)}</div> : <Empty title="No role projection" message="This account has no role-specific projection available." />}</Section>
     </div>
     {detail.transactions.length > 0 && <Section title="Commerce activity"><div className="stack-list">{detail.transactions.map((transaction) => <div className="amount-row" key={transaction.id}><div><strong>{transaction.purchaseAmount.toLocaleString()} {transaction.currency}</strong><small>{dateTime(transaction.occurredAtUtc)} · {transaction.status}</small></div><span>{transaction.businessId}</span></div>)}</div></Section>}
-    {detail.profiles.find(x => x.role === "Business")?.subjectId && <BusinessCashiers businessId={detail.profiles.find(x => x.role === "Business")!.subjectId} />}
+    {businessId && <><AdminPromotionalFunding businessId={businessId} manage={manage && account.canManage} /><BusinessCashiers businessId={businessId} /></>}
   </>;
+}
+
+function AdminPromotionalFunding({ businessId, manage }: { businessId: string; manage: boolean }) {
+  const path = `/admin/accounts/businesses/${businessId}/promotional-funding`;
+  const resource = useResource<PromotionalFundingReceipt[]>(path);
+  const action = useAction();
+  const [fundingAmount, setFundingAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [created, setCreated] = useState<PromotionalFundingReceipt | null>(null);
+  return <Section title="Promotional funding">
+    {manage && <form className="filter-grid three" onSubmit={(event) => { event.preventDefault(); void action.run(async key => {
+      const result = await post<PromotionalFundingReceipt>(path, { amount: Number(fundingAmount), reason: reason.trim() }, key);
+      setCreated(result); setFundingAmount(""); setReason(""); resource.reload();
+    }); }}>
+      <Field label="Amount (ETB)"><MoneyInput value={fundingAmount} onChange={(event) => setFundingAmount(event.target.value)} /></Field>
+      <Field label="Reason"><textarea required maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+      <div className="actions"><Button type="submit" disabled={action.busy || !fundingAmount || !reason.trim()}>{action.busy ? "Adding funds…" : "Add Promotional Funds"}</Button></div>
+    </form>}
+    {created && <Notice>Promotional funds added: {amount(created.amount)} Br. Reference {created.id}.</Notice>}
+    {action.error && <Notice error>{action.error}</Notice>}
+    <Resource resource={resource}>{rows => rows.length ? <div className="stack-list">{rows.map(row => <div className="amount-row" key={row.id}><div><strong>{amount(row.amount)} Br</strong><small>{row.reason} · Added by {row.platformAdminDisplayName} · {dateTime(row.createdAtUtc)}</small><small>Reference {row.id}</small></div><Badge status="Completed" /></div>)}</div> : <Empty title="No promotional funding" message="Weymela-funded credit will appear here." />}</Resource>
+  </Section>;
 }
 
 function BusinessCashiers({ businessId }: { businessId: string }) {

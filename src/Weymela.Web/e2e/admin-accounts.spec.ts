@@ -104,6 +104,16 @@ test("Operations Admin cannot create accounts or enter Platform Admin account ar
   await layout(page);
 });
 
+test("Platform Admin Business management exposes promotional funding without a visual redesign", async ({ page, context }) => {
+  await login(context, "admin");
+  await page.goto(`/admin/accounts/${id(2)}?role=Business&mode=manage`);
+  await expect(page.getByRole("heading", { name: "Promotional funding" })).toBeVisible();
+  await expect(page.getByLabel("Amount (ETB)")).toBeVisible();
+  await expect(page.getByLabel("Reason", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Promotional Funds" })).toBeDisabled();
+  await layout(page);
+});
+
 test("legacy View As cookie does not change the authenticated actor", async ({ page, context }) => {
   await login(context, "admin");
   await open(page, "/admin");

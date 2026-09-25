@@ -20,6 +20,19 @@ internal static class OperationalConfiguration
         wallet.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
         wallet.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
         wallet.HasIndex(x => new { x.BusinessId, x.CreatedAtUtc });
+        var promotionalFunding = model.Entity<PlatformPromotionalFundingRecord>(); Mapping.Scalars(promotionalFunding);
+        promotionalFunding.HasKey(x => x.Id);
+        promotionalFunding.ToTable("PlatformPromotionalFundings", t =>
+            t.HasCheckConstraint("CK_PlatformPromotionalFunding_Valid", "\"Amount\" > 0 AND \"Reason\" <> '' AND \"PlatformAdminDisplayNameSnapshot\" <> ''"));
+        promotionalFunding.Property(x => x.Reason).HasMaxLength(500);
+        promotionalFunding.Property(x => x.PlatformAdminDisplayNameSnapshot).HasMaxLength(200);
+        promotionalFunding.Property(x => x.IdempotencyKey).HasMaxLength(200);
+        promotionalFunding.Property(x => x.RequestFingerprint).HasMaxLength(64);
+        promotionalFunding.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        promotionalFunding.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
+        promotionalFunding.HasIndex(x => x.JournalId).IsUnique();
+        promotionalFunding.HasIndex(x => new { x.PlatformAdminUserId, x.IdempotencyKey }).IsUnique();
+        promotionalFunding.HasIndex(x => new { x.BusinessId, x.CreatedAtUtc });
         var budget = model.Entity<PromotionBudgetEntry>(); Mapping.Scalars(budget); budget.HasKey(x => x.Id);
         budget.ToTable("PromotionBudgetEntries", t => t.HasCheckConstraint("CK_BudgetEntry_Positive", "\"Amount\" > 0"));
         budget.HasOne<Promotion>().WithMany().HasForeignKey(x => x.PromotionId).OnDelete(DeleteBehavior.Restrict);

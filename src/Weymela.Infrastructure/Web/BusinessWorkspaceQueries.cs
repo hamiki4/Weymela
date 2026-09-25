@@ -12,8 +12,11 @@ public sealed partial class WorkspaceQueries
     {
         await DemandBusiness(actor,ct);
         var wallet=await db.BusinessWallets.AsNoTracking().SingleAsync(x=>x.BusinessId==actor.BusinessId,ct);
-        var history=(await db.WalletEntries.AsNoTracking().Where(x=>x.BusinessId==actor.BusinessId).OrderByDescending(x=>x.CreatedAtUtc).Take(100).ToListAsync(ct))
-            .Select(x=>new WalletMovement(x.Id,x.Movement switch {"Deposit"=>"Funds added","Reserve"=>"Promotion funded","Consumed"=>"Promotion activity","UgcReserve"=>"UGC funded","UgcConsumed"=>"UGC approved","UgcReleased"=>"UGC funds released","UgcCustomerOfferReserve"=>"Customer Offer funded","UgcCustomerOfferConsumed"=>"Customer Offer Sale","UgcCustomerOfferReleased"=>"Customer Offer funds released",_=>"Funds movement"},x.Amount.Amount,x.CreatedAtUtc,x.JournalId.ToString())).ToArray();
+        var entries=await db.WalletEntries.AsNoTracking().Where(x=>x.BusinessId==actor.BusinessId).OrderByDescending(x=>x.CreatedAtUtc).Take(100).ToListAsync(ct);
+        var fundingJournalIds=entries.Where(x=>x.Movement=="AdminPromotionalFunding").Select(x=>x.JournalId).ToArray();
+        var fundingRecords=(await db.PlatformPromotionalFundings.AsNoTracking().Where(x=>fundingJournalIds.Contains(x.JournalId)).ToListAsync(ct))
+            .ToDictionary(x=>x.JournalId);
+        var history=entries.Select(x=>new WalletMovement(x.Id,x.Movement switch {"Deposit"=>"Funds added","AdminPromotionalFunding"=>"Promotional funds from Weymela","Reserve"=>"Promotion funded","Consumed"=>"Promotion activity","UgcReserve"=>"UGC funded","UgcConsumed"=>"UGC approved","UgcReleased"=>"UGC funds released","UgcCustomerOfferReserve"=>"Customer Offer funded","UgcCustomerOfferConsumed"=>"Customer Offer Sale","UgcCustomerOfferReleased"=>"Customer Offer funds released",_=>"Funds movement"},x.Amount.Amount,x.CreatedAtUtc,fundingRecords.TryGetValue(x.JournalId,out var funding)?funding.Id.ToString("D"):x.JournalId.ToString(),funding?.Reason)).ToArray();
         return new(wallet.TotalBalance.Amount,wallet.AvailableBalance.Amount,wallet.ReservedBalance.Amount,wallet.Version,history);
     }
     public async Task<BusinessHome> BusinessHomeAsync(Actor actor,CancellationToken ct)

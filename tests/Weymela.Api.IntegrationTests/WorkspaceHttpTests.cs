@@ -49,6 +49,40 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
             Assert.DoesNotContain(secret, detail.ToJsonString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Platform_admin_promotional_funding_is_distinct_and_business_visible()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        using var admin = await f.Login("admin"); using var business = await f.Login("business");
+        var businessId = DevelopmentDirectory.Id(100);
+        var path = $"/api/admin/accounts/businesses/{businessId:D}/promotional-funding";
+        var before = (await business.GetJson("/api/business/wallet"))["available"]!.GetValue<decimal>();
+        var first = await admin.PostJson(path, new { amount = 5000m, reason = "Launch promotion support" }, "admin-funding-http");
+        var replay = await admin.PostJson(path, new { amount = 5000m, reason = "Launch promotion support" }, "admin-funding-http");
+        Assert.Equal(first["id"]!.GetValue<string>(), replay["id"]!.GetValue<string>());
+        Assert.Equal(first["journalId"]!.GetValue<string>(), replay["journalId"]!.GetValue<string>());
+        Assert.Equal("Weymela Admin", first["platformAdminDisplayName"]!.GetValue<string>());
+        Assert.Equal(5000m, first["amount"]!.GetValue<decimal>());
+        var wallet = await business.GetJson("/api/business/wallet");
+        Assert.Equal(before + 5000m, wallet["available"]!.GetValue<decimal>());
+        Assert.Contains(wallet["history"]!.AsArray(), x => x?["label"]?.GetValue<string>() == "Promotional funds from Weymela"
+            && x["reason"]?.GetValue<string>() == "Launch promotion support");
+        Assert.Single((await admin.GetJson(path)).AsArray());
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Post(path, new { amount = 5001m, reason = "Launch promotion support" }, "admin-funding-http")).StatusCode);
+        Assert.Empty((await admin.GetJson("/api/admin/reconciliation")).AsArray());
+    }
+
+    [Theory]
+    [InlineData("operations-admin")] [InlineData("business")] [InlineData("creator")]
+    [InlineData("customer")] [InlineData("cashier")]
+    public async Task Promotional_funding_endpoints_deny_other_roles(string persona)
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres); using var client = await f.Login(persona);
+        var path = $"/api/admin/accounts/businesses/{DevelopmentDirectory.Id(100):D}/promotional-funding";
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.Post(path, new { amount = 12m, reason = "not allowed" })).StatusCode);
+    }
+
     [Theory]
     [InlineData("/api/admin/view-as/start")]
     [InlineData("/api/admin/view-as/current")]

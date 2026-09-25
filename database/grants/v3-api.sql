@@ -57,6 +57,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."OutboxMessages",
     v3."PasswordCredentials",
     v3."PayoutRecords",
+    v3."PlatformPromotionalFundings",
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",
     v3."PricingSnapshots",
@@ -142,6 +143,7 @@ GRANT SELECT, INSERT ON TABLE
     v3."FinancialConfigurationVersions",
     v3."FinancialJournals",
     v3."FinancialJournalLines",
+    v3."PlatformPromotionalFundings",
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",
     v3."PricingSnapshots",
@@ -191,6 +193,8 @@ REVOKE EXECUTE ON FUNCTION v3.guard_creator_promotion_content_revision() FROM PU
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_platform_promotional_funding_account() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.check_admin_promotional_funding() FROM PUBLIC, :"api_role";
 
 GRANT EXECUTE ON FUNCTION v3.check_wallet_journal() TO :"api_role";
 GRANT EXECUTE ON FUNCTION v3.check_earned_account() TO :"api_role";

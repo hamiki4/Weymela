@@ -22,7 +22,7 @@ public enum CashbackSource { VerifiedSale, AuthorizedAdjustment }
 public enum PlatformRevenueSource { ViewRewardPlatformShare, SalePlatformShare, UgcFee, UgcCustomerOfferSaleFee, AuthorizedAdjustment }
 public enum RevenueStatus { Accrued, Settled }
 public enum JournalLineType { Debit, Credit }
-public enum JournalSourceType { Deposit, PromotionReservation, UgcReservation, UgcCustomerOfferReservation, Allocation, UgcApproval, ViewReward, VerifiedSale, UgcCustomerOfferSale, Payout, Adjustment, Settlement }
+public enum JournalSourceType { Deposit, PromotionReservation, UgcReservation, UgcCustomerOfferReservation, Allocation, UgcApproval, ViewReward, VerifiedSale, UgcCustomerOfferSale, Payout, Adjustment, Settlement, AdminPromotionalFunding }
 public enum LegalRole { Account, Business, Creator }
 public enum LegalDocumentType { TermsOfService, BusinessAgreement, CreatorAgreement, AntiCircumventionAgreement, PrivacyPolicy }
 
@@ -56,6 +56,7 @@ public sealed class BusinessWallet
     public IReadOnlyList<DomainEvent> DomainEvents => events;
     public BusinessWallet(Guid businessId, string currency = "ETB") { BusinessId = businessId; AvailableBalance = Money.Zero(currency); ReservedBalance = Money.Zero(currency); }
     public void CreditDeposit(Money amount, DateTime at, Guid correlation) { Positive(amount); AvailableBalance = AvailableBalance.Add(amount); events.Add(new BusinessWalletCredited(BusinessId, amount, at, correlation)); }
+    public void CreditPromotionalFunding(Money amount, DateTime at, Guid correlation) { Positive(amount); if (amount.Currency != "ETB") throw new InvalidOperationException("Promotional funding must be in ETB."); AvailableBalance = AvailableBalance.Add(amount); }
     public void ReserveForPromotion(Money amount, DateTime at, Guid correlation) { Positive(amount); AvailableBalance = AvailableBalance.Subtract(amount); ReservedBalance = ReservedBalance.Add(amount); }
     public void ReleasePromotionReserve(Money amount, DateTime at, Guid correlation) { Positive(amount); ReservedBalance = ReservedBalance.Subtract(amount); AvailableBalance = AvailableBalance.Add(amount); }
     public void ConsumeReservedFunds(Money amount, DateTime at, Guid correlation) { Positive(amount); ReservedBalance = ReservedBalance.Subtract(amount); }

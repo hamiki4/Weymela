@@ -70,6 +70,10 @@ internal static class AdminEndpoints
         accounts.MapGet("",([AsParameters] AdminAccountFilterInput filter,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),filter,ct));
         accounts.MapGet("/{id:guid}",(Guid id,string? role,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,role,ct));
         accounts.MapGet("/businesses/{businessId:guid}/cashiers",(Guid businessId,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>service.BusinessCashiersAsync(EndpointSupport.Actor(c),businessId,ct));
+        accounts.MapGet("/businesses/{businessId:guid}/promotional-funding",(Guid businessId,HttpContext c,AdminPromotionalFundingService service,CancellationToken ct)=>
+            service.BusinessHistoryAsync(EndpointSupport.Authority(c),businessId,ct));
+        accounts.MapPost("/businesses/{businessId:guid}/promotional-funding",(Guid businessId,AdminPromotionalFundingInput input,HttpContext c,AdminPromotionalFundingService service,CancellationToken ct)=>
+            service.AddAsync(EndpointSupport.Authority(c),businessId,input,EndpointSupport.Key(c),ct));
         accounts.MapPost("/preauthorize",async(AccountPreauthorizationInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
             Results.Ok(await service.PreauthorizeAsync(EndpointSupport.Authority(c),input,EndpointSupport.Key(c),ct)));
         accounts.MapPost("/preauthorizations/{id:guid}/cancel",async(Guid id,AccountLifecycleInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>

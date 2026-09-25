@@ -156,7 +156,7 @@ export function BusinessDashboard() {
                   <div className="amount-row" key={item.id}>
                     <div>
                       <strong>{item.label}</strong>
-                      <small>{date(item.atUtc)}</small>
+                      <small>{date(item.atUtc)}{item.reason ? ` · Reason: ${item.reason}` : ""}</small>
                     </div>
                     <strong>{amount(item.amount)}</strong>
                   </div>
@@ -287,7 +287,7 @@ export function BusinessWallet() {
                 rowKey={(r) => r.id}
                 label="Wallet history"
                 columns={[
-                  { label: "Activity", cell: (r) => r.label },
+                  { label: "Activity", cell: (r) => <>{r.label}{r.reason && <small>Reason: {r.reason}</small>}</> },
                   {
                     label: "Amount",
                     cell: (r) => amount(r.amount),
@@ -298,7 +298,7 @@ export function BusinessWallet() {
                     label: "Reference",
                     cell: (r) => (
                       <details>
-                        <summary>Journal</summary>
+                        <summary>Reference</summary>
                         <code>{r.reference}</code>
                       </details>
                     ),
@@ -310,7 +310,7 @@ export function BusinessWallet() {
                       <strong>{r.label}</strong>
                       <strong>{amount(r.amount)}</strong>
                     </div>
-                    <p className="fine-print">{date(r.atUtc)}</p>
+                    <p className="fine-print">{date(r.atUtc)}{r.reason ? ` · Reason: ${r.reason}` : ""}</p>
                     <details>
                       <summary>Reference</summary>
                       <code>{r.reference}</code>

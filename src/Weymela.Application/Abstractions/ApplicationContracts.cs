@@ -27,6 +27,7 @@ public enum AdministrativeCapability
     PlatformSettlement,
     PlatformReconciliation,
     PlatformAccountManagement,
+    PlatformPromotionalFunding,
     PlatformRoleGrant,
     ProtectedPlatformVariables
 }

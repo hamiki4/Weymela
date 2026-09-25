@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
 import type { Role, SessionProfile } from "../api/types";
 import { Button, Field, Notice, Resource } from "../ui/components";
 import { PasswordField } from "../ui/PasswordField";
 import { Brand } from "./Shell";
-import { roleHome, useSession } from "./Session";
+import { SessionLoadFailure, SessionTransition, useSession } from "./Session";
 import {
   ProfileSelectionRequiredError,
   FirebaseWebAuthAdapter,
@@ -155,8 +155,11 @@ function FirebaseSignIn({
                 );
                 if (!profile) throw new Error("Choose an approved profile.");
                 await adapter.selectProfile(profile);
-                setProfiles([]);
                 await onSignedIn();
+                // Keep the profile-selection view stable until the server
+                // session/device/PIN bootstrap has authoritatively completed.
+                // App then owns the single redirect to setup or workspace.
+                setProfiles([]);
               })
             }
           >
@@ -548,9 +551,9 @@ export function SignIn() {
   const [accessKey, setAccessKey] = useState("");
   const session = useSession();
   const action = useAction();
-  const navigate = useNavigate();
-  if (session.user)
-    return <Navigate to={roleHome[session.user.role]} replace />;
+  if (session.loading || session.resolution === "resolving") return <SessionTransition />;
+  if (session.loadFailed || session.resolution === "failed") return <SessionLoadFailure retry={session.refresh} />;
+  if (session.user) return <SessionTransition />;
   const initialView: AuthView =
     params.get("intent") === "sign-in" ? "signIn" : "landing";
   return (
@@ -577,10 +580,6 @@ export function SignIn() {
                     await post("/development/session", { alias, accessKey });
                     setAccessKey("");
                     await session.refresh();
-                    const persona = data.personas?.find(
-                      (x) => x.alias === alias,
-                    );
-                    if (persona) navigate(roleHome[persona.role]);
                   });
                 }}
               >

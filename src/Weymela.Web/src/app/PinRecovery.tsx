@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { Button, Field, Notice } from "../ui/components";
 import { PinInput } from "../ui/PinInput";
@@ -14,13 +14,17 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
+  const starting = useRef(false);
+  const completing = useRef(false);
 
   const start = async (event: FormEvent) => {
     event.preventDefault();
+    if (starting.current) return;
     if (!identifier.trim()) {
       setError("Enter a valid email address.");
       return;
     }
+    starting.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -33,12 +37,14 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
           : "PIN recovery is temporarily unavailable.",
       );
     } finally {
+      starting.current = false;
       setBusy(false);
     }
   };
 
   const complete = async (event: FormEvent) => {
     event.preventDefault();
+    if (completing.current) return;
     if (!/^[0-9]{6}$/.test(code)) {
       setError("Enter the six-digit email code.");
       setPinError(null);
@@ -54,6 +60,7 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
       setPinError("PINs don't match. Try again.");
       return;
     }
+    completing.current = true;
     setBusy(true);
     setError(null);
     setPinError(null);
@@ -77,6 +84,7 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
             : "PIN recovery could not be completed.",
         );
     } finally {
+      completing.current = false;
       setBusy(false);
     }
   };

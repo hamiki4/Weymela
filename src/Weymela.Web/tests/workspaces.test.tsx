@@ -560,7 +560,7 @@ describe("Accepted commerce compatibility", () => {
   it("keeps Discover on the same eligible Customer offer API and filters safely", async () => {
     mockApi({ "/customer/offers": [offer, ugcCustomerOffer] });
     mount(<CustomerOffers discover />);
-    expect(await screen.findByRole("heading", { name: "Discover Promotions" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Discover Promotions", level: 1 })).toBeVisible();
     expect(screen.getAllByRole("article")).toHaveLength(2);
     await userEvent.click(screen.getByRole("button", { name: "Customer offers" }));
     expect(screen.getByText("Bella Beauty")).toBeVisible();

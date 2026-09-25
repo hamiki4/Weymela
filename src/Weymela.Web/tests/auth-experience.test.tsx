@@ -35,7 +35,11 @@ vi.mock("../src/app/Session", () => ({
 }));
 vi.mock("../src/auth/firebase", () => ({
   ProfileSelectionRequiredError: class extends Error {
-    profiles = [];
+    profiles: unknown[];
+    constructor(profiles: unknown[]) {
+      super("Choose a profile");
+      this.profiles = profiles;
+    }
   },
   exchangeFirebaseToken: vi.fn(),
   readFirebasePublicConfig: vi.fn(() => ({})),
@@ -141,6 +145,32 @@ describe("final authentication experience", () => {
       "correct horse battery staple",
     );
     expect(mocks.startEmailCode).not.toHaveBeenCalled();
+  });
+
+  it("keeps profile selection visible while the authoritative session is still resolving", async () => {
+    const { ProfileSelectionRequiredError } = await import("../src/auth/firebase");
+    const refresh = (() => {
+      let resolve!: () => void;
+      const promise = new Promise<void>(yes => { resolve = yes; });
+      return { promise, resolve };
+    })();
+    mocks.refresh.mockReturnValueOnce(refresh.promise);
+    mocks.signInWithPassword.mockRejectedValueOnce(new ProfileSelectionRequiredError([
+      { role: "Business", subjectId: "business-1", businessId: "business-1", displayName: "Business", publicId: "BUS-1", canCheckout: true },
+      { role: "Customer", subjectId: "customer-1", businessId: null, displayName: "Customer", publicId: "CU-1", canCheckout: false },
+    ]));
+    renderSignIn("/sign-in?intent=sign-in");
+    await userEvent.type(screen.getByLabelText("Phone number"), "0911111111");
+    await userEvent.type(screen.getByLabelText("Password"), "correct horse battery staple");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Choose a profile" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(screen.getByRole("heading", { name: "Choose a profile" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Welcome back" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Preparing secure sign-in/)).not.toBeInTheDocument();
+    refresh.resolve();
   });
 
   it("keeps forgot-password recovery email-only", async () => {

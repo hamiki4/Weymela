@@ -1,19 +1,19 @@
-import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useRef, useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
 import { Button, Notice } from "../ui/components";
 import { PinInput } from "../ui/PinInput";
-import { roleHome, useSession } from "./Session";
+import { useSession } from "./Session";
 import { Brand } from "./Shell";
 import { AccountRedirect } from "./AccountEntry";
 
 export function PinSetup() {
   const session = useSession();
-  const navigate = useNavigate();
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   if (session.loading) return <main className="pin-setup-page">
     <section className="pin-setup-card" aria-live="polite">
@@ -38,6 +38,7 @@ export function PinSetup() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting.current) return;
     if (!/^[0-9]{5}$/.test(pin) || !/^[0-9]{5}$/.test(confirmPin)) {
       setError("Enter five digits for both PINs.");
       setPinError("Enter five digits for both PINs.");
@@ -48,6 +49,7 @@ export function PinSetup() {
       setPinError("PINs don't match. Try again.");
       return;
     }
+    submitting.current = true;
     setBusy(true);
     setError(null);
     setPinError(null);
@@ -55,10 +57,10 @@ export function PinSetup() {
       await session.enrollDevice(pin, confirmPin);
       setPin("");
       setConfirmPin("");
-      navigate(roleHome[session.user!.role], { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create your PIN. Try again.");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };

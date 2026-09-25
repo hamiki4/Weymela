@@ -63,7 +63,8 @@ describe("account security setup", () => {
 
     expect(mocks.enrollPassword).toHaveBeenCalledWith(
       "0911111111", "correct horse battery staple", "correct horse battery staple");
-    expect(await screen.findByRole("heading", { name: "PIN setup" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "PIN setup" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sign in|Welcome back/)).not.toBeInTheDocument();
   });
 
   it("does not collect the phone twice and blocks mismatched passwords", async () => {

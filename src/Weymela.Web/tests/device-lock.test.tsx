@@ -145,4 +145,19 @@ describe("server-authoritative device lock", () => {
     expect(mocks.unlockDevice).toHaveBeenCalledTimes(2);
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many PIN attempts");
   });
+
+  it("keeps a slow unlock in one transition and ignores a duplicate PIN submit", async () => {
+    let complete!: () => void;
+    mocks.unlockDevice.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    renderLock();
+    const user = userEvent.setup();
+    await user.type(pinCells("PIN")[0], "01234");
+    const button = screen.getByRole("button", { name: "Unlock" });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(mocks.unlockDevice).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
+    complete();
+  });
 });

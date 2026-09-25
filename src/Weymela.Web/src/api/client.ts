@@ -10,6 +10,34 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+const resourceContextChangedEvent = "weymela-resource-context-changed";
+const resourceCache = new Map<string, unknown>();
+let resourceContextGeneration = 0;
+
+function clearResourceCache() {
+  resourceCache.clear();
+  resourceContextGeneration += 1;
+}
+
+/**
+ * Clears in-memory workspace data when the server-authoritative session
+ * context changes. This cache is intentionally neither persisted nor used for
+ * authorization; it only lets an already-authorized page revalidate without
+ * flashing an empty skeleton on ordinary navigation.
+ */
+export function invalidateResourceCache() {
+  clearResourceCache();
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new Event(resourceContextChangedEvent));
+}
+
+function cachedResource<T>(path: string): { path: string; value: T } | null {
+  return resourceCache.has(path)
+    ? { path, value: resourceCache.get(path) as T }
+    : null;
+}
+
 export async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -46,8 +74,10 @@ export async function request<T>(
       error.code,
       error.retryAfterSeconds,
     );
-    if (typeof window !== "undefined" && error.code === "InvalidViewAsSession")
+    if (typeof window !== "undefined" && error.code === "InvalidViewAsSession") {
+      invalidateResourceCache();
       window.dispatchEvent(new Event("weymela-view-as-expired"));
+    }
     if (typeof window !== "undefined" && ["SessionLocked", "PinCooldown", "PinRecoveryRequired", "FullAuthenticationRequired"].includes(error.code)) {
       window.dispatchEvent(new CustomEvent("weymela-device-access", { detail: { state: error.state ?? error.code } }));
       if (typeof BroadcastChannel !== "undefined") {
@@ -74,31 +104,47 @@ export function post<T = { id: string }>(
   });
 }
 export function useResource<T>(path: string) {
-  const [saved, setData] = useState<{ path: string; value: T } | null>(null);
+  const [saved, setData] = useState<{ path: string; value: T } | null>(() => cachedResource<T>(path));
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((x) => x + 1), []);
   useEffect(() => {
     const abort = new AbortController();
+    const requestContextGeneration = resourceContextGeneration;
+    setData(cachedResource<T>(path));
     setLoading(true);
     setError(null);
     request<T>(path, { signal: abort.signal })
       .then((value) => {
-        if (!abort.signal.aborted) setData({ path, value });
+        if (!abort.signal.aborted && requestContextGeneration === resourceContextGeneration) {
+          resourceCache.set(path, value);
+          setData({ path, value });
+        }
       })
       .catch((e: Error) => {
-        if (!abort.signal.aborted) setError(e);
+        if (!abort.signal.aborted && requestContextGeneration === resourceContextGeneration) setError(e);
       })
       .finally(() => {
-        if (!abort.signal.aborted) setLoading(false);
+        if (!abort.signal.aborted && requestContextGeneration === resourceContextGeneration) setLoading(false);
       });
     return () => abort.abort();
   }, [path, revision]);
   useEffect(() => {
-    const refreshForProfile = () => setRevision((x) => x + 1);
-    window.addEventListener("weymela-profile-switched", refreshForProfile);
-    return () => window.removeEventListener("weymela-profile-switched", refreshForProfile);
+    const refreshForContext = () => {
+      clearResourceCache();
+      setData(null);
+      setError(null);
+      setRevision((x) => x + 1);
+    };
+    window.addEventListener(resourceContextChangedEvent, refreshForContext);
+    // Keep compatibility with the existing profile-switch notification while
+    // ensuring it also clears the old account's rendered data immediately.
+    window.addEventListener("weymela-profile-switched", refreshForContext);
+    return () => {
+      window.removeEventListener(resourceContextChangedEvent, refreshForContext);
+      window.removeEventListener("weymela-profile-switched", refreshForContext);
+    };
   }, []);
   const data = saved?.path === path ? saved.value : null;
   return { data, error, loading: loading || (data === null && !error), reload };

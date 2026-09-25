@@ -1,19 +1,19 @@
-import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useRef, useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
 import { Button, Field, Notice } from "../ui/components";
 import { PasswordField } from "../ui/PasswordField";
 import { Brand } from "./Shell";
-import { roleHome, useSession } from "./Session";
+import { useSession } from "./Session";
 import { AccountRedirect, accountEntryPath } from "./AccountEntry";
 
 export function SecuritySetup() {
   const session = useSession();
-  const navigate = useNavigate();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   if (session.loading) return <main className="pin-setup-page">
     <section className="pin-setup-card security-setup-card" aria-live="polite">
@@ -35,16 +35,17 @@ export function SecuritySetup() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting.current) return;
     if (password.length < 12) { setError("Use at least 12 characters for your password."); return; }
     if (password !== confirmPassword) { setError("Passwords don't match. Try again."); return; }
+    submitting.current = true;
     setBusy(true); setError(null);
     try {
       await session.enrollPassword(session.accountSecurity?.phoneEnrolled ? null : phone, password, confirmPassword);
       setPassword(""); setConfirmPassword("");
-      navigate(session.deviceEnrollment?.state === "EnrollmentRequired" ? "/pin-setup" : roleHome[session.user!.role], { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Account security setup could not be completed.");
-    } finally { setBusy(false); }
+    } finally { submitting.current = false; setBusy(false); }
   };
 
   return <main className="pin-setup-page">

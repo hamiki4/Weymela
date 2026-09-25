@@ -95,13 +95,30 @@ describe("initial five-digit PIN setup", () => {
     expect(mocks.enrollDevice).not.toHaveBeenCalled();
   });
 
-  it("enrolls once and returns to the existing active role workspace", async () => {
+  it("submits once and leaves the final destination to the authoritative app gate", async () => {
     renderSetup();
     const user = userEvent.setup();
     await user.type(pinCells("Create PIN")[0], "01234");
     await user.type(pinCells("Confirm PIN")[0], "01234");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(mocks.enrollDevice).toHaveBeenCalledWith("01234", "01234");
-    expect(await screen.findByRole("heading", { name: "Customer workspace" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Customer workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sign in|Welcome back/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the setup transition stable and ignores a duplicate submit", async () => {
+    let complete!: () => void;
+    mocks.enrollDevice.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+    renderSetup();
+    const user = userEvent.setup();
+    await user.type(pinCells("Create PIN")[0], "01234");
+    await user.type(pinCells("Confirm PIN")[0], "01234");
+    const button = screen.getByRole("button", { name: "Continue" });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(mocks.enrollDevice).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("heading", { name: "Customer workspace" })).not.toBeInTheDocument();
+    complete();
   });
 });

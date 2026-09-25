@@ -2,11 +2,14 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { ApiError, useAction, useResource } from "../src/api/client";
+import { ApiError, invalidateResourceCache, useAction, useResource } from "../src/api/client";
 import { Button, Field, Resource, Tabs } from "../src/ui/components";
 import { BusinessCampaigns } from "../src/features/business/BusinessPages";
 import { mockApi } from "./fixtures";
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  invalidateResourceCache();
+  vi.unstubAllGlobals();
+});
 describe("Shared designed states and accessibility", () => {
   it("shows a labeled loading state", () => {
     render(
@@ -132,6 +135,58 @@ describe("Shared designed states and accessibility", () => {
       respond!(new Response(JSON.stringify({ name: "Second Campaign" }))),
     );
     expect(await screen.findByText("Second Campaign")).toBeVisible();
+  });
+  it("revalidates a cached workspace without showing an empty navigation skeleton", async () => {
+    let respond!: (response: Response) => void;
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        return calls === 1
+          ? Response.json({ name: "Cached workspace" })
+          : await new Promise<Response>((resolve) => { respond = resolve; });
+      }),
+    );
+    function Example() {
+      const resource = useResource<{ name: string }>("/workspace");
+      return <Resource resource={resource}>{(value) => <h1>{value.name}</h1>}</Resource>;
+    }
+    const first = render(<Example />);
+    await screen.findByRole("heading", { name: "Cached workspace" });
+    first.unmount();
+
+    render(<Example />);
+    expect(screen.getByRole("heading", { name: "Cached workspace" })).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
+    await act(async () => respond(Response.json({ name: "Fresh workspace" })));
+    expect(await screen.findByRole("heading", { name: "Fresh workspace" })).toBeVisible();
+    expect(calls).toBe(2);
+  });
+  it("clears cached workspace data before a profile or View As context can render it", async () => {
+    let respond!: (response: Response) => void;
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        return calls === 1
+          ? Response.json({ name: "First account" })
+          : await new Promise<Response>((resolve) => { respond = resolve; });
+      }),
+    );
+    function Example() {
+      const resource = useResource<{ name: string }>("/workspace");
+      return <Resource resource={resource}>{(value) => <h1>{value.name}</h1>}</Resource>;
+    }
+    render(<Example />);
+    await screen.findByRole("heading", { name: "First account" });
+
+    await act(async () => invalidateResourceCache());
+    expect(screen.queryByText("First account")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading workspace" })).toBeVisible();
+    await act(async () => respond(Response.json({ name: "Second account" })));
+    expect(await screen.findByRole("heading", { name: "Second account" })).toBeVisible();
   });
   it("does not queue a financial action while offline", async () => {
     const call = vi.fn();

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { Button, Notice } from "../ui/components";
 import { PinInput } from "../ui/PinInput";
@@ -16,15 +16,18 @@ export function LockScreen() {
   const [error, setError] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
+  const submitting = useRef(false);
   const canUnlock = state === "Locked";
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting.current) return;
     if (!/^[0-9]{5}$/.test(pin)) {
       setError("Enter your five-digit PIN.");
       setPinError("Enter your five-digit PIN.");
       return;
     }
+    submitting.current = true;
     setBusy(true);
     setError(null);
     setPinError(null);
@@ -41,6 +44,7 @@ export function LockScreen() {
             : "Weymela could not be unlocked.",
         );
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };

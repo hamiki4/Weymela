@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { ApiError, post, request } from "../api/client";
+import { ApiError, invalidateResourceCache, post, request } from "../api/client";
 import type { AccountSecurityStatus, DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser, ViewAsSession } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
 
@@ -21,8 +21,10 @@ export const roleHome: Record<Role, string> = {
   Cashier: "/checkout",
   Onboarding: "/onboarding",
 };
+export type SessionResolution = "resolving" | "anonymous" | "authenticated" | "failed";
 interface SessionContextValue {
   user: SessionUser | null;
+  resolution: SessionResolution;
   loading: boolean;
   loadFailed: boolean;
   deviceEnrollment: DeviceEnrollmentStatus | null;
@@ -59,6 +61,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [accountSecurity, setAccountSecurity] = useState<AccountSecurityStatus | null>(null);
   const accessState = useRef<DeviceAccessStatus["state"] | null>(null);
   const refreshGeneration = useRef(0);
+  // `user === null` is ambiguous until the authoritative bootstrap finishes.
+  // Keep that unresolved state explicit so routes cannot mistake it for an
+  // unauthenticated session and render Sign In prematurely.
+  const [resolution, setResolution] = useState<SessionResolution>("resolving");
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [viewAs, setViewAs] = useState<ViewAsState | null>(null);
@@ -75,6 +81,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.sessionStorage.removeItem(viewAsReturnPathKey);
   };
   const clearSessionState = () => {
+    invalidateResourceCache();
     setUser(null);
     setDeviceEnrollment(null);
     setDeviceAccess(null);
@@ -87,6 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const refresh = async () => {
     const generation = ++refreshGeneration.current;
     const isCurrent = () => refreshGeneration.current === generation;
+    setResolution("resolving");
     setLoading(true);
     setLoadFailed(false);
     try {
@@ -131,7 +139,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           channel.postMessage(access.state === "FullAuthenticationRequired" ? "full-authentication-required" : "locked");
           channel.close();
         }
-        if (!["Unlocked", "EnrollmentRequired"].includes(access.state)) return;
+        if (!["Unlocked", "EnrollmentRequired"].includes(access.state)) {
+          setResolution(user ? "authenticated" : "anonymous");
+          return;
+        }
         next = await request<SessionUser>("/session");
         if (!isCurrent()) return;
         security = next.developmentMode
@@ -175,10 +186,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setAccountSecurity(security);
       if (enrollment) setDeviceEnrollment(enrollment);
       if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
+      setResolution("authenticated");
     } catch (error) {
       if (!isCurrent()) return;
       clearSessionState();
-      setLoadFailed(!(error instanceof ApiError && error.status === 401));
+      const unauthenticated = error instanceof ApiError && error.status === 401;
+      setLoadFailed(!unauthenticated);
+      setResolution(unauthenticated ? "anonymous" : "failed");
     } finally {
       if (isCurrent()) setLoading(false);
     }
@@ -199,6 +213,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (handlingViewAsExpiry.current) return;
       handlingViewAsExpiry.current = true;
       const returnTo = safeAdminReturnPath(viewAsRef.current?.returnTo);
+      invalidateResourceCache();
       updateViewAs(null);
       clearViewAsMetadata();
       setViewAsNotice("Admin View Mode expired. You are back in the Platform Admin workspace.");
@@ -217,6 +232,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ++refreshGeneration.current;
         clearSessionState();
         setLoadFailed(false);
+        setResolution("anonymous");
         setLoading(false);
       } else void refresh();
     };
@@ -234,6 +250,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // Invalidate every in-flight refresh before beginning intentional logout.
     ++refreshGeneration.current;
+    invalidateResourceCache();
+    setResolution("resolving");
+    setLoading(true);
     try {
       await createFirebaseWebAuthAdapter().signOut();
     } catch (error) {
@@ -245,6 +264,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ++refreshGeneration.current;
       clearSessionState();
       setLoadFailed(false);
+      setResolution("anonymous");
       setLoading(false);
       if (typeof BroadcastChannel !== "undefined") {
         const channel = new BroadcastChannel("weymela-v3-access");
@@ -299,8 +319,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       businessId: profile.businessId,
     });
     if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
-    // BrowserRouter transitions location updates. Commit the authoritative role
-    // in that same transition so the old route never sees the new role alone.
+    invalidateResourceCache();
+    // The old workspace remains authorized until this server response arrives;
+    // commit the new role and route together so no mismatched protected page is
+    // ever rendered during a successful profile switch. ProfileSwitcher keeps
+    // rejected switches in the old context and preserves its error state.
     startTransition(() => {
       setUser(next);
       navigate(roleHome[next.role], { replace: true });
@@ -310,6 +333,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
   const startViewAs = async (viewedUserId: string, displayName: string, returnTo: string) => {
     const started = await post<ViewAsSession>("/admin/view-as/start", { viewedUserId });
+    invalidateResourceCache();
     const next: ViewAsState = {
       session: started,
       displayName,
@@ -326,6 +350,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const endViewAs = async () => {
     const returnTo = safeAdminReturnPath(viewAsRef.current?.returnTo);
     await post<void>("/admin/view-as/end", {});
+    invalidateResourceCache();
     updateViewAs(null);
     clearViewAsMetadata();
     setViewAsNotice(null);
@@ -333,7 +358,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await refresh();
   };
   return (
-    <Context.Provider value={{ user, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile, viewAs, viewAsNotice, startViewAs, endViewAs }}>
+    <Context.Provider value={{ user, resolution, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile, viewAs, viewAsNotice, startViewAs, endViewAs }}>
       {children}
     </Context.Provider>
   );
@@ -343,6 +368,26 @@ export function useSession() {
   if (!value) throw new Error("SessionProvider required");
   return value;
 }
+export function SessionTransition() {
+  return (
+    <main className="pin-setup-page">
+      <section className="pin-setup-card" role="status" aria-live="polite">
+        Preparing your secure session…
+      </section>
+    </main>
+  );
+}
+export function SessionLoadFailure({ retry }: { retry: () => Promise<void> }) {
+  return (
+    <main className="pin-setup-page">
+      <section className="pin-setup-card" aria-labelledby="session-load-error-title">
+        <h1 id="session-load-error-title">We couldn’t verify your session.</h1>
+        <p className="muted">Your account is not being opened until its security state can be confirmed.</p>
+        <button type="button" className="button primary" onClick={() => void retry()}>Try again</button>
+      </section>
+    </main>
+  );
+}
 export function RoleGate({
   roles,
   children,
@@ -350,13 +395,9 @@ export function RoleGate({
   roles: Role[];
   children: ReactNode;
 }) {
-  const { user, loading } = useSession();
-  if (loading)
-    return (
-      <div className="loading" role="status">
-        Opening your workspace…
-      </div>
-    );
+  const { user, loading, resolution } = useSession();
+  if (loading || resolution === "resolving")
+    return <SessionTransition />;
   if (!user) return <Navigate to="/sign-in" replace />;
   if (!roles.includes(user.role))
     return <Navigate to="/unauthorized" replace />;

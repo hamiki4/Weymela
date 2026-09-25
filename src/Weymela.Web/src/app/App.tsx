@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { RoleGate, roleHome, useSession } from "./Session";
+import { RoleGate, roleHome, SessionLoadFailure, SessionTransition, useSession } from "./Session";
 import { Shell } from "./Shell";
 import { SignIn } from "./SignIn";
 import { ActionLink, Empty, Section } from "../ui/components";
@@ -66,6 +66,11 @@ function Home() {
 export function App() {
   const session = useSession();
   const location = useLocation();
+  // A null user is not authoritative while bootstrap is pending. Keep every
+  // route behind one stable transition state until auth, profile, device and
+  // workspace prerequisites have been resolved.
+  if (session.loading || session.resolution === "resolving") return <SessionTransition />;
+  if (session.loadFailed || session.resolution === "failed") return <SessionLoadFailure retry={session.refresh} />;
   if (!session.loading && session.deviceAccess
       && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
     return <LockScreen />;
@@ -80,7 +85,7 @@ export function App() {
       const recognized = state === "Enrolled" || state === "NotRequired";
       if (!recognized && location.pathname !== "/pin-setup")
         return <AccountRedirect to="/pin-setup" />;
-      if (recognized && location.pathname === "/pin-setup")
+      if (recognized && (location.pathname === "/pin-setup" || location.pathname === "/sign-in"))
         return <AccountRedirect to={roleHome[session.user.role]} />;
     }
   }

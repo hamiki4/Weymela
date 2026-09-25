@@ -49,6 +49,7 @@ function Observer() {
     <output aria-label="session-state">
       {session.loading ? "loading" : session.loadFailed ? "failed" : session.user ? "authenticated" : "anonymous"}
     </output>
+    {session.loading ? <h1>Preparing your secure session</h1> : session.loadFailed ? <h1>Session unavailable</h1> : session.user ? <h1>Business Home</h1> : <h1>Sign In</h1>}
     <button type="button" onClick={() => void session.refresh()}>Refresh</button>
     <button type="button" onClick={() => void session.signOut()}>Sign out</button>
   </>;
@@ -74,6 +75,30 @@ beforeEach(() => {
 });
 
 describe("authoritative session refresh ordering", () => {
+  it("does not render Sign In while authenticated bootstrap is unresolved", async () => {
+    const firstAccess = deferred<typeof access>();
+    mocks.request.mockImplementation((path: string) => {
+      if (path === "/device/access") return firstAccess.promise;
+      return authenticatedRequests(path);
+    });
+    renderSession();
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith("/device/access"));
+    expect(screen.getByRole("heading", { name: "Preparing your secure session" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Business Home" })).not.toBeInTheDocument();
+
+    await act(async () => firstAccess.resolve(access));
+    expect(await screen.findByRole("heading", { name: "Business Home" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
+  });
+
+  it("shows Sign In only after an authoritative unauthenticated result", async () => {
+    mocks.request.mockRejectedValueOnce(new ApiError(401, "Sign in to continue."));
+    renderSession();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Sign In" })).toBeVisible());
+    expect(screen.queryByRole("heading", { name: "Preparing your secure session" })).not.toBeInTheDocument();
+  });
+
   it("performs one bounded bootstrap sequence and does not start a refresh loop", async () => {
     mocks.request.mockImplementation(authenticatedRequests);
     renderSession();
@@ -122,6 +147,8 @@ describe("authoritative session refresh ordering", () => {
     mocks.request.mockRejectedValueOnce(new ApiError(503, "Unavailable"));
     renderSession();
     await waitFor(() => expect(screen.getByLabelText("session-state")).toHaveTextContent("failed"));
+    expect(screen.getByRole("heading", { name: "Session unavailable" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
   });
 
   it("invalidates an in-flight refresh when the user intentionally signs out", async () => {

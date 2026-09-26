@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import { ApiError, invalidateResourceCache, post, request } from "../api/client";
 import type { AccountSecurityStatus, DeviceAccessStatus, DeviceEnrollmentStatus, EmailCodeStartStatus, Role, SessionProfile, SessionUser } from "../api/types";
 import { createFirebaseWebAuthAdapter, FirebaseConfigurationError } from "../auth/firebase";
@@ -25,12 +25,13 @@ export type SessionResolution = "resolving" | "anonymous" | "authenticated" | "f
 interface SessionContextValue {
   user: SessionUser | null;
   resolution: SessionResolution;
+  confirmedAnonymous: boolean;
   loading: boolean;
   loadFailed: boolean;
   deviceEnrollment: DeviceEnrollmentStatus | null;
   deviceAccess: DeviceAccessStatus | null;
   accountSecurity: AccountSecurityStatus | null;
-  refresh: () => Promise<void>;
+  refresh: (propagateError?: boolean) => Promise<void>;
   enrollDevice: (pin: string, confirmPin: string) => Promise<void>;
   enrollPassword: (phone: string | null, password: string, confirmPassword: string) => Promise<void>;
   unlockDevice: (pin: string) => Promise<void>;
@@ -48,10 +49,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [accountSecurity, setAccountSecurity] = useState<AccountSecurityStatus | null>(null);
   const accessState = useRef<DeviceAccessStatus["state"] | null>(null);
   const refreshGeneration = useRef(0);
+  const switching = useRef(false);
+  const contextKey = useRef<string | null>(null);
   // `user === null` is ambiguous until the authoritative bootstrap finishes.
   // Keep that unresolved state explicit so routes cannot mistake it for an
   // unauthenticated session and render Sign In prematurely.
   const [resolution, setResolution] = useState<SessionResolution>("resolving");
+  const [confirmedAnonymous, setConfirmedAnonymous] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const clearSessionState = () => {
@@ -61,9 +65,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setDeviceAccess(null);
     setAccountSecurity(null);
     accessState.current = null;
+    contextKey.current = null;
     window.sessionStorage.removeItem("weymela.profile-key");
   };
-  const refresh = async () => {
+  const refresh = async (propagateError = false) => {
     const generation = ++refreshGeneration.current;
     const isCurrent = () => refreshGeneration.current === generation;
     setResolution("resolving");
@@ -77,7 +82,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (!isCurrent()) return;
         const previousAccess = accessState.current;
         accessState.current = access.state;
-        setDeviceAccess(access);
         if (["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(access.state)
             && previousAccess !== access.state && typeof BroadcastChannel !== "undefined") {
           const channel = new BroadcastChannel("weymela-v3-access");
@@ -85,6 +89,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           channel.close();
         }
         if (!["Unlocked", "EnrollmentRequired"].includes(access.state)) {
+          setDeviceAccess(access);
           setResolution(user ? "authenticated" : "anonymous");
           return;
         }
@@ -101,17 +106,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           enrollment = { state: "Unavailable", expiresAtUtc: null };
         }
         if (!isCurrent()) return;
+      const nextContext = JSON.stringify([next.role, next.publicId, next.activeProfileKey ?? null]);
+      if (contextKey.current !== nextContext) invalidateResourceCache();
+      contextKey.current = nextContext;
       setUser(next);
+      setDeviceAccess(access);
       setAccountSecurity(security);
       if (enrollment) setDeviceEnrollment(enrollment);
       if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
       setResolution("authenticated");
+      setConfirmedAnonymous(false);
     } catch (error) {
       if (!isCurrent()) return;
       clearSessionState();
       const unauthenticated = error instanceof ApiError && error.status === 401;
+      setConfirmedAnonymous(unauthenticated);
       setLoadFailed(!unauthenticated);
       setResolution(unauthenticated ? "anonymous" : "failed");
+      if (propagateError) throw error;
     } finally {
       if (isCurrent()) setLoading(false);
     }
@@ -120,7 +132,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, []);
   useEffect(() => {
-    const accessChanged = () => void refresh();
+    const accessChanged = (event: Event) => {
+      const code = (event as CustomEvent<{ state?: string }>).detail?.state;
+      const state = code === "PinCooldown" ? "Cooldown"
+        : code === "PinRecoveryRequired" ? "RecoveryRequired"
+        : code === "FullAuthenticationRequired" ? "FullAuthenticationRequired"
+        : "Locked";
+      setDeviceAccess({ state, idleExpiresAtUtc: null, sessionExpiresAtUtc: null, retryAfterSeconds: null });
+      void refresh();
+    };
     window.addEventListener("weymela-device-access", accessChanged);
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("weymela-v3-access");
     if (channel) channel.onmessage = (event) => {
@@ -129,8 +149,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         clearSessionState();
         setLoadFailed(false);
         setResolution("anonymous");
+        setConfirmedAnonymous(true);
         setLoading(false);
-      } else void refresh();
+      } else {
+        if (event.data === "locked" || event.data === "full-authentication-required")
+          setDeviceAccess({ state: event.data === "locked" ? "Locked" : "FullAuthenticationRequired",
+            idleExpiresAtUtc: null, sessionExpiresAtUtc: null, retryAfterSeconds: null });
+        void refresh();
+      }
     };
     return () => {
       window.removeEventListener("weymela-device-access", accessChanged);
@@ -161,6 +187,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       clearSessionState();
       setLoadFailed(false);
       setResolution("anonymous");
+      setConfirmedAnonymous(true);
       setLoading(false);
       if (typeof BroadcastChannel !== "undefined") {
         const channel = new BroadcastChannel("weymela-v3-access");
@@ -172,7 +199,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const enrollDevice = async (pin: string, confirmPin: string) => {
     const status = await post<DeviceEnrollmentStatus>("/device/enrollment", { pin, confirmPin });
     if (status.state !== "Enrolled") throw new Error("Secure device setup did not complete.");
-    setDeviceEnrollment(status);
     await refresh();
   };
   const enrollPassword = async (phone: string | null, password: string, confirmPassword: string) => {
@@ -182,7 +208,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const unlockDevice = async (pin: string) => {
     const status = await post<DeviceAccessStatus>("/device/unlock", { pin });
     accessState.current = status.state;
-    setDeviceAccess(status);
     await refresh();
     if (typeof BroadcastChannel !== "undefined") {
       const channel = new BroadcastChannel("weymela-v3-access");
@@ -200,7 +225,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
     if (status.state !== "Unlocked") throw new Error("Secure PIN recovery did not complete.");
     accessState.current = status.state;
-    setDeviceAccess(status);
     await refresh();
     if (typeof BroadcastChannel !== "undefined") {
       const channel = new BroadcastChannel("weymela-v3-access");
@@ -209,26 +233,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   };
   const switchProfile = async (profile: SessionProfile) => {
-    const next = await post<SessionUser>("/session/switch-profile", {
-      role: profile.role,
-      subjectId: profile.subjectId,
-      businessId: profile.businessId,
-    });
-    if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
-    invalidateResourceCache();
-    // The old workspace remains authorized until this server response arrives;
-    // commit the new role and route together so no mismatched protected page is
-    // ever rendered during a successful profile switch. ProfileSwitcher keeps
-    // rejected switches in the old context and preserves its error state.
-    startTransition(() => {
-      setUser(next);
-      navigate(roleHome[next.role], { replace: true });
-      window.dispatchEvent(new Event("weymela-profile-switched"));
-    });
-    return next;
+    if (switching.current) throw new Error("A profile switch is already in progress.");
+    switching.current = true;
+    try {
+      const next = await post<SessionUser>("/session/switch-profile", {
+        role: profile.role,
+        subjectId: profile.subjectId,
+        businessId: profile.businessId,
+      });
+      ++refreshGeneration.current;
+      // The server response is authoritative. Commit role and route together.
+      startTransition(() => {
+        if (next.activeProfileKey) window.sessionStorage.setItem("weymela.profile-key", next.activeProfileKey);
+        // The old page unmounts with this route change. A synchronous cache
+        // notification would repaint it as a skeleton before the new route commits.
+        invalidateResourceCache(false);
+        contextKey.current = JSON.stringify([next.role, next.publicId, next.activeProfileKey ?? null]);
+        setUser(next);
+        setResolution("authenticated");
+        setLoading(false);
+        setLoadFailed(false);
+        navigate(roleHome[next.role], { replace: true });
+      });
+      return next;
+    } finally {
+      switching.current = false;
+    }
   };
   return (
-    <Context.Provider value={{ user, resolution, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
+    <Context.Provider value={{ user, resolution, confirmedAnonymous, loading, loadFailed, deviceEnrollment, deviceAccess, accountSecurity, refresh, enrollDevice, enrollPassword, unlockDevice, startPinRecovery, completePinRecovery, signOut, switchProfile }}>
       {children}
     </Context.Provider>
   );
@@ -240,10 +273,16 @@ export function useSession() {
 }
 export function SessionTransition() {
   return (
-    <main className="pin-setup-page">
-      <section className="pin-setup-card" role="status" aria-live="polite">
-        Preparing your secure session…
-      </section>
+    <main className="sign-in">
+      <div className="sign-in-story">
+        <span className="brand" role="img" aria-label="Weymela">
+          <img className="brand-mark" src="/brand/weymela-mark.png" width="38" height="38" alt="" />
+          <img className="brand-wordmark" src="/brand/weymela-wordmark.png" width="154" height="36" alt="" />
+        </span>
+      </div>
+      <div className="sign-in-form">
+        <div className="sign-in-secure" role="status" aria-live="polite">Preparing your secure session…</div>
+      </div>
     </main>
   );
 }
@@ -263,13 +302,13 @@ export function RoleGate({
   children,
 }: {
   roles: Role[];
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const { user, loading, resolution } = useSession();
-  if (loading || resolution === "resolving")
-    return <SessionTransition />;
+  if (!user && (loading || resolution === "resolving"))
+    return <div role="status" aria-live="polite">Checking your secure session…</div>;
   if (!user) return <Navigate to="/sign-in" replace />;
   if (!roles.includes(user.role))
     return <Navigate to="/unauthorized" replace />;
-  return <>{children}</>;
+  return children ? <>{children}</> : <Outlet />;
 }

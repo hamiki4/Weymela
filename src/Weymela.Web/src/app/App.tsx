@@ -64,17 +64,23 @@ function Home() {
     <Navigate to={user ? roleHome[user.role] : "/sign-in"} replace />
   );
 }
+function ProtectedShell() {
+  const { user, loading, resolution } = useSession();
+  if (!user) return loading || resolution === "resolving" ? <SessionTransition /> : <Navigate to="/sign-in" replace />;
+  return <Shell />;
+}
 export function App() {
   const session = useSession();
   const location = useLocation();
   // A null user is not authoritative while bootstrap is pending. Keep every
   // route behind one stable transition state until auth, profile, device and
   // workspace prerequisites have been resolved.
-  if (session.loading || session.resolution === "resolving") return <SessionTransition />;
   if (session.loadFailed || session.resolution === "failed") return <SessionLoadFailure retry={session.refresh} />;
-  if (!session.loading && session.deviceAccess
+  if (session.deviceAccess
       && ["Locked", "Cooldown", "RecoveryRequired", "FullAuthenticationRequired"].includes(session.deviceAccess.state))
     return <LockScreen />;
+  if ((session.loading || session.resolution === "resolving") && !session.user
+      && location.pathname !== "/sign-in") return <SessionTransition />;
   if (!session.loading && session.user) {
     if (session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
       if (location.pathname !== "/security-setup")
@@ -99,157 +105,81 @@ export function App() {
       <Route path="/pin-setup" element={<PinSetup />} />
       <Route path="/security-setup" element={<SecuritySetup />} />
       <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/business" element={
-        <RoleGate roles={["Business"]}>
-          <Shell><BusinessDashboard /></Shell>
-        </RoleGate>
+      <Route path="/legal/terms-of-service" element={<LegalDocumentPage kind="terms" />} />
+      <Route path="/legal/privacy-policy" element={<LegalDocumentPage kind="privacy" />} />
+      <Route path="/unauthorized" element={
+        <div className="offer-page section-kicker-space">
+          <Section title="Workspace unavailable">
+            <Empty icon="lock" title="This workspace isn’t available to your role"
+              message="Return to your own workspace to continue."
+              action={<ActionLink to="/">Your workspace</ActionLink>} />
+          </Section>
+        </div>
       } />
-      <Route path="/creator" element={
-        <RoleGate roles={["Creator"]}>
-          <Shell><CreatorDashboard /></Shell>
-        </RoleGate>
-      } />
-      <Route path="/admin" element={
-        <RoleGate roles={["PlatformAdmin"]}>
-          <Shell><AdminDashboard /></Shell>
-        </RoleGate>
-      } />
-      <Route path="/admin/operations" element={
-        <RoleGate roles={["OperationsAdmin"]}>
-          <Shell><OperationsDashboard /></Shell>
-        </RoleGate>
-      } />
-      <Route path="/customer/offers" element={
-        <RoleGate roles={["Customer"]}>
-          <Shell><CustomerOffers /></Shell>
-        </RoleGate>
-      } />
-      <Route path="/customer/discover" element={
-        <RoleGate roles={["Customer"]}>
-          <Shell><CustomerDiscover /></Shell>
-        </RoleGate>
-      } />
-      <Route
-        path="/legal/terms-of-service"
-        element={<LegalDocumentPage kind="terms" />}
-      />
-      <Route
-        path="/legal/privacy-policy"
-        element={<LegalDocumentPage kind="privacy" />}
-      />
-      <Route element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><Shell /></RoleGate>}>
-        <Route path="/notifications" element={<Inbox />} />
-      </Route>
-      <Route
-        path="/unauthorized"
-        element={
-          <div className="offer-page section-kicker-space">
-            <Section title="Workspace unavailable">
-              <Empty
-                icon="lock"
-                title="This workspace isn’t available to your role"
-                message="Return to your own workspace to continue."
-                action={<ActionLink to="/">Your workspace</ActionLink>}
-              />
-            </Section>
-          </div>
-        }
-      />
-      <Route
-        element={
-          <RoleGate roles={["Business"]}>
-            <Shell />
-          </RoleGate>
-        }
-      >
-        <Route path="/business/wallet" element={<BusinessWallet />} />
-        <Route path="/business/campaigns" element={<BusinessCampaigns />} />
-        <Route path="/business/campaigns/new" element={<CreateCampaign />} />
-        <Route
-          path="/business/campaigns/:id"
-          element={<BusinessCampaignDetail />}
-        />
-        <Route path="/business/requests" element={<BusinessRequests />} />
-        <Route path="/business/pricing" element={<BusinessPricingPage />} />
-        <Route path="/business/ugc" element={<BusinessUgcPage />} />
-        <Route path="/business/cashiers" element={<BusinessCashiers />} />
-      </Route>
-      <Route
-        element={
-          <RoleGate roles={["Creator"]}>
-            <Shell />
-          </RoleGate>
-        }
-      >
-        <Route path="/creator/discover" element={<CreatorDiscover />} />
-        <Route path="/creator/discover/:id" element={<CreatorOpportunity />} />
-        <Route path="/creator/promotions" element={<CreatorPromotions />} />
-        <Route path="/creator/promotions/:id" element={<CreatorActiveDetail />} />
-        <Route path="/creator/campaigns" element={<Navigate to="/creator/promotions" replace />} />
-        <Route path="/creator/campaigns/:id" element={<CreatorActiveDetail />} />
-        <Route path="/creator/requests" element={<Navigate to="/creator/promotions" replace />} />
-        <Route path="/creator/pricing" element={<Navigate to="/creator/earnings#how-you-earn" replace />} />
-        <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
-        <Route path="/creator/earnings" element={<CreatorEarnings />} />
-        <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
-      </Route>
-      <Route
-        element={
-          <RoleGate roles={["PlatformAdmin"]}>
-            <Shell />
-          </RoleGate>
-        }
-      >
-        <Route path="/admin/accounts" element={<Navigate to="/admin/customers" replace />} />
-        <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
-        <Route path="/admin/customers" element={<AdminAccounts area="Customer" />} />
-        <Route path="/admin/creators" element={<AdminAccounts area="Creator" />} />
-        <Route path="/admin/businesses" element={<AdminAccounts area="Business" />} />
-        <Route path="/admin/admins" element={<AdminAccounts area="Admin" />} />
-        <Route path="/admin/settings" element={<AdminFinancialSettings />} />
-        <Route
-          path="/admin/financial-settings"
-          element={<Navigate to="/admin/settings" replace />}
-        />
-        <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
-      </Route>
-      <Route
-        element={
-          <RoleGate roles={["PlatformAdmin", "OperationsAdmin"]}>
-            <Shell />
-          </RoleGate>
-        }
-      >
-        <Route path="/admin/campaigns" element={<AdminCampaigns />} />
-        <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
-        <Route path="/admin/operations/businesses" element={<AdminBusinesses />} />
-        <Route path="/admin/operations/creators" element={<AdminCreators />} />
-        <Route path="/admin/operations/customers" element={<OperationsCustomers />} />
-        <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
-        <Route path="/admin/payouts" element={<AdminPayouts />} />
-        <Route path="/admin/notifications" element={<AdminActivity />} />
-      </Route>
-      <Route path="/admin/ugc" element={<RoleGate roles={["OperationsAdmin"]}><Shell><OperationsUgc /></Shell></RoleGate>} />
-      <Route
-        element={
-          <RoleGate roles={["Customer"]}>
-            <Shell />
-          </RoleGate>
-        }
-      >
-        <Route path="/customer/offers/:id" element={<CustomerOfferQr />} />
-        <Route path="/customer/transactions" element={<CustomerTransactions />} />
-        <Route path="/customer/history" element={<Navigate to="/customer/transactions" replace />} />
-        <Route path="/customer/cashback" element={<CustomerCashback />} />
-      </Route>
-      <Route
-        element={
-          <RoleGate roles={["Cashier", "Business"]}>
-            <Shell />
-          </RoleGate>
-        }
-      >
-        <Route path="/checkout" element={<Checkout />} />
+      <Route element={<ProtectedShell />}>
+        <Route path="/notifications" element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><Inbox /></RoleGate>} />
+        <Route element={<RoleGate roles={["Business"]} />}>
+          <Route path="/business" element={<BusinessDashboard />} />
+          <Route path="/business/wallet" element={<BusinessWallet />} />
+          <Route path="/business/campaigns" element={<BusinessCampaigns />} />
+          <Route path="/business/campaigns/new" element={<CreateCampaign />} />
+          <Route path="/business/campaigns/:id" element={<BusinessCampaignDetail />} />
+          <Route path="/business/requests" element={<BusinessRequests />} />
+          <Route path="/business/pricing" element={<BusinessPricingPage />} />
+          <Route path="/business/ugc" element={<BusinessUgcPage />} />
+          <Route path="/business/cashiers" element={<BusinessCashiers />} />
+        </Route>
+        <Route element={<RoleGate roles={["Creator"]} />}>
+          <Route path="/creator" element={<CreatorDashboard />} />
+          <Route path="/creator/discover" element={<CreatorDiscover />} />
+          <Route path="/creator/discover/:id" element={<CreatorOpportunity />} />
+          <Route path="/creator/promotions" element={<CreatorPromotions />} />
+          <Route path="/creator/promotions/:id" element={<CreatorActiveDetail />} />
+          <Route path="/creator/campaigns" element={<Navigate to="/creator/promotions" replace />} />
+          <Route path="/creator/campaigns/:id" element={<CreatorActiveDetail />} />
+          <Route path="/creator/requests" element={<Navigate to="/creator/promotions" replace />} />
+          <Route path="/creator/pricing" element={<Navigate to="/creator/earnings#how-you-earn" replace />} />
+          <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
+          <Route path="/creator/earnings" element={<CreatorEarnings />} />
+          <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
+        </Route>
+        <Route element={<RoleGate roles={["PlatformAdmin"]} />}>
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/accounts" element={<Navigate to="/admin/customers" replace />} />
+          <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
+          <Route path="/admin/customers" element={<AdminAccounts area="Customer" />} />
+          <Route path="/admin/creators" element={<AdminAccounts area="Creator" />} />
+          <Route path="/admin/businesses" element={<AdminAccounts area="Business" />} />
+          <Route path="/admin/admins" element={<AdminAccounts area="Admin" />} />
+          <Route path="/admin/settings" element={<AdminFinancialSettings />} />
+          <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
+          <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
+        </Route>
+        <Route element={<RoleGate roles={["OperationsAdmin"]} />}>
+          <Route path="/admin/operations" element={<OperationsDashboard />} />
+          <Route path="/admin/ugc" element={<OperationsUgc />} />
+        </Route>
+        <Route element={<RoleGate roles={["PlatformAdmin", "OperationsAdmin"]} />}>
+          <Route path="/admin/campaigns" element={<AdminCampaigns />} />
+          <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
+          <Route path="/admin/operations/businesses" element={<AdminBusinesses />} />
+          <Route path="/admin/operations/creators" element={<AdminCreators />} />
+          <Route path="/admin/operations/customers" element={<OperationsCustomers />} />
+          <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
+          <Route path="/admin/payouts" element={<AdminPayouts />} />
+          <Route path="/admin/notifications" element={<AdminActivity />} />
+        </Route>
+        <Route element={<RoleGate roles={["Customer"]} />}>
+          <Route path="/customer/offers" element={<CustomerOffers />} />
+          <Route path="/customer/discover" element={<CustomerDiscover />} />
+          <Route path="/customer/offers/:id" element={<CustomerOfferQr />} />
+          <Route path="/customer/transactions" element={<CustomerTransactions />} />
+          <Route path="/customer/history" element={<Navigate to="/customer/transactions" replace />} />
+          <Route path="/customer/cashback" element={<CustomerCashback />} />
+        </Route>
+        <Route element={<RoleGate roles={["Cashier", "Business"]} />}>
+          <Route path="/checkout" element={<Checkout />} />
+        </Route>
       </Route>
       <Route path="*" element={<Home />} />
     </Routes>

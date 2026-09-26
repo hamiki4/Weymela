@@ -7,13 +7,14 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #243b30;
+  color: #111827;
   background: #f5f7f3;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --green: #164d38;
-  --ink: #243b30;
-  --muted: #617066;
+  --ink: #111827;
+  --secondary-text: #374151;
+  --muted: #4b5563;
   --line: #dde5dc;
   --surface: #fff;
   --tint: #ecf2e9;
@@ -80,19 +81,21 @@ p {
 }
 h1 {
   font-size: clamp(1.8rem, 3.5vw, 2.7rem);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -0.055em;
   line-height: 1.15;
   margin-bottom: 12px;
 }
 h2 {
   font-size: 1.18rem;
+  font-weight: 650;
   letter-spacing: -0.025em;
   line-height: 1.3;
   margin-bottom: 6px;
 }
 h3 {
   font-size: 1.06rem;
+  font-weight: 650;
   letter-spacing: -0.015em;
   line-height: 1.4;
 }
@@ -104,7 +107,7 @@ small {
   line-height: 1.5;
 }
 strong {
-  font-weight: 650;
+  font-weight: 700;
 }
 svg {
   flex-shrink: 0;
@@ -160,7 +163,7 @@ code {
 }
 details {
   font-size: 0.8rem;
-  color: var(--muted);
+  color: var(--secondary-text);
 }
 summary {
   cursor: pointer;
@@ -181,7 +184,7 @@ td {
   vertical-align: middle;
 }
 th {
-  color: var(--muted);
+  color: var(--secondary-text);
   font-size: 0.71rem;
   line-height: 1.45;
   font-weight: 600;
@@ -221,7 +224,7 @@ td .button {
 }
 .muted,
 .lead {
-  color: var(--muted);
+  color: var(--secondary-text);
 }
 .lead {
   font-size: 0.93rem;
@@ -233,12 +236,12 @@ td .button {
   letter-spacing: 0.16em;
   font-size: 0.68rem;
   font-weight: 750;
-  color: #60714f;
+  color: var(--secondary-text);
   margin-bottom: 12px;
 }
 .fine-print {
   font-size: 0.78rem;
-  color: var(--muted);
+  color: var(--secondary-text);
   line-height: 1.65;
 }
 .currency {
@@ -260,7 +263,7 @@ td .button {
   min-height: 46px;
   padding: 11px 17px;
   font-size: 0.84rem;
-  font-weight: 620;
+  font-weight: 600;
   text-align: center;
   line-height: 1.45;
   text-decoration: none;
@@ -417,7 +420,7 @@ td .button {
   gap: 20px;
   padding: 22px 28px;
   font-size: 0.68rem;
-  color: #657464;
+  color: var(--muted);
   border-top: 1px solid var(--line);
 }
 .workspace-footer span:last-child {
@@ -453,7 +456,7 @@ td .button {
 }
 .section-heading p {
   font-size: 0.8rem;
-  color: var(--muted);
+  color: var(--secondary-text);
   margin: 5px 0 0;
 }
 .metric-grid {
@@ -475,7 +478,7 @@ td .button {
   align-items: flex-start;
   gap: 8px;
   font-size: 0.74rem;
-  color: var(--muted);
+  color: var(--secondary-text);
   line-height: 1.4;
 }
 .metric-top svg {
@@ -565,10 +568,10 @@ td .button {
 }
 .quick-card .quick-value {
   font-size: 1.8rem;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1;
   letter-spacing: -0.04em;
-  color: var(--green);
+  color: var(--ink);
 }
 .pricing-card-grid {
   display: grid;
@@ -595,7 +598,7 @@ td .button {
 }
 .pricing-card h3 {
   margin: 4px 0 0;
-  color: var(--role-accent);
+  color: var(--ink);
 }
 .pricing-card-details {
   display: grid;
@@ -648,13 +651,13 @@ td .button {
   display: block;
   font-size: 0.72rem;
   line-height: 1.45;
-  color: var(--muted);
+  color: var(--secondary-text);
   margin-bottom: 6px;
 }
 .funds-grid dd {
   margin: 0;
   font-size: 1.22rem;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
 }
@@ -760,7 +763,7 @@ td .button {
   font-family: Georgia, serif;
   font-size: 2.9rem;
   font-style: italic;
-  color: #6c815a;
+  color: var(--secondary-text);
 }
 .campaign-art svg {
   width: 40px;
@@ -856,7 +859,7 @@ td .button {
 }
 .empty-state p {
   max-width: 390px;
-  color: var(--muted);
+  color: var(--secondary-text);
   font-size: 0.85rem;
   margin-bottom: 18px;
 }
@@ -887,8 +890,8 @@ td .button {
   margin-bottom: 18px;
 }
 .field > small {
-  font-weight: 400;
-  color: var(--muted);
+  font-weight: 500;
+  color: var(--secondary-text);
   font-size: 0.72rem;
 }
 .form-grid {
@@ -1011,7 +1014,7 @@ td .button {
 }
 .tabs button {
   background: transparent;
-  color: var(--muted);
+  color: var(--ink);
   border: 0;
   border-radius: 7px;
   min-height: 44px;
@@ -1203,7 +1206,7 @@ td .button {
   padding: 10px 12px;
   border: 1px solid var(--role-border);
   border-radius: 9px;
-  color: var(--role-accent);
+  color: var(--ink);
 }
 .account-menu-link:hover {
   border-color: var(--role-accent);
@@ -1233,7 +1236,7 @@ td .button {
   text-transform: uppercase;
   font-size: 0.6rem;
   letter-spacing: 0.15em;
-  color: #6f7d67;
+  color: var(--muted);
   margin: 8px 0 18px;
 }
 .profile-switcher {
@@ -1242,7 +1245,7 @@ td .button {
   margin: 0 0 18px;
 }
 .profile-switcher label {
-  color: var(--muted);
+  color: var(--secondary-text);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1264,10 +1267,10 @@ td .button {
   min-height: 46px;
   margin: 4px 0;
   padding: 11px 12px;
-  color: #5b6b5a;
+  color: var(--ink);
   font-size: 0.8rem;
   border-radius: 8px;
-  font-weight: 550;
+  font-weight: 600;
   border: 1px solid transparent;
 }
 .nav-link:hover {
@@ -1370,7 +1373,7 @@ td .button {
 }
 .offer-simple h1 {
   font-family: Georgia, serif;
-  font-weight: 500;
+  font-weight: 700;
   font-size: 2.4rem;
   letter-spacing: -0.04em;
 }
@@ -1436,7 +1439,7 @@ td .button {
   flex-direction: column;
   align-items: center;
   gap: 15px;
-  color: #617754;
+  color: var(--secondary-text);
   font-size: 0.82rem;
   padding: 20px;
   text-align: center;
@@ -1597,7 +1600,7 @@ td .button {
   gap: 7px;
 }
 .profile-choice-grid .profile-choice strong {
-  color: var(--role-accent);
+  color: var(--ink);
   font-size: 1.08rem;
 }
 .profile-choice-grid .profile-choice span {
@@ -1633,7 +1636,7 @@ td .button {
 }
 .role-creator .creator-live-days,
 .role-creator .creator-opportunity-reward strong {
-  color: var(--role-accent);
+  color: var(--ink);
   font-weight: 800;
 }
 .creator-dashboard-metric,
@@ -1913,7 +1916,7 @@ td .button {
   --role-border: #b7cbf8;
 }
 .app-shell .workspace-label {
-  color: var(--role-accent);
+  color: var(--ink);
 }
 .app-shell .nav-link.active,
 .app-shell .mobile-role-link.active {
@@ -2274,7 +2277,7 @@ td .button {
   gap: 5px;
 }
 .customer-cashback-available strong {
-  color: #205c3d;
+  color: var(--ink);
   font-size: clamp(2rem, 5vw, 3.25rem);
   line-height: 1.1;
 }
@@ -2370,7 +2373,7 @@ td .button {
 .customer-promotion-source {
   display: block;
   margin-bottom: 3px;
-  color: #68815f;
+  color: var(--secondary-text);
   font-size: 0.65rem;
   font-weight: 750;
   letter-spacing: 0.09em;
@@ -2465,10 +2468,10 @@ td .button {
     border: 0;
     border-radius: 8px;
     background: transparent;
-    color: var(--muted);
+    color: var(--ink);
     text-align: center;
     font-size: 0.68rem;
-    font-weight: 650;
+    font-weight: 600;
   }
   .mobile-role-link span {
     overflow: hidden;
@@ -2540,7 +2543,7 @@ td .button {
 }
 .role-onboarding-heading h3 {
   margin: 0 0 0.25rem;
-  color: var(--role-accent);
+  color: var(--ink);
   font-size: clamp(1.2rem, 4vw, 1.5rem);
 }
 .role-onboarding-heading p,
@@ -2673,7 +2676,7 @@ td .button {
 .sign-in-secure h1 {
   font-family: Georgia, serif;
   font-size: 2rem;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: -0.04em;
   margin-bottom: 18px;
 }
@@ -2703,7 +2706,7 @@ td .button {
   margin: 6px 0 12px;
   font-family: Georgia, serif;
   font-size: clamp(1.8rem, 7vw, 2.35rem);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: -0.045em;
 }
 .pin-setup-card form {
@@ -2853,13 +2856,13 @@ td .button {
 }
 .overview-highlight h2 {
   font-family: Georgia, serif;
-  font-weight: 400;
+  font-weight: 700;
   font-size: 1.6rem;
   letter-spacing: -0.025em;
 }
 .overview-highlight p {
   font-size: 0.85rem;
-  color: #596d50;
+  color: var(--secondary-text);
   max-width: 440px;
 }
 .overview-highlight .button {

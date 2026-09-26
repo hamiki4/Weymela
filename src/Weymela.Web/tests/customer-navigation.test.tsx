@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, Outlet, useLocation } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { Shell } from "../src/app/Shell";
 import { App } from "../src/app/App";
@@ -10,7 +10,7 @@ vi.mock("../src/app/Session", async (importOriginal) => {
   return {
     ...original,
     roleHome: { Customer: "/customer/offers" },
-    RoleGate: ({ children }: { children: import("react").ReactNode }) => children,
+    RoleGate: ({ children }: { children?: import("react").ReactNode }) => children ?? <Outlet />,
     useSession: () => ({
       loading: false,
       deviceAccess: null,

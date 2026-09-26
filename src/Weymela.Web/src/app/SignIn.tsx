@@ -5,7 +5,7 @@ import type { Role, SessionProfile } from "../api/types";
 import { Button, Field, Notice, Resource } from "../ui/components";
 import { PasswordField } from "../ui/PasswordField";
 import { Brand } from "./Shell";
-import { SessionLoadFailure, SessionTransition, useSession } from "./Session";
+import { SessionLoadFailure, useSession } from "./Session";
 import {
   ProfileSelectionRequiredError,
   FirebaseWebAuthAdapter,
@@ -128,6 +128,7 @@ function FirebaseSignIn({
   if (profiles.length > 1 && adapter)
     return (
       <div className="sign-in-secure" aria-live="polite">
+        {error ? <Notice error>{error}</Notice> : null}
         <h1>Choose a profile</h1>
         <p className="muted">Choose where you want to continue.</p>
         <div className="profile-choice" aria-label="Choose a profile">
@@ -156,16 +157,13 @@ function FirebaseSignIn({
                 if (!profile) throw new Error("Choose an approved profile.");
                 await adapter.selectProfile(profile);
                 await onSignedIn();
-                // Keep the profile-selection view stable until the server
-                // session/device/PIN bootstrap has authoritatively completed.
-                // App then owns the single redirect to setup or workspace.
-                setProfiles([]);
               })
             }
           >
             {busy ? "Opening…" : "Continue"}
           </Button>
         </div>
+        {busy && <p role="status">Preparing your secure session…</p>}
       </div>
     );
 
@@ -546,9 +544,8 @@ export function SignIn() {
   const [accessKey, setAccessKey] = useState("");
   const session = useSession();
   const action = useAction();
-  if (session.loading || session.resolution === "resolving") return <SessionTransition />;
   if (session.loadFailed || session.resolution === "failed") return <SessionLoadFailure retry={session.refresh} />;
-  if (session.user) return <SessionTransition />;
+  const resolving = ((session.loading || session.resolution === "resolving") && !session.confirmedAnonymous) || !!session.user;
   const initialView: AuthView =
     params.get("intent") === "sign-in" ? "signIn" : "landing";
   return (
@@ -557,7 +554,11 @@ export function SignIn() {
         <Brand />
       </div>
       <div className="sign-in-form">
-        <Resource resource={mode}>
+        {resolving || (mode.loading && mode.data === null) ? (
+          <div className="sign-in-secure" role="status" aria-live="polite">
+            {resolving ? "Preparing your secure session…" : "Preparing secure sign-in…"}
+          </div>
+        ) : <Resource resource={mode}>
           {(data) =>
             data.development ? (
               <form
@@ -566,7 +567,7 @@ export function SignIn() {
                   void action.run(async () => {
                     await post("/development/session", { alias, accessKey });
                     setAccessKey("");
-                    await session.refresh();
+                    await session.refresh(true);
                   });
                 }}
               >
@@ -603,12 +604,12 @@ export function SignIn() {
               </form>
             ) : (
               <FirebaseSignIn
-                onSignedIn={session.refresh}
+                onSignedIn={() => session.refresh(true)}
                 initialView={initialView}
               />
             )
           }
-        </Resource>
+        </Resource>}
       </div>
     </main>
   );

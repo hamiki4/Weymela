@@ -40,7 +40,7 @@
 .settings-table td:before {
   content: attr(data-label);
   display: block;
-  color: var(--muted);
+  color: var(--secondary-text);
   font-size: 0.72rem;
   min-height: 34px;
   margin-bottom: 8px;
@@ -430,7 +430,7 @@
   content: attr(data-label);
   display: block;
   font-size: 0.68rem;
-  color: #617066;
+  color: var(--secondary-text);
   margin-bottom: 6px;
 }
 .pricing-table td:first-child {

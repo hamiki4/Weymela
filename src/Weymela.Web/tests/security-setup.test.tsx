@@ -81,9 +81,9 @@ describe("account security setup", () => {
   it("shows a branded loading state instead of a blank setup page", () => {
     mocks.loading = true;
     renderSetup();
-    expect(screen.getByRole("status")).toHaveTextContent("Opening your account setup");
+    expect(screen.getByRole("status")).toHaveTextContent("Preparing your secure session");
     expect(screen.getByRole("img", { name: "Weymela" })).toBeVisible();
-    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeDisabled();
   });
 
   it("shows a recoverable non-technical failure and retries bootstrap", async () => {

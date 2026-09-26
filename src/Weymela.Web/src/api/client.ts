@@ -27,15 +27,15 @@ function clearResourceCache() {
  * authorization; it only lets an already-authorized page revalidate without
  * flashing an empty skeleton on ordinary navigation.
  */
-export function invalidateResourceCache() {
+export function invalidateResourceCache(notifyMountedResources = true) {
   clearResourceCache();
-  if (typeof window !== "undefined")
+  if (notifyMountedResources && typeof window !== "undefined")
     window.dispatchEvent(new Event(resourceContextChangedEvent));
 }
 
-function cachedResource<T>(path: string): { path: string; value: T } | null {
+function cachedResource<T>(path: string): { path: string; value: T; generation: number } | null {
   return resourceCache.has(path)
-    ? { path, value: resourceCache.get(path) as T }
+    ? { path, value: resourceCache.get(path) as T, generation: resourceContextGeneration }
     : null;
 }
 
@@ -99,7 +99,7 @@ export function post<T = { id: string }>(
   });
 }
 export function useResource<T>(path: string) {
-  const [saved, setData] = useState<{ path: string; value: T } | null>(() => cachedResource<T>(path));
+  const [saved, setData] = useState<{ path: string; value: T; generation: number } | null>(() => cachedResource<T>(path));
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
@@ -114,7 +114,7 @@ export function useResource<T>(path: string) {
       .then((value) => {
         if (!abort.signal.aborted && requestContextGeneration === resourceContextGeneration) {
           resourceCache.set(path, value);
-          setData({ path, value });
+          setData({ path, value, generation: requestContextGeneration });
         }
       })
       .catch((e: Error) => {
@@ -127,21 +127,16 @@ export function useResource<T>(path: string) {
   }, [path, revision]);
   useEffect(() => {
     const refreshForContext = () => {
-      clearResourceCache();
       setData(null);
       setError(null);
       setRevision((x) => x + 1);
     };
     window.addEventListener(resourceContextChangedEvent, refreshForContext);
-    // Keep compatibility with the existing profile-switch notification while
-    // ensuring it also clears the old account's rendered data immediately.
-    window.addEventListener("weymela-profile-switched", refreshForContext);
     return () => {
       window.removeEventListener(resourceContextChangedEvent, refreshForContext);
-      window.removeEventListener("weymela-profile-switched", refreshForContext);
     };
   }, []);
-  const data = saved?.path === path ? saved.value : null;
+  const data = saved?.path === path && saved.generation === resourceContextGeneration ? saved.value : null;
   return { data, error, loading: loading || (data === null && !error), reload };
 }
 export function useAction() {

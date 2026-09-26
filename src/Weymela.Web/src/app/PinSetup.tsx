@@ -15,14 +15,9 @@ export function PinSetup() {
   const [pinError, setPinError] = useState<string | null>(null);
   const submitting = useRef(false);
 
-  if (session.loading) return <main className="pin-setup-page">
-    <section className="pin-setup-card" aria-live="polite">
-      <Brand />
-      <div role="status">Opening your PIN setup…</div>
-    </section>
-  </main>;
-  if (session.loadFailed || session.user && (!session.accountSecurity || !session.deviceEnrollment
+  if (!session.loading && (session.loadFailed || session.user && (!session.accountSecurity || !session.deviceEnrollment
       || session.deviceEnrollment.state === "Unavailable"))
+  )
     return <main className="pin-setup-page">
       <section className="pin-setup-card" aria-labelledby="pin-setup-error-title">
         <Brand />
@@ -30,7 +25,7 @@ export function PinSetup() {
         <Button type="button" onClick={() => void session.refresh()}>Try again</Button>
       </section>
     </main>;
-  if (!session.user) return <Navigate to="/sign-in" replace />;
+  if (!session.user) return session.loading ? <main className="pin-setup-page"><section className="pin-setup-card"><Brand /><div role="status">Opening your PIN setup…</div></section></main> : <Navigate to="/sign-in" replace />;
   if (!session.accountSecurity?.passwordEnrolled)
     return <AccountRedirect to="/security-setup" />;
   const state = session.deviceEnrollment?.state ?? "Unavailable";
@@ -70,9 +65,10 @@ export function PinSetup() {
       <Brand />
       <h1 id="pin-setup-title">Create your PIN</h1>
       <p className="muted">Use this PIN to unlock Weymela on this device.</p>
+      {session.loading && <p role="status">Preparing your secure session…</p>}
       {error ? <Notice error>{error}</Notice> : null}
       {canEnroll ? <form noValidate onSubmit={(event) => void submit(event)}>
-        <fieldset disabled={busy}>
+        <fieldset disabled={busy || session.loading}>
           <PinInput label="Create PIN" value={pin} onChange={(value) => { setPin(value); setError(null); setPinError(null); }} error={pinError} autoFocus />
           <PinInput label="Confirm PIN" value={confirmPin} onChange={(value) => { setConfirmPin(value); setError(null); setPinError(null); }} error={pinError} />
           <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Creating…" : "Continue"}</Button>

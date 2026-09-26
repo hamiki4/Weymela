@@ -159,7 +159,7 @@ test("Business presentation keeps separate checkout and Cashier Management desti
   await open(page, "/business");
   const shell = page.locator(".app-shell.role-business");
   await expect(shell).toBeVisible();
-  await expect(page.locator("main")).toHaveCSS("color", /rgb\(36, 59, 48\)|rgb\(0, 0, 0\)/);
+  await expect(page.locator("main")).toHaveCSS("color", "rgb(17, 24, 39)");
   await expect(page.getByRole("link", { name: "Checkout / Scan QR", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Cashier Management", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Checkout / Scan QR", exact: true }).click();

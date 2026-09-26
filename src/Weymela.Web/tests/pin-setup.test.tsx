@@ -61,7 +61,9 @@ describe("initial five-digit PIN setup", () => {
   it("shows explicit loading and recoverable failure states instead of a blank route", async () => {
     mocks.state = "loading";
     const loading = renderSetup();
-    expect(screen.getByRole("status")).toHaveTextContent("Opening your PIN setup");
+    expect(screen.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("Preparing your secure session");
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
     loading.unmount();
 
     mocks.state = "failed";

@@ -188,6 +188,43 @@ describe("Shared designed states and accessibility", () => {
     await act(async () => respond(Response.json({ name: "Second account" })));
     expect(await screen.findByRole("heading", { name: "Second account" })).toBeVisible();
   });
+  it("ignores a late response from the previous account context", async () => {
+    const replies: Array<(response: Response) => void> = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { replies.push(resolve); })));
+    function Example() {
+      const resource = useResource<{ name: string }>("/workspace");
+      return <Resource resource={resource}>{(value) => <h1>{value.name}</h1>}</Resource>;
+    }
+    render(<Example />);
+    await waitFor(() => expect(replies).toHaveLength(1));
+    await act(async () => invalidateResourceCache());
+    await waitFor(() => expect(replies).toHaveLength(2));
+    await act(async () => replies[1](Response.json({ name: "New account" })));
+    expect(screen.getByRole("heading", { name: "New account" })).toBeVisible();
+    await act(async () => replies[0](Response.json({ name: "Previous account" })));
+    expect(screen.getByRole("heading", { name: "New account" })).toBeVisible();
+    expect(screen.queryByText("Previous account")).not.toBeInTheDocument();
+  });
+  it("shows an error after a failed warm refresh instead of leaving financial data stale indefinitely", async () => {
+    let fail!: (reason: Error) => void;
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(() => ++calls === 1
+      ? Promise.resolve(Response.json({ balance: "100 Br" }))
+      : new Promise<Response>((_, reject) => { fail = reject; })));
+    function Example() {
+      const resource = useResource<{ balance: string }>("/financial-summary");
+      return <Resource resource={resource}>{(value) => <h1>{value.balance}</h1>}</Resource>;
+    }
+    const first = render(<MemoryRouter><Example /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "100 Br" })).toBeVisible();
+    first.unmount();
+    render(<MemoryRouter><Example /></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "100 Br" })).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
+    await act(async () => fail(new Error("Balance is unavailable")));
+    expect(screen.getByText("Balance is unavailable")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "100 Br" })).not.toBeInTheDocument();
+  });
   it("does not queue a financial action while offline", async () => {
     const call = vi.fn();
     Object.defineProperty(navigator, "onLine", {

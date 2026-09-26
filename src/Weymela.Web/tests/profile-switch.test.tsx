@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLayoutEffect, useState } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import type { Role, SessionProfile, SessionUser } from "../src/api/types";
@@ -95,10 +95,19 @@ function TestWorkspace() {
   </main>;
 }
 
+function SessionControls() {
+  const session = useSession();
+  return <>
+    <button onClick={() => void session.refresh()}>Refresh session</button>
+    <button onClick={() => void session.switchProfile(profiles[1])}>Switch to Creator</button>
+  </>;
+}
+
 function renderSessionRoutes() {
   const commits: CommittedContext[] = [];
   render(<BrowserRouter><SessionProvider>
     <ContextProbe commits={commits} />
+    <SessionControls />
     <Routes>
       {(["Customer", "Creator", "Business"] as const).map(role =>
         <Route key={role} path={`${roleHome[role]}/*`} element={<RoleGate roles={[role]}><TestWorkspace /></RoleGate>} />)}
@@ -109,6 +118,24 @@ function renderSessionRoutes() {
 }
 
 describe("profile switching with the real router and session guard", () => {
+  it("ignores a previous-profile session response after an authorized switch", async () => {
+    const fetch = sessionServer();
+    renderSessionRoutes();
+    await screen.findByRole("heading", { name: "Customer workspace" });
+    const original = fetch.getMockImplementation()!;
+    let release!: (value: Response) => void;
+    fetch.mockImplementation((input, init) => input === "/api/session" && !init?.method
+      ? new Promise<Response>(resolve => { release = resolve; })
+      : original(input, init));
+    await userEvent.click(screen.getByRole("button", { name: "Refresh session" }));
+    await waitFor(() => expect(release).toBeDefined());
+    await userEvent.click(screen.getByRole("button", { name: "Switch to Creator" }));
+    expect(await screen.findByRole("heading", { name: "Creator workspace" })).toBeVisible();
+    await act(async () => release(Response.json(sessionFor(profiles[0]))));
+    expect(screen.getByRole("heading", { name: "Creator workspace" })).toBeVisible();
+    expect(window.sessionStorage.getItem("weymela.profile-key")).toBe(profileKey(profiles[1]));
+  });
+
   it("commits Customer, Creator and Business switches without any unauthorized or mismatched route render", async () => {
     const fetch = sessionServer();
     const commits = renderSessionRoutes();

@@ -74,8 +74,8 @@
 .admin-dashboard-links > a:nth-child(odd) { padding-right: 14px; }
 .admin-dashboard-links > a:nth-child(even) { padding-left: 14px; }
 .admin-dashboard-links strong { font-size: 1.05rem; font-weight: 700; color: var(--admin-ink); }
-.admin-report-controls { display: grid; gap: 12px; margin-bottom: 12px; }
-.admin-report-controls .tabs { width: max-content; max-width: 100%; overflow-x: auto; }
+.admin-report-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 12px; }
+.admin-report-controls .tabs { width: 100%; min-width: 0; }
 .admin-report-controls .tabs button { white-space: nowrap; }
 .admin-period-label { color: var(--admin-secondary); font-size: .78rem; font-weight: 500; margin: 5px 0 18px; }
 .admin-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }

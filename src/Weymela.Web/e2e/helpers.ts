@@ -32,8 +32,16 @@ export async function screenshot(page: Page, name: string) {
 export async function layout(page: Page) {
   const issues = await page.evaluate(() => {
     const problems: string[] = [];
-    if (document.documentElement.scrollWidth > window.innerWidth + 1)
-      problems.push("Document overflows horizontally");
+    if (document.documentElement.scrollWidth > window.innerWidth + 1) {
+      const overflowing = [...document.querySelectorAll<HTMLElement>("body *")]
+        .map((element) => ({ element, right: element.getBoundingClientRect().right }))
+        .filter(({ right }) => right > window.innerWidth + 1)
+        .sort((a, b) => b.right - a.right)[0];
+      const detail = overflowing
+        ? `${overflowing.element.tagName.toLowerCase()}.${typeof overflowing.element.className === "string" ? overflowing.element.className.replaceAll(" ", ".") : ""} right=${overflowing.right.toFixed(1)}px`
+        : "unknown element";
+      problems.push(`Document overflows horizontally on ${location.pathname}: document=${document.documentElement.scrollWidth}px viewport=${window.innerWidth}px; ${detail}`);
+    }
     for (const element of document.querySelectorAll<HTMLElement>(
       "main input,main select,main textarea,main button,main .button,main h1,main h2,main th",
     )) {

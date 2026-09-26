@@ -10,12 +10,12 @@ for (const width of [375, 1366])
     await login(context, "business");
     await open(page, "/business/campaigns/new");
     const title = `Local stories ${width}-${Date.now()}`;
-    await page.getByLabel("Campaign Title", { exact: true }).fill(title);
+    await page.getByLabel("Promotion title", { exact: true }).fill(title);
     await page
       .getByLabel("Description", { exact: true })
       .fill("An original story from our neighbourhood.");
     await page
-      .getByLabel("Campaign Type", { exact: true })
+      .getByLabel("Promotion type", { exact: true })
       .selectOption("ViewPlusCommission");
     const start = new Date(Date.now() - 3600000).toISOString().slice(0, 16);
     const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16);
@@ -34,7 +34,7 @@ for (const width of [375, 1366])
     await screenshot(page, `${width}-flow-creator-requirements`);
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
-      .getByLabel("Campaign Budget", { exact: true })
+      .getByLabel("Promotion budget", { exact: true })
       .fill("1000");
     await screenshot(page, `${width}-flow-campaign-budget`);
     await page.getByRole("button", { name: "Create Draft" }).click();
@@ -44,17 +44,17 @@ for (const width of [375, 1366])
     const campaignId = page.url().split("/").pop()!;
     await page.getByRole("button", { name: "Review Funding" }).click();
     await expect(
-      page.getByRole("dialog", { name: "Confirm Campaign Funding" }),
+      page.getByRole("dialog", { name: "Confirm Promotion Funding" }),
     ).toBeVisible();
     await layout(page);
     await screenshot(page, `${width}-flow-funding-confirmation`);
     await page.getByRole("button", { name: "Confirm & Reserve Funds" }).click();
     await expect(
-      page.getByRole("button", { name: "Publish Campaign" }),
+      page.getByRole("button", { name: "Publish Promotion" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Publish Campaign" }).click();
+    await page.getByRole("button", { name: "Publish Promotion" }).click();
     await expect(
-      page.getByText("Campaign published. Eligible Creators can now find it.", {
+      page.getByText("Promotion published. Eligible Creators can now find it.", {
         exact: true,
       }),
     ).toBeVisible();
@@ -63,7 +63,7 @@ for (const width of [375, 1366])
     const card = page
       .locator("article")
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
-    await card.getByRole("link", { name: "Review Promotion" }).click();
+    await card.getByRole("link", { name: "Request to Join" }).click();
     await page
       .getByLabel("Short message", { exact: true })
       .fill("I would love to create this.");
@@ -71,8 +71,8 @@ for (const width of [375, 1366])
       .getByLabel("Content concept (optional)", { exact: true })
       .fill("A warm neighbourhood story.");
     await screenshot(page, `${width}-flow-creator-request`);
-    await page.getByRole("button", { name: "Request to Join" }).click();
-    await expect(page.getByText(/Your request is pending/)).toBeVisible();
+    await page.getByRole("button", { name: "Submit Request" }).click();
+    await expect(page.getByText(/Request pending/)).toBeVisible();
     await login(context, "business");
     await open(page, `/business/campaigns/${campaignId}?tab=applicants`);
     await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -101,7 +101,7 @@ for (const width of [375, 1366])
     await page
       .locator("article")
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) })
-      .getByRole("link", { name: "Review Requirements & Add Content" })
+      .getByRole("link", { name: "Add Content" })
       .click();
     await page
       .getByLabel("Promotion content reference", { exact: true })
@@ -120,7 +120,7 @@ for (const width of [375, 1366])
     await login(context, "other-creator");
     await open(page, "/creator/promotions");
     const changesRequested = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
-    await changesRequested.getByRole("link", { name: "Resubmit Content", exact: true }).click();
+    await changesRequested.getByRole("link", { name: "Update Content", exact: true }).click();
     await page
       .getByLabel("Promotion content reference", { exact: true })
       .fill(`${Date.now()}${width}-revision-2`);

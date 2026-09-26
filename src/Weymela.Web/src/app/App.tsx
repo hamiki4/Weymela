@@ -33,9 +33,10 @@ import {
   OperationsDashboard,
   OperationsUgc,
 } from "../features/admin/AdminPages";
-import { AdminAccountDetail, AdminAccounts } from "../features/admin/AdminAccounts";
+import { AdminAccountCreate, AdminAccountDetail, AdminAccounts } from "../features/admin/AdminAccounts";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
+import { AdminReportsPage, AdminUgcPage, AdminWalletsPage } from "../features/admin/AdminFinancePages";
 import {
   CustomerDiscover,
   CustomerCashback,
@@ -43,7 +44,7 @@ import {
   CustomerOffers,
   CustomerTransactions,
 } from "../features/commerce/CustomerPages";
-import { Checkout } from "../features/commerce/Checkout";
+import { Checkout, CheckoutTransactions } from "../features/commerce/Checkout";
 import { Inbox } from "../features/notifications/Inbox";
 import { Onboarding } from "./Onboarding";
 import { PinSetup } from "./PinSetup";
@@ -68,6 +69,10 @@ function ProtectedShell() {
   const { user, loading, resolution } = useSession();
   if (!user) return loading || resolution === "resolving" ? <SessionTransition /> : <Navigate to="/sign-in" replace />;
   return <Shell />;
+}
+function AdminUgcWorkspace() {
+  const { user } = useSession();
+  return user?.role === "OperationsAdmin" ? <OperationsUgc /> : <AdminUgcPage />;
 }
 export function App() {
   const session = useSession();
@@ -148,26 +153,32 @@ export function App() {
           <Route path="/admin/accounts" element={<Navigate to="/admin/customers" replace />} />
           <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
           <Route path="/admin/customers" element={<AdminAccounts area="Customer" />} />
+          <Route path="/admin/customers/new" element={<AdminAccountCreate area="Customer" />} />
           <Route path="/admin/creators" element={<AdminAccounts area="Creator" />} />
+          <Route path="/admin/creators/new" element={<AdminAccountCreate area="Creator" />} />
           <Route path="/admin/businesses" element={<AdminAccounts area="Business" />} />
+          <Route path="/admin/businesses/new" element={<AdminAccountCreate area="Business" />} />
           <Route path="/admin/admins" element={<AdminAccounts area="Admin" />} />
+          <Route path="/admin/admins/new" element={<AdminAccountCreate area="Admin" />} />
+          <Route path="/admin/wallets" element={<AdminWalletsPage />} />
+          <Route path="/admin/reports" element={<AdminReportsPage />} />
           <Route path="/admin/settings" element={<AdminFinancialSettings />} />
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
         </Route>
         <Route element={<RoleGate roles={["OperationsAdmin"]} />}>
           <Route path="/admin/operations" element={<OperationsDashboard />} />
-          <Route path="/admin/ugc" element={<OperationsUgc />} />
         </Route>
         <Route element={<RoleGate roles={["PlatformAdmin", "OperationsAdmin"]} />}>
           <Route path="/admin/campaigns" element={<AdminCampaigns />} />
+          <Route path="/admin/ugc" element={<AdminUgcWorkspace />} />
           <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />
           <Route path="/admin/operations/businesses" element={<AdminBusinesses />} />
           <Route path="/admin/operations/creators" element={<AdminCreators />} />
           <Route path="/admin/operations/customers" element={<OperationsCustomers />} />
           <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
           <Route path="/admin/payouts" element={<AdminPayouts />} />
-          <Route path="/admin/notifications" element={<AdminActivity />} />
+          <Route path="/admin/notifications" element={<Navigate to="/notifications" replace />} />
         </Route>
         <Route element={<RoleGate roles={["Customer"]} />}>
           <Route path="/customer/offers" element={<CustomerOffers />} />
@@ -179,6 +190,7 @@ export function App() {
         </Route>
         <Route element={<RoleGate roles={["Cashier", "Business"]} />}>
           <Route path="/checkout" element={<Checkout />} />
+          <Route path="/checkout/transactions" element={<CheckoutTransactions />} />
         </Route>
       </Route>
       <Route path="*" element={<Home />} />

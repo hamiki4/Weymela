@@ -19,7 +19,9 @@ for (const { alias, from, to } of workspaces) {
     await shell.evaluate(element => { (element as HTMLElement & { flickerMarker?: string }).flickerMarker = "same-shell"; });
     const link = to === "/notifications"
       ? page.getByRole("link", { name: "Your notifications" })
-      : page.getByRole("navigation", { name: "Main navigation" }).locator(`a[href="${to}"]`);
+      : ["customer", "creator", "business"].includes(alias)
+        ? page.locator(".product-desktop-nav nav").locator(`a[href="${to}"]`)
+        : page.getByRole("navigation", { name: "Main navigation" }).locator(`a[href="${to}"]`);
     await link.click();
     await expect(page).toHaveURL(new RegExp(`${to}$`));
     await expect(page.locator("main h1").first()).not.toHaveText(fromHeading);

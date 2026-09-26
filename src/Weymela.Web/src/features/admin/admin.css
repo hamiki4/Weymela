@@ -1,0 +1,123 @@
+/* Platform Admin presentation. Shared authorization and workspace layout stay mounted. */
+.role-platformadmin {
+  background: #f7f8f6;
+  --role-accent: #1f2937;
+  --role-soft: #e9edf1;
+  --role-border: #cbd5e1;
+  --admin-ink: #111827;
+  --admin-secondary: #374151;
+  --admin-muted: #4b5563;
+  --admin-line: #dfe4e1;
+  --admin-line-soft: #e1e6e2;
+  color: var(--admin-ink);
+}
+.role-platformadmin .topbar,
+.role-platformadmin .sidebar,
+.role-platformadmin .mobile-role-nav { background: #fff; }
+.role-platformadmin .topbar { border-bottom-color: #e5e7eb; }
+.role-platformadmin .workspace-label { color: var(--admin-secondary); }
+.role-platformadmin .topbar-identity { color: var(--admin-ink); font-size: .89rem; font-weight: 700; }
+.role-platformadmin .account-trigger { display: inline-flex; align-items: center; gap: 7px; }
+.role-platformadmin .sidebar { border-right-color: #e5e7eb; }
+.role-platformadmin .sidebar .nav-link { min-height: 39px; margin: 1px 0; padding: 8px 10px; font-size: .78rem; color: var(--admin-ink); }
+.role-platformadmin .sidebar .nav-link.active,
+.role-platformadmin .more-sheet .nav-link.active,
+.role-platformadmin .mobile-role-link.active { background: var(--role-soft); border-color: transparent; color: var(--role-accent); }
+.role-platformadmin .nav-eyebrow { color: var(--admin-secondary); }
+.role-platformadmin .sidebar-bottom { margin-top: auto; padding-top: 14px; }
+.role-platformadmin .workspace-footer { display: none; }
+.role-platformadmin .main-content { max-width: 1320px; padding-top: 22px; }
+.role-platformadmin .page-heading { gap: 8px; margin-bottom: 18px; }
+.role-platformadmin .page-heading h1 { font-size: clamp(1.55rem, 2.4vw, 2rem); letter-spacing: -.035em; margin-bottom: 0; }
+.role-platformadmin .page-heading .lead { color: var(--admin-secondary); font-size: .85rem; margin-top: 5px; }
+.role-platformadmin .panel { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; margin-bottom: 30px; }
+.role-platformadmin .section-heading { margin-bottom: 12px; padding-bottom: 9px; border-bottom: 1px solid var(--admin-line); }
+.role-platformadmin .section-heading h2 { font-size: 1.05rem; font-weight: 650; margin: 0; }
+.role-platformadmin .section-heading p { color: var(--admin-secondary); }
+.role-platformadmin .metric { border-radius: 9px; box-shadow: none; }
+.role-platformadmin .desktop-data { border: 0; border-radius: 0; background: transparent; }
+.role-platformadmin .desktop-data table { width: 100%; border-collapse: collapse; }
+.role-platformadmin .desktop-data th { background: transparent; color: var(--admin-secondary); font-size: .81rem; font-weight: 650; border-bottom: 1px solid #cfd8d1; text-transform: none; }
+.role-platformadmin .desktop-data td { color: var(--admin-ink); font-size: .86rem; border-bottom: 1px solid #e2e7e4; vertical-align: middle; font-variant-numeric: tabular-nums; }
+.role-platformadmin .desktop-data td strong { color: var(--admin-ink); font-weight: 650; }
+.role-platformadmin .desktop-data td.numeric { font-weight: 650; }
+.role-platformadmin .desktop-data tr:last-child td { border-bottom: 0; }
+.role-platformadmin .data-card { border: 0; border-bottom: 1px solid var(--admin-line); border-radius: 0; box-shadow: none; padding: 14px 0; background: transparent; }
+.role-platformadmin .card-stack { gap: 0; }
+.role-platformadmin .button { min-height: 38px; padding: 7px 12px; font-weight: 600; }
+.role-platformadmin .button.secondary { color: var(--role-accent); }
+.role-platformadmin .badge { font-weight: 650; }
+.role-platformadmin .loading { min-height: auto; }
+.role-platformadmin .loading .metric-grid { display: none; }
+.admin-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 0 0 16px; }
+.admin-toolbar form { display: flex; gap: 7px; flex: 1 1 240px; max-width: 520px; }
+.admin-toolbar form input { flex: 1; min-width: 0; }
+.admin-toolbar label { display: grid; gap: 4px; font-size: .76rem; font-weight: 600; color: var(--admin-secondary); }
+.admin-toolbar :is(input, select) { min-height: 40px; }
+.admin-mobile-row { display: grid; gap: 7px; }
+.admin-mobile-row > div:first-child:not(.admin-mobile-row-meta) { display: grid; gap: 2px; }
+.admin-mobile-row small { color: var(--admin-muted); font-size: .73rem; }
+.admin-mobile-row-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-mobile-row-meta strong { min-width: 0; overflow-wrap: anywhere; }
+.admin-mobile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; margin: 8px 0; }
+.admin-mobile-facts > div { min-width: 0; }
+.admin-mobile-facts dt { color: var(--admin-secondary); font-size: .76rem; font-weight: 500; }
+.admin-mobile-facts dd { margin: 2px 0 0; color: var(--admin-ink); font-size: .89rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-action-menu { position: relative; }
+.admin-action-menu summary { list-style: none; display: inline-grid; place-items: center; width: 42px; height: 40px; cursor: pointer; font-size: 1.05rem; font-weight: 700; color: var(--admin-ink); }
+.admin-action-menu summary::-webkit-details-marker { display: none; }
+.admin-action-menu[open] > div { position: absolute; z-index: 8; right: 0; top: 100%; min-width: 180px; background: #fff; border: 1px solid #d6ded7; border-radius: 7px; box-shadow: 0 8px 24px #17282220; padding: 4px; }
+.admin-action-menu button { display: block; width: 100%; min-height: 40px; padding: 8px 10px; text-align: left; color: var(--admin-ink); background: transparent; border: 0; border-radius: 4px; font-weight: 600; }
+.admin-page:has(.admin-action-menu) .desktop-data { overflow: visible; }
+.admin-dashboard-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--admin-line-soft); }
+.admin-dashboard-links > a { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 53px; padding: 11px 3px; color: var(--admin-ink); border-bottom: 1px solid var(--admin-line-soft); font-size: .84rem; font-weight: 600; }
+.admin-dashboard-links > a:nth-child(odd) { padding-right: 14px; }
+.admin-dashboard-links > a:nth-child(even) { padding-left: 14px; }
+.admin-dashboard-links strong { font-size: 1.05rem; font-weight: 700; color: var(--admin-ink); }
+.admin-report-controls { display: grid; gap: 12px; margin-bottom: 12px; }
+.admin-report-controls .tabs { width: max-content; max-width: 100%; overflow-x: auto; }
+.admin-report-controls .tabs button { white-space: nowrap; }
+.admin-period-label { color: var(--admin-secondary); font-size: .78rem; font-weight: 500; margin: 5px 0 18px; }
+.admin-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.admin-report-grid > div { display: grid; gap: 3px; padding: 12px 0; border-bottom: 1px solid var(--admin-line-soft); }
+.admin-report-grid span { color: var(--admin-secondary); font-size: .76rem; }
+.admin-report-grid strong { color: var(--admin-ink); font-size: .97rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-deposit-list { display: grid; gap: 18px; }
+.admin-deposit-list form { display: grid; gap: 6px; padding-bottom: 16px; border-bottom: 1px solid var(--admin-line-soft); }
+.admin-deposit-list small { color: var(--admin-secondary); overflow-wrap: anywhere; }
+.admin-create { max-width: 880px; }
+@media (max-width: 599px) {
+  .role-platformadmin .main-content { padding: 18px 16px 85px; }
+  .role-platformadmin .topbar { height: 58px; padding-inline: 15px; }
+  .role-platformadmin .workspace-label { display: none; }
+  .role-platformadmin .topbar-identity { margin-right: auto; }
+  .admin-toolbar form { flex-basis: 100%; }
+  .admin-toolbar label { flex: 1 1 130px; }
+  .admin-toolbar label select { width: 100%; }
+  .admin-dashboard-links { grid-template-columns: 1fr; }
+  .admin-dashboard-links > a:nth-child(n) { padding-inline: 3px; }
+  .admin-report-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 600px) {
+  .admin-report-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .role-platformadmin { grid-template-columns: 218px minmax(0, 1fr); }
+  .role-platformadmin .sidebar { padding: 18px 13px; }
+  .role-platformadmin .main-content { padding: 28px 32px 58px; }
+  .admin-dashboard-links { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .admin-dashboard-links > a:nth-child(n) { padding-inline: 12px; }
+  .admin-report-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+.admin-ugc-list { display: grid; }
+.admin-ugc-row { display: grid; gap: 8px; padding: 13px 0; border-bottom: 1px solid var(--admin-line); }
+.admin-ugc-row:last-child { border-bottom: 0; }
+.admin-ugc-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.admin-ugc-heading > div { display: grid; gap: 3px; min-width: 0; }
+.admin-ugc-heading strong { color: var(--admin-ink); font-size: .88rem; font-weight: 650; overflow-wrap: anywhere; }
+.admin-ugc-heading small { color: var(--admin-muted); font-size: .73rem; }
+.admin-ugc-row .admin-mobile-facts { margin: 0; }
+@media (min-width: 900px) {
+  .admin-ugc-row { grid-template-columns: minmax(230px, 1fr) minmax(0, 3fr); align-items: center; }
+  .admin-ugc-row .admin-mobile-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

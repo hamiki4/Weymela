@@ -14,6 +14,10 @@ internal static class AdminEndpoints
     {
         var g=app.MapGroup("/api/admin").RequireAuthorization("AdminOperations").AddEndpointFilter<Weymela.Api.Security.ValidatedInputFilter>();
         g.MapGet("/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminHomeAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
+        g.MapGet("/wallets",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminWalletsAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
+        g.MapGet("/ugc/finance",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminUgcFinanceAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
+        g.MapGet("/reports",(DateOnly from,DateOnly to,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
+            q.AdminReportAsync(EndpointSupport.Actor(c),from,to,ct)).RequireAuthorization("PlatformAdmin");
         g.MapGet("/operations/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.OperationsHomeAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/businesses",async(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {

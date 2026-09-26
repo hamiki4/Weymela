@@ -109,22 +109,24 @@ describe("shared app navigation", () => {
       if (input === "/api/session") return Promise.resolve(Response.json(customer));
       if (input === "/api/device/enrollment") return Promise.resolve(Response.json({ state: "Enrolled", expiresAtUtc: null }));
       if (input === "/api/customer/offers") return Promise.resolve(Response.json([]));
+      if (input === "/api/customer/cashback") return Promise.resolve(Response.json({ availableCashback: { amount: 0 }, status: "BelowMinimum" }));
+      if (input === "/api/customer/transactions") return Promise.resolve(Response.json([]));
       if (input === "/api/auth/mode") return Promise.resolve(Response.json({ development: true, personas: [] }));
       return new Promise<Response>(() => {});
     }));
     renderApp("/customer/offers");
-    const heading = await screen.findByRole("heading", { name: "Offers for Hana" });
+    const heading = await screen.findByRole("heading", { name: "Home" });
     await waitFor(() => expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument());
     const shell = document.querySelector(".app-shell");
     await userEvent.click(screen.getByRole("button", { name: "Refresh session" }));
     await waitFor(() => expect(finishRefresh).toBeDefined());
-    expect(screen.getByRole("heading", { name: "Offers for Hana" })).toBe(heading);
+    expect(screen.getByRole("heading", { name: "Home" })).toBe(heading);
     expect(document.querySelector(".app-shell")).toBe(shell);
     expect(screen.queryByText("Checking your secure session…")).not.toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
     await act(async () => finishRefresh(Response.json({}, { status: 401 })));
     await waitFor(() => expect(screen.getByLabelText("Path")).toHaveTextContent("/sign-in"));
-    expect(screen.queryByRole("heading", { name: "Offers for Hana" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Home" })).not.toBeInTheDocument();
   });
 
   it("opens PIN setup directly after profile and device resolution", async () => {

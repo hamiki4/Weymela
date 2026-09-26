@@ -15,16 +15,19 @@ test("Platform Admin has role-specific account areas and can preauthorize an Adm
   ]) {
     await open(page, path);
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: `+ Create ${action}` })).toBeVisible();
+    await expect(page.getByRole("link", { name: `+ Create ${action}` })).toBeVisible();
     await expect(page.getByRole("button", { name: "View As" })).toHaveCount(0);
   }
-  await page.getByRole("button", { name: "+ Create Admin" }).click();
+  await page.getByRole("link", { name: "+ Create Admin" }).click();
+  await expect(page).toHaveURL(/\/admin\/admins\/new$/);
   await page.getByLabel("Admin type").selectOption("PlatformAdmin");
-  await page.getByLabel("Email (required for a new identity)").fill(`browser-admin-${Date.now()}@example.com`);
+  await page.getByLabel("Email").fill(`browser-admin-${Date.now()}@example.com`);
   await page.getByLabel("Display name").fill("Browser Platform Admin");
   await page.getByLabel("Reason").fill("Browser security authority test");
-  await page.getByRole("button", { name: "Create preauthorization" }).click();
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  await expect(page).toHaveURL(/\/admin\/admins\?created=/);
   await expect(page.getByRole("status")).toContainText("Preauthorization created");
+  await expect(page.locator("main .desktop-data")).toContainText("Browser Platform Admin");
   await expect(page.locator("main")).not.toContainText(/password hash|pin verifier|firebase token|activation code/i);
   await layout(page);
 });
@@ -36,11 +39,13 @@ test("recipient activates a Platform Admin-created Customer with own credentials
   const email = `invited-${suffix}@example.com`;
   const phone = `+2519${suffix.slice(-8)}`;
   const password = `Recipient passphrase ${suffix}`;
-  await page.getByRole("button", { name: "+ Create Customer" }).click();
-  await page.getByLabel("Email (required for a new identity)").fill(email);
+  await page.getByRole("link", { name: "+ Create Customer" }).click();
+  await page.getByLabel("Email").fill(email);
   await page.getByLabel("Display name").fill("Invited Customer");
-  await page.getByRole("button", { name: "Create preauthorization" }).click();
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  await expect(page).toHaveURL(/\/admin\/customers\?created=/);
   await expect(page.getByRole("status")).toContainText("Preauthorization created");
+  await expect(page.locator("main .desktop-data")).toContainText("Invited Customer");
   const invitation = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(email)}`);
   expect(invitation.status()).toBe(200);
   const { code: activationSecret } = await invitation.json() as { code: string };
@@ -104,10 +109,11 @@ test("Operations Admin cannot create accounts or enter Platform Admin account ar
   await layout(page);
 });
 
-test("Platform Admin Business management exposes promotional funding without a visual redesign", async ({ page, context }) => {
+test("Platform Admin Wallets owns promotional funding", async ({ page, context }) => {
   await login(context, "admin");
-  await page.goto(`/admin/accounts/${id(2)}?role=Business&mode=manage`);
-  await expect(page.getByRole("heading", { name: "Promotional funding" })).toBeVisible();
+  await open(page, "/admin/wallets");
+  await page.getByRole("button", { name: "Add Funds" }).first().click();
+  await expect(page.getByRole("dialog", { name: /Add funds/ })).toBeVisible();
   await expect(page.getByLabel("Amount (ETB)")).toBeVisible();
   await expect(page.getByLabel("Reason", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Promotional Funds" })).toBeDisabled();
@@ -124,25 +130,26 @@ test("legacy View As cookie does not change the authenticated actor", async ({ p
   await expect(page.getByRole("link", { name: "Admins" })).toBeVisible();
 });
 
-test("Platform Admin manages Customer lock and deactivation from the account page", async ({ page, context }) => {
+test("Platform Admin manages Customer lock and deactivation from the Customers list", async ({ page, context }) => {
   await login(context, "admin");
   const target = id(7);
+  const rows = await (await context.request.get("/api/admin/accounts?role=Customer")).json() as { id: string; userId: string | null; name: string }[];
+  const customer = rows.find(row => row.userId === target || row.id === target);
+  expect(customer).toBeTruthy();
+  const choose = async (command: string, reason: string) => {
+    const row = page.locator(".desktop-data tbody tr").filter({ hasText: customer!.name }).first();
+    await row.locator("summary").click();
+    await row.getByRole("menuitem", { name: command, exact: true }).click();
+    await page.getByRole("dialog", { name: new RegExp(command) }).getByLabel("Reason").fill(reason);
+    await page.getByRole("dialog", { name: new RegExp(command) }).getByRole("button", { name: command, exact: true }).click();
+    await expect(page.getByRole("dialog", { name: new RegExp(command) })).not.toBeVisible();
+  };
   try {
-    await open(page, `/admin/accounts/${target}?role=Customer&mode=manage`);
-    const reason = page.getByLabel("Reason for lifecycle action");
-    await reason.fill("Browser account review");
-    await page.getByRole("button", { name: "Lock", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Unlock", exact: true })).toBeVisible();
-    await reason.fill("Browser review complete");
-    await page.getByRole("button", { name: "Unlock", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
-    await reason.fill("Browser temporary deactivation");
-    await page.getByRole("button", { name: "Deactivate", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Reactivate", exact: true })).toBeVisible();
-    await reason.fill("Browser account restored");
-    await page.getByRole("button", { name: "Reactivate", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Close Account", exact: true })).toBeDisabled();
+    await open(page, "/admin/customers");
+    await choose("Lock", "Browser account review");
+    await choose("Unlock", "Browser review complete");
+    await choose("Deactivate", "Browser temporary deactivation");
+    await choose("Reactivate", "Browser account restored");
   } finally {
     const response = await context.request.get(`/api/admin/accounts/${target}`);
     if (response.ok()) {

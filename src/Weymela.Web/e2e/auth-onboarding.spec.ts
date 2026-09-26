@@ -300,7 +300,9 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
   page.on("framenavigated", onNavigation);
   let stage = "selector-visible";
   try {
-    const select = page.locator("aside.sidebar").getByLabel("Switch profile", { exact: true });
+    const menu = page.getByRole("dialog", { name: "Account menu" });
+    if (!await menu.isVisible()) await page.getByRole("button", { name: "Open account menu" }).click();
+    const select = menu.getByLabel("Switch profile", { exact: true });
     await expect(select).toBeVisible({ timeout: 5000 });
     const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value", { timeout: 3000 });
     expect(value).toBeTruthy();
@@ -612,8 +614,8 @@ test("server idle lock requires the authorized-device PIN and propagates across 
   await page.getByRole("button", { name: "Unlock", exact: true }).click();
   expect((await unlocked).status()).toBe(200);
   await expect(page).toHaveURL(/\/customer\/offers/);
-  await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
-  await expect(second.getByRole("heading", { name: /Offers for/ })).toBeVisible();
+  await expect(page.locator("main h1")).toHaveText("Home");
+  await expect(second.locator("main h1")).toHaveText("Home");
   await second.close();
 });
 
@@ -663,8 +665,8 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
     await page.getByRole("button", { name: "Recover device" }).click();
     expect((await completed).status()).toBe(200);
     await expect(page).toHaveURL(/\/customer\/offers/);
-    await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
-    await expect(otherTab.getByRole("heading", { name: /Offers for/ })).toBeVisible();
+    await expect(page.locator("main h1")).toHaveText("Home");
+    await expect(otherTab.locator("main h1")).toHaveText("Home");
 
     const oldAccess = await oldContext.request.get("/api/device/access");
     expect(oldAccess.status()).toBe(200);
@@ -682,7 +684,7 @@ test("forgot PIN on a locked recognized device uses verified email and replaces 
       && new URL(response.url()).pathname === "/api/device/unlock");
     await page.getByRole("button", { name: "Unlock" }).click();
     expect((await newPin).status()).toBe(200);
-    await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
+    await expect(page.locator("main h1")).toHaveText("Home");
   } finally {
     await otherTab.close();
     await oldContext.close();
@@ -713,7 +715,7 @@ test("recovery-required device can complete verified-email PIN recovery", async 
   await page.getByRole("button", { name: "Recover device" }).click();
   expect((await completed).status()).toBe(200);
   await expect(page).toHaveURL(/\/customer\/offers/);
-  await expect(page.getByRole("heading", { name: /Offers for/ })).toBeVisible();
+  await expect(page.locator("main h1")).toHaveText("Home");
 });
 
 test("customer-to-creator choice uses a phase-safe purple shell", async ({ page, context }) => {
@@ -851,8 +853,10 @@ test("multi-role-switching", async ({ page, context }) => {
   await approveLatest(context, "Business", businessPublicId);
   await establishFirebaseSession(context, account.token, "Customer");
   await open(page, "/customer/offers");
-  const select = page.locator("aside.sidebar").getByLabel("Switch profile", { exact: true });
+  await page.getByRole("button", { name: "Open account menu" }).click();
+  const select = page.getByRole("dialog", { name: "Account menu" }).getByLabel("Switch profile", { exact: true });
   await expect(select.locator("option")).toHaveCount(3);
+  await page.keyboard.press("Escape");
   const beforeSwitch = await context.request.get("/api/session");
   expect(beforeSwitch.status()).toBe(200);
   const approved = await beforeSwitch.json() as SessionUser;

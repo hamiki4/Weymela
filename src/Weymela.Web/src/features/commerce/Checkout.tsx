@@ -20,6 +20,18 @@ import { amount, date } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 
+function CheckoutTransactionList({ rows }: { rows: CheckoutSaleRow[] }) {
+  return rows.length ? <div className="stack-list">{rows.map((row) => <div className="amount-row" key={row.id}>
+    <div><strong>{row.offer}</strong><small>{date(row.createdAtUtc)}{row.cashier ? ` · ${row.cashier}` : ""}</small></div>
+    <strong>{amount(row.purchaseAmount)}</strong>
+  </div>)}</div> : <p className="muted">No checkout transactions yet.</p>;
+}
+
+export function CheckoutTransactions() {
+  const recent = useResource<CheckoutSaleRow[]>("/checkout/recent");
+  return <div className="checkout-panel"><PageHeader title="Transactions" /><Section title="Recent purchases"><Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows : []} />}</Resource></Section></div>;
+}
+
 export function Checkout() {
   const { user } = useSession();
   const [token, setToken] = useState("");
@@ -386,28 +398,7 @@ export function Checkout() {
         </>
       )}
       <Section title="Recent Transactions">
-        <Resource resource={recent}>
-          {(rows) =>
-            rows.length ? (
-              <div className="stack-list">
-                {rows.slice(0, 10).map((row) => (
-                  <div className="amount-row" key={row.id}>
-                    <div>
-                      <strong>{row.offer}</strong>
-                      <small>
-                        {date(row.createdAtUtc)}
-                        {row.cashier ? " · " + row.cashier : ""}
-                      </small>
-                    </div>
-                    <strong>{amount(row.purchaseAmount)}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="muted">No checkout transactions yet.</p>
-            )
-          }
-        </Resource>
+        <Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows.slice(0, 10) : []} />}</Resource>
       </Section>
     </div>
   );

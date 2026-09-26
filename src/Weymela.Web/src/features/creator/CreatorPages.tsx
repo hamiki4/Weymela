@@ -187,6 +187,7 @@ export function CreatorOpportunity() {
   const action = useAction();
   const [message, setMessage] = useState("");
   const [concept, setConcept] = useState("");
+  const [socialProfileId, setSocialProfileId] = useState("");
   return (
     <>
       <Link className="back-link" to="/creator/discover">
@@ -203,14 +204,12 @@ export function CreatorOpportunity() {
             />
             <div className="content-grid">
               <Section title="Promotion details">
-                <p className="preserve-lines">{p.description}</p>
+                {p.description?.trim() && <p className="preserve-lines">{p.description}</p>}
                 {p.slogan?.trim() && <p className="creator-opportunity-slogan">{p.slogan}</p>}
-                <div className="pricing-note">
+                {p.requirements?.trim() && <div className="pricing-note">
                   <strong>Requirements</strong>
-                  <p className="preserve-lines">
-                    {p.requirements || "Bring your own creative approach."}
-                  </p>
-                </div>
+                  <p className="preserve-lines">{p.requirements}</p>
+                </div>}
                 <dl className="detail-list">
                   <div>
                     <dt>Duration</dt>
@@ -218,14 +217,14 @@ export function CreatorOpportunity() {
                       {p.promotionLiveDurationDays} days after you go live
                     </dd>
                   </div>
-                  <div>
+                  {p.region && <div>
                     <dt>Region</dt>
-                    <dd>{p.region || "All regions"}</dd>
-                  </div>
-                  <div>
+                    <dd>{p.region}</dd>
+                  </div>}
+                  {p.category && <div>
                     <dt>Category</dt>
-                    <dd>{p.category || "All categories"}</dd>
-                  </div>
+                    <dd>{p.category}</dd>
+                  </div>}
                   {!!p.minimumVerifiedFollowers && (
                     <div>
                       <dt>Verified followers</dt>
@@ -233,8 +232,7 @@ export function CreatorOpportunity() {
                     </div>
                   )}
                 </dl>
-                {!!p.platforms?.length && <div className="creator-platform-counts">{p.platforms.map((slot) => <span key={slot.platform}><strong>{slot.platform}</strong> {slot.approved}/{slot.capacity}</span>)}</div>}
-                <Notice>{p.eligibility}</Notice>
+                {!!p.platforms?.length && <div className="creator-platform-counts" aria-label="Social platform availability">{p.platforms.map((slot) => <span key={slot.platform} className={slot.available <= 0 ? "platform-full" : ""}><strong>{slot.platform}</strong> {slot.approved}/{slot.capacity}{slot.available <= 0 ? " · Full" : ""}</span>)}</div>}
               </Section>
               <Section title="How You Earn" action={<Currency />}>
                 <div className="price-feature">
@@ -247,29 +245,24 @@ export function CreatorOpportunity() {
                     verified sale.
                   </p>
                 )}
-                <p className="fine-print">
-                    These are the saved Creator reward terms for this Promotion.
-                </p>
               </Section>
             </div>
             <Section
               title={p.requestStatus ? "Your request" : "Request to Join"}
-              description="Share a short introduction and the idea you’d love to create."
             >
               {p.requestStatus ? (
-                <Notice>
-                  Your request is {p.requestStatus.toLowerCase()}.{" "}
-                  <Link to="/creator/promotions">View My Promotions</Link>
-                </Notice>
+                <Notice>Request {p.requestStatus.toLowerCase()}. {p.requestStatus === "Pending" && "Waiting for approval."} <Link to="/creator/promotions">My Promotions</Link></Notice>
               ) : (
                 <form
                   className="contained-form"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    const selectedProfile = p.eligibleSocialProfiles?.find((profile) => profile.id === socialProfileId);
+                    if (p.platforms?.length && !selectedProfile) return;
                     void action.run(async (key) => {
                       await post(
                         `/creator/promotions/${id}/request`,
-                        { message, contentConcept: concept || null },
+                        { message, contentConcept: concept || null, ...(selectedProfile ? { platform: selectedProfile.platform, creatorSocialProfileId: selectedProfile.id } : {}) },
                         key,
                       );
                       resource.reload();
@@ -277,6 +270,17 @@ export function CreatorOpportunity() {
                   }}
                 >
                   <fieldset disabled={action.busy}>
+                    {!!p.platforms?.length && <div className="creator-platform-selector" role="radiogroup" aria-label="Choose platform">
+                      <strong>Choose platform</strong>
+                      {p.platforms.map((slot) => {
+                        const profiles = p.eligibleSocialProfiles?.filter((profile) => profile.platform === slot.platform) ?? [];
+                        return <div className="creator-platform-option" key={slot.platform}>
+                          <strong>{slot.platform}</strong><small>{slot.available > 0 ? `${slot.available} available` : "Full"}</small>
+                          {profiles.map((profile) => <label key={profile.id}><input type="radio" name="creator-platform" value={profile.id} checked={socialProfileId === profile.id} onChange={() => setSocialProfileId(profile.id)} disabled={slot.available <= 0} />{profile.profileUrl}</label>)}
+                          {profiles.length === 0 && <small>{slot.available > 0 ? "Connect a social profile to request" : "Unavailable"}</small>}
+                        </div>;
+                      })}
+                    </div>}
                     <Field label="Short message">
                       <textarea
                         value={message}
@@ -294,8 +298,8 @@ export function CreatorOpportunity() {
                       />
                     </Field>
                     {action.error && <Notice error>{action.error}</Notice>}
-                    <Button type="submit" disabled={action.busy}>
-                      {action.busy ? "Sending request…" : "Request to Join"}
+                    <Button type="submit" disabled={action.busy || (!!p.platforms?.length && !p.eligibleSocialProfiles?.some((profile) => profile.id === socialProfileId && p.platforms?.some((slot) => slot.platform === profile.platform && slot.available > 0)))}>
+                      {action.busy ? "Sending request…" : "Submit Request"}
                     </Button>
                   </fieldset>
                 </form>
@@ -442,15 +446,12 @@ export function CreatorEarnings() {
   return (
     <>
       <PageHeader
-        eyebrow="Your creativity, rewarded"
         title="Earnings"
-        description="Your available balance, earnings history and payouts in one place."
       />
       <Resource resource={resource}>
         {(data) => (
           <>
-            <div className="two-column">
-              <Section title="Available Earnings">
+            <Section title="Available Earnings" className="creator-earnings-summary">
                 <Eligibility data={data} />
                 <Button
                   disabled={action.busy || data.amountNeeded > 0 || data.payoutHistory.some((r) => r.status === "Eligible")}
@@ -464,21 +465,7 @@ export function CreatorEarnings() {
                 </Button>
                 {requested && <Notice>Payout request recorded. Your balance changes only after payment is confirmed.</Notice>}
                 {action.error && <Notice error>{action.error}</Notice>}
-              </Section>
-              <div className="overview-highlight">
-                <p className="eyebrow">Every Promotion adds up</p>
-                <h2>
-                  One balance.
-                  <br />
-                  More possibilities.
-                </h2>
-                <p>
-                  View rewards, eligible sales and completed UGC work build your
-                  earnings balance. A payout uses your threshold amount; the rest stays
-                  with you.
-                </p>
-              </div>
-            </div>
+            </Section>
             <Section title="Earning History" action={<Currency />}>
                 <DataTable
                   rows={data.history}

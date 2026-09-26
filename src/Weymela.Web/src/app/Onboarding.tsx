@@ -92,8 +92,8 @@ function LegacyOnboarding() {
               && (item.status === "Approved" || item.status === 1) ? "Unavailable" : statusLabel(item.status)}
           </strong>{item.decisionReason && <small>{item.decisionReason}</small>}</div></div>)}
         </div></Section>}
-        <Section title="Choose a profile">
-          <div className="content-grid profile-choice-grid">
+        <Section title="Choose a profile" className="onboarding-choice-section">
+          <div className="content-grid profile-choice-grid profile-selection-options">
             {choices.map(([choice, description, actionLabel, className]) => {
               const state = approved.has(choice) ? "Already added" : pending.has(choice) ? "Pending"
                 : unavailable.has(choice) ? "Unavailable" : actionLabel;

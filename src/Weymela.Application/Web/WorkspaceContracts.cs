@@ -73,6 +73,24 @@ public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal Minimu
 public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCampaigns, EarningsWorkspace Earnings);
 public sealed record AdminHome(int Businesses, int Creators, int ActiveCampaigns, decimal CampaignSpend, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> Activity);
+public sealed record AdminBusinessWallet(Guid BusinessId, string Business, decimal TotalBalance, decimal Available,
+    decimal Reserved, decimal PendingDeposit, int ViewOnlyCount, int ViewSaleCount, string Status);
+public sealed record AdminPromotionWallet(Guid Id, string Business, string Title, string Type, decimal Budget,
+    decimal Used, decimal Remaining, long VerifiedViews, int VerifiedSales, string Status);
+public sealed record AdminWallets(IReadOnlyList<AdminBusinessWallet> Businesses, IReadOnlyList<AdminPromotionWallet> Promotions);
+public sealed record AdminUgcFinance(Guid Id, string Business, string Title, string Type, decimal Budget,
+    decimal CreatorPayment, decimal? CustomerDiscountPercent, decimal CreatorUsed, decimal OfferUsed, decimal DiscountUsed,
+    decimal Remaining, int QualifyingSales, string Status);
+public sealed record AdminReportPeriod(decimal BusinessDeposits, decimal PromotionalFunding, decimal PromotionSpend,
+    decimal UgcCreatorSpend, decimal UgcOfferSpend, decimal UgcCreatorPayments, decimal CreatorEarnings, decimal CustomerCashback,
+    decimal CustomerDiscounts, decimal PlatformRevenue, decimal CreatorPayouts, decimal CustomerPayouts,
+    long VerifiedViews, int VerifiedSales, int UgcQualifyingSales);
+public sealed record AdminReportType(string Type, decimal Allocated, decimal Used, long VerifiedViews, int VerifiedSales,
+    decimal CurrentRemaining, decimal CreatorPayments = 0, decimal CustomerDiscounts = 0);
+public sealed record AdminReportAccounts(int Customers, int Creators, int Businesses, int NewAccountsInPeriod);
+public sealed record AdminReport(DateTime FromUtc, DateTime ToExclusiveUtc, AdminReportPeriod Activity,
+    IReadOnlyList<AdminReportType> Promotions, IReadOnlyList<AdminReportType> Ugc,
+    AdminReportAccounts Accounts, decimal CurrentBusinessWalletBalance, decimal CurrentPlatformUnsettled);
 public sealed record OperationsHome(int PendingReviews, int Businesses, int Creators, int Customers,
     int ActiveCampaigns, int PendingCreatorPayouts, int PendingCustomerPayouts);
 public sealed record BusinessOversight(BusinessCard Business, string Status, decimal TotalBalance, decimal Available, decimal Reserved,

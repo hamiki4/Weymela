@@ -84,16 +84,16 @@ describe("Shared designed states and accessibility", () => {
       screen.getByRole("heading", { name: "Workspace unavailable" }),
     ).toBeVisible();
   });
-  it("offers Campaign creation in an empty Business list", async () => {
+  it("offers Promotion creation in an empty Business list", async () => {
     mockApi({ "/business/campaigns": [] });
     render(
       <MemoryRouter>
         <BusinessCampaigns />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("No Campaigns to show")).toBeVisible();
+    expect(await screen.findByText("No Promotions to show")).toBeVisible();
     expect(
-      screen.getAllByRole("link", { name: "Create Campaign" }).length,
+      screen.getAllByRole("link", { name: "Create Promotion" }).length,
     ).toBeGreaterThan(0);
   });
   it("separates a concise input label from its help description", () => {

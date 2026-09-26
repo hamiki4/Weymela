@@ -44,20 +44,17 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
       <Metric
         label="Total Balance"
         value={amount(wallet.totalBalance)}
-        note="Your advertising funds"
         icon="wallet"
         emphasis
       />
       <Metric
         label="Available Balance"
         value={amount(wallet.available)}
-        note="Ready for your next Promotion"
         icon="plus"
       />
       <Metric
         label="Reserved Balance"
         value={amount(wallet.reserved)}
-        note="Committed to Promotions"
         icon="lock"
       />
     </div>
@@ -72,77 +69,34 @@ export function BusinessDashboard() {
         <>
           <PageHeader
             eyebrow={data.business.displayName}
-            title="Business Home"
-            description="Manage Promotions, UGC, checkout and your Business funds."
+            title="Home"
             action={
               <ActionLink to="/business/campaigns/new" icon="plus">
-                New Promotion
+                Create Promotion
               </ActionLink>
             }
           />
-          <WalletMetrics wallet={data.wallet} />
-          <div className="section-kicker">
-            <h2>Business operations</h2>
-            <Currency />
-          </div>
-          <div className="quick-grid">
-            <Link className="quick-card" to="/business/campaigns">
-              <Icon name="campaign" />
-              <span className="quick-value">{count(data.activeCampaigns)}</span>
-              <strong>Active Promotions</strong>
-            </Link>
-            <Link className="quick-card" to="/business/requests">
-              <Icon name="people" />
-              <span className="quick-value">{count(data.creatorRequests)}</span>
-              <strong>Creator Requests</strong>
-            </Link>
+          <div className="product-home-summary">
+            <Link className="product-summary-row" to="/business/wallet"><span>Available funds</span><strong>{amount(data.wallet.available)}</strong></Link>
+            <Link className="product-summary-row" to="/business/wallet"><span>Total balance</span><strong>{amount(data.wallet.totalBalance)}</strong></Link>
+            <Link className="product-summary-row" to="/business/wallet"><span>Reserved funds</span><strong>{amount(data.wallet.reserved)}</strong></Link>
+            <Link className="product-summary-row" to="/business/campaigns"><span>Active Promotions</span><strong>{count(data.activeCampaigns)}</strong></Link>
+            <Link className="product-summary-row" to="/business/requests"><span>Creator Requests</span><strong>{count(data.creatorRequests)}</strong></Link>
             <Resource resource={ugc}>
               {(rows) => (
-                <Link className="quick-card" to="/business/ugc">
-                  <Icon name="sparkle" />
-                  <span className="quick-value">
-                    {count(rows.filter((row) => row.status === "Open").length)}
-                  </span>
-                  <strong>Open UGC</strong>
-                </Link>
+                <Link className="product-summary-row" to="/business/ugc"><span>Open UGC</span><strong>{count(rows.filter((row) => row.status === "Open").length)}</strong></Link>
               )}
             </Resource>
-            <Link className="quick-card" to="/business/campaigns">
-              <Icon name="chart" />
-              <span className="quick-value">{count(data.confirmedSales)}</span>
-              <strong>Confirmed Sales</strong>
-            </Link>
-            <Link className="quick-card" to="/business/wallet">
-              <Icon name="wallet" />
-              <strong>Wallet</strong>
-              <span className="quick-card-arrow"><Icon name="arrow" /></span>
-            </Link>
-            <Link className="quick-card pricing-home-card" to="/business/pricing">
-              <Icon name="settings" />
-              <strong>Pricing</strong>
-              <Icon name="arrow" />
-            </Link>
           </div>
           <Section title="Quick actions" className="quick-actions-section">
             <div className="actions quick-actions">
-              <ActionLink to="/business/campaigns/new" icon="plus">
-                New Promotion
-              </ActionLink>
-              <ActionLink to="/business/ugc" secondary icon="sparkle">
-                Create UGC
-              </ActionLink>
-              <ActionLink to="/checkout" secondary icon="qr">
-                Checkout / Scan QR
-              </ActionLink>
-              <ActionLink to="/business/cashiers" secondary icon="people">
-                Cashier Management
-              </ActionLink>
-              <ActionLink to="/business/wallet" secondary icon="wallet">
-                Add Funds
-              </ActionLink>
+              <ActionLink to="/business/ugc" secondary icon="sparkle">Create UGC</ActionLink>
+              <ActionLink to="/checkout" secondary icon="qr">Checkout / Scan QR</ActionLink>
+              <ActionLink to="/business/cashiers" secondary icon="people">Cashier Management</ActionLink>
+              <ActionLink to="/business/pricing" secondary icon="settings">Pricing</ActionLink>
             </div>
           </Section>
-          <div className="content-grid section-kicker-space">
+          <div className="section-kicker-space">
             <Section
               title="Recent fund activity"
               action={
@@ -163,17 +117,10 @@ export function BusinessDashboard() {
                 ))
               ) : (
                 <Empty
-                  title="Your first Promotion starts here"
-                  message="Add any positive amount, then reserve a budget when you’re ready."
+                  title="No fund activity"
                 />
               )}
             </Section>
-            <div className="overview-highlight">
-              <h2>Create a Promotion</h2>
-              <ActionLink to="/business/campaigns/new" secondary icon="plus">
-                Create Promotion
-              </ActionLink>
-            </div>
           </div>
         </>
       )}
@@ -447,13 +394,14 @@ export function CampaignTable({
       ? [{ label: "Business", cell: (r: CampaignRow) => r.business }]
       : []),
     {
-      label: "Campaign",
+      label: admin ? "Campaign" : "Promotion",
       cell: (r: CampaignRow) => (
         <div className="campaign-name">
           <Link to={`${base}/campaigns/${r.id}`}>
             <strong>{r.title}</strong>
           </Link>
-          <small>{campaignType(r.type)}</small>
+          <small>{campaignType(r.type)}{!admin && ` · ${daysLeft(r.endUtc)} days left`}</small>
+          {!admin && <small>Assigned {amount(r.assignedToCreators)} · Available {amount(r.availableCampaignBudget)}</small>}
           {!admin && (
             <div className="row-links">
               <Link to={`${base}/campaigns/${r.id}?tab=applicants`}>
@@ -468,24 +416,11 @@ export function CampaignTable({
       ),
     },
     {
-      label: "Campaign Budget",
+      label: admin ? "Campaign Budget" : "Budget",
       cell: (r: CampaignRow) => amount(r.campaignBudget),
       numeric: true,
     },
-    {
-      label: admin ? "Assigned" : "Assigned to Creators",
-      cell: (r: CampaignRow) => amount(r.assignedToCreators),
-      numeric: true,
-    },
-    ...(!admin
-      ? [
-          {
-            label: "Available Campaign Budget",
-            cell: (r: CampaignRow) => amount(r.availableCampaignBudget),
-            numeric: true,
-          },
-        ]
-      : []),
+    ...(admin ? [{ label: "Assigned", cell: (r: CampaignRow) => amount(r.assignedToCreators), numeric: true }] : []),
     { label: "Used", cell: (r: CampaignRow) => amount(r.used), numeric: true },
     {
       label: "Remaining",
@@ -497,15 +432,11 @@ export function CampaignTable({
       cell: (r: CampaignRow) => r.creatorCount,
       numeric: true,
     },
-    {
-      label: "Live Duration",
-      cell: (r: CampaignRow) => `${r.promotionLiveDurationDays} days`,
-    },
-    { label: "Start", cell: (r: CampaignRow) => date(r.startUtc) },
-    {
-      label: admin ? "End" : "Days Left",
-      cell: (r: CampaignRow) => (admin ? date(r.endUtc) : daysLeft(r.endUtc)),
-    },
+    ...(admin ? [
+      { label: "Live Duration", cell: (r: CampaignRow) => `${r.promotionLiveDurationDays} days` },
+      { label: "Start", cell: (r: CampaignRow) => date(r.startUtc) },
+      { label: "End", cell: (r: CampaignRow) => date(r.endUtc) },
+    ] : []),
     { label: "Status", cell: (r: CampaignRow) => <Badge status={r.status} /> },
   ];
   return (
@@ -513,7 +444,7 @@ export function CampaignTable({
       rows={campaigns}
       columns={columns}
       rowKey={(r) => r.id}
-      label={admin ? "Admin Campaigns" : "Business Campaigns"}
+      label={admin ? "Admin Campaigns" : "Business Promotions"}
       card={(r) => (
         <>
           <div className="card-head">
@@ -528,20 +459,14 @@ export function CampaignTable({
           </div>
           <FundsGrid
             values={[
-              ["Campaign Budget", r.campaignBudget],
-              ["Assigned to Creators", r.assignedToCreators],
-              ["Available Campaign Budget", r.availableCampaignBudget],
+              [admin ? "Campaign Budget" : "Budget", r.campaignBudget],
+              ["Available", r.availableCampaignBudget],
               ["Used", r.used],
               ["Remaining", r.remaining],
-              ["Creators", r.creatorCount],
             ]}
           />
           <div className="meta-row">
-            <span>
-              <Icon name="calendar" />
-              {date(r.startUtc)}
-            </span>
-            <span>{r.promotionLiveDurationDays} days live after Creator goes live</span>
+            <span>{r.creatorCount} {r.creatorCount === 1 ? "Creator" : "Creators"} · {amount(r.assignedToCreators)} assigned</span>
             <span>
               {admin
                 ? `Ends ${date(r.endUtc)}`
@@ -550,7 +475,7 @@ export function CampaignTable({
           </div>
           <div className="actions">
             <ActionLink to={`${base}/campaigns/${r.id}`} secondary>
-              View Campaign
+              {admin ? "View Campaign" : "View Promotion"}
             </ActionLink>
             {!admin && (
               <>
@@ -573,16 +498,16 @@ export function CampaignTable({
       )}
       empty={
         <Empty
-          title="No Campaigns to show"
+          title={admin ? "No Campaigns to show" : "No Promotions to show"}
           message={
             admin
               ? "Try adjusting your filters, or check back when a Business creates a Campaign."
-              : "Create a Campaign and choose a budget to start working with Creators."
+              : "Create a Promotion and choose a budget to start working with Creators."
           }
           action={
             !admin && (
               <ActionLink to="/business/campaigns/new" icon="plus">
-                Create Campaign
+                Create Promotion
               </ActionLink>
             )
           }
@@ -596,18 +521,16 @@ export function BusinessCampaigns() {
   return (
     <>
       <PageHeader
-        eyebrow="Your stories, in motion"
-        title="Campaigns"
-        description="Keep your Campaigns, Creator Budgets and performance in one place."
+        title="Promotions"
         action={
           <ActionLink to="/business/campaigns/new" icon="plus">
-            Create Campaign
+            Create Promotion
           </ActionLink>
         }
       />
       <Resource resource={resource}>
         {(rows) => (
-          <Section title="Active Campaigns and drafts" action={<Currency />}>
+          <Section title="Active Promotions and drafts" action={<Currency />}>
             <CampaignTable campaigns={rows} />
           </Section>
         )}
@@ -621,9 +544,7 @@ export function BusinessRequests() {
   return (
     <>
       <PageHeader
-        eyebrow="Find your collaborators"
         title="Creator Requests"
-        description="Review applicants within each Campaign, then approve a Creator with their own budget."
       />
       <Resource resource={resource}>
         {(rows) => (
@@ -657,10 +578,7 @@ export function BusinessRequests() {
                 ))}
             </div>
             {!rows.some((r) => ["Active", "Published"].includes(r.status)) && (
-              <Empty
-                title="No Creator requests yet"
-                message="Publish a funded Campaign so eligible Creators can request to join."
-              />
+              <Empty title="No Creator requests yet" />
             )}
           </Section>
         )}

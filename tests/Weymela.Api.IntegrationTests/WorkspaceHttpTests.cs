@@ -27,6 +27,8 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [InlineData("admin","/api/admin/platform")]
     [InlineData("admin","/api/admin/notifications")]
     [InlineData("admin","/api/admin/accounts")]
+    [InlineData("admin","/api/admin/wallets")]
+    [InlineData("admin","/api/admin/ugc/finance")]
     [InlineData("customer","/api/customer/offers")]
     [InlineData("customer","/api/customer/transactions")]
     [InlineData("customer","/api/customer/cashback")]
@@ -47,6 +49,32 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         var detail = await c.GetJson($"/api/admin/accounts/{userId}");
         foreach (var secret in new[] { "passwordHash", "pinVerifier", "activationSecretHash", "firebaseToken", "sessionToken" })
             Assert.DoesNotContain(secret, detail.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Platform_admin_read_projections_keep_current_balances_separate_from_period_activity()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres); using var admin = await f.Login("admin");
+        var wallets = await admin.GetJson("/api/admin/wallets");
+        Assert.NotEmpty(wallets["businesses"]!.AsArray());
+        Assert.Contains(wallets["businesses"]!.AsArray(), x => x?["totalBalance"]?.GetValue<decimal>() > 0);
+        Assert.NotNull((await admin.GetJson("/api/admin/ugc/finance")).AsArray());
+        var future = await admin.GetJson("/api/admin/reports?from=2050-01-01&to=2050-01-07");
+        Assert.Equal(0m, future["activity"]!["businessDeposits"]!.GetValue<decimal>());
+        Assert.Equal(0m, future["activity"]!["platformRevenue"]!.GetValue<decimal>());
+        Assert.Equal(0, future["accounts"]!["newAccountsInPeriod"]!.GetValue<int>());
+        Assert.True(future["currentBusinessWalletBalance"]!.GetValue<decimal>() > 0);
+        Assert.Equal(2, future["promotions"]!.AsArray().Count);
+        Assert.Equal(2, future["ugc"]!.AsArray().Count);
+    }
+
+    [Theory]
+    [InlineData("operations-admin")][InlineData("customer")][InlineData("creator")][InlineData("business")][InlineData("cashier")]
+    public async Task Platform_admin_read_projections_deny_other_roles(string persona)
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres); using var client = await f.Login(persona);
+        foreach (var path in new[] { "/api/admin/wallets", "/api/admin/ugc/finance", "/api/admin/reports?from=2026-01-01&to=2026-01-31" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
     }
 
     [Fact]

@@ -58,7 +58,7 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
   const action = useAction();
   return (
     <article className="data-card">
-      <div className="card-head"><div><small>{item.contentType} UGC</small><h3>{item.title}</h3></div><Badge status={item.status} /></div>
+      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Discount Sale" : "UGC Only"} · {item.contentType}</small><h3>{item.title}</h3></div><Badge status={item.status} /></div>
       <dl className="funds-grid">
         <div><dt>Creator Payment</dt><dd>{amount(item.creatorPayment)}</dd></div>
         <div><dt>Platform Fee</dt><dd>{item.platformFee === undefined ? "—" : amount(item.platformFee)} {item.platformFeePercent === undefined ? "" : `(${amount(item.platformFeePercent)}%)`}</dd></div>
@@ -67,7 +67,7 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
       </dl>
       <p className="fine-print">{item.platformRequirements.length ? "Creator must post on:" : "Creator delivers content to the Business."}</p>
       <PlatformList platforms={item.platformRequirements} />
-      {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && item.customerOfferFundedAllocation !== undefined && <p className="fine-print">Customer Offer: {amount(item.customerDiscountPercent)}% discount · {amount(item.customerOfferFundedAllocation)} reward budget.</p>}
+      {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && item.customerOfferFundedAllocation !== undefined && <p className="fine-print">Customer discount: {amount(item.customerDiscountPercent)}% · Discount funding: {amount(item.customerOfferFundedAllocation)}.</p>}
       {item.status === "Draft" && <Button onClick={() => void action.run(async (key) => { await post(`/business/ugc/${item.id}/publish`, { version: item.version }, key); onChanged(); })} disabled={action.busy}>{action.busy ? "Publishing…" : "Publish UGC"}</Button>}
       {action.error && <Notice error>{action.error}</Notice>}
     </article>
@@ -83,8 +83,9 @@ export function BusinessUgcPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Creator content" title="UGC" description="Set the Creator payment, delivery terms, and optional Customer Offer." />
-      <Resource resource={pricing}>
+      <PageHeader title="UGC" description="Fixed Creator payment and optional Customer discount." action={<a className="button primary" href="#ugc-create">Create UGC</a>} />
+      <Section title="UGC Promotions"><Resource resource={opportunities}>{(rows) => rows.length ? <div className="card-stack">{rows.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={opportunities.reload} />)}</div> : <Empty title="No UGC yet" message="Create a UGC Promotion below." />}</Resource></Section>
+      <div id="ugc-create"><Resource resource={pricing}>
         {(config) => {
           const payment = Number(form.creatorPayment) || 0;
           const creators = Number(form.creatorsNeeded) || 0;
@@ -126,7 +127,7 @@ export function BusinessUgcPage() {
                   <Field label="Instructions" wide><textarea value={form.instructions} onChange={(e) => set("instructions", e.target.value)} required /></Field>
                   <label className="field wide"><span><input type="checkbox" checked={form.mustPost} onChange={(e) => set("mustPost", e.target.checked)} /> Creator must post on social media</span><small>OFF means the Creator delivers the video/content directly to the Business.</small></label>
                   {form.mustPost && <fieldset className="field wide"><legend>Required social platform</legend><div className="tag-row">{SOCIAL_PLATFORMS.map((platform) => <label key={platform}><input type="checkbox" checked={form.platforms.includes(platform)} onChange={(e) => set("platforms", e.target.checked ? [...form.platforms, platform] : form.platforms.filter((item) => item !== platform))} /> {platform}</label>)}</div></fieldset>}
-                  <label className="field wide"><span><input type="checkbox" checked={form.customerOffer} onChange={(e) => set("customerOffer", e.target.checked)} /> Add optional Customer Offer</span></label>
+                  <label className="field wide"><span><input type="checkbox" checked={form.customerOffer} onChange={(e) => set("customerOffer", e.target.checked)} /> Add Customer discount sale</span></label>
                   {form.customerOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer Reward Budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
                   {form.mustPost && form.platforms.length === 0 && <Notice error>Choose at least one social platform.</Notice>}
                   {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer Offers require an Admin platform sale fee configuration.</Notice>}
@@ -140,11 +141,10 @@ export function BusinessUgcPage() {
                 <dl className="funds-grid"><div><dt>Creator Payment</dt><dd>{amount(creatorTotal)}</dd></div><div><dt>Platform Fee</dt><dd>{amount(platformFee)}</dd></div><div><dt>Total Required Funding</dt><dd>{amount(requiredFunding)}</dd></div>{form.customerOffer && <div><dt>Customer Discount</dt><dd>{amount(discount)}%</dd></div>}{form.customerOffer && <div><dt>Customer Reward Budget</dt><dd>{amount(Number(form.customerRewardBudget) || 0)}</dd></div>}</dl>
                 <p className="fine-print">Current Admin UGC fee: {amount(config.platformFeePercent)}%.</p>
               </Section>
-              <Section title="Your UGC opportunities"><Resource resource={opportunities}>{(rows) => rows.length ? <div className="card-stack">{rows.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={opportunities.reload} />)}</div> : <Empty title="No UGC opportunities yet" message="Create your first UGC opportunity above." />}</Resource></Section>
             </div>
           );
         }}
-      </Resource>
+      </Resource></div>
     </>
   );
 }

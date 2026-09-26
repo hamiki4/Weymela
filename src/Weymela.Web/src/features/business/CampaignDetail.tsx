@@ -64,16 +64,16 @@ export function BusinessCampaignDetail() {
       {(data) => {
         const c = data.campaign;
         const funds: [string, number][] = [
-          ["Campaign Budget", c.campaignBudget],
+          ["Promotion budget", c.campaignBudget],
           ["Assigned to Creators", c.assignedToCreators],
-          ["Available Campaign Budget", c.availableCampaignBudget],
+          ["Available Promotion budget", c.availableCampaignBudget],
           ["Used", c.used],
           ["Remaining", c.remaining],
         ];
         return (
           <>
             <Link className="back-link" to="/business/campaigns">
-              ← Campaigns
+              ← Promotions
             </Link>
             <PageHeader
               eyebrow={campaignType(c.type)}
@@ -90,17 +90,17 @@ export function BusinessCampaignDetail() {
                 <div>
                   <h2>
                     {c.status === "Draft"
-                      ? "Ready to fund your Campaign?"
+                      ? "Ready to fund your Promotion?"
                       : c.status === "Funded"
-                        ? "Your Campaign is funded"
-                        : "Your Campaign is published"}
+                        ? "Your Promotion is funded"
+                        : "Your Promotion is published"}
                   </h2>
                   <p>
                     {c.status === "Draft"
                       ? "Review the amount to reserve before committing your funds."
                       : c.status === "Funded"
                         ? "Publish it so eligible Creators can request to join."
-                        : "Eligible Creators can request to join. Start the Campaign when its start date arrives."}
+                        : "Eligible Creators can request to join. Start the Promotion when its start date arrives."}
                   </p>
                 </div>
                 {c.status === "Draft" ? (
@@ -117,67 +117,63 @@ export function BusinessCampaignDetail() {
                         `/business/campaigns/${id}/${c.status === "Funded" ? "publish" : "start"}`,
                         { version: c.version },
                         c.status === "Funded"
-                          ? "Campaign published. Eligible Creators can now find it."
-                          : "Campaign started.",
+                          ? "Promotion published. Eligible Creators can now find it."
+                          : "Promotion started.",
                       )
                     }
                   >
                     {c.status === "Funded"
-                      ? "Publish Campaign"
-                      : "Start Campaign"}
+                      ? "Publish Promotion"
+                      : "Start Promotion"}
                   </Button>
                 )}
               </div>
             )}
             <Tabs
-              label="Campaign sections"
+              label="Promotion sections"
               value={tab}
               onChange={(value) => setSearch({ tab: value })}
               items={[
                 { value: "overview", label: "Overview" },
                 { value: "applicants", label: "Creator Applicants" },
                 { value: "budgets", label: "Approved Creators" },
-                { value: "funds", label: "Campaign Funds" },
+                { value: "funds", label: "Promotion funds" },
                 { value: "performance", label: "Performance" },
               ]}
             />
             {tab === "overview" && (
               <div className="two-column">
-                <Section title="The Campaign">
+                <Section title="Promotion">
+                  {c.slogan?.trim() && <p className="business-promotion-slogan">{c.slogan}</p>}
                   <p className="preserve-lines">{data.description}</p>
                   <dl className="detail-list">
-                    <div>
+                    {data.requirements?.trim() && <div>
                       <dt>Requirements</dt>
-                      <dd>
-                        {data.requirements || "No additional requirements"}
-                      </dd>
-                    </div>
-                    <div>
+                      <dd>{data.requirements}</dd>
+                    </div>}
+                    {data.category && <div>
                       <dt>Creator category</dt>
-                      <dd>{data.category || "All categories"}</dd>
-                    </div>
-                    <div>
+                      <dd>{data.category}</dd>
+                    </div>}
+                    {data.region && <div>
                       <dt>Region</dt>
-                      <dd>{data.region || "All regions"}</dd>
-                    </div>
-                    <div>
+                      <dd>{data.region}</dd>
+                    </div>}
+                    {data.minimumVerifiedFollowers != null && <div>
                       <dt>Verified followers</dt>
-                      <dd>
-                        {data.minimumVerifiedFollowers
-                          ? `${count(data.minimumVerifiedFollowers)} minimum`
-                          : "No minimum"}
-                      </dd>
-                    </div>
+                      <dd>{count(data.minimumVerifiedFollowers)} minimum</dd>
+                    </div>}
                     <div>
                       <dt>Days Left</dt>
                       <dd>{daysLeft(c.endUtc)}</dd>
                     </div>
                   </dl>
+                  {!!c.platforms?.length && <div className="business-platform-summary"><strong>Social platforms</strong><div className="creator-platform-counts">{c.platforms.map((slot) => <span key={slot.platform}><strong>{slot.platform}</strong> {slot.approved}/{slot.capacity} approved</span>)}</div><small>Creators {c.platforms.reduce((total, slot) => total + slot.approved, 0)}/{c.platforms.reduce((total, slot) => total + slot.capacity, 0)} · {data.applicants.filter((applicant) => applicant.status === "Pending").length} pending requests</small></div>}
                 </Section>
-                <Section title="Campaign Funds" action={<Currency />}>
+                <Section title="Promotion funds" action={<Currency />}>
                   <FundsGrid values={funds} />
                   <div className="pricing-note">
-                    <strong>Saved Campaign Pricing</strong>
+                    <strong>Saved Promotion pricing</strong>
                     <p>
                       {amount(data.pricing.businessPays)} per{" "}
                       {count(data.pricing.views)} verified views
@@ -204,9 +200,7 @@ export function BusinessCampaignDetail() {
                         {a.creator.region} ·{" "}
                         {count(a.creator.verifiedFollowers)} verified followers
                       </p>
-                      <p className="preserve-lines">
-                        {a.message || "Ready to create for your Campaign."}
-                      </p>
+                      {a.message?.trim() && <p className="preserve-lines">{a.message}</p>}
                       {a.contentConcept && (
                         <div className="pricing-note">
                           <strong>Content concept</strong>
@@ -252,7 +246,7 @@ export function BusinessCampaignDetail() {
                 {!data.applicants.length && (
                   <Empty
                     title="No Creator applicants yet"
-                    message="Eligible Creators can request to join once your funded Campaign is published."
+                    message="Publish the funded Promotion to receive requests."
                     icon="people"
                   />
                 )}
@@ -261,7 +255,7 @@ export function BusinessCampaignDetail() {
             {tab === "budgets" && (
               <Section
                 title="Approved Creators"
-                description={`Available Campaign Budget: ${amount(c.availableCampaignBudget)}`}
+                description={`Available Promotion budget: ${amount(c.availableCampaignBudget)}`}
                 action={<Currency />}
               >
                 <DataTable
@@ -357,10 +351,10 @@ export function BusinessCampaignDetail() {
               </Section>
             )}
             {tab === "funds" && (
-              <Section title="Campaign Funds" action={<Currency />}>
+              <Section title="Promotion funds" action={<Currency />}>
                 <FundsGrid values={funds} />
                 <Notice>
-                  Unused Creator Budget returns to the Available Campaign
+                  Unused Creator Budget returns to the Available Promotion
                   Budget, not your available wallet balance. Earned funds remain
                   earned.
                 </Notice>
@@ -379,11 +373,11 @@ export function BusinessCampaignDetail() {
                         "Confirmed Sales",
                         data.creators.reduce((sum, r) => sum + r.sales, 0),
                       ],
-                      ["Campaign spend", c.used],
+                      ["Promotion spend", c.used],
                     ]}
                   />
                 </Section>
-                <Section title="Campaign history">
+                <Section title="Promotion history">
                   <ActivityList items={data.history} />
                 </Section>
               </div>
@@ -400,7 +394,7 @@ export function BusinessCampaignDetail() {
               }}
             >
               <p>
-                Available Campaign Budget:{" "}
+                Available Promotion budget:{" "}
                 <strong>{amount(c.availableCampaignBudget)}</strong>
               </p>
               <form
@@ -420,7 +414,7 @@ export function BusinessCampaignDetail() {
                 <fieldset disabled={action.busy}>
                   <Field
                     label="Creator Budget"
-                    help="This is the maximum Campaign budget available for this Creator’s verified activity."
+                    help="Maximum Promotion budget available for this Creator’s verified activity."
                   >
                     <MoneyInput
                       value={value}
@@ -454,7 +448,7 @@ export function BusinessCampaignDetail() {
               }}
             >
               <p>
-                Available Campaign Budget:{" "}
+                Available Promotion budget:{" "}
                 <strong>{amount(c.availableCampaignBudget)}</strong>
               </p>
               <form
@@ -474,7 +468,7 @@ export function BusinessCampaignDetail() {
                 <fieldset disabled={action.busy}>
                   <Field
                     label="Amount to add"
-                    help="This uses only your Available Campaign Budget."
+                    help="Uses only your available Promotion budget."
                   >
                     <MoneyInput
                       value={value}
@@ -503,7 +497,7 @@ export function BusinessCampaignDetail() {
               </form>
             </Dialog>
             <Dialog
-              title="Confirm Campaign Funding"
+              title="Confirm Promotion Funding"
               open={fund}
               onClose={() => {
                 if (!action.busy) setFund(false);
@@ -514,7 +508,7 @@ export function BusinessCampaignDetail() {
                   <>
                     <FundsGrid
                       values={[
-                        ["Campaign Budget", c.campaignBudget],
+                        ["Promotion budget", c.campaignBudget],
                         ["Available Wallet Balance", w.available],
                         ["Amount that will be Reserved", c.campaignBudget],
                       ]}
@@ -527,13 +521,13 @@ export function BusinessCampaignDetail() {
                       </p>
                     </div>
                     <p className="fine-print">
-                      Campaign funding is committed and generally
+                      Promotion funding is committed and generally
                       non-refundable. This does not pay Creators before verified
                       activity.
                     </p>
                     {w.available < c.campaignBudget && (
                       <Notice error>
-                        Your available balance cannot cover this Campaign
+                        Your available balance cannot cover this Promotion
                         Budget. <Link to="/business/wallet">Add Funds</Link> to
                         continue.
                       </Notice>
@@ -552,7 +546,7 @@ export function BusinessCampaignDetail() {
                             key,
                           );
                           setFund(false);
-                          changed("Campaign funded. You can now publish it.");
+                          changed("Promotion funded. You can now publish it.");
                         })
                       }
                     >

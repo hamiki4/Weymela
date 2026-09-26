@@ -131,21 +131,17 @@ function FirebaseSignIn({
         {error ? <Notice error>{error}</Notice> : null}
         <h1>Choose a profile</h1>
         <p className="muted">Choose where you want to continue.</p>
-        <div className="profile-choice" aria-label="Choose a profile">
-          <select
-            aria-label="Approved profile"
-            value={selectedProfile}
-            onChange={(event) => setSelectedProfile(event.target.value)}
-          >
+        <div className="approved-profile-chooser">
+          <div className="approved-profile-list profile-selection-options" role="radiogroup" aria-label="Approved profile">
             {profiles.map((profile) => (
-              <option key={profileValue(profile)} value={profileValue(profile)}>
-                {profile.displayName} ·{" "}
-                {profile.role === "PlatformAdmin"
-                  ? "Platform Admin"
-                  : profile.role}
-              </option>
+              <label key={profileValue(profile)} className={`approved-profile-option profile-role-${profile.role.toLowerCase()}`}>
+                <input type="radio" name="approved-profile" value={profileValue(profile)}
+                  checked={selectedProfile === profileValue(profile)}
+                  onChange={() => setSelectedProfile(profileValue(profile))} disabled={busy} />
+                <span><strong>{profile.displayName}</strong><small>{profile.role === "PlatformAdmin" ? "Platform Admin" : profile.role === "OperationsAdmin" ? "Operations Admin" : profile.role}</small></span>
+              </label>
             ))}
-          </select>
+          </div>
           <Button
             type="button"
             disabled={busy || !selectedProfile}

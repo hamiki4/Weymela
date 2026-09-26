@@ -595,6 +595,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var profile = permissions.Where(x => x.Role == role).Select(x => profiles.FirstOrDefault(p => p.SubjectId == x.SubjectId && p.Role == role)).FirstOrDefault(x => x is not null);
         var grant = grants.Where(x => x.UserId == userId && x.Role == role).OrderByDescending(x => x.GrantedAtUtc).FirstOrDefault();
         var customer = customers.FirstOrDefault(x => x.UserId == userId);
+        var joined = identifiers.Where(x => x.UserId == userId).Select(x => (DateTime?)x.CreatedAtUtc).Min()
+            ?? customer?.CreatedAtUtc ?? lifecycle?.CreatedAtUtc ?? grant?.GrantedAtUtc;
         var email = identifiers.FirstOrDefault(x => x.UserId == userId && x.Kind == "Email" && x.DeliveryAddress != null)?.DeliveryAddress;
         var status = lifecycle?.Status.ToString() ?? (permissions.Any(x => x.IsActive) ? "Active" : "Inactive");
         if (lifecycle is null || lifecycle.Status == AccountLifecycleStatus.Pending)
@@ -609,7 +611,8 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         return new(userId, userId, name, role.ToString(), status, approval, identifier,
             permissions.FirstOrDefault(x => x.Role == role)?.BusinessId?.ToString("D"), activity ?? preauth?.CreatedAtUtc,
             role != ActorRole.Cashier && status is not ("Closed" or "Revoked" or "Cancelled")
-                && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending));
+                && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending),
+            status == "Pending" ? null : joined);
     }
 
     private static AdminCommerceTransaction Transaction(VerifiedSale x)

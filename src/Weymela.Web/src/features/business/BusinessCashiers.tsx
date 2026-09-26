@@ -11,7 +11,6 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { date } from "../../ui/format";
 
 export function BusinessCashiers() {
   const resource = useResource<Cashier[]>("/business/cashiers");
@@ -91,17 +90,14 @@ export function BusinessCashiers() {
         <Resource resource={resource}>
           {(cashiers) =>
             cashiers.length ? (
-              <div className="card-grid">
+              <div className="cashier-list">
                 {cashiers.map((cashier) => (
-                  <article className="workspace-card" key={cashier.id}>
-                    <div className="card-head">
-                      <div>
-                        <h3>{cashier.name}</h3>
-                        <p className="muted">{cashier.maskedPhone}</p>
-                      </div>
-                      <span className="status-badge">{cashier.status}</span>
+                  <article className="cashier-row" key={cashier.id}>
+                    <div className="cashier-identity">
+                      <strong>{cashier.name}</strong>
+                      <span>{cashier.maskedPhone}</span>
                     </div>
-                    <p className="fine-print">Added {date(cashier.createdAtUtc)}</p>
+                    <span className="status-badge">{cashier.status}</span>
                     <div className="actions">
                       {cashier.status === "Pending Activation" ? (
                         <>

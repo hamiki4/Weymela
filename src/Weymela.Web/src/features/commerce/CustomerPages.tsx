@@ -315,11 +315,11 @@ function CustomerOfferBrowser({
         </div>
       )}
 
-      <section className="customer-offer-section" aria-labelledby="customer-offers-title">
+      <section className="customer-offer-section" aria-labelledby={discover ? undefined : "customer-offers-title"} aria-label={discover ? "Promotions" : undefined}>
         <div className="customer-offer-section-heading">
           <div>
             <p className="eyebrow">Promotions</p>
-            <h2 id="customer-offers-title">{discover ? "Discover Promotions" : "Recommended Promotions"}</h2>
+            {!discover && <h2 id="customer-offers-title">Recommended Promotions</h2>}
           </div>
           <span className="customer-offer-count">
             {visibleRows.length} {visibleRows.length === 1 ? "offer" : "offers"}
@@ -366,12 +366,21 @@ function CustomerOfferBrowser({
   );
 }
 
+function CustomerHomeSummary() {
+  const cashback = useResource<CashbackSummary>("/customer/cashback");
+  const transactions = useResource<CustomerTransaction[]>("/customer/transactions");
+  return <section className="product-home-summary" aria-label="Your account summary">
+    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Available cashback</span><strong>{amount(data.availableCashback.amount)}</strong><small>{cashbackStatusLabel(data.status)}</small></Link>}</Resource>
+    <Resource resource={transactions}>{(rows) => rows.length ? <Link to="/customer/transactions" className="product-summary-row"><span>Latest purchase</span><strong>{rows[0].business}</strong><small>{dateTime(rows[0].purchasedAtUtc)}</small></Link> : null}</Resource>
+  </section>;
+}
+
 export function CustomerOffers({ discover = false }: CustomerOffersProps = {}) {
   const { user } = useSession();
   const customerLocation = useCustomerLocation();
   const resource = useResource<Offer[]>("/customer/offers");
   const name = user?.displayName?.trim();
-  const firstName = name ? name.split(/\s+/)[0] : "there";
+  const firstName = name ? name.split(/\s+/)[0] : "Customer";
 
   return (
     <div className="customer-home-page">
@@ -380,14 +389,7 @@ export function CustomerOffers({ discover = false }: CustomerOffersProps = {}) {
           title="Discover Promotions"
         />
       ) : (
-        <header className="customer-home-hero">
-          <div>
-            <h1>Offers for {firstName}</h1>
-          </div>
-          <span className="customer-hero-mark" aria-hidden="true">
-            <Icon name="sparkle" size={32} />
-          </span>
-        </header>
+        <><PageHeader eyebrow={firstName} title="Home" /><CustomerHomeSummary /></>
       )}
       <CustomerLocationCard
         discover={discover}
@@ -453,11 +455,8 @@ function QrPanel({ offer }: { offer: Offer }) {
   return (
     <div className="offer-simple">
       <h1>{offer.business.displayName}</h1>
-      {offer.creator ? (
-        <p>By {offer.creator.displayName}</p>
-      ) : (
-        <p>Available from this Business</p>
-      )}
+      {(offer.slogan?.trim() || offer.offer?.trim()) && <p className="customer-offer-detail-title">{offer.slogan?.trim() || offer.offer}</p>}
+      {offer.creator && <p>By {offer.creator.displayName}</p>}
       <span className="cashback">{benefitLabel(offer)}</span>
       {used ? (
         <Notice>Offer used. Your confirmed cashback is in your history.</Notice>
@@ -557,9 +556,7 @@ export function CustomerTransactions() {
   return (
     <div className="customer-ledger-page">
       <PageHeader
-        eyebrow="Your purchase activity"
         title="Transactions"
-        description="Purchases confirmed at participating Businesses."
       />
       <Resource resource={resource}>
         {(rows) => rows.length ? (
@@ -618,9 +615,7 @@ export function CustomerCashback() {
   return (
     <div className="customer-ledger-page">
       <PageHeader
-        eyebrow="Your cashback balance"
         title="Cashback"
-        description="See what is available and review recorded payouts."
       />
       <Resource resource={resource}>
         {(summary) => {

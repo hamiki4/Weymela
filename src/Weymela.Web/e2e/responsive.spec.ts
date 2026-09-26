@@ -46,18 +46,24 @@ for (const viewport of viewports)
         [
           "/admin",
           "/admin/customers",
+          "/admin/customers/new",
           "/admin/campaigns",
+          "/admin/wallets",
+          "/admin/ugc",
+          "/admin/reports",
           "/admin/settings",
           "/admin/payouts",
           "/admin/businesses",
+          "/admin/businesses/new",
           "/admin/creators",
+          "/admin/creators/new",
           "/admin/admins",
-          "/admin/platform",
-          "/admin/notifications",
+          "/admin/admins/new",
+          "/notifications",
         ],
       ],
       ["customer", ["/customer/offers", "/customer/discover", "/customer/transactions", "/customer/cashback"]],
-      ["cashier", ["/checkout"]],
+      ["cashier", ["/checkout", "/checkout/transactions"]],
     ];
     for (const [role, paths] of screens) {
       await login(context, role);
@@ -105,12 +111,8 @@ for (const viewport of viewports)
         if (path === "/admin/payouts") {
           if (viewport.width <= 430) {
             await open(page, "/admin");
-            await page.getByRole("button", { name: "More navigation" }).click();
-            const menu = page.getByRole("dialog", { name: "More navigation" });
-            await expect(menu).toBeVisible();
-            await menu.getByRole("link", { name: "Payouts", exact: true }).click();
+            await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Payouts", exact: true }).click();
             await expect(page).toHaveURL(/\/admin\/payouts$/);
-            await expect(menu).not.toBeVisible();
           }
           for (const tab of ["Customers", "Platform", "History"]) {
             const payoutTab = page
@@ -125,6 +127,12 @@ for (const viewport of viewports)
             );
           }
         }
+      }
+      if (viewport.width <= 430 && ["customer", "creator", "business", "cashier"].includes(role)) {
+        await page.getByRole("button", { name: "Open account menu" }).click();
+        await expect(page.getByRole("dialog", { name: "Account menu" })).toBeVisible();
+        await screenshot(page, `${viewport.width}-${role}-profile-settings`);
+        await page.keyboard.press("Escape");
       }
       if (role === "business" || role === "admin") {
         const campaigns = await (
@@ -187,8 +195,20 @@ test("stable buttons and mobile keyboard navigation", async ({
   await login(context, "business");
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/business");
+  const typography = await page.evaluate(() => ({
+    root: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    bottomLabel: parseFloat(getComputedStyle(document.querySelector<HTMLElement>(".mobile-role-link")!).fontSize),
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+    decorativeHover: Array.from(document.styleSheets).filter((sheet) => {
+      try { return Array.from(sheet.cssRules).some((rule) => rule.cssText.includes(":hover")); } catch { return false; }
+    }).length,
+  }));
+  expect(typography.root).toBeGreaterThanOrEqual(17);
+  expect(typography.bottomLabel).toBeGreaterThanOrEqual(12);
+  expect(typography.overflow).toBe(false);
+  expect(typography.decorativeHover).toBe(0);
   const button = page
-    .getByRole("link", { name: "New Promotion", exact: true })
+    .getByRole("link", { name: "Create Promotion", exact: true })
     .first();
   const before = await button.evaluate((e) => ({
     transform: getComputedStyle(e).transform,

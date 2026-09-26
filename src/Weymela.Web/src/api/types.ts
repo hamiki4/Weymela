@@ -110,6 +110,7 @@ export interface AdminAccountSummary {
   association: string | null;
   lastActivityAtUtc: string | null;
   canManage: boolean;
+  joinedAtUtc?: string | null;
 }
 export interface AdminAuditItem {
   id: string;
@@ -221,6 +222,9 @@ export interface CampaignRow {
   promotionLiveDurationDays: number;
   status: string;
   version: number;
+  slogan?: string | null;
+  location?: string | null;
+  platforms?: { platform: string; approved: number; capacity: number; available: number }[] | null;
 }
 export interface Applicant {
   id: string;
@@ -274,6 +278,7 @@ export interface Opportunity {
   slogan?: string | null;
   location?: string | null;
   platforms?: { platform: string; approved: number; capacity: number; available: number }[] | null;
+  eligibleSocialProfiles?: { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null }[] | null;
   approvedCreators?: number;
   creatorCapacity?: number;
 }
@@ -366,6 +371,19 @@ export interface AdminHome {
   customerCashback: number;
   platformRevenue: number;
   activity: Activity[];
+}
+export interface AdminWallets {
+  businesses: { businessId: string; business: string; totalBalance: number; available: number; reserved: number; pendingDeposit: number; viewOnlyCount: number; viewSaleCount: number; status: string }[];
+  promotions: { id: string; business: string; title: string; type: string; budget: number; used: number; remaining: number; verifiedViews: number; verifiedSales: number; status: string }[];
+}
+export interface AdminUgcFinance { id: string; business: string; title: string; type: string; budget: number; creatorPayment: number; customerDiscountPercent: number | null; creatorUsed: number; offerUsed: number; discountUsed: number; remaining: number; qualifyingSales: number; status: string; }
+export interface AdminReport {
+  fromUtc: string; toExclusiveUtc: string;
+  activity: { businessDeposits: number; promotionalFunding: number; promotionSpend: number; ugcCreatorSpend: number; ugcOfferSpend: number; ugcCreatorPayments: number; creatorEarnings: number; customerCashback: number; customerDiscounts: number; platformRevenue: number; creatorPayouts: number; customerPayouts: number; verifiedViews: number; verifiedSales: number; ugcQualifyingSales: number };
+  promotions: { type: string; allocated: number; used: number; verifiedViews: number; verifiedSales: number; currentRemaining: number; creatorPayments: number; customerDiscounts: number }[];
+  ugc: { type: string; allocated: number; used: number; verifiedViews: number; verifiedSales: number; currentRemaining: number; creatorPayments: number; customerDiscounts: number }[];
+  accounts: { customers: number; creators: number; businesses: number; newAccountsInPeriod: number };
+  currentBusinessWalletBalance: number; currentPlatformUnsettled: number;
 }
 export interface OperationsHome {
   pendingReviews: number;

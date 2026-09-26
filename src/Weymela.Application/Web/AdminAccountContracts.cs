@@ -32,7 +32,8 @@ public sealed record AdminAccountSummary(
     string SafeIdentifier,
     string? Association,
     DateTime? LastActivityAtUtc,
-    bool CanManage);
+    bool CanManage,
+    DateTime? JoinedAtUtc = null);
 
 public sealed record AdminAuditItem(
     Guid Id,

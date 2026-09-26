@@ -8,7 +8,7 @@ interface InboxPage { items: Notification[]; unreadCount: number }
 export function Inbox() {
   const resource = useResource<InboxPage>("/notifications"); const action = useAction();
   const read = (path: string) => void action.run(async key => { await post(path, undefined, key); resource.reload(); });
-  return <><PageHeader eyebrow="Your workspace" title="Notifications" description="Updates that need your attention, all in one place." />
+  return <><PageHeader title="Notifications" />
     {action.error && <Notice error>{action.error}</Notice>}
     <Resource resource={resource}>{page => <Section title={`${page.unreadCount} unread`} action={<Button variant="secondary" disabled={!page.unreadCount || action.busy} onClick={() => read("/notifications/read-all")}>Mark all read</Button>}>
       {!page.items.length ? <Empty icon="bell" title="You’re all caught up" message="Your Campaign and account updates will appear here." /> : <div className="notification-list">{page.items.map(item => <article className="notification-item" key={item.id}>

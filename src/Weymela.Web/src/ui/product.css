@@ -1,0 +1,157 @@
+/* One compact presentation for Customer, Creator, Business, and Cashier.
+   Role colors are accents; normal information retains the shared dark text. */
+.product-shell {
+  --product-ink: var(--ink);
+  --product-secondary: var(--secondary-text);
+  --product-muted: var(--muted);
+  --product-line: var(--line);
+  color: var(--product-ink);
+  background: #f7f8f6;
+}
+.role-cashier { --role-accent: #374151; --role-soft: #f3f4f6; --role-border: #d1d5db; }
+.product-shell .topbar { height: 62px; background: #fff; border-bottom-color: var(--product-line); }
+.product-shell .workspace-label { color: var(--product-secondary); }
+.product-shell .main-content { max-width: 1180px; padding-top: 24px; }
+.product-shell .workspace-footer { display: none; }
+.product-shell .page-heading { gap: 8px; margin-bottom: 18px; }
+.product-shell .page-heading h1 { font-size: clamp(1.55rem, 2.4vw, 2rem); letter-spacing: -.035em; margin-bottom: 0; }
+.product-shell .page-heading .lead { font-size: .86rem; color: var(--product-secondary); }
+.product-shell .panel { padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; margin-bottom: 28px; }
+.product-shell .section-heading { padding-bottom: 9px; border-bottom: 1px solid var(--product-line); margin-bottom: 12px; }
+.product-shell .section-heading h2 { font-size: 1.05rem; }
+.product-shell .section-heading p { color: var(--product-secondary); }
+.product-shell .metric { padding: 12px 0; background: transparent; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; }
+.product-shell .metric strong { font-size: clamp(1.3rem, 2vw, 1.75rem); margin: 7px 0 3px; color: var(--product-ink); }
+.product-shell .metric-top, .product-shell .metric small { color: var(--product-secondary); }
+.product-shell .metric.emphasis { color: var(--product-ink); background: transparent; }
+.product-shell .metric.emphasis .metric-top, .product-shell .metric.emphasis small { color: var(--product-secondary); }
+.product-shell .metric.emphasis .metric-top svg { color: var(--role-accent); }
+.product-shell .funds-grid dt { color: var(--product-secondary); }
+.product-shell .funds-grid dd { color: var(--product-ink); font-size: 1.07rem; }
+.product-shell .data-card, .product-shell .campaign-card, .product-shell .creator-promotion-row,
+.product-shell .business-promotion-review-row, .product-shell .creator-promotion-list-card {
+  padding: 14px 0; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0;
+  background: transparent; box-shadow: none;
+}
+.product-shell .card-stack, .product-shell .creator-promotion-list, .product-shell .business-promotion-review-list { gap: 0; }
+.product-shell .desktop-data { border: 0; border-radius: 0; background: transparent; }
+.product-shell .desktop-data th { background: transparent; color: var(--product-secondary); border-bottom: 1px solid #cfd8d1; }
+.product-shell .desktop-data th { font-size: .81rem; font-weight: 650; }
+.product-shell .desktop-data td { color: var(--product-ink); font-size: .86rem; font-variant-numeric: tabular-nums; }
+.product-shell .desktop-data td.numeric { font-weight: 650; }
+.product-shell .data-card .funds-grid { padding: 10px 0; }
+.product-shell .button { font-weight: 600; min-height: 44px; }
+.product-shell .button.secondary { color: var(--product-ink); border-color: var(--role-border); }
+.product-shell .empty-state { padding: 20px 6px; }
+.product-shell .empty-icon { width: 44px; height: 44px; margin-bottom: 12px; }
+.product-shell .empty-state p { color: var(--product-secondary); }
+.product-shell .account-summary { border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; padding-inline: 0; }
+.product-shell .account-menu-link { border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; font-weight: 600; }
+.product-shell .profile-switcher select { color: var(--product-ink); }
+.account-menu-secondary { margin-top: 8px; }
+.product-desktop-nav { display: none; }
+.product-home-summary { display: grid; gap: 0 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 24px; border-top: 1px solid var(--product-line); }
+.product-summary-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; padding: 13px 3px; border-bottom: 1px solid var(--product-line); color: var(--product-ink); }
+.product-summary-row span { color: var(--product-secondary); font-size: .79rem; font-weight: 600; }
+.product-summary-row strong { color: var(--product-ink); font-size: 1.04rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.product-summary-row small { grid-column: 1 / -1; color: var(--product-muted); }
+.role-creator .creator-discover-cta { padding: 13px 0; margin: 4px 0 20px; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; }
+.role-creator .creator-discover-cta h2 { margin: 0; font-size: 1rem; }
+.role-creator .creator-activity-list { gap: 0; }
+.role-creator .creator-activity-list article { padding: 12px 0; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; }
+.role-creator .creator-opportunity-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px; border-color: var(--role-border); border-radius: 12px; box-shadow: none; }
+.role-creator .creator-opportunity-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.role-creator .creator-opportunity-card h3 { margin: 0; }
+.role-creator .creator-opportunity-card p { margin: 0; }
+.role-creator .creator-opportunity-slogan { color: var(--product-secondary); border: 0; padding: 0; font-weight: 500; }
+.role-creator .creator-opportunity-meta { color: var(--product-secondary); font-size: .86rem; }
+.role-creator .creator-opportunity-location { display: inline-flex; align-items: center; gap: 4px; color: var(--product-secondary); font-size: .84rem; }
+.role-creator .creator-platform-counts { margin: 3px 0; }
+.role-creator .creator-platform-counts .platform-full { color: var(--product-muted); background: #f3f4f6; border-color: #d1d5db; }
+.role-creator .creator-opportunity-card > .button { margin-top: auto; }
+.creator-platform-selector { display: grid; gap: 8px; margin-bottom: 15px; }
+.creator-platform-option { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.creator-platform-option > small { color: var(--secondary-text); }
+.creator-platform-option label { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; overflow-wrap: anywhere; }
+.promotion-platform-field { grid-column: 1 / -1; display: grid; gap: 7px; }
+.promotion-platform-field > small { color: var(--secondary-text); }
+.promotion-platform-choice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 42px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.promotion-platform-choice label { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); font-weight: 600; }
+.promotion-platform-choice input[type="number"] { width: 72px; min-height: 38px; }
+.business-promotion-slogan { color: var(--secondary-text); font-weight: 500; }
+.business-platform-summary { margin-top: 14px; }
+.role-creator .creator-promotion-row { grid-template-columns: minmax(0, 1fr) minmax(175px, .55fr); }
+.role-creator .creator-promotion-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 420px; gap: 8px; }
+.role-creator .creator-promotion-filters button { min-width: 0; border-radius: 9px; }
+.role-creator .creator-work-list { max-width: 960px; }
+.role-creator .creator-work-row { align-items: start; }
+.role-creator .creator-work-row h3 { color: var(--product-ink); font-size: 1rem; font-weight: 650; }
+.role-creator .creator-work-row p { margin: 4px 0; color: var(--product-secondary); font-size: .85rem; }
+.role-creator .creator-work-row .creator-live-days { color: var(--product-ink); font-weight: 600; }
+.role-creator .creator-work-row .creator-next-action { font-size: .84rem; color: var(--product-secondary); }
+.role-creator .creator-work-submit { display: grid; gap: 8px; width: min(100%, 280px); }
+.role-creator .creator-work-submit label { display: grid; gap: 5px; font-weight: 600; color: var(--product-ink); }
+.role-creator .creator-work-submit input { width: 100%; min-width: 0; }
+.role-creator .creator-work-detail-error { display: flex; align-items: center; gap: 8px; color: var(--product-secondary); }
+.role-creator .creator-work-empty { display: grid; justify-items: start; gap: 12px; padding: 16px 0; }
+.role-creator .creator-work-empty h2 { margin: 0; font-size: 1rem; font-weight: 650; }
+.role-creator .creator-earnings-summary { max-width: 760px; }
+.role-creator .creator-tabs button { font-weight: 600; }
+.role-customer .customer-promotion-card { padding: 16px; gap: 10px; border-radius: 12px; box-shadow: none; }
+.role-customer .customer-promotion-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.role-customer .customer-location-card { padding: 12px 0; gap: 10px; margin-bottom: 18px; border: 0; border-top: 1px solid var(--product-line); border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; }
+.role-customer .customer-location-icon { display: none; }
+.role-customer .customer-location-copy h2 { font-size: .94rem; }
+.role-customer .customer-promotion-title { min-height: 0; font-family: inherit; font-size: 1rem; font-weight: 650; }
+.role-customer .offer-simple { padding: 18px; border-radius: 12px; }
+.role-customer .offer-simple h1 { font-family: inherit; font-size: clamp(1.45rem, 4vw, 1.7rem); letter-spacing: -.035em; }
+.role-customer .customer-offer-detail-title { color: var(--product-secondary); font-weight: 500; }
+.role-customer .offer-simple .cashback { margin: 12px auto; }
+.role-customer .customer-ledger-list { gap: 0; }
+.role-customer .customer-transaction-card { padding: 15px 0; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; box-shadow: none; }
+.role-customer .customer-cashback-summary { padding: 18px; border-radius: 12px; box-shadow: none; }
+.role-customer .customer-payout-history { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.role-business .fund-metrics .metric:first-child { grid-column: auto; }
+.role-business .campaign-name > a { color: var(--product-ink); }
+.role-business .campaign-name .row-links { font-size: .78rem; }
+.role-business .campaign-name .row-links a { color: var(--role-accent); }
+.role-business .quick-actions { gap: 8px; }
+.role-business .cashier-list { display: grid; }
+.role-business .cashier-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--product-line); }
+.role-business .cashier-identity { display: grid; gap: 2px; min-width: 0; }
+.role-business .cashier-identity strong { color: var(--product-ink); font-weight: 650; }
+.role-business .cashier-identity span { color: var(--product-secondary); font-size: .82rem; }
+.role-business .cashier-row .actions { margin: 0; }
+.role-business .overview-highlight { display: none; }
+.role-cashier .checkout-panel { max-width: 760px; margin-inline: auto; }
+.role-cashier .checkout-panel .button { min-height: 48px; }
+.role-cashier .checkout-panel .field input { min-height: 48px; }
+@media (max-width: 640px) {
+  .product-shell .main-content { padding: 18px 16px 88px; }
+  .product-shell .page-heading h1 { font-size: 1.6rem; }
+  .product-home-summary { grid-template-columns: 1fr; }
+  .role-creator .creator-promotion-row { grid-template-columns: 1fr; }
+  .role-business .cashier-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .role-business .cashier-row .actions { grid-column: 1 / -1; }
+  .product-shell .mobile-role-nav { box-shadow: none; }
+  .role-business .mobile-role-link span, .role-cashier .mobile-role-link span { white-space: normal; line-height: 1.05; }
+}
+@media (min-width: 1100px) {
+  .app-shell.product-shell:is(.role-customer, .role-creator, .role-business) { display: block; }
+  .product-shell:is(.role-customer, .role-creator, .role-business) .sidebar { display: none; }
+  .product-shell:is(.role-customer, .role-creator, .role-business) .product-desktop-nav { display: block; background: #fff; border-bottom: 1px solid var(--product-line); }
+  .product-desktop-nav nav { display: flex; align-items: center; gap: 4px; max-width: 1180px; margin: auto; padding: 4px 24px; }
+  .product-desktop-nav .nav-link { min-height: 42px; margin: 0; padding: 8px 12px; white-space: nowrap; }
+  .product-shell .main-content { padding: 28px 28px 58px; }
+  .role-creator .creator-metrics, .role-business .fund-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Auth retains the same mounted shell and secure transition lifecycle. */
+.sign-in { background: #f7f8f6; }
+.sign-in-story { background: #fff; border-bottom: 1px solid #dfe4e1; padding: max(12px, env(safe-area-inset-top)) 18px 10px; }
+.sign-in-form { padding: 24px 18px max(26px, env(safe-area-inset-bottom)); }
+.sign-in-form h2 { font-size: 1.6rem; }
+.sign-in-secure { color: #374151; }
+.profile-choice { padding: 12px 0; border: 0; border-top: 1px solid #dfe4e1; border-bottom: 1px solid #dfe4e1; border-radius: 0; background: transparent; }
+@media (min-width: 1100px) {
+  .sign-in-form { padding: 48px 24px; }
+}

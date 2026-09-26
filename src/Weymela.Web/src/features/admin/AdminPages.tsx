@@ -5,6 +5,7 @@ import type {
   Activity,
   AdminCampaign,
   AdminHome,
+  OperationsHome,
   BusinessOversight,
   CampaignRow,
   CreatorOversight,
@@ -12,7 +13,6 @@ import type {
   OperationsCampaignView,
   OperationsCreatorView,
   OperationsCustomerView,
-  OperationsHome,
   OperationsUgcView,
 } from "../../api/types";
 import {
@@ -144,61 +144,21 @@ type EnrollmentRow = { id: string; role: string; status: string; displayName: st
 
 export function AdminDashboard() {
   const resource = useResource<AdminHome>("/admin/home");
-  return (
-    <Resource resource={resource}>
-      {(d) => (
-        <>
-          <PageHeader
-            title="Dashboard"
-            action={
-              <ActionLink to="/admin/campaigns">Campaigns</ActionLink>
-            }
-          />
-          <div className="metric-grid four">
-            <Metric
-              label="Active Campaigns"
-              value={count(d.activeCampaigns)}
-              emphasis
-              icon="campaign"
-            />
-            <Metric
-              label="Businesses"
-              value={count(d.businesses)}
-              icon="business"
-            />
-            <Metric label="Creators" value={count(d.creators)} icon="people" />
-            <Metric
-              label="Campaign spend"
-              value={amount(d.campaignSpend)}
-              note="Verified activity"
-            />
-          </div>
-          <div className="two-column">
-            <Section title="Financial overview" action={<Currency />}>
-              <FundsGrid
-                values={[
-                  ["Creator earnings", d.creatorEarnings],
-                  ["Customer cashback", d.customerCashback],
-                  ["Platform revenue", d.platformRevenue],
-                ]}
-              />
-              <div className="actions section-kicker-space">
-                <ActionLink to="/admin/payouts" secondary>
-                  Manage Payouts
-                </ActionLink>
-                <Link className="text-link" to="/admin/financial-settings">
-                  Financial Settings
-                </Link>
-              </div>
-            </Section>
-            <Section title="Recent activity">
-              <ActivityList items={d.activity.slice(0, 6)} />
-            </Section>
-          </div>
-        </>
-      )}
-    </Resource>
-  );
+  const operations = useResource<OperationsHome>("/admin/operations/home");
+  const deposits = useResource<{ status: string }[]>("/admin/deposit-requests");
+  return <div className="admin-page"><PageHeader title="Dashboard" />
+    <Resource resource={operations}>{o => <Section title="Needs attention"><div className="admin-dashboard-links">
+      <Link to="/admin/role-enrollments"><span>Pending profile approvals</span><strong>{count(o.pendingReviews)}</strong></Link>
+      <Link to="/admin/payouts"><span>Pending payouts</span><strong>{count(o.pendingCreatorPayouts + o.pendingCustomerPayouts)}</strong></Link>
+      <Link to="/admin/wallets"><span>Pending deposits</span><strong>{deposits.data ? count(deposits.data.filter(row => row.status === "Pending").length) : "—"}</strong></Link>
+    </div></Section>}</Resource>
+    <Resource resource={resource}>{d => <Section title="Workspaces"><div className="admin-dashboard-links">
+      <Link to="/admin/businesses"><span>Businesses</span><strong>{count(d.businesses)}</strong></Link>
+      <Link to="/admin/creators"><span>Creators</span><strong>{count(d.creators)}</strong></Link>
+      <Link to="/admin/customers"><span>Customers</span><strong>{operations.data ? count(operations.data.customers) : "—"}</strong></Link>
+      <Link to="/admin/campaigns"><span>Active Campaigns</span><strong>{count(d.activeCampaigns)}</strong></Link>
+    </div></Section>}</Resource>
+  </div>;
 }
 export function AdminCampaigns() {
   const { user } = useSession();
@@ -214,11 +174,7 @@ export function AdminCampaigns() {
   });
   return (
     <>
-      <PageHeader
-        eyebrow="Campaign control tower"
-        title="Campaigns"
-        description="Follow every Campaign from committed funds to verified activity."
-      />
+      <PageHeader title="Campaigns" />
       <Resource resource={resource}>
         {(rows) => {
           const filtered = rows.filter(

@@ -261,6 +261,7 @@ export const routes: Record<string, unknown> = {
   "/creator/discover/campaign": opportunity,
   "/creator/ugc": [],
   "/creator/ugc/assignments": [],
+  "/creator/ugc/requests": [],
   "/creator/campaigns": [active],
   "/creator/earnings": earnings,
   "/creator/requests": [],

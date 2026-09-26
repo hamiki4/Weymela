@@ -59,14 +59,14 @@ describe("Phase 3 multi-profile shell", () => {
       expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
     } else if (role === "Creator") {
       expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
-        "Home", "Discover", "My Promotions", "Earnings",
+        "Home", "Discover", "Promotions", "Earnings",
       ]);
       expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
       expect(within(mobile).getAllByRole("link")).toHaveLength(4);
       expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
     } else {
       expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
-        "Home", "Promotions", "UGC", "Checkout",
+        "Home", "Promotions", "UGC", "Wallet",
       ]);
       expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
       expect(within(mobile).getAllByRole("link")).toHaveLength(4);
@@ -112,7 +112,7 @@ describe("Phase 3 multi-profile shell", () => {
     setup("Creator", "/creator");
     const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
     expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Home", "Discover", "My Promotions", "Earnings",
+      "Home", "Discover", "Promotions", "Earnings",
     ]);
     expect(within(mobile).queryByRole("link", { name: /Find Businesses|Campaign Requests|Payouts|How You Earn|Add a profile/ })).not.toBeInTheDocument();
     await userEvent.click(within(mobile).getByRole("button", { name: "Profile" }));
@@ -126,6 +126,23 @@ describe("Phase 3 multi-profile shell", () => {
     setup("PlatformAdmin", "/admin");
     expect(document.querySelector(".workspace-label")).toHaveTextContent("Platform Admin / Weymela");
     expect(screen.queryByRole("link", { name: "Add a profile" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["/admin/customers/new", "Customers", true],
+    ["/admin/businesses/new", "Businesses", true],
+    ["/admin/wallets/business", "Wallets", false],
+    ["/admin/ugc/promotion", "UGC", true],
+  ] as const)("marks the Admin section for child route %s", async (path, label, moreActive) => {
+    setup("PlatformAdmin", path);
+    const mobile = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
+    expect(mobile.getByRole("button", { name: "More navigation" })).toHaveAttribute("aria-pressed", String(moreActive));
+    if (moreActive) {
+      await userEvent.click(mobile.getByRole("button", { name: "More navigation" }));
+      expect(within(screen.getByRole("navigation", { name: "More navigation" })).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+    } else {
+      expect(mobile.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+    }
   });
 
   it("gives Operations Admin an operational navigation without platform controls", () => {

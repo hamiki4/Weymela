@@ -55,7 +55,7 @@ describe("Customer mobile navigation", () => {
 
     const navigation = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
     expect(navigation.getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Home", "Discover", "Transactions", "Cashback",
+      "Home", "Discover", "Cashback", "Transactions",
     ]);
     expect(navigation.getByRole("link", { name: "Home" })).toHaveAttribute(
       "href",

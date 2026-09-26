@@ -274,11 +274,11 @@ test("Cashier activation uses the real activation, password, and PIN flow", asyn
     await expect(activationPage.getByText("Cashier Management", { exact: true })).toHaveCount(0);
 
     await open(page, "/business/cashiers");
-    const activeCard = page.locator("article.workspace-card").filter({ hasText: "Activation Test" });
-    await activeCard.getByRole("button", { name: "Disable", exact: true }).click();
-    await expect(activeCard).toContainText("Disabled");
-    await activeCard.getByRole("button", { name: "Enable", exact: true }).click();
-    await expect(activeCard).toContainText("Active");
+    const activeRow = page.locator("article.cashier-row").filter({ hasText: "Activation Test" });
+    await activeRow.getByRole("button", { name: "Disable", exact: true }).click();
+    await expect(activeRow).toContainText("Disabled");
+    await activeRow.getByRole("button", { name: "Enable", exact: true }).click();
+    await expect(activeRow).toContainText("Active");
 
     const repeated = await apiPost(activation, "/auth/cashier/activate", {
       phone: "0912345679",

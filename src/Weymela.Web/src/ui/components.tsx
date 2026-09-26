@@ -145,7 +145,7 @@ export function Empty({
   icon = "campaign",
 }: {
   title: string;
-  message: string;
+  message?: string;
   action?: ReactNode;
   icon?: string;
 }) {
@@ -155,7 +155,7 @@ export function Empty({
         <Icon name={icon} size={28} />
       </span>
       <h3>{title}</h3>
-      <p>{message}</p>
+      {message && <p>{message}</p>}
       {action}
     </div>
   );

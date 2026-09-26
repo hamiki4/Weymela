@@ -164,6 +164,11 @@ describe("final authentication experience", () => {
     await userEvent.type(screen.getByLabelText("Password"), "correct horse battery staple");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByRole("heading", { name: "Choose a profile" });
+    const options = screen.getAllByRole("radio");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toBeChecked();
+    expect(options[0]).toHaveAccessibleName(/Business/);
+    expect(options[1]).toHaveAccessibleName(/Customer/);
 
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(mocks.refresh).toHaveBeenCalledOnce();

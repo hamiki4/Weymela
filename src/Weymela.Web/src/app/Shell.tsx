@@ -16,14 +16,16 @@ const navigation: Record<Role, [string, string, string][]> = {
   Business: [
     ["/business", "Home", "home"],
     ["/business/campaigns", "Promotions", "campaign"],
+    ["/business/requests", "Requests", "people"],
     ["/business/ugc", "UGC", "sparkle"],
+    ["/business/wallet", "Wallet", "wallet"],
     ["/checkout", "Checkout", "qr"],
     ["/profile", "Profile", "people"],
   ],
   Creator: [
     ["/creator", "Home", "home"],
     ["/creator/discover", "Discover", "search"],
-    ["/creator/promotions", "My Promotions", "campaign"],
+    ["/creator/promotions", "Promotions", "campaign"],
     ["/creator/earnings", "Earnings", "wallet"],
     ["/profile", "Profile", "people"],
   ],
@@ -34,10 +36,12 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/businesses", "Businesses", "wallet"],
     ["/admin/admins", "Admins", "people"],
     ["/admin/campaigns", "Campaigns", "campaign"],
+    ["/admin/wallets", "Wallets", "wallet"],
+    ["/admin/ugc", "UGC", "sparkle"],
     ["/admin/payouts", "Payouts", "money"],
+    ["/admin/reports", "Reports", "chart"],
     ["/admin/settings", "Financial Settings", "settings"],
-    ["/admin/platform", "Platform Revenue", "chart"],
-    ["/admin/notifications", "Notifications", "bell"],
+    ["/notifications", "Notifications", "bell"],
   ],
   OperationsAdmin: [
     ["/admin/operations", "Home", "home"],
@@ -53,11 +57,11 @@ const navigation: Record<Role, [string, string, string][]> = {
   Customer: [
     ["/customer/offers", "Home", "home"],
     ["/customer/discover", "Discover", "search"],
-    ["/customer/transactions", "Transactions", "document"],
     ["/customer/cashback", "Cashback", "wallet"],
+    ["/customer/transactions", "Transactions", "document"],
     ["/profile", "Profile", "people"],
   ],
-  Cashier: [["/checkout", "Checkout", "qr"], ["/profile", "Profile", "people"]],
+  Cashier: [["/checkout", "Purchase", "qr"], ["/checkout/transactions", "Transactions", "document"], ["/profile", "Profile", "people"]],
   Onboarding: [],
 };
 const roles: Record<Role, string> = {
@@ -69,6 +73,7 @@ const roles: Record<Role, string> = {
   Cashier: "Cashier",
   Onboarding: "Account setup",
 };
+const exactNavigationRoots = new Set(["/admin", "/admin/operations", "/business", "/creator", "/checkout"]);
 export function Brand() {
   return (
     <span className="brand" role="img" aria-label="Weymela">
@@ -103,13 +108,19 @@ export function Shell({ children }: { children?: ReactNode }) {
     user.role === "Creator" ||
     user.role === "Business";
   const hasAccountMenuProfile = isPublicProfile || user.role === "Cashier";
-  const hasFiveItemMobileNav = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
-  const mobileItems = hasFiveItemMobileNav ? items : items.slice(0, 3);
-  const overflowItems = hasFiveItemMobileNav ? [] : items.slice(3);
+  const isProductRole = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
+  const mobileItems = user.role === "PlatformAdmin"
+    ? items.filter(([to]) => ["/admin", "/admin/wallets", "/admin/payouts"].includes(to))
+    : user.role === "Business" ? items.filter(([to]) => ["/business", "/business/campaigns", "/business/ugc", "/business/wallet", "/profile"].includes(to))
+    : items.slice(0, user.role === "OperationsAdmin" ? 3 : 5);
+  const overflowItems = user.role === "PlatformAdmin"
+    ? items.filter(([to]) => !mobileItems.some(([mobileTo]) => mobileTo === to))
+    : user.role === "OperationsAdmin" ? items.slice(3) : [];
   const itemIsActive = (to: string, isActive: boolean) =>
     isActive ||
-    (to === "/customer/offers" && location.pathname.startsWith("/customer/offers")) ||
-    (to.endsWith("/campaigns") && location.pathname.startsWith(`${to}/`));
+    (!exactNavigationRoots.has(to)
+      && location.pathname.startsWith(`${to}/`));
+  const overflowIsActive = overflowItems.some(([to]) => itemIsActive(to, location.pathname === to));
   const closeAccountMenu = () => accountMenu.current?.close();
   const openAccountMenu = () => {
     moreMenu.current?.close();
@@ -130,7 +141,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         ) : (
           <NavLink
             to={to}
-            end
+            end={exactNavigationRoots.has(to)}
             key={to}
             className={({ isActive }) =>
               `nav-link ${itemIsActive(to, isActive) ? "active" : ""}`
@@ -153,7 +164,7 @@ export function Shell({ children }: { children?: ReactNode }) {
     void signOut().then(() => navigate("/sign-in"));
   };
   return (
-    <div className={`app-shell role-${user.role.toLowerCase()}`}>
+    <div className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -162,7 +173,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <Brand />
         </Link>
         <p className="nav-eyebrow">{roles[user.role]} workspace</p>
-        {user.profiles && user.profiles.length > 0 && (
+        {user.profiles && user.profiles.length > 0 && (user.role !== "PlatformAdmin" || user.profiles.length > 1) && (
           <ProfileSwitcher
             profiles={user.profiles}
             activeKey={user.activeProfileKey}
@@ -214,7 +225,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             <small>{roles[user.role]}</small>
           </div>
         </div>
-        {user.profiles && user.profiles.length > 0 && (
+        {user.profiles && user.profiles.length > 0 && (user.role !== "PlatformAdmin" || user.profiles.length > 1) && (
           <ProfileSwitcher
             profiles={user.profiles}
             activeKey={user.activeProfileKey}
@@ -231,6 +242,16 @@ export function Shell({ children }: { children?: ReactNode }) {
             Add a profile
           </Link>
         )}
+        <Link className="account-menu-link" to="/notifications" onClick={closeAccountMenu}>
+          <Icon name="bell" />
+          Notifications
+        </Link>
+        {user.role === "Business" && <div className="account-menu-secondary">
+          <Link className="account-menu-link" to="/business/requests" onClick={closeAccountMenu}><Icon name="people" />Creator Requests</Link>
+          <Link className="account-menu-link" to="/checkout" onClick={closeAccountMenu}><Icon name="qr" />Checkout</Link>
+          <Link className="account-menu-link" to="/business/cashiers" onClick={closeAccountMenu}><Icon name="people" />Cashier Management</Link>
+          <Link className="account-menu-link" to="/business/pricing" onClick={closeAccountMenu}><Icon name="settings" />Pricing</Link>
+        </div>}
         <div className="account-menu-actions">
           <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
             Sign out
@@ -289,12 +310,14 @@ export function Shell({ children }: { children?: ReactNode }) {
               aria-controls="account-menu"
               onClick={openAccountMenu}
             >
+              {user.role === "PlatformAdmin" && <Icon name="settings" />}
               <span className="small-avatar" aria-hidden="true">
                 {user.displayName.slice(0, 1)}
               </span>
             </Button>
           </div>
         </header>
+        {isProductRole && <div className="product-desktop-nav">{renderNavigation(items, `${roles[user.role]} navigation`)}</div>}
         <main id="main-content" className="main-content" tabIndex={-1}>
           <ConnectionStatus />
           {children ?? <Outlet />}
@@ -318,7 +341,7 @@ export function Shell({ children }: { children?: ReactNode }) {
               <NavLink
                 key={to}
                 to={to}
-                end
+                end={exactNavigationRoots.has(to)}
                 className={({ isActive }) =>
                   `mobile-role-link ${itemIsActive(to, isActive) ? "active" : ""}`
                 }
@@ -331,8 +354,9 @@ export function Shell({ children }: { children?: ReactNode }) {
           {overflowItems.length > 0 && (
             <button
               type="button"
-              className="mobile-role-link"
+              className={`mobile-role-link ${overflowIsActive ? "active" : ""}`}
               aria-label="More navigation"
+              aria-pressed={overflowIsActive}
               aria-haspopup="dialog"
               aria-controls="more-navigation"
               onClick={openMoreMenu}
@@ -342,9 +366,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             </button>
           )}
         </nav>
-        <footer className="workspace-footer">
-          <span>Grow together, with Weymela.</span>
-        </footer>
+        <footer className="workspace-footer"><span>Weymela</span></footer>
       </div>
     </div>
   );

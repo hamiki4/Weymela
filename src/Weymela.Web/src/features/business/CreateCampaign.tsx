@@ -19,6 +19,8 @@ import {
   promotionTypeCode,
 } from "../../ui/format";
 
+const SOCIAL_PLATFORMS = ["TikTok", "Instagram", "YouTube", "Facebook"] as const;
+
 export function CreateCampaign() {
   const pricing = useResource<BusinessPricing>("/business/pricing");
   const action = useAction();
@@ -27,6 +29,7 @@ export function CreateCampaign() {
   const [type, setType] = useState<CampaignTypeCode>("ViewOnly");
   const [form, setForm] = useState({
     title: "",
+    slogan: "",
     description: "",
     campaignBudget: "",
     requirements: "",
@@ -36,14 +39,15 @@ export function CreateCampaign() {
     startUtc: "",
     endUtc: "",
   });
+  const [platforms, setPlatforms] = useState<{ platform: string; capacity: number }[]>([]);
+  const togglePlatform = (platform: string, selected: boolean) => setPlatforms((current) =>
+    selected ? [...current, { platform, capacity: 1 }] : current.filter((row) => row.platform !== platform));
   const set = (name: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [name]: value }));
   return (
     <>
       <PageHeader
-        eyebrow="Make your next connection"
-        title="Create Campaign"
-        description="Your idea, your budget. Weymela’s verified activity pricing takes care of the rest."
+        title="Create Promotion"
       />
       <Resource resource={pricing}>
         {(data) => {
@@ -57,14 +61,14 @@ export function CreateCampaign() {
               <Section
                 title={
                   [
-                    "Start with the story",
-                    "Find the right Creators",
-                    "Set your Campaign Budget",
+                    "Promotion",
+                    "Creators",
+                    "Budget",
                   ][step]
                 }
               >
                 <ol className="stepper" aria-label="Campaign setup progress">
-                  {["Campaign", "Creators", "Budget"].map((label, index) => (
+                  {["Promotion", "Creators", "Budget"].map((label, index) => (
                     <li
                       key={label}
                       aria-current={index === step ? "step" : undefined}
@@ -86,6 +90,8 @@ export function CreateCampaign() {
                         "/business/campaigns",
                         {
                           ...form,
+                          slogan: form.slogan.trim() || null,
+                          platforms,
                           type,
                           campaignBudget: Number(form.campaignBudget),
                           minimumVerifiedFollowers:
@@ -104,7 +110,7 @@ export function CreateCampaign() {
                   <fieldset disabled={action.busy}>
                     {step === 0 && (
                       <div className="form-grid">
-                        <Field label="Campaign Title" wide>
+                        <Field label="Promotion title" wide>
                           <input
                             value={form.title}
                             onChange={(e) => set("title", e.target.value)}
@@ -112,10 +118,12 @@ export function CreateCampaign() {
                             required
                           />
                         </Field>
+                        <Field label="Promotion slogan (optional)" wide>
+                          <input value={form.slogan} onChange={(e) => set("slogan", e.target.value)} maxLength={160} />
+                        </Field>
                         <Field
                           label="Description"
                           wide
-                          help="Tell Creators what makes your Business and this Campaign special."
                         >
                           <textarea
                             value={form.description}
@@ -125,7 +133,7 @@ export function CreateCampaign() {
                             rows={4}
                           />
                         </Field>
-                        <Field label="Campaign Type" wide>
+                        <Field label="Promotion type" wide>
                           <select
                             value={type}
                             onChange={(e) =>
@@ -162,7 +170,6 @@ export function CreateCampaign() {
                         <Field
                           label="Requirements"
                           wide
-                          help="What would you like your Creators to make?"
                         >
                           <textarea
                             value={form.requirements}
@@ -175,7 +182,6 @@ export function CreateCampaign() {
                         </Field>
                         <Field
                           label="Creator category"
-                          help="Optional. Leave blank for all categories."
                         >
                           <input
                             value={form.category}
@@ -186,7 +192,6 @@ export function CreateCampaign() {
                         </Field>
                         <Field
                           label="Region"
-                          help="Optional. Leave blank for all regions."
                         >
                           <input
                             value={form.region}
@@ -197,7 +202,6 @@ export function CreateCampaign() {
                         </Field>
                         <Field
                           label="Minimum verified followers"
-                          help="Optional. Based on verified social metrics."
                         >
                           <input
                             type="number"
@@ -209,13 +213,23 @@ export function CreateCampaign() {
                             }
                           />
                         </Field>
+                        <div className="promotion-platform-field" role="group" aria-label="Social platforms">
+                          <strong>Social platforms</strong>
+                          <small>Optional. Approved Creators fill these slots.</small>
+                          {SOCIAL_PLATFORMS.map((platform) => {
+                            const selected = platforms.find((row) => row.platform === platform);
+                            return <div className="promotion-platform-choice" key={platform}>
+                              <label><input type="checkbox" checked={!!selected} onChange={(e) => togglePlatform(platform, e.target.checked)} />{platform}</label>
+                              {selected && <label>Creator slots <input aria-label={`${platform} Creator slots`} type="number" min="1" max="100" required value={selected.capacity} onChange={(e) => setPlatforms((current) => current.map((row) => row.platform === platform ? { ...row, capacity: Number(e.target.value) } : row))} /></label>}
+                            </div>;
+                          })}
+                        </div>
                       </div>
                     )}
                     {step === 2 && (
                       <>
                         <Field
-                          label="Campaign Budget"
-                          help="The total funds you will commit to this Campaign."
+                          label="Promotion budget"
                         >
                           <MoneyInput
                             value={form.campaignBudget}
@@ -234,10 +248,7 @@ export function CreateCampaign() {
                             {campaignType(type)} ·{" "}
                             {form.category || "All Creator categories"}
                           </p>
-                          <p>
-                            Next, review your wallet balance and confirm
-                            funding. Creating this draft does not reserve funds.
-                          </p>
+                          <p>Creating a draft does not reserve funds.</p>
                         </div>
                       </>
                     )}
@@ -265,7 +276,7 @@ export function CreateCampaign() {
               <aside>
                 <Section
                   title="Your activity pricing"
-                  description="Set by Weymela. Saved with your Campaign."
+                  description="Saved with your Promotion."
                 >
                   <p className="eyebrow">{campaignType(type)}</p>
                   <div className="price-feature">
@@ -281,14 +292,10 @@ export function CreateCampaign() {
                   )}
                   {price.minimumCampaignBudget !== null && (
                     <p>
-                      Minimum Campaign Budget:{" "}
+                      Minimum Promotion budget:{" "}
                       {amount(price.minimumCampaignBudget)}
                     </p>
                   )}
-                  <p className="fine-print">
-                    Your Creator Budgets protect the funds assigned to each
-                    Creator. No Creator can spend another Creator’s budget.
-                  </p>
                   <p className="fine-print">
                     Promotion duration: {data.promotionLiveDurationDays} days · Set by Weymela.
                   </p>

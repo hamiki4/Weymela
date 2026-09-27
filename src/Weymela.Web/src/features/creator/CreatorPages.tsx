@@ -379,7 +379,7 @@ export function Eligibility({ data }: { data: Earnings }) {
     <>
       <div className="payout-summary">
         <div>
-          <small>Available Earnings</small>
+          <small>Available</small>
           <strong>{amount(data.availableEarnings)}</strong>
         </div>
         <Icon name="wallet" />
@@ -431,8 +431,7 @@ export function PayoutHistory({ rows }: { rows: Payout[] }) {
       )}
       empty={
         <Empty
-          title="No payout history yet"
-          message="Confirmed payouts will appear here. Your remaining earnings always carry forward."
+          title="No payouts yet."
           icon="wallet"
         />
       }
@@ -494,8 +493,7 @@ export function CreatorEarnings() {
                   )}
                   empty={
                     <Empty
-                      title="No earnings yet"
-                      message="Verified views and eligible sales will grow your earnings here."
+                      title="No earnings yet."
                       icon="wallet"
                     />
                   }
@@ -504,7 +502,6 @@ export function CreatorEarnings() {
             <Section title="Payout history" action={<Currency />}>
               <PayoutHistory rows={data.payoutHistory} />
             </Section>
-            <details className="creator-how-you-earn"><summary>How You Earn</summary><CreatorHowYouEarn /></details>
           </>
         )}
       </Resource>

@@ -201,7 +201,8 @@ export function Resource<T>({
         <span>Loading your workspace…</span>
       </div>
     );
-  if (resource.error)
+  if (resource.error && (resource.data === null
+      || resource.error instanceof ApiError && [401, 403].includes(resource.error.status)))
     return (
       <Section
         title={
@@ -230,7 +231,10 @@ export function Resource<T>({
       </Section>
     );
   return resource.data === null ? null : (
-    <div aria-busy={resource.loading}>{children(resource.data)}</div>
+    <div aria-busy={resource.loading}>
+      {resource.error && <Notice error>{resource.error.message}</Notice>}
+      {children(resource.data)}
+    </div>
   );
 }
 export function Field({

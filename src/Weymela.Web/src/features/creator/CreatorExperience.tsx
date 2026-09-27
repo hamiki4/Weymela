@@ -41,8 +41,8 @@ export function CreatorDashboard() {
       </section>
       <Section title="Recent earnings">
         {data.earnings.history.length || data.earnings.payoutHistory.length ? <div className="creator-activity-list">
-          {data.earnings.history.slice(0, 3).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="spark" /></span><div><strong>Verified earning recorded</strong><p>{item.campaign} · {item.source}</p></div><small>{date(item.atUtc)} · {amount(item.amount)}</small></article>)}
-          {data.earnings.payoutHistory.filter((item) => item.paidAtUtc).slice(0, 2).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="wallet" /></span><div><strong>Payout paid</strong><p>{item.status}</p></div><small>{date(item.paidAtUtc!)} · {amount(item.amount)}</small></article>)}
+          {data.earnings.history.slice(0, 3).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="spark" /></span><div><strong>Verified earning recorded</strong><p>{item.campaign} · {item.source}</p></div><span className="creator-activity-meta"><strong>{amount(item.amount)}</strong><small>{date(item.atUtc)}</small></span></article>)}
+          {data.earnings.payoutHistory.filter((item) => item.paidAtUtc).slice(0, 2).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="wallet" /></span><div><strong>Payout paid</strong><p>{item.status}</p></div><span className="creator-activity-meta"><strong>{amount(item.amount)}</strong><small>{date(item.paidAtUtc!)}</small></span></article>)}
         </div> : <Empty title="No recent earnings" />}
       </Section>
     </>}</Resource>

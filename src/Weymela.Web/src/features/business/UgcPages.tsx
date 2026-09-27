@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type { UgcAssignment, UgcCard, UgcPricing } from "../../api/types";
 import {
@@ -75,6 +76,8 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
 }
 
 export function BusinessUgcPage() {
+  const [params] = useSearchParams();
+  const openOnly = params.get("filter") === "Open";
   const pricing = useResource<UgcPricing>("/business/ugc-pricing");
   const opportunities = useResource<UgcCard[]>("/business/ugc");
   const action = useAction();
@@ -84,7 +87,10 @@ export function BusinessUgcPage() {
   return (
     <>
       <PageHeader title="UGC" description="Fixed Creator payment and optional Customer discount." action={<a className="button primary" href="#ugc-create">Create UGC</a>} />
-      <Section title="UGC Promotions"><Resource resource={opportunities}>{(rows) => rows.length ? <div className="card-stack">{rows.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={opportunities.reload} />)}</div> : <Empty title="No UGC yet" message="Create a UGC Promotion below." />}</Resource></Section>
+      <Section title={openOnly ? "Open UGC" : "UGC Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
+        const visible = openOnly ? rows.filter((item) => item.status === "Open") : rows;
+        return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={opportunities.reload} />)}</div> : <Empty title={openOnly ? "No open UGC." : "No UGC yet."} />;
+      }}</Resource></Section>
       <div id="ugc-create"><Resource resource={pricing}>
         {(config) => {
           const payment = Number(form.creatorPayment) || 0;

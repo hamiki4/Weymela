@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Weymela.Domain;
 using Weymela.Infrastructure.Development;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
@@ -12,6 +13,41 @@ namespace Weymela.Api.IntegrationTests;
 [Collection("V3 HTTP PostgreSQL")]
 public sealed class WorkspaceHttpTests(PostgresFixture postgres)
 {
+    [Fact]
+    public async Task Creator_social_accounts_are_self_scoped_and_expose_no_credentials()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        await using (var db = f.Database.Open())
+        {
+            var now = DateTime.UtcNow;
+            db.CreatorSocialProfiles.AddRange(
+                new CreatorSocialProfileRecord { CreatorId = DevelopmentDirectory.Id(300), Platform = CreatorPlatform.TikTok,
+                    ProfileUrl = "https://www.tiktok.com/@bella", SelfReportedAudience = 42000,
+                    VerificationStatus = "Verified", VerifiedAudience = 40000, CreatedAtUtc = now, UpdatedAtUtc = now },
+                new CreatorSocialProfileRecord { CreatorId = DevelopmentDirectory.Id(300), Platform = CreatorPlatform.Instagram,
+                    ProfileUrl = "https://www.instagram.com/bella", IsActive = false, CreatedAtUtc = now, UpdatedAtUtc = now },
+                new CreatorSocialProfileRecord { CreatorId = DevelopmentDirectory.Id(400), Platform = CreatorPlatform.YouTube,
+                    ProfileUrl = "https://www.youtube.com/@elias", CreatedAtUtc = now, UpdatedAtUtc = now });
+            await db.SaveChangesAsync();
+        }
+
+        using var anonymous = f.Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/creator/social-accounts")).StatusCode);
+        using var customer = await f.Login("customer");
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync("/api/creator/social-accounts")).StatusCode);
+        using var creator = await f.Login("creator");
+        var response = await creator.GetAsync("/api/creator/social-accounts?creatorId=" + DevelopmentDirectory.Id(400));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("no-store", response.Headers.CacheControl!.ToString());
+        var profile = Assert.Single(JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray())!;
+        Assert.Equal("TikTok", profile["platform"]!.GetValue<string>());
+        Assert.Equal("https://www.tiktok.com/@bella", profile["profileUrl"]!.GetValue<string>());
+        Assert.Equal("Verified", profile["verificationStatus"]!.GetValue<string>());
+        Assert.Equal(6, profile.AsObject().Count);
+        foreach (var secret in new[] { "token", "secret", "credential", "password" })
+            Assert.DoesNotContain(secret, profile.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("business","/api/business/home")]
     [InlineData("business","/api/business/wallet")]

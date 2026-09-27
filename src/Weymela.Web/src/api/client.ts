@@ -14,10 +14,12 @@ export class ApiError extends Error {
 
 const resourceContextChangedEvent = "weymela-resource-context-changed";
 const resourceCache = new Map<string, unknown>();
+const pendingResources = new Map<string, Promise<void>>();
 let resourceContextGeneration = 0;
 
 function clearResourceCache() {
   resourceCache.clear();
+  pendingResources.clear();
   resourceContextGeneration += 1;
 }
 
@@ -37,6 +39,27 @@ function cachedResource<T>(path: string): { path: string; value: T; generation: 
   return resourceCache.has(path)
     ? { path, value: resourceCache.get(path) as T, generation: resourceContextGeneration }
     : null;
+}
+
+/** Prepare the next workspace page while the current page remains mounted. */
+export async function primeResources(paths: string[]): Promise<void> {
+  const generation = resourceContextGeneration;
+  const profileKey = typeof window === "undefined" ? null : window.sessionStorage.getItem("weymela.profile-key");
+  await Promise.all(paths.map((path) => {
+    if (resourceCache.has(path)) return Promise.resolve();
+    const existing = pendingResources.get(path);
+    if (existing) return existing;
+    const pending = request<unknown>(path).then((value) => {
+      if (generation === resourceContextGeneration
+          && (typeof window === "undefined" || window.sessionStorage.getItem("weymela.profile-key") === profileKey))
+        resourceCache.set(path, value);
+    }).finally(() => { if (pendingResources.get(path) === pending) pendingResources.delete(path); });
+    pendingResources.set(path, pending);
+    return pending;
+  }));
+  if (generation !== resourceContextGeneration
+      || (typeof window !== "undefined" && window.sessionStorage.getItem("weymela.profile-key") !== profileKey))
+    throw new Error("Workspace profile changed during navigation.");
 }
 
 export async function request<T>(

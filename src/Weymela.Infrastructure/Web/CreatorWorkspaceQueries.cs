@@ -9,6 +9,16 @@ namespace Weymela.Infrastructure.Web;
 
 public sealed partial class WorkspaceQueries
 {
+    public async Task<IReadOnlyList<CreatorSocialProfileView>> CreatorSocialAccountsAsync(Actor actor,CancellationToken ct)
+    {
+        await DemandCreator(actor,ct);
+        return await db.CreatorSocialProfiles.AsNoTracking()
+            .Where(x=>x.CreatorId==actor.CreatorId&&x.IsActive)
+            .OrderBy(x=>x.Platform)
+            .Select(x=>new CreatorSocialProfileView(x.Id,x.Platform.ToString(),x.ProfileUrl,
+                x.SelfReportedAudience,x.VerificationStatus,x.VerifiedAudience))
+            .ToListAsync(ct);
+    }
     public async Task<IReadOnlyList<CreatorRequestCard>> CreatorRequestsAsync(Actor actor,CancellationToken ct)
     {
         await DemandCreator(actor,ct);

@@ -52,6 +52,10 @@ test("Business keeps funding, Checkout and Cashier Management within reach", asy
   await login(context, "business");
   await open(page, "/business");
   await expect(page.getByRole("link", { name: /Available funds/i })).toHaveAttribute("href", "/business/wallet");
+  await page.getByRole("link", { name: /Open UGC/ }).click();
+  await expect(page).toHaveURL(/\/business\/ugc\?filter=Open$/);
+  await expect(page.getByRole("heading", { name: "Open UGC", exact: true })).toBeVisible();
+  await open(page, "/business");
   const nav = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(nav.getByRole("link", { name: "Wallet" })).toBeVisible();
   await nav.getByRole("button", { name: "Profile" }).click();

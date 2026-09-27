@@ -84,17 +84,17 @@ describe("Shared designed states and accessibility", () => {
       screen.getByRole("heading", { name: "Workspace unavailable" }),
     ).toBeVisible();
   });
-  it("offers Promotion creation in an empty Business list", async () => {
+  it("keeps one Promotion creation action above an empty Business list", async () => {
     mockApi({ "/business/campaigns": [] });
     render(
       <MemoryRouter>
         <BusinessCampaigns />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("No Promotions to show")).toBeVisible();
+    expect(await screen.findByText("No promotions yet.")).toBeVisible();
     expect(
       screen.getAllByRole("link", { name: "Create Promotion" }).length,
-    ).toBeGreaterThan(0);
+    ).toBe(1);
   });
   it("separates a concise input label from its help description", () => {
     render(
@@ -205,7 +205,7 @@ describe("Shared designed states and accessibility", () => {
     expect(screen.getByRole("heading", { name: "New account" })).toBeVisible();
     expect(screen.queryByText("Previous account")).not.toBeInTheDocument();
   });
-  it("shows an error after a failed warm refresh instead of leaving financial data stale indefinitely", async () => {
+  it("shows a refresh error without replacing previously valid content", async () => {
     let fail!: (reason: Error) => void;
     let calls = 0;
     vi.stubGlobal("fetch", vi.fn(() => ++calls === 1
@@ -223,7 +223,7 @@ describe("Shared designed states and accessibility", () => {
     expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
     await act(async () => fail(new Error("Balance is unavailable")));
     expect(screen.getByText("Balance is unavailable")).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "100 Br" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "100 Br" })).toBeVisible();
   });
   it("does not queue a financial action while offline", async () => {
     const call = vi.fn();

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type {
   BusinessHome,
@@ -76,15 +76,17 @@ export function BusinessDashboard() {
               </ActionLink>
             }
           />
-          <div className="product-home-summary">
-            <Link className="product-summary-row" to="/business/wallet"><span>Available funds</span><strong>{amount(data.wallet.available)}</strong></Link>
-            <Link className="product-summary-row" to="/business/wallet"><span>Total balance</span><strong>{amount(data.wallet.totalBalance)}</strong></Link>
-            <Link className="product-summary-row" to="/business/wallet"><span>Reserved funds</span><strong>{amount(data.wallet.reserved)}</strong></Link>
-            <Link className="product-summary-row" to="/business/campaigns"><span>Active Promotions</span><strong>{count(data.activeCampaigns)}</strong></Link>
-            <Link className="product-summary-row" to="/business/requests"><span>Creator Requests</span><strong>{count(data.creatorRequests)}</strong></Link>
+          <Link className="business-balance-summary" to="/business/wallet" aria-label="Available funds, view wallet">
+            <div><span>Available</span><strong>{amount(data.wallet.available)}</strong></div>
+            <div><span>Total</span><strong>{amount(data.wallet.totalBalance)}</strong></div>
+            <div><span>Reserved</span><strong>{amount(data.wallet.reserved)}</strong></div>
+          </Link>
+          <div className="business-operation-list">
+            <Link className="business-operation-row" to="/business/campaigns?filter=Active"><Icon name="campaign" /><span>Active Promotions</span><strong>{count(data.activeCampaigns)}</strong><Icon name="arrow" /></Link>
+            <Link className="business-operation-row" to="/business/requests"><Icon name="people" /><span>Creator Requests</span><strong>{count(data.creatorRequests)}</strong><Icon name="arrow" /></Link>
             <Resource resource={ugc}>
               {(rows) => (
-                <Link className="product-summary-row" to="/business/ugc"><span>Open UGC</span><strong>{count(rows.filter((row) => row.status === "Open").length)}</strong></Link>
+                <Link className="business-operation-row" to="/business/ugc?filter=Open"><Icon name="sparkle" /><span>Open UGC</span><strong>{count(rows.filter((row) => row.status === "Open").length)}</strong><Icon name="arrow" /></Link>
               )}
             </Resource>
           </div>
@@ -498,19 +500,7 @@ export function CampaignTable({
       )}
       empty={
         <Empty
-          title={admin ? "No Campaigns to show" : "No Promotions to show"}
-          message={
-            admin
-              ? "Try adjusting your filters, or check back when a Business creates a Campaign."
-              : "Create a Promotion and choose a budget to start working with Creators."
-          }
-          action={
-            !admin && (
-              <ActionLink to="/business/campaigns/new" icon="plus">
-                Create Promotion
-              </ActionLink>
-            )
-          }
+          title={admin ? "No Campaigns to show" : "No promotions yet."}
         />
       }
     />
@@ -518,6 +508,8 @@ export function CampaignTable({
 }
 export function BusinessCampaigns() {
   const resource = useResource<CampaignRow[]>("/business/campaigns");
+  const [params] = useSearchParams();
+  const activeOnly = params.get("filter") === "Active";
   return (
     <>
       <PageHeader
@@ -530,8 +522,8 @@ export function BusinessCampaigns() {
       />
       <Resource resource={resource}>
         {(rows) => (
-          <Section title="Active Promotions and drafts" action={<Currency />}>
-            <CampaignTable campaigns={rows} />
+          <Section title={activeOnly ? "Active Promotions" : "Active Promotions and drafts"} action={activeOnly ? <Link className="text-link" to="/business/campaigns">Show all</Link> : <Currency />}>
+            <CampaignTable campaigns={activeOnly ? rows.filter((row) => ["Active", "Published"].includes(row.status)) : rows} />
           </Section>
         )}
       </Resource>

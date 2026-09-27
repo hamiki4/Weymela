@@ -9,8 +9,10 @@ import {
 import type { Role, SessionProfile } from "../api/types";
 import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
+import { primeResources } from "../api/client";
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { routeResources } from "./routeResources";
 
 const navigation: Record<Role, [string, string, string][]> = {
   Business: [
@@ -98,6 +100,7 @@ export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
   const accountMenu = useRef<HTMLDialogElement>(null);
   const moreMenu = useRef<HTMLDialogElement>(null);
+  const navigationSequence = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   if (!user) return null;
@@ -163,8 +166,28 @@ export function Shell({ children }: { children?: ReactNode }) {
     closeAccountMenu();
     void signOut().then(() => navigate("/sign-in"));
   };
+  const prepareNavigation = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>("a[href]") : null;
+    if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
+    const destination = new URL(anchor.href, window.location.href);
+    if (destination.origin !== window.location.origin || destination.pathname === location.pathname) return;
+    const resources = routeResources(destination.pathname);
+    if (!resources.length) return;
+    event.preventDefault();
+    const sequence = ++navigationSequence.current;
+    const profileKey = user.activeProfileKey ?? null;
+    void primeResources(resources).catch(() => {
+      // The destination owns its ordinary error presentation if a request fails.
+    }).then(() => {
+      if (sequence === navigationSequence.current
+          && (window.sessionStorage.getItem("weymela.profile-key") ?? null) === profileKey)
+        navigate(`${destination.pathname}${destination.search}${destination.hash}`);
+    });
+  };
   return (
-    <div className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
+    <div onClickCapture={prepareNavigation} className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -242,6 +265,9 @@ export function Shell({ children }: { children?: ReactNode }) {
             Add a profile
           </Link>
         )}
+        {user.role === "Creator" && <Link className="account-menu-link" to="/creator/profile" onClick={closeAccountMenu}>
+          <Icon name="people" />Creator Profile
+        </Link>}
         <Link className="account-menu-link" to="/notifications" onClick={closeAccountMenu}>
           <Icon name="bell" />
           Notifications

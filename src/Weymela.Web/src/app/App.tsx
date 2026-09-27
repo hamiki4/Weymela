@@ -18,6 +18,7 @@ import {
   CreatorOpportunity,
 } from "../features/creator/CreatorPages";
 import { CreatorDashboard, CreatorDiscover, CreatorPromotions } from "../features/creator/CreatorExperience";
+import { CreatorProfile } from "../features/creator/CreatorProfile";
 import {
   CreatorActiveDetail,
 } from "../features/creator/ActiveCampaigns";
@@ -143,9 +144,10 @@ export function App() {
           <Route path="/creator/campaigns" element={<Navigate to="/creator/promotions" replace />} />
           <Route path="/creator/campaigns/:id" element={<CreatorActiveDetail />} />
           <Route path="/creator/requests" element={<Navigate to="/creator/promotions" replace />} />
-          <Route path="/creator/pricing" element={<Navigate to="/creator/earnings#how-you-earn" replace />} />
+          <Route path="/creator/pricing" element={<Navigate to="/creator/earnings" replace />} />
           <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
           <Route path="/creator/earnings" element={<CreatorEarnings />} />
+          <Route path="/creator/profile" element={<CreatorProfile />} />
           <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
         </Route>
         <Route element={<RoleGate roles={["PlatformAdmin"]} />}>

@@ -22,6 +22,7 @@ import {
   CreatorDiscover,
   CreatorPromotions,
 } from "../src/features/creator/CreatorExperience";
+import { CreatorProfile } from "../src/features/creator/CreatorProfile";
 import {
   CreatorActiveDetail,
 } from "../src/features/creator/ActiveCampaigns";
@@ -88,6 +89,20 @@ describe("Business workspace", () => {
         name: "Pricing",
       }),
     ).toBeVisible();
+  });
+  it("routes Business operations to their destination and keeps one Create Promotion action", async () => {
+    mount(<BusinessDashboard />);
+    const active = await screen.findByRole("link", { name: /Active Promotions/ });
+    expect(active).toHaveAttribute("href", "/business/campaigns?filter=Active");
+    expect(screen.getByRole("link", { name: /Creator Requests/ })).toHaveAttribute("href", "/business/requests");
+    expect(screen.getByRole("link", { name: /Open UGC/ })).toHaveAttribute("href", "/business/ugc?filter=Open");
+    expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
+  });
+  it("does not repeat the Create Promotion action on an empty Promotions page", async () => {
+    mockApi({ "/business/campaigns": [] });
+    mount(<BusinessCampaigns />);
+    expect(await screen.findByText("No promotions yet.")).toBeVisible();
+    expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
   });
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
@@ -332,6 +347,16 @@ describe("Business workspace", () => {
 });
 
 describe("Creator workspace", () => {
+  it("shows only server recorded social profiles and supported platform statuses", async () => {
+    mockApi({ "/creator/social-accounts": [{ id: "social-1", platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella",
+      verificationStatus: "Verified" }, { id: "social-2", platform: "YouTube", profileUrl: "javascript:alert(1)", verificationStatus: "Unverified" }] });
+    mount(<CreatorProfile />);
+    expect(await screen.findByRole("heading", { name: "Social Accounts" })).toBeVisible();
+    expect(screen.getByText("Verified")).toBeVisible();
+    expect(screen.getAllByText("Profile on file")).toHaveLength(2);
+    expect(screen.getAllByText("Not connected")).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "View" })).toHaveLength(1);
+  });
   it("groups own earnings and Campaigns", async () => {
     mount(<CreatorDashboard />);
     expect(
@@ -724,10 +749,10 @@ describe("Accepted commerce compatibility", () => {
   it("shows empty transaction and payout histories", async () => {
     mockApi();
     const rendered = mount(<CustomerTransactions />);
-    expect(await screen.findByText("No transactions yet")).toBeVisible();
+    expect(await screen.findByText("No transactions yet.")).toBeVisible();
     rendered.unmount();
     mount(<CustomerCashback />);
-    expect(await screen.findByText("No payouts recorded yet")).toBeVisible();
+    expect(await screen.findByText("No payouts yet.")).toBeVisible();
   });
   it("renders the simple QR page with working Back destination", async () => {
     const api = mockApi();

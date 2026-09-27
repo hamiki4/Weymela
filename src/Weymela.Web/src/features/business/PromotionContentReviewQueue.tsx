@@ -31,7 +31,7 @@ function ReviewRow({ row, reload }: { row: PromotionContentReviewCard; reload: (
 
 export function PromotionContentReviewQueue() {
   const resource = useResource<PromotionContentReviewCard[]>("/business/promotion-content-submissions");
-  return <Section title="Promotion content review" description="Review content submitted by Creators for your Promotions. Approval only makes it ready for the Creator to go live.">
-    <Resource resource={resource}>{(rows) => rows.length ? <div className="business-promotion-review-list">{rows.map((row) => <ReviewRow key={row.submissionId} row={row} reload={resource.reload} />)}</div> : <Empty title="No Promotion content to review" message="Creator submissions will appear here after you approve their request to join." />}</Resource>
+  return <Section title="Promotion content review">
+    <Resource resource={resource}>{(rows) => rows.length ? <div className="business-promotion-review-list">{rows.map((row) => <ReviewRow key={row.submissionId} row={row} reload={resource.reload} />)}</div> : <Empty title="No content to review." />}</Resource>
   </Section>;
 }

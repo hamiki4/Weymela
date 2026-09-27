@@ -95,7 +95,6 @@ function CustomerLocationCard({
       <span className="customer-location-icon" aria-hidden="true"><Icon name="location" size={23} /></span>
       <div className="customer-location-copy">
         <h2>{discover ? "Find promotions near you" : "See what is close to you"}</h2>
-        <p>Use your location to sort eligible live promotions by distance.</p>
         {coordinates && <p className="customer-location-note">Location is on. Offers without Business coordinates remain available without a distance.</p>}
         {error && <p className="customer-location-error" role="status">{error}</p>}
       </div>
@@ -594,8 +593,7 @@ export function CustomerTransactions() {
           </section>
         ) : (
           <Empty
-            title="No transactions yet"
-            message="Confirmed purchases will appear here after checkout."
+            title="No transactions yet."
             action={<ActionLink to="/customer/offers">Explore Offers</ActionLink>}
           />
         )}
@@ -654,7 +652,7 @@ export function CustomerCashback() {
                     <strong>{amount(payout.amount.amount)}</strong>
                   </article>
                 )) : (
-                  <Empty title="No payouts recorded yet" message="When a payout is recorded, its status and date will appear here." />
+                  <Empty title="No payouts yet." />
                 )}
               </section>
             </>

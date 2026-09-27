@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { Role, SessionUser } from "../src/api/types";
 import { App } from "../src/app/App";
 import { SessionProvider, useSession } from "../src/app/Session";
+import { invalidateResourceCache, primeResources } from "../src/api/client";
 
 function NavigationControls() {
   const navigate = useNavigate();
@@ -33,7 +34,13 @@ function sessionResponses(role: Role) {
     }));
     if (input === "/api/session") return Promise.resolve(Response.json(user));
     if (input === "/api/device/enrollment") return Promise.resolve(Response.json({ state: "Enrolled", expiresAtUtc: null }));
-    // Hold first-visit page requests to exercise the shared layout during slow loading.
+    if (input === "/api/customer/offers" || input === "/api/customer/transactions" || input === "/api/checkout/recent"
+        || input === "/api/creator/campaigns" || input === "/api/creator/discover"
+        || input === "/api/creator/ugc") return Promise.resolve(Response.json([]));
+    if (input === "/api/customer/cashback") return Promise.resolve(Response.json({ availableCashback: { amount: 0 }, status: "BelowMinimum" }));
+    if (input === "/api/creator/home") return Promise.resolve(Response.json({ creator: { displayName: "Creator" },
+      requests: 0, activeCampaigns: 0, earnings: { availableEarnings: 0, history: [], payoutHistory: [] } }));
+    if (input === "/api/notifications") return Promise.resolve(Response.json({ items: [], unreadCount: 0 }));
     return new Promise<Response>(() => {});
   });
   vi.stubGlobal("fetch", fetch);
@@ -46,6 +53,51 @@ afterEach(() => {
 });
 
 describe("shared app navigation", () => {
+  it("drops an in-flight destination response after the profile context changes", async () => {
+    let completeFirst!: (response: Response) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { completeFirst = resolve; }))
+      .mockResolvedValue(Response.json([{ platform: "YouTube" }]));
+    vi.stubGlobal("fetch", fetch);
+    window.sessionStorage.setItem("weymela.profile-key", "Creator:first");
+    const first = primeResources(["/creator/social-accounts"]);
+    await waitFor(() => expect(completeFirst).toBeDefined());
+    window.sessionStorage.setItem("weymela.profile-key", "Creator:second");
+    invalidateResourceCache(false);
+    completeFirst(Response.json([{ platform: "TikTok" }]));
+    await expect(first).rejects.toThrow("Workspace profile changed during navigation.");
+    await primeResources(["/creator/social-accounts"]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    invalidateResourceCache(false);
+  });
+
+  it("retains the current Creator page until first-visit destination data is ready", async () => {
+    const creator: SessionUser = { role: "Creator", displayName: "Bela", publicId: "CR-1",
+      developmentMode: true, canCheckout: false, activeProfileKey: "Creator:creator-1:-", profiles: [] };
+    let finishDiscover!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      if (input === "/api/device/access") return Promise.resolve(Response.json({ state: "Unlocked", idleExpiresAtUtc: null }));
+      if (input === "/api/session") return Promise.resolve(Response.json(creator));
+      if (input === "/api/device/enrollment") return Promise.resolve(Response.json({ state: "Enrolled", expiresAtUtc: null }));
+      if (input === "/api/creator/home") return Promise.resolve(Response.json({ creator: { displayName: "Bela" }, requests: 1,
+        activeCampaigns: 0, earnings: { availableEarnings: 0, history: [], payoutHistory: [] } }));
+      if (input === "/api/creator/campaigns" || input === "/api/creator/ugc") return Promise.resolve(Response.json([]));
+      if (input === "/api/creator/discover") return new Promise<Response>(resolve => { finishDiscover = resolve; });
+      return Promise.resolve(Response.json([]));
+    }));
+    renderApp("/creator");
+    const heading = await screen.findByRole("heading", { name: "Home" });
+    const shell = document.querySelector(".app-shell");
+    await userEvent.click(screen.getByRole("navigation", { name: "Main navigation" }).querySelector('a[href="/creator/discover"]')!);
+    await waitFor(() => expect(finishDiscover).toBeDefined());
+    expect(screen.getByRole("heading", { name: "Home" })).toBe(heading);
+    expect(screen.getByLabelText("Path")).toHaveTextContent("/creator");
+    expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
+    await act(async () => finishDiscover(Response.json([])));
+    await waitFor(() => expect(screen.getByLabelText("Path")).toHaveTextContent("/creator/discover"));
+    expect(document.querySelector(".app-shell")).toBe(shell);
+    expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
+  });
   it.each([
     ["Customer", "/customer/offers", "/customer/discover"],
     ["Creator", "/creator", "/creator/discover"],

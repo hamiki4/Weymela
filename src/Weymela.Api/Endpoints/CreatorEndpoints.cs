@@ -11,6 +11,7 @@ internal static class CreatorEndpoints
     {
         var g=app.MapGroup("/api/creator").RequireAuthorization("Creator").AddEndpointFilter<Weymela.Api.Security.ValidatedInputFilter>();
         g.MapGet("/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorHomeAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/social-accounts",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorSocialAccountsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/requests",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorRequestsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/pricing",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorPricingAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/discover",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.DiscoverAsync(EndpointSupport.Actor(c),ct));

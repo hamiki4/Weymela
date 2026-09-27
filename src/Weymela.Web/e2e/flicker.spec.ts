@@ -49,3 +49,29 @@ for (const { alias, from, to } of workspaces) {
     expect(await page.evaluate(() => (window as Window & { flickerEvents?: string[] }).flickerEvents)).toEqual([]);
   });
 }
+
+test("iPhone first visit keeps Business Home visible until Promotions data arrives", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(context, "business");
+  await open(page, "/business");
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/business/campaigns", async route => { await held; await route.continue(); });
+  await page.evaluate(() => {
+    const shell = document.querySelector(".app-shell") as HTMLElement & { pilotMarker?: string };
+    shell.pilotMarker = "retained";
+    (window as Window & { transitionFrames?: string[] }).transitionFrames = [];
+    new MutationObserver(() => {
+      if (document.querySelector("main .loading, .sign-in"))
+        (window as Window & { transitionFrames?: string[] }).transitionFrames?.push("loading frame");
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Promotions" }).click();
+  await expect(page).toHaveURL(/\/business$/);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  release();
+  await expect(page).toHaveURL(/\/business\/campaigns$/);
+  await expect(page.getByRole("heading", { name: "Promotions", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => ({ marker: (document.querySelector(".app-shell") as HTMLElement & { pilotMarker?: string }).pilotMarker,
+    frames: (window as Window & { transitionFrames?: string[] }).transitionFrames }))).toEqual({ marker: "retained", frames: [] });
+});

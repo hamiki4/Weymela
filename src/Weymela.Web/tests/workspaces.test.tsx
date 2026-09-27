@@ -355,6 +355,9 @@ describe("Creator workspace", () => {
     expect(screen.getByText("Verified")).toBeVisible();
     expect(screen.getAllByText("Profile on file")).toHaveLength(2);
     expect(screen.getAllByText("Not connected")).toHaveLength(2);
+    expect(screen.getByText("@bella")).toBeVisible();
+    expect(screen.queryByText("social-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("javascript:alert(1)")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "View" })).toHaveLength(1);
   });
   it("groups own earnings and Campaigns", async () => {
@@ -363,6 +366,9 @@ describe("Creator workspace", () => {
       await screen.findByRole("heading", { name: "Home" }),
     ).toBeVisible();
     expect(screen.getAllByText("5,400").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Pending Requests/ })).toHaveAttribute("href", "/creator/promotions?filter=Requests");
+    expect(screen.getByRole("link", { name: /Active Promotions/ })).toHaveAttribute("href", "/creator/promotions?filter=Active");
+    expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
   });
   it("discovers specific Business Promotions with a compact UGC switch", async () => {
     mockApi({ "/creator/ugc": [] });
@@ -527,7 +533,7 @@ describe("Creator workspace", () => {
       },
     });
     mount(<CreatorEarnings />);
-    expect(await screen.findByText("4,600 more needed")).toBeVisible();
+    expect(await screen.findByText("Amount remaining: 4,600")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Request Payout" }),
     ).toBeDisabled();

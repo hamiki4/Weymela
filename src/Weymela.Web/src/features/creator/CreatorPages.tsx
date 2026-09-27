@@ -6,7 +6,6 @@ import type {
   CreatorPricing,
   Earnings,
   Opportunity,
-  Payout,
 } from "../../api/types";
 import {
   ActionLink,
@@ -389,7 +388,7 @@ export function Eligibility({ data }: { data: Earnings }) {
         <strong>{amount(data.minimumToCashOut)}</strong>
       </p>
       {data.amountNeeded > 0 ? (
-        <p className="muted">{amount(data.amountNeeded)} more needed</p>
+        <p className="muted">Amount remaining: {amount(data.amountNeeded)}</p>
       ) : (
         <Notice>Eligible for payout · {amount(data.eligibleAmount)}</Notice>
       )}
@@ -400,42 +399,6 @@ export function Eligibility({ data }: { data: Earnings }) {
         aria-label="Progress toward payout threshold"
       />
     </>
-  );
-}
-export function PayoutHistory({ rows }: { rows: Payout[] }) {
-  return (
-    <DataTable
-      rows={rows}
-      rowKey={(r) => r.id}
-      label="Payout history"
-      columns={[
-        { label: "Amount", cell: (r) => amount(r.amount), numeric: true },
-        { label: "Status", cell: (r) => <Badge status={r.status} /> },
-        { label: "Date", cell: (r) => date(r.paidAtUtc ?? r.eligibleAtUtc) },
-        {
-          label: "Reference",
-          cell: (r) => r.reference || "Awaiting payment confirmation",
-        },
-      ]}
-      card={(r) => (
-        <>
-          <div className="card-head">
-            <strong>{amount(r.amount)}</strong>
-            <Badge status={r.status} />
-          </div>
-          <p>{date(r.paidAtUtc ?? r.eligibleAtUtc)}</p>
-          <p className="fine-print">
-            {r.reference || "Awaiting payment confirmation"}
-          </p>
-        </>
-      )}
-      empty={
-        <Empty
-          title="No payouts yet."
-          icon="wallet"
-        />
-      }
-    />
   );
 }
 export function CreatorEarnings() {
@@ -499,9 +462,6 @@ export function CreatorEarnings() {
                   }
                 />
               </Section>
-            <Section title="Payout history" action={<Currency />}>
-              <PayoutHistory rows={data.payoutHistory} />
-            </Section>
           </>
         )}
       </Resource>

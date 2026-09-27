@@ -71,9 +71,9 @@ export function BusinessDashboard() {
             eyebrow={data.business.displayName}
             title="Home"
             action={
-              <ActionLink to="/business/campaigns/new" icon="plus">
+              <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
                 Create Promotion
-              </ActionLink>
+              </ActionLink></span>
             }
           />
           <Link className="business-balance-summary" to="/business/wallet" aria-label="Available funds, view wallet">
@@ -515,9 +515,9 @@ export function BusinessCampaigns() {
       <PageHeader
         title="Promotions"
         action={
-          <ActionLink to="/business/campaigns/new" icon="plus">
+          <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
             Create Promotion
-          </ActionLink>
+          </ActionLink></span>
         }
       />
       <Resource resource={resource}>

@@ -186,6 +186,10 @@ export function Shell({ children }: { children?: ReactNode }) {
         navigate(`${destination.pathname}${destination.search}${destination.hash}`);
     });
   };
+  const accountIdentity = <>
+    <span className="avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
+    <div><strong>{user.displayName}</strong><small>{roles[user.role]}</small></div>
+  </>;
   return (
     <div onClickCapture={prepareNavigation} className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
       <a className="skip-link" href="#main-content">
@@ -227,10 +231,10 @@ export function Shell({ children }: { children?: ReactNode }) {
         ref={accountMenu}
         id="account-menu"
         className="dialog account-sheet"
-        aria-labelledby="account-menu-title"
+        aria-label="Account menu"
       >
         <div className="dialog-header">
-          <h2 id="account-menu-title">Account menu</h2>
+          <h2>Account</h2>
           <Button
             variant="quiet"
             aria-label="Close account menu"
@@ -239,15 +243,11 @@ export function Shell({ children }: { children?: ReactNode }) {
             <Icon name="close" />
           </Button>
         </div>
-        <div className="account-summary">
-          <span className="avatar" aria-hidden="true">
-            {user.displayName.slice(0, 1)}
-          </span>
-          <div>
-            <strong>{user.displayName}</strong>
-            <small>{roles[user.role]}</small>
-          </div>
-        </div>
+        {user.role === "Creator"
+          ? <Link className="account-summary account-summary-link" to="/creator/profile" aria-label="Creator Profile" onClick={closeAccountMenu}>
+              {accountIdentity}<Icon name="arrow" />
+            </Link>
+          : <div className="account-summary">{accountIdentity}</div>}
         {user.profiles && user.profiles.length > 0 && (user.role !== "PlatformAdmin" || user.profiles.length > 1) && (
           <ProfileSwitcher
             profiles={user.profiles}
@@ -265,9 +265,6 @@ export function Shell({ children }: { children?: ReactNode }) {
             Add a profile
           </Link>
         )}
-        {user.role === "Creator" && <Link className="account-menu-link" to="/creator/profile" onClick={closeAccountMenu}>
-          <Icon name="people" />Creator Profile
-        </Link>}
         <Link className="account-menu-link" to="/notifications" onClick={closeAccountMenu}>
           <Icon name="bell" />
           Notifications

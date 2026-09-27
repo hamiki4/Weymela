@@ -119,6 +119,7 @@ describe("Phase 3 multi-profile shell", () => {
     const menu = screen.getByRole("dialog", { name: "Account menu" });
     expect(within(menu).getByLabelText("Switch profile")).toBeInTheDocument();
     expect(within(menu).getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
+    expect(within(menu).getByRole("link", { name: "Creator Profile" })).toHaveAttribute("href", "/creator/profile");
     expect(within(menu).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 

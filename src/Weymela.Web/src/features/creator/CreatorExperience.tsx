@@ -43,7 +43,7 @@ export function CreatorDashboard() {
         {data.earnings.history.length || data.earnings.payoutHistory.length ? <div className="creator-activity-list">
           {data.earnings.history.slice(0, 3).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="spark" /></span><div><strong>Verified earning recorded</strong><p>{item.campaign} · {item.source}</p></div><span className="creator-activity-meta"><strong>{amount(item.amount)}</strong><small>{date(item.atUtc)}</small></span></article>)}
           {data.earnings.payoutHistory.filter((item) => item.paidAtUtc).slice(0, 2).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="wallet" /></span><div><strong>Payout paid</strong><p>{item.status}</p></div><span className="creator-activity-meta"><strong>{amount(item.amount)}</strong><small>{date(item.paidAtUtc!)}</small></span></article>)}
-        </div> : <Empty title="No recent earnings" />}
+        </div> : <Empty title="No recent earnings." />}
       </Section>
     </>}</Resource>
     <Section title="Live Promotions" action={<ActionLink to="/creator/promotions" secondary>Promotions</ActionLink>}>
@@ -52,7 +52,7 @@ export function CreatorDashboard() {
         return live.length ? <div className="creator-promotion-list">{live.map((row) => <Link className="creator-promotion-list-card" to={`/creator/promotions/${row.budgetId}`} key={row.budgetId}>
           <div><small>{row.business.displayName}</small><h3>{row.title}</h3><p>{campaignType(row.type)} · {row.remainingDays} days left</p></div>
           <div className="creator-progress"><span>{count(row.verifiedViews)} verified views</span><span>{amount(row.viewEarnings + row.saleCommissionEarnings)} earned</span></div>
-        </Link>)}</div> : <Empty title="No live Promotions" />;
+        </Link>)}</div> : <Empty title="No live promotions." />;
       }}</Resource>
     </Section>
   </>;

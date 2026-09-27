@@ -50,26 +50,34 @@
 .product-shell .account-menu-link { border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; font-weight: 600; }
 .product-shell .profile-switcher select { color: var(--product-ink); }
 .account-menu-secondary { margin-top: 8px; }
-.product-shell .account-sheet { width: min(360px, calc(100% - 24px)); padding: 12px 16px 14px; border-radius: 15px; }
-.product-shell .account-sheet .dialog-header { align-items: center; margin-bottom: 5px; }
+.product-shell .account-sheet { width: min(360px, calc(100% - 24px)); padding: 8px 14px 10px; border-radius: 13px; }
+.product-shell .account-sheet .dialog-header { align-items: center; margin-bottom: 0; }
 .product-shell .account-sheet .dialog-header h2 { padding: 0; margin: 0; font-size: 1.05rem; }
-.product-shell .account-sheet .dialog-header .button { width: 32px; min-height: 32px; padding: 4px; border: 0; border-radius: 8px; color: #374151; background: #f3f4f6; box-shadow: none; }
-.product-shell .account-sheet .account-summary { gap: 9px; margin: 0 0 5px; padding: 7px 0 10px; }
-.product-shell .account-sheet .account-menu-link { min-height: 38px; padding: 7px 2px; font-size: .86rem; }
-.product-shell .account-sheet .account-menu-secondary { margin-top: 0; }
-.product-shell .account-sheet .account-menu-actions { margin-top: 5px; padding-top: 5px; }
-.product-shell .account-sheet .account-menu-actions .button { min-height: 38px; }
-.product-shell .account-sheet .profile-switcher { margin-bottom: 6px; }
+.product-shell .account-sheet .dialog-header .button { width: 44px; min-height: 44px; padding: 11px; border: 0; border-radius: 9px; color: #374151; background: transparent; box-shadow: none; }
+.product-shell .account-sheet .account-summary { gap: 9px; min-height: 49px; margin: 0 0 4px; padding: 5px 2px 7px; }
+.product-shell .account-sheet .account-summary-link { color: var(--product-ink); }
+.product-shell .account-sheet .account-summary-link > div { flex: 1; min-width: 0; }
+.product-shell .account-sheet .account-summary-link > svg { width: 16px; color: var(--product-secondary); }
+.product-shell .account-sheet .account-menu-link { min-height: 44px; padding: 6px 2px; font-size: .86rem; }
+.product-shell .account-sheet .account-menu-secondary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 9px; margin-top: 0; }
+.product-shell .account-sheet .account-menu-secondary .account-menu-link { min-width: 0; gap: 6px; font-size: .8rem; line-height: 1.2; }
+.product-shell .account-sheet .account-menu-secondary .account-menu-link svg { flex: none; width: 17px; }
+.product-shell .account-sheet .account-menu-actions { margin-top: 2px; padding-top: 2px; }
+.product-shell .account-sheet .account-menu-actions .button { min-height: 44px; }
+.product-shell .account-sheet .profile-switcher { gap: 4px; margin-bottom: 3px; }
+.product-shell .account-sheet .profile-switcher label { font-size: .76rem; letter-spacing: 0; text-transform: none; }
+.product-shell .account-sheet .profile-switcher select { min-height: 44px; font-size: .86rem; }
 .product-desktop-nav { display: none; }
+.role-business .business-create-action .button { min-height: 44px; padding: 9px 16px; border-radius: 10px; }
 .business-balance-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 14px 6px; margin-bottom: 16px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); }
 .business-balance-summary > div { display: grid; gap: 5px; min-width: 0; padding: 3px 11px; border-right: 1px solid var(--product-line); }
 .business-balance-summary > div:last-child { border: 0; }
 .business-balance-summary span { font-size: .73rem; font-weight: 650; color: var(--product-secondary); }
 .business-balance-summary strong { overflow-wrap: anywhere; font-size: clamp(.9rem, 3.8vw, 1.28rem); line-height: 1.2; font-variant-numeric: tabular-nums; }
 .business-balance-summary > div:first-child strong { color: var(--role-accent); }
-.business-operation-list { display: grid; margin-bottom: 18px; border-top: 1px solid var(--product-line); }
-.business-operation-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto 17px; align-items: center; gap: 9px; min-height: 53px; padding: 8px 3px; border-bottom: 1px solid var(--product-line); color: var(--product-ink); }
-.business-operation-row > svg:first-child { color: var(--role-accent); }
+.business-operation-list { display: grid; gap: 6px; margin-bottom: 18px; }
+.business-operation-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 17px; align-items: center; gap: 9px; min-height: 50px; padding: 7px 10px; border: 1px solid var(--product-line); border-radius: 9px; background: #fff; color: var(--product-ink); }
+.business-operation-row > svg:first-child { width: 28px; height: 28px; padding: 5px; border-radius: 7px; color: var(--role-accent); background: var(--role-soft); }
 .business-operation-row > svg:last-child { width: 16px; color: var(--product-secondary); }
 .business-operation-row span { font-size: .9rem; font-weight: 650; }
 .business-operation-row strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
@@ -78,11 +86,14 @@
 .role-customer .product-summary-row span { color: var(--product-secondary); font-size: .8rem; font-weight: 600; }
 .role-customer .product-summary-row strong { color: var(--role-accent); font-size: 1rem; font-variant-numeric: tabular-nums; }
 .role-customer .product-summary-row small { grid-column: 1 / -1; color: var(--product-secondary); font-size: .73rem; }
-.role-creator .creator-dashboard-metric { display: block; min-width: 0; padding: 5px 11px; border: 1px solid var(--role-border); border-radius: 11px; background: #fff; }
+.role-creator .creator-metrics { gap: 0; padding: 5px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; }
+.role-creator .creator-dashboard-metric { display: block; min-width: 0; padding: 5px 11px; border-right: 1px solid var(--product-line); color: var(--product-ink); }
+.role-creator .creator-dashboard-metric:last-child { border-right: 0; border-radius: 8px; background: var(--role-soft); }
 .role-creator .creator-dashboard-metric .metric { border: 0; padding: 6px 0; }
 .role-creator .creator-dashboard-metric .metric-top { gap: 4px; }
 .role-creator .creator-dashboard-metric .metric-top svg { color: var(--role-accent); }
-.role-creator .creator-dashboard-metric .metric strong { color: var(--role-accent); }
+.role-creator .creator-dashboard-metric .metric strong { color: var(--product-ink); }
+.role-creator .creator-dashboard-metric:last-child .metric strong { color: var(--role-accent); }
 .role-creator .creator-dashboard-metric .metric-top span { color: var(--product-ink); font-size: .78rem; font-weight: 650; }
 .role-creator .creator-activity-list article { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: start; gap: 9px; }
 .role-creator .creator-activity-icon { width: 28px; height: 28px; }
@@ -96,6 +107,7 @@
 .creator-social-row > div { display: grid; flex: 1; min-width: 110px; gap: 2px; }
 .creator-social-row strong { font-size: .91rem; }
 .creator-social-row small { color: var(--product-secondary); }
+.creator-social-row .creator-social-handle { color: var(--product-ink); font-size: .8rem; overflow-wrap: anywhere; }
 .creator-social-row > a { font-size: .82rem; font-weight: 650; color: var(--role-accent); }
 .creator-social-status { padding: 3px 7px; border-radius: 6px; background: var(--role-soft); color: var(--role-accent); font-size: .72rem; font-weight: 650; }
 .role-creator .creator-discover-cta { padding: 13px 0; margin: 4px 0 20px; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; }
@@ -163,7 +175,9 @@
 .role-business .campaign-name > a { color: var(--product-ink); }
 .role-business .campaign-name .row-links { font-size: .78rem; }
 .role-business .campaign-name .row-links a { color: var(--role-accent); }
-.role-business .quick-actions { gap: 8px; }
+.role-business .quick-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.role-business .quick-actions .button { justify-content: space-between; width: 100%; min-width: 0; min-height: 48px; padding: 8px 10px; border-radius: 9px; font-size: .82rem; line-height: 1.2; text-align: left; white-space: normal; }
+.role-business .quick-actions .button svg { flex: none; width: 17px; }
 .role-business .cashier-list { display: grid; }
 .role-business .cashier-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--product-line); }
 .role-business .cashier-identity { display: grid; gap: 2px; min-width: 0; }
@@ -177,11 +191,18 @@
 @media (max-width: 640px) {
   .product-shell .main-content { padding: 18px 16px 88px; }
   .product-shell .page-heading h1 { font-size: 1.6rem; }
-  .role-creator .creator-metrics { gap: 7px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .role-business .business-create-action .button { width: min(100%, 232px); }
+  .business-balance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 12px; margin-bottom: 12px; }
+  .business-balance-summary > div { padding: 5px 8px; }
+  .business-balance-summary > div:first-child { grid-column: 1 / -1; gap: 2px; padding-bottom: 10px; margin-bottom: 5px; border: 0; border-bottom: 1px solid var(--product-line); }
+  .business-balance-summary > div:first-child strong { font-size: 1.55rem; }
+  .business-balance-summary > div:nth-child(2) { border-right: 1px solid var(--product-line); }
+  .business-balance-summary > div:last-child { border: 0; }
+  .role-creator .creator-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .role-creator .creator-dashboard-metric { padding: 4px 7px; }
   .role-creator .creator-dashboard-metric .metric strong { font-size: clamp(.95rem, 4.4vw, 1.35rem); }
   .role-creator .creator-dashboard-metric .metric-top svg { width: 14px; }
-  .role-creator .creator-dashboard-metric .metric-top span { font-size: .68rem; line-height: 1.2; }
+  .role-creator .creator-dashboard-metric .metric-top span { font-size: .74rem; line-height: 1.2; }
   .role-customer .product-home-summary { grid-template-columns: 1fr; }
   .role-creator .creator-promotion-row { grid-template-columns: 1fr; }
   .role-business .cashier-row { grid-template-columns: minmax(0, 1fr) auto; }

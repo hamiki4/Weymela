@@ -47,7 +47,10 @@ test("captures the nine Pilot correction views", async ({ page, context }) => {
     }
     await open(page, views[0][0]);
     await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("button", { name: "Profile" }).click();
-    await expect(page.getByRole("dialog", { name: "Account menu" })).toBeVisible();
+    const menu = page.getByRole("dialog", { name: "Account menu" });
+    await expect(menu).toBeVisible();
+    expect(await menu.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(430);
+    await layout(page);
     await screenshot(page, `pilot-correction-${role}-account-menu`);
   }
 });

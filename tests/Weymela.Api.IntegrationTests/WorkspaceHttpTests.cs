@@ -154,6 +154,70 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         }
     }
 
+    [Fact]
+    public async Task Shared_AntiCircumvention_version_is_accepted_only_by_the_authenticated_Business_or_Creator()
+    {
+        using var content = new TestBusinessLegalContent();
+        await using var fixture = await ApiFixture.CreateAsync(postgres, builder =>
+            builder.Services.AddSingleton(new BusinessLegalDocumentSource(content.Root)));
+        var version = Guid.NewGuid();
+        var hash = content.Publish(version, "Shared AntiCircumvention version");
+        await using (var db = fixture.Database.Open())
+        {
+            db.LegalDocumentVersions.Add(new(version, LegalDocumentType.AntiCircumventionAgreement,
+                "shared-current", hash, DateTime.UtcNow.AddMinutes(-1)));
+            await db.SaveChangesAsync();
+        }
+
+        using var business = await fixture.Login("business");
+        using var creator = await fixture.Login("creator");
+        using var otherCreator = await fixture.Login("other-creator");
+        var businessAgreement = (await business.GetJson("/api/legal/current")).AsArray()
+            .Single(document => document?["type"]?.GetValue<string>() == "BusinessAgreement")!;
+        var creatorCurrent = (await creator.GetJson("/api/legal/current")).AsArray();
+        Assert.DoesNotContain(creatorCurrent, document => document?["type"]?.GetValue<string>() == "BusinessAgreement");
+        Assert.False(creatorCurrent.Single(document => document?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
+        Assert.False((await otherCreator.GetJson("/api/legal/current")).AsArray()
+            .Single(document => document?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
+
+        Assert.False((await creator.Post($"/api/legal/{businessAgreement["id"]!.GetValue<Guid>()}/accept",
+            new { contentHash = businessAgreement["contentHash"]!.GetValue<string>(), confirmed = true })).IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await creator.Post($"/api/legal/{version}/accept",
+            new { contentHash = hash, confirmed = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await creator.Post($"/api/legal/{version}/accept",
+            new { contentHash = "incorrect-hash", confirmed = true })).StatusCode);
+        foreach (var alias in new[] { "customer", "cashier", "operations-admin", "admin" })
+        {
+            using var other = await fixture.Login(alias);
+            Assert.False((await other.Post($"/api/legal/{version}/accept",
+                new { contentHash = hash, confirmed = true })).IsSuccessStatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await creator.Post($"/api/legal/{version}/accept",
+            new { contentHash = hash, confirmed = true, userId = DevelopmentDirectory.Id(5) })).StatusCode);
+        await creator.PostJson($"/api/legal/{version}/accept", new { contentHash = hash, confirmed = true });
+        await business.PostJson($"/api/legal/{version}/accept", new { contentHash = hash, confirmed = true });
+        Assert.True((await creator.GetJson("/api/legal/current")).AsArray()
+            .Single(document => document?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
+        Assert.False((await otherCreator.GetJson("/api/legal/current")).AsArray()
+            .Single(document => document?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
+
+        await using var verify = fixture.Database.Open();
+        Assert.Equal(2, await verify.LegalAcceptances.CountAsync(acceptance => acceptance.DocumentVersionId == version));
+        Assert.True(await verify.LegalAcceptances.AnyAsync(acceptance => acceptance.DocumentVersionId == version
+            && acceptance.UserId == DevelopmentDirectory.Id(4) && acceptance.Role == LegalRole.Creator));
+        Assert.True(await verify.LegalAcceptances.AnyAsync(acceptance => acceptance.DocumentVersionId == version
+            && acceptance.UserId == DevelopmentDirectory.Id(2) && acceptance.Role == LegalRole.Business));
+        Assert.False(await verify.LegalAcceptances.AnyAsync(acceptance => acceptance.DocumentVersionId == version
+            && acceptance.UserId == DevelopmentDirectory.Id(5)));
+        Assert.Equal(1, await verify.AuditEvents.CountAsync(audit => audit.EventType == "LegalVersionAccepted"
+            && audit.Detail == version.ToString() && audit.ActorId == DevelopmentDirectory.Id(4)
+            && audit.CreatorId == DevelopmentDirectory.Id(300) && audit.BusinessId == null));
+        Assert.Equal(1, await verify.AuditEvents.CountAsync(audit => audit.EventType == "LegalVersionAccepted"
+            && audit.Detail == version.ToString() && audit.ActorId == DevelopmentDirectory.Id(2)
+            && audit.BusinessId == DevelopmentDirectory.Id(100) && audit.CreatorId == null));
+    }
+
     private sealed class TestBusinessLegalContent : IDisposable
     {
         private readonly DirectoryInfo root = Directory.CreateTempSubdirectory("weymela-legal-test-");

@@ -34,14 +34,14 @@ export function BusinessLegalPage() {
   const action = useAction();
   const [acknowledged, setAcknowledged] = useState(false);
   const [content, setContent] = useState<Record<string, LegalContent> | null>(null);
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
   const documents = legal.data;
   const versionKey = documents?.map(document => `${document.id}:${document.contentHash}`).join("|") ?? "";
 
   useEffect(() => {
     setAcknowledged(false);
     setContent(null);
-    setViewing(null);
+    setViewing(false);
     if (!documents || !currentBusinessDocuments(documents) || documents.every(document => document.accepted)) return;
     let active = true;
     void Promise.all(documents.map(async document => {
@@ -62,16 +62,13 @@ export function BusinessLegalPage() {
     if (!currentBusinessDocuments(current)) return <Notice error>Current Business requirements could not be verified.</Notice>;
     if (current.every(document => document.accepted)) return <Navigate to={destination} replace />;
     const ready = current.every(document => Boolean(content?.[document.id]));
-    const selected = current.find(document => document.type === viewing);
     return <div className="business-legal-page">
-      <PageHeader title="Before you continue" description="Review and accept the current Weymela Business requirements." />
+      <PageHeader title="Before you continue" />
       <div className="business-legal-choice">
-        <input id="business-legal-acknowledgement" type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />
+        <input id="business-legal-acknowledgement" type="checkbox" aria-label="I agree to Weymela's rules and regulations." checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />
         <div>
           <label htmlFor="business-legal-acknowledgement">I agree to Weymela&apos;s </label>
-          <button type="button" className="text-link" onClick={() => setViewing("BusinessAgreement")}>Business Terms</button>
-          <span> and </span>
-          <button type="button" className="text-link" onClick={() => setViewing("AntiCircumventionAgreement")}>Anti-Circumvention Rules</button>
+          <button type="button" className="text-link" onClick={() => setViewing(true)}>rules and regulations</button>
           <span>.</span>
         </div>
       </div>
@@ -90,13 +87,15 @@ export function BusinessLegalPage() {
           throw new Error("Business requirements changed. Review the current versions before continuing.");
         navigate(destination, { replace: true });
       })}>Accept &amp; Continue</Button>
-      {selected && <div className="business-legal-overlay" role="presentation" onClick={() => setViewing(null)}>
-        <section className="business-legal-document" role="dialog" aria-modal="true" aria-label={selected.type === "BusinessAgreement" ? "Business Terms" : "Anti-Circumvention Rules"} onClick={event => event.stopPropagation()}>
-          <button type="button" className="text-link" onClick={() => setViewing(null)}>Back</button>
-          <h2>{selected.type === "BusinessAgreement" ? "Business Terms" : "Anti-Circumvention Rules"}</h2>
-          <p className="muted">Version {selected.version}</p>
-          {content?.[selected.id] ? <div className="business-legal-copy">{content[selected.id].content}</div>
-            : <Notice error>Approved text for this version is unavailable.</Notice>}
+      {viewing && <div className="business-legal-overlay" role="presentation" onClick={() => setViewing(false)}>
+        <section className="business-legal-document" role="dialog" aria-modal="true" aria-label="Weymela rules and regulations" onClick={event => event.stopPropagation()}>
+          <button type="button" className="text-link" onClick={() => setViewing(false)}>Back</button>
+          {current.map(document => <div key={document.id}>
+            <h2>{document.type === "BusinessAgreement" ? "Business Terms" : "Anti-Circumvention Rules"}</h2>
+            <p className="muted">Version {document.version}</p>
+            {content?.[document.id] ? <div className="business-legal-copy">{content[document.id].content}</div>
+              : <Notice error>Approved text for this version is unavailable.</Notice>}
+          </div>)}
         </section>
       </div>}
     </div>;

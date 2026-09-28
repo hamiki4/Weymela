@@ -59,24 +59,27 @@ describe("Business legal resolution", () => {
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
-  it("keeps missing approved content unaccepted while both version links remain readable", async () => {
+  it("shows one unchecked acknowledgement and keeps missing approved content unaccepted", async () => {
     const { writes } = setup();
     mount();
-    const checkbox = await screen.findByRole("checkbox");
+    const checkbox = await screen.findByRole("checkbox", { name: "I agree to Weymela's rules and regulations." });
     const accept = screen.getByRole("button", { name: "Accept & Continue" });
+    expect(screen.getByRole("heading", { name: "Before you continue" })).toBeVisible();
     expect(checkbox).not.toBeChecked();
     expect(accept).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Business Terms" }));
-    let dialog = screen.getByRole("dialog", { name: "Business Terms" });
+    await userEvent.click(screen.getByRole("button", { name: "rules and regulations" }));
+    const dialog = screen.getByRole("dialog", { name: "Weymela rules and regulations" });
+    expect(within(dialog).getByRole("heading", { name: "Business Terms" })).toBeVisible();
+    expect(within(dialog).getByRole("heading", { name: "Anti-Circumvention Rules" })).toBeVisible();
     expect(within(dialog).getByText("Version 2")).toBeVisible();
-    expect(within(dialog).getByText("Approved text for this version is unavailable.")).toBeVisible();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Back" }));
-    await userEvent.click(screen.getByRole("button", { name: "Anti-Circumvention Rules" }));
-    dialog = screen.getByRole("dialog", { name: "Anti-Circumvention Rules" });
     expect(within(dialog).getByText("Version 3")).toBeVisible();
+    expect(within(dialog).getAllByText("Approved text for this version is unavailable.")).toHaveLength(2);
+    expect(checkbox).not.toBeChecked();
     await userEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    expect(await screen.findByText("Approved document text is unavailable. Acceptance is paused.")).toBeVisible();
     expect(writes).toHaveLength(0);
     await userEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
     expect(accept).toBeDisabled();
     expect(writes).toHaveLength(0);
   });
@@ -88,11 +91,14 @@ describe("Business legal resolution", () => {
     const { writes } = setup({ content: true });
     mount(path);
     const accept = await screen.findByRole("button", { name: "Accept & Continue" });
-    await waitFor(() => expect(screen.getByRole("checkbox")).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "I agree to Weymela's rules and regulations." })).toBeEnabled());
     expect(accept).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Business Terms" }));
-    expect(within(screen.getByRole("dialog")).getByText("Approved test fixture for BusinessAgreement")).toBeVisible();
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("button", { name: "rules and regulations" }));
+    const dialog = screen.getByRole("dialog", { name: "Weymela rules and regulations" });
+    expect(within(dialog).getByText("Approved test fixture for BusinessAgreement")).toBeVisible();
+    expect(within(dialog).getByText("Approved test fixture for AntiCircumventionAgreement")).toBeVisible();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(writes).toHaveLength(0);
     await userEvent.click(screen.getByRole("checkbox"));
     await waitFor(() => expect(accept).toBeEnabled());

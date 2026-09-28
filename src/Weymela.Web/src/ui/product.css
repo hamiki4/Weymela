@@ -70,7 +70,7 @@
 .update-notice button { flex: none; min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: var(--role-accent, #164d38); font: inherit; font-weight: 700; }
 .update-notice .update-dismiss { display: grid; place-items: center; width: 34px; padding: 0; color: #374151; }
 .business-legal-page { max-width: 620px; }
-.business-legal-choice { display: flex; align-items: flex-start; gap: 12px; margin: 22px 0; color: #111827; font-size: 1rem; line-height: 1.5; }
+.business-legal-choice { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; margin: 22px 0; color: #111827; font-size: 1rem; line-height: 1.5; }
 .business-legal-choice input { flex: none; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--role-accent); }
 .business-legal-choice label { color: #111827; }
 .business-legal-choice .text-link { display: inline; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--role-accent); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
@@ -79,6 +79,7 @@
 .business-legal-document { width: min(100%, 680px); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border-radius: 12px; background: #fff; color: #111827; }
 .business-legal-document > .text-link { min-height: 36px; padding: 0; border: 0; background: transparent; color: var(--role-accent); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .business-legal-document h2 { margin: 12px 0 4px; font-size: 1.3rem; }
+.business-legal-document > div + div { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 .business-legal-copy { margin-top: 18px; white-space: pre-wrap; overflow-wrap: anywhere; color: #374151; font-size: .95rem; line-height: 1.6; }
 .product-shell .account-sheet .account-menu-actions .button { min-height: 44px; }
 .product-shell .account-sheet .profile-switcher { gap: 4px; margin-bottom: 3px; }

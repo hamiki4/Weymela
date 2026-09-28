@@ -29,9 +29,12 @@ public sealed class LegalWorkspaceService(WeymelaDbContext db, TimeProvider cloc
     }
     public async Task<RequiredLegalContent?> CurrentContentAsync(Actor actor, Guid id, CancellationToken ct)
     {
-        if (actor.Role != ActorRole.Business) throw new ApplicationFailure(FailureKind.Forbidden, "Only the Business may review these documents.");
+        if (actor.Role is not (ActorRole.Business or ActorRole.Creator))
+            throw new ApplicationFailure(FailureKind.Forbidden, "This agreement workspace is not available to this role.");
         var current = (await CurrentAsync(actor, ct)).SingleOrDefault(x => x.Id == id)
-            ?? throw new ApplicationFailure(FailureKind.NotFound, "Current Business document was not found.");
+            ?? throw new ApplicationFailure(FailureKind.NotFound, "Current document was not found.");
+        if (actor.Role == ActorRole.Creator && current.Type != nameof(LegalDocumentType.AntiCircumventionAgreement))
+            throw new ApplicationFailure(FailureKind.Forbidden, "This document is not available to the Creator.");
         var version = await db.LegalDocumentVersions.AsNoTracking().SingleAsync(x => x.Id == current.Id, ct);
         var content = contentSource is null ? null : await contentSource.ReadAsync(version, ct);
         return content is null ? null : new(current.Id, current.Type, current.Version, current.ContentHash, content);

@@ -57,6 +57,7 @@ import { CashierActivation } from "./CashierActivation";
 import { AccountActivation } from "./AccountActivation";
 import { BusinessCashiers } from "../features/business/BusinessCashiers";
 import { BusinessLegalPage } from "../features/business/BusinessLegalPage";
+import { CreatorLegalPage } from "../features/creator/CreatorLegalPage";
 
 
 function Home() {
@@ -151,6 +152,7 @@ export function App() {
           <Route path="/creator/pricing" element={<Navigate to="/creator/earnings" replace />} />
           <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
           <Route path="/creator/earnings" element={<CreatorEarnings />} />
+          <Route path="/creator/legal" element={<CreatorLegalPage />} />
           <Route path="/creator/profile" element={<Navigate to="/profile#social-accounts" replace />} />
           <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
         </Route>

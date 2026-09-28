@@ -16,6 +16,7 @@ export function routeResources(pathname: string): string[] {
     case "/creator/discover": return ["/creator/discover", "/creator/ugc"];
     case "/creator/promotions": return ["/creator/campaigns", "/creator/requests", "/creator/ugc/assignments", "/creator/ugc/requests"];
     case "/creator/earnings": return ["/creator/earnings"];
+    case "/creator/legal": return ["/legal/current"];
     case "/profile": return ["/profile"];
     case "/creator/profile": return ["/profile"];
     case "/customer/offers": return ["/customer/offers", "/customer/cashback", "/customer/transactions"];

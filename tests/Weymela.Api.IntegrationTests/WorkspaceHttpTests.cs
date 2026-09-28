@@ -179,6 +179,11 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         Assert.False(creatorCurrent.Single(document => document?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
         Assert.False((await otherCreator.GetJson("/api/legal/current")).AsArray()
             .Single(document => document?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
+        var creatorContent = await creator.GetJson($"/api/legal/{version}/content");
+        Assert.Equal(version, creatorContent["id"]!.GetValue<Guid>());
+        Assert.Equal(hash, creatorContent["contentHash"]!.GetValue<string>());
+        Assert.Equal("INTEGRATION TEST ONLY: Shared AntiCircumvention version", creatorContent["content"]!.GetValue<string>());
+        Assert.False((await creator.GetAsync($"/api/legal/{businessAgreement["id"]!.GetValue<Guid>()}/content")).IsSuccessStatusCode);
 
         Assert.False((await creator.Post($"/api/legal/{businessAgreement["id"]!.GetValue<Guid>()}/accept",
             new { contentHash = businessAgreement["contentHash"]!.GetValue<string>(), confirmed = true })).IsSuccessStatusCode);
@@ -189,6 +194,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         foreach (var alias in new[] { "customer", "cashier", "operations-admin", "admin" })
         {
             using var other = await fixture.Login(alias);
+            Assert.False((await other.GetAsync($"/api/legal/{version}/content")).IsSuccessStatusCode);
             Assert.False((await other.Post($"/api/legal/{version}/accept",
                 new { contentHash = hash, confirmed = true })).IsSuccessStatusCode);
         }

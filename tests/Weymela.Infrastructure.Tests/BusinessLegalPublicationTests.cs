@@ -149,6 +149,11 @@ public sealed class BusinessLegalPublicationTests(PostgresFixture fixture)
         Assert.DoesNotContain(creatorCurrent, document => document.Type == "BusinessAgreement");
         Assert.True(creatorCurrent.Single(document => document.Type == "CreatorAgreement").Accepted);
         Assert.False(creatorCurrent.Single(document => document.Type == "AntiCircumventionAgreement").Accepted);
+        var creatorContent = await service.CurrentContentAsync(creator, antiCircumvention.Id, default);
+        Assert.NotNull(creatorContent);
+        Assert.Equal(antiCircumvention.ContentHash, creatorContent.ContentHash);
+        Assert.Equal(await File.ReadAllTextAsync(Path.Combine(apiRoot, "BusinessLegal", $"{antiCircumvention.Id:N}.txt")), creatorContent.Content);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.CurrentContentAsync(creator, businessAgreement.Id, default));
         await Assert.ThrowsAsync<ApplicationFailure>(() => new LegalAcceptanceGate(verify, Clock)
             .EnsureCurrentAcceptedAsync(creatorUser, LegalRole.Creator,
                 [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], default));
@@ -177,6 +182,7 @@ public sealed class BusinessLegalPublicationTests(PostgresFixture fixture)
             var other = new Actor(Guid.NewGuid(), role);
             await Assert.ThrowsAsync<ApplicationFailure>(() => service.CurrentAsync(other, default));
             await Assert.ThrowsAsync<ApplicationFailure>(() => service.CurrentContentAsync(other, businessAgreement.Id, default));
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.CurrentContentAsync(other, antiCircumvention.Id, default));
             await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptAsync(other,
                 businessAgreement.Id, businessAgreement.ContentHash, true, default));
             await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptAsync(other,

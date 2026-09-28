@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type {
   CreatorCampaign,
@@ -24,6 +24,7 @@ import {
 } from "../../ui/components";
 import { amount, campaignType, count, date } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
+import { useCreatorLegalAction } from "./CreatorLegalPage";
 
 export function CreatorDashboard() {
   const home = useResource<CreatorHome>("/creator/home");
@@ -224,6 +225,8 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
 
 function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; onChanged: () => void }) {
   const action = useAction();
+  const location = useLocation();
+  const ensureLegal = useCreatorLegalAction();
   const state = row.status;
   const canGoLive = state === "ReadyToGoLive" && row.contentReviewStatus === "Approved" && !row.participationId;
   return <article className="creator-promotion-row creator-work-row">
@@ -239,7 +242,10 @@ function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; 
       {state === "Paused" && <span>Your Promotion is paused</span>}
       {state === "FundingRequired" && <span>Waiting for Business funding</span>}
       {state === "Approved" || state === "ChangesRequested" ? <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>{state === "Approved" ? "Add Content" : "Update Content"}</ActionLink> : null}
-      {canGoLive && <Button disabled={action.busy} onClick={() => void action.run(async (key) => { await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key); onChanged(); })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
+      {canGoLive && <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
+        if (!await ensureLegal(location.pathname + location.search)) return;
+        await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key); onChanged();
+      })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
       {row.participationId && <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>View progress</ActionLink>}
       {action.error && <Notice error>{action.error}</Notice>}
     </div>

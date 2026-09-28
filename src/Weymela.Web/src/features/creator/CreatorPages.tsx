@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type {
   CreatorHome,
@@ -30,6 +30,7 @@ import {
   isViewOnly,
 } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
+import { CreatorLegalGate, useCreatorLegalAction } from "./CreatorLegalPage";
 
 export function CreatorDashboard() {
   const resource = useResource<CreatorHome>("/creator/home");
@@ -182,6 +183,8 @@ export function CreatorDiscovery() {
 }
 export function CreatorOpportunity() {
   const { id } = useParams();
+  const location = useLocation();
+  const ensureLegal = useCreatorLegalAction();
   const resource = useResource<Opportunity>(`/creator/discover/${id}`);
   const action = useAction();
   const [message, setMessage] = useState("");
@@ -252,6 +255,7 @@ export function CreatorOpportunity() {
               {p.requestStatus ? (
                 <Notice>Request {p.requestStatus.toLowerCase()}. {p.requestStatus === "Pending" && "Waiting for approval."} <Link to="/creator/promotions">My Promotions</Link></Notice>
               ) : (
+                <CreatorLegalGate>
                 <form
                   className="contained-form"
                   onSubmit={(e) => {
@@ -259,6 +263,7 @@ export function CreatorOpportunity() {
                     const selectedProfile = p.eligibleSocialProfiles?.find((profile) => profile.id === socialProfileId);
                     if (p.platforms?.length && !selectedProfile) return;
                     void action.run(async (key) => {
+                      if (!await ensureLegal(location.pathname)) return;
                       await post(
                         `/creator/promotions/${id}/request`,
                         { message, contentConcept: concept || null, ...(selectedProfile ? { platform: selectedProfile.platform, creatorSocialProfileId: selectedProfile.id } : {}) },
@@ -302,6 +307,7 @@ export function CreatorOpportunity() {
                     </Button>
                   </fieldset>
                 </form>
+                </CreatorLegalGate>
               )}
             </Section>
           </>

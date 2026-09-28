@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type { CreatorCampaign } from "../../api/types";
 import {
@@ -21,6 +21,7 @@ import {
   date,
   isViewAndSale,
 } from "../../ui/format";
+import { useCreatorLegalAction } from "./CreatorLegalPage";
 
 export function contentUrl(provider: string | null, id: string | null) {
   if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return undefined;
@@ -93,6 +94,8 @@ function CreatorContent({
   const [content, setContent] = useState("");
   const [message, setMessage] = useState("");
   const action = useAction();
+  const location = useLocation();
+  const ensureLegal = useCreatorLegalAction();
   const url = contentUrl(row.provider, row.externalContentId);
   const maySubmit = !row.participationId &&
     (row.contentReviewStatus == null || row.contentReviewStatus === "ChangesRequested") &&
@@ -149,6 +152,7 @@ function CreatorContent({
         <div className="creator-review-ready">
           <Notice>Content approved by the Business. You decide when to go live.</Notice>
           <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
+            if (!await ensureLegal(location.pathname)) return;
             await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key);
               setMessage(`Promotion is live. Your ${row.promotionLiveDurationDays}-day window has started.`);
             reload();

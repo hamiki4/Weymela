@@ -406,8 +406,17 @@ describe("Business workspace", () => {
 });
 
 describe("Creator workspace", () => {
+  const acceptedCreatorLegal = [
+    { id: "creator-agreement", type: "CreatorAgreement", version: "1", contentHash: "creator-fixture", accepted: true },
+    { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
+  ];
+  function mockCreatorApi(overrides: Record<string, unknown> = {}) {
+    return mockApi({ "/legal/current": acceptedCreatorLegal, ...overrides });
+  }
+  beforeEach(() => { mockCreatorApi(); });
+
   it("shows only server recorded social profiles and supported platform statuses", async () => {
-    mockApi({ "/creator/social-accounts": [{ id: "social-1", platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella",
+    mockCreatorApi({ "/creator/social-accounts": [{ id: "social-1", platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella",
       verificationStatus: "Verified" }, { id: "social-2", platform: "YouTube", profileUrl: "javascript:alert(1)", verificationStatus: "Unverified" }] });
     mount(<CreatorProfile />);
     expect(await screen.findByRole("heading", { name: "Social Accounts" })).toBeVisible();
@@ -430,7 +439,7 @@ describe("Creator workspace", () => {
     expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
   });
   it("discovers specific Business Promotions with a compact UGC switch", async () => {
-    mockApi({ "/creator/ugc": [] });
+    mockCreatorApi({ "/creator/ugc": [] });
     mount(<CreatorDiscover />);
     expect(await screen.findByRole("heading", { name: "Discover" })).toBeVisible();
     const tabs = within(screen.getByRole("tablist", { name: "Opportunity type" }));
@@ -446,7 +455,7 @@ describe("Creator workspace", () => {
     expect(container.querySelector(".creator-platform-counts")).toBeNull();
   });
   it("shows optional slogan and keeps pending requests out of platform occupancy", async () => {
-    mockApi({ "/creator/discover": [{ ...opportunity, slogan: "Weekend Special", platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }], approvedCreators: 1, creatorCapacity: 2, requestStatus: "Pending" }] });
+    mockCreatorApi({ "/creator/discover": [{ ...opportunity, slogan: "Weekend Special", platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }], approvedCreators: 1, creatorCapacity: 2, requestStatus: "Pending" }] });
     mount(<CreatorDiscover />);
     expect(await screen.findByText("Weekend Special")).toBeVisible();
     expect(screen.getByLabelText("Social platform availability")).toHaveTextContent("TikTok 1/2");
@@ -454,14 +463,14 @@ describe("Creator workspace", () => {
     expect(screen.getByRole("link", { name: "View Promotion" })).toBeVisible();
   });
   it("shows approved occupancy and makes a full platform unavailable", async () => {
-    mockApi({ "/creator/discover/campaign": { ...opportunity, platforms: [{ platform: "TikTok", approved: 2, capacity: 2, available: 0 }], eligibleSocialProfiles: [] } });
+    mockCreatorApi({ "/creator/discover/campaign": { ...opportunity, platforms: [{ platform: "TikTok", approved: 2, capacity: 2, available: 0 }], eligibleSocialProfiles: [] } });
     mount(<CreatorOpportunity />, "/creator/discover/campaign", "/creator/discover/:id");
     expect(await screen.findByText("Full")).toBeVisible();
     expect(screen.getByRole("button", { name: "Submit Request" })).toBeDisabled();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
   it("requests the specific Promotion and selected available social profile", async () => {
-    const api = mockApi({ "/creator/discover/campaign": { ...opportunity,
+    const api = mockCreatorApi({ "/creator/discover/campaign": { ...opportunity,
       platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }, { platform: "Instagram", approved: 1, capacity: 1, available: 0 }],
       eligibleSocialProfiles: [{ id: "social-tiktok", platform: "TikTok", profileUrl: "https://tiktok.com/@bella", selfReportedAudience: 5000, verificationStatus: "Verified", verifiedAudience: 5000 }],
     } });
@@ -476,14 +485,14 @@ describe("Creator workspace", () => {
     await waitFor(() => expect(api.writes[0]).toMatchObject({ path: "/creator/promotions/campaign/request", body: { platform: "TikTok", creatorSocialProfileId: "social-tiktok" } }));
   });
   it("has a designed empty discovery state", async () => {
-    mockApi({ "/creator/discover": [], "/creator/ugc": [] });
+    mockCreatorApi({ "/creator/discover": [], "/creator/ugc": [] });
     mount(<CreatorDiscover />);
     expect(await screen.findByText("No available Promotions")).toBeVisible();
     await userEvent.click(screen.getByRole("tab", { name: "UGC" }));
     expect(screen.getByText("No available UGC opportunities")).toBeVisible();
   });
   it("sends a join message without negotiating budget or rates", async () => {
-    const api = mockApi();
+    const api = mockCreatorApi();
     mount(
       <CreatorOpportunity />,
       "/creator/discover/campaign",
@@ -503,7 +512,7 @@ describe("Creator workspace", () => {
     expect(api.writes[0].path).toBe("/creator/promotions/campaign/request");
   });
   it("shows own Promotion progress without Business budget or wallet details", async () => {
-    mockApi({ "/creator/campaigns": [{ ...active, remainingDays: 20 }] });
+    mockCreatorApi({ "/creator/campaigns": [{ ...active, remainingDays: 20 }] });
     mount(<CreatorPromotions />);
     expect(await screen.findByRole("heading", { name: "My Promotions" })).toBeVisible();
     expect(screen.getByText("20 days left")).toBeVisible();
@@ -512,7 +521,7 @@ describe("Creator workspace", () => {
     expect(screen.queryByText("Business Wallet")).not.toBeInTheDocument();
   });
   it("refreshes verified views through the participation endpoint", async () => {
-    const api = mockApi({ "/creator/campaigns": [{ ...active, remainingDays: 30 }] });
+    const api = mockCreatorApi({ "/creator/campaigns": [{ ...active, remainingDays: 30 }] });
     mount(
       <CreatorActiveDetail />,
       "/creator/campaigns/budget",
@@ -528,7 +537,7 @@ describe("Creator workspace", () => {
     );
   });
   it("keeps Go Live unavailable while submitted content is under Business review", async () => {
-    mockApi({ "/creator/campaigns": [{
+    mockCreatorApi({ "/creator/campaigns": [{
       ...active,
       participationId: null,
       status: "UnderReview",
@@ -542,7 +551,7 @@ describe("Creator workspace", () => {
     expect(screen.queryByRole("button", { name: "Submit Content for Review" })).not.toBeInTheDocument();
   });
   it("allows the Creator to start the live window only after content approval", async () => {
-    const api = mockApi({ "/creator/campaigns": [{
+    const api = mockCreatorApi({ "/creator/campaigns": [{
       ...active,
       participationId: null,
       status: "ReadyToGoLive",
@@ -583,7 +592,7 @@ describe("Creator workspace", () => {
     ).toBeEnabled();
   });
   it("shows amount remaining and disables payout below threshold", async () => {
-    mockApi({
+    mockCreatorApi({
       "/creator/earnings": {
         ...earnings,
         availableEarnings: 400,

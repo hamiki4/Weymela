@@ -60,6 +60,12 @@ internal static class OperationalEndpoints
         workspace.MapPost("/notifications/read-all",async(HttpContext c,NotificationService service,CancellationToken ct)=>
         {await service.ReadAllAsync(EndpointSupport.Actor(c),ct);return Results.NoContent();});
         workspace.MapGet("/legal/current",(HttpContext c,LegalWorkspaceService service,CancellationToken ct)=>service.CurrentAsync(EndpointSupport.Actor(c),ct));
+        workspace.MapGet("/legal/{id:guid}/content",async(Guid id,HttpContext c,LegalWorkspaceService service,CancellationToken ct)=>
+        {
+            var content=await service.CurrentContentAsync(EndpointSupport.Actor(c),id,ct);
+            c.Response.Headers.CacheControl="no-store";
+            return content is null ? Results.Json(new{message="Approved Business document content is unavailable."},statusCode:503) : Results.Ok(content);
+        });
         workspace.MapPost("/legal/{id:guid}/accept",async(Guid id,LegalConsent consent,HttpContext c,LegalWorkspaceService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.AcceptAsync(EndpointSupport.Actor(c),id,consent.ContentHash,consent.Confirmed,ct)));
         var business=app.MapGroup("/api/business").RequireAuthorization("Business").AddEndpointFilter<ValidatedInputFilter>();

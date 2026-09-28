@@ -10,6 +10,7 @@ import {
   BusinessCampaigns,
 } from "../src/features/business/BusinessPages";
 import { CreateCampaign } from "../src/features/business/CreateCampaign";
+import { BusinessLegalPage } from "../src/features/business/BusinessLegalPage";
 import { BusinessUgcPage, CreateBusinessUgcPage } from "../src/features/business/UgcPages";
 import { BusinessCampaignDetail } from "../src/features/business/CampaignDetail";
 import { PromotionContentReviewQueue } from "../src/features/business/PromotionContentReviewQueue";
@@ -67,6 +68,7 @@ function mount(element: ReactNode, path = "/", pattern = "*") {
           path="/business/campaigns/saved"
           element={<h1>Saved Campaign</h1>}
         />
+        <Route path="/business/legal" element={<BusinessLegalPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -182,8 +184,8 @@ describe("Business workspace", () => {
       { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
       { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
     ] });
-    mount(<CreateCampaign />);
-    expect(await screen.findByRole("heading", { name: "Current agreements required" })).toBeVisible();
+    mount(<CreateCampaign />, "/business/campaigns/new");
+    expect(await screen.findByRole("heading", { name: "Before you continue" })).toBeVisible();
     expect(screen.queryByLabelText("Promotion title")).not.toBeInTheDocument();
   });
   it("checks current Business agreements before opening UGC creation", async () => {
@@ -191,8 +193,8 @@ describe("Business workspace", () => {
       { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
       { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
     ] });
-    mount(<CreateBusinessUgcPage />);
-    expect(await screen.findByRole("heading", { name: "Current agreements required" })).toBeVisible();
+    mount(<CreateBusinessUgcPage />, "/business/ugc/new");
+    expect(await screen.findByRole("heading", { name: "Before you continue" })).toBeVisible();
     expect(screen.queryByLabelText("UGC title")).not.toBeInTheDocument();
   });
   it("separates UGC Creator funding from optional Customer discount funding", async () => {

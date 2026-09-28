@@ -219,8 +219,14 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         foreach (var actor in new[] { selectedCreator.Actor, selectedBusiness.Actor })
         {
             foreach (var document in await legal.CurrentAsync(actor, default))
-                await legal.AcceptAsync(actor, document.Id, document.ContentHash, true, default);
+            {
+                if (actor.Role == ActorRole.Business)
+                    db.LegalAcceptances.Add(new LegalAcceptance(actor.UserId, LegalRole.Business, document.Id, Now, null, null));
+                else
+                    await legal.AcceptAsync(actor, document.Id, document.ContentHash, true, default);
+            }
         }
+        await db.SaveChangesAsync();
 
         var deviceEnrollment = await new DeviceEnrollmentService(db, options, clock).EnrollAsync(
             userId, "01234", "01234", null, "device-enrollment", default);

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useResource } from "../../api/client";
 import type { Wallet } from "../../api/types";
+import { businessLegalPath } from "./BusinessLegalPage";
 import { Button, Notice, Resource, Section } from "../../ui/components";
 
 type RequiredDocument = {
@@ -13,6 +14,7 @@ type RequiredDocument = {
 };
 
 export function BusinessCreationGate({ children }: { children: (wallet: Wallet) => ReactNode }) {
+  const location = useLocation();
   const legal = useResource<RequiredDocument[]>("/legal/current");
   const wallet = useResource<Wallet>("/business/wallet");
   if (legal.loading || wallet.loading)
@@ -24,13 +26,7 @@ export function BusinessCreationGate({ children }: { children: (wallet: Wallet) 
         || !documents.some(document => document.type === "AntiCircumventionAgreement"))
       return <Section title="Creation unavailable"><Notice error>Current Business agreements could not be verified.</Notice><Button variant="secondary" onClick={legal.reload}>Try again</Button></Section>;
     const outstanding = documents.filter(document => !document.accepted);
-    if (outstanding.length) return <Section title="Current agreements required">
-      <Notice error>Accept the current Business agreements before creating a Promotion or UGC.</Notice>
-      <ul>{outstanding.map(document => <li key={document.id}>{document.type === "BusinessAgreement" ? "Business Agreement" : "Anti-Circumvention Agreement"} · {document.version}</li>)}</ul>
-      <p className="fine-print">The current agreement text is not available in this workspace. Contact Weymela to review and accept the exact current versions.</p>
-      <Button variant="secondary" onClick={() => { legal.reload(); wallet.reload(); }}>Check again</Button>
-      <Link className="text-link" to="/business">Business Home</Link>
-    </Section>;
+    if (outstanding.length) return <Navigate to={businessLegalPath(location.pathname)} replace />;
     return <Resource resource={wallet}>{children}</Resource>;
   }}</Resource>;
 }

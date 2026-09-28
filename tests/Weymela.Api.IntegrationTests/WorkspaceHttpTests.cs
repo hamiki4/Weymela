@@ -1,9 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Weymela.Domain;
 using Weymela.Infrastructure.Development;
+using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
 using Xunit;
@@ -64,12 +68,15 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     [Fact]
     public async Task Current_Business_agreement_blocks_Promotion_creation_until_exact_version_is_accepted()
     {
-        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        using var content = new TestBusinessLegalContent();
+        await using var fixture = await ApiFixture.CreateAsync(postgres, builder =>
+            builder.Services.AddSingleton(new BusinessLegalDocumentSource(content.Root)));
         using var business = await fixture.Login("business");
         var version = Guid.NewGuid();
+        var hash = content.Publish(version, "Business version two");
         await using (var db = fixture.Database.Open())
         {
-            db.LegalDocumentVersions.Add(new(version, LegalDocumentType.BusinessAgreement, "new-current", "fixture-new-hash", DateTime.UtcNow.AddMinutes(-1)));
+            db.LegalDocumentVersions.Add(new(version, LegalDocumentType.BusinessAgreement, "new-current", hash, DateTime.UtcNow.AddMinutes(-1)));
             await db.SaveChangesAsync();
         }
         var input = new
@@ -83,19 +90,27 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         var documents = (await business.GetJson("/api/legal/current")).AsArray();
         Assert.False(documents.Single(x => x?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
-        await business.PostJson($"/api/legal/{version}/accept", new { contentHash = "fixture-new-hash", confirmed = true });
+        Assert.Equal(HttpStatusCode.BadRequest, (await business.Post($"/api/legal/{version}/accept", new { contentHash = hash, confirmed = false })).StatusCode);
+        var reviewed = await business.GetJson($"/api/legal/{version}/content");
+        Assert.Equal("new-current", reviewed["version"]!.GetValue<string>());
+        Assert.Equal(hash, reviewed["contentHash"]!.GetValue<string>());
+        await business.PostJson($"/api/legal/{version}/accept", new { contentHash = hash, confirmed = true });
+        using (var otherBusiness = await fixture.Login("other-business"))
+            Assert.False((await otherBusiness.GetJson("/api/legal/current")).AsArray()
+                .Single(x => x?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
         var draft = await business.PostJson("/api/business/campaigns", input, "agreement-now-current");
         var draftId = draft["id"]!.GetValue<Guid>();
         var newer = Guid.NewGuid();
+        var newerHash = content.Publish(newer, "Business version three");
         await using (var db = fixture.Database.Open())
         {
-            db.LegalDocumentVersions.Add(new(newer, LegalDocumentType.BusinessAgreement, "newer-current", "fixture-newer-hash", DateTime.UtcNow));
+            db.LegalDocumentVersions.Add(new(newer, LegalDocumentType.BusinessAgreement, "newer-current", newerHash, DateTime.UtcNow));
             await db.SaveChangesAsync();
         }
         var wallet = await business.GetJson("/api/business/wallet");
         var funding = new { campaignVersion = 0, walletVersion = wallet["version"]!.GetValue<long>() };
         Assert.Equal(HttpStatusCode.Forbidden, (await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-outdated-agreement")).StatusCode);
-        await business.PostJson($"/api/legal/{newer}/accept", new { contentHash = "fixture-newer-hash", confirmed = true });
+        await business.PostJson($"/api/legal/{newer}/accept", new { contentHash = newerHash, confirmed = true });
         var funded = await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-current-agreement");
         Assert.True(funded.IsSuccessStatusCode);
         await using (var db = fixture.Database.Open())
@@ -104,6 +119,54 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
             await db.SaveChangesAsync();
         }
         Assert.True((await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-current-agreement")).IsSuccessStatusCode);
+        await using (var db = fixture.Database.Open())
+        {
+            Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == DevelopmentDirectory.Id(2)
+                && (x.DocumentVersionId == version || x.DocumentVersionId == newer)));
+            Assert.Equal(2, await db.AuditEvents.CountAsync(x => x.ActorId == DevelopmentDirectory.Id(2)
+                && x.EventType == "LegalVersionAccepted" && (x.Detail == version.ToString() || x.Detail == newer.ToString())));
+        }
+    }
+
+    [Fact]
+    public async Task Missing_Business_document_content_blocks_review_and_acceptance_for_every_role()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        var version = Guid.NewGuid();
+        await using (var db = fixture.Database.Open())
+        {
+            db.LegalDocumentVersions.Add(new(version, LegalDocumentType.BusinessAgreement, "unpublished-content", "sha256:" + new string('0', 64), DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+        using var business = await fixture.Login("business");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await business.GetAsync($"/api/legal/{version}/content")).StatusCode);
+        Assert.False((await business.Post($"/api/legal/{version}/accept", new { contentHash = "sha256:" + new string('0', 64), confirmed = true })).IsSuccessStatusCode);
+        foreach (var alias in new[] { "customer", "creator", "cashier", "operations-admin", "admin" })
+        {
+            using var actor = await fixture.Login(alias);
+            Assert.False((await actor.GetAsync($"/api/legal/{version}/content")).IsSuccessStatusCode);
+            Assert.False((await actor.Post($"/api/legal/{version}/accept", new { contentHash = "sha256:" + new string('0', 64), confirmed = true })).IsSuccessStatusCode);
+        }
+        await using (var db = fixture.Database.Open())
+        {
+            Assert.False(await db.LegalAcceptances.AnyAsync(x => x.DocumentVersionId == version));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.EventType == "LegalVersionAccepted" && x.Detail == version.ToString()));
+        }
+    }
+
+    private sealed class TestBusinessLegalContent : IDisposable
+    {
+        private readonly DirectoryInfo root = Directory.CreateTempSubdirectory("weymela-legal-test-");
+        public string Root => root.FullName;
+        public string Publish(Guid id, string marker)
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(Root, "BusinessLegal"));
+            // These bytes exist only in this disposable integration-test directory.
+            var bytes = Encoding.UTF8.GetBytes("INTEGRATION TEST ONLY: " + marker);
+            File.WriteAllBytes(Path.Combine(folder.FullName, $"{id:N}.txt"), bytes);
+            return "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        }
+        public void Dispose() => root.Delete(true);
     }
 
     [Theory]

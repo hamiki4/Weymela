@@ -7,6 +7,7 @@ export function routeResources(pathname: string): string[] {
     case "/business/requests": return ["/business/campaigns"];
     case "/business/ugc": return ["/business/ugc", "/business/wallet"];
     case "/business/ugc/new": return ["/legal/current", "/business/wallet", "/business/ugc-pricing"];
+    case "/business/legal": return ["/legal/current"];
     case "/business/wallet": return ["/business/wallet", "/business/deposit-method", "/business/deposit-requests"];
     case "/business/pricing": return ["/business/pricing", "/business/ugc-pricing"];
     case "/business/cashiers": return ["/business/cashiers"];

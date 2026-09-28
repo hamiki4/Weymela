@@ -56,6 +56,7 @@ import { LegalDocumentPage } from "./LegalDocumentPage";
 import { CashierActivation } from "./CashierActivation";
 import { AccountActivation } from "./AccountActivation";
 import { BusinessCashiers } from "../features/business/BusinessCashiers";
+import { BusinessLegalPage } from "../features/business/BusinessLegalPage";
 
 
 function Home() {
@@ -135,6 +136,7 @@ export function App() {
           <Route path="/business/pricing" element={<BusinessPricingPage />} />
           <Route path="/business/ugc" element={<BusinessUgcPage />} />
           <Route path="/business/ugc/new" element={<CreateBusinessUgcPage />} />
+          <Route path="/business/legal" element={<BusinessLegalPage />} />
           <Route path="/business/cashiers" element={<BusinessCashiers />} />
         </Route>
         <Route element={<RoleGate roles={["Creator"]} />}>

@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Repositories;
+using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Xunit;
 
@@ -11,6 +14,26 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class ConfigurationAndLegalTests(PostgresFixture fixture)
 {
+    [Fact] public async Task Business_document_bytes_must_match_the_exact_published_hash()
+    {
+        var root = Directory.CreateTempSubdirectory("weymela-content-check-");
+        try
+        {
+            var id = Guid.NewGuid();
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "BusinessLegal"));
+            var path = Path.Combine(folder.FullName, $"{id:N}.txt");
+            var bytes = Encoding.UTF8.GetBytes("INTEGRATION TEST ONLY: document integrity");
+            var version = new LegalDocumentVersion(id, LegalDocumentType.BusinessAgreement, "test-1",
+                "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), Scenario.Now);
+            var source = new BusinessLegalDocumentSource(root.FullName);
+            Assert.Null(await source.ReadAsync(version, default));
+            await File.WriteAllBytesAsync(path, bytes);
+            Assert.Equal(Encoding.UTF8.GetString(bytes), await source.ReadAsync(version, default));
+            await File.WriteAllTextAsync(path, "Altered content");
+            Assert.Null(await source.ReadAsync(version, default));
+        }
+        finally { root.Delete(true); }
+    }
     [Fact] public async Task Effective_pricing_returns_current_version()
     {
         var s = await Scenario.Create(fixture); await using var db = s.Database.Open();

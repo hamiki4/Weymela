@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Api.Security;
 using Weymela.Application;
 using Weymela.Application.Operations;
+using Weymela.Application.Web;
 using Weymela.Infrastructure.Deposits;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
@@ -19,6 +20,40 @@ internal static class OperationalEndpoints
         app.MapGet("/health/ready",async(HttpContext context,OperationalHealth health,CancellationToken ct)=>
         {context.Response.Headers.CacheControl="no-store";var result=await health.ReadinessAsync(ct);return Results.Json(new{status=result.Status},statusCode:result.Ready?200:503);}).AllowAnonymous();
         var workspace=app.MapGroup("/api").RequireAuthorization("Workspace").AddEndpointFilter<ValidatedInputFilter>();
+        workspace.MapGet("/profile", async (HttpContext c, WeymelaDbContext db, RuntimeOptions options, IWorkspaceDirectory directory, CancellationToken ct) =>
+        {
+            var actor = EndpointSupport.Actor(c);
+            var subjectId = actor.Role switch
+            {
+                ActorRole.Customer => actor.CustomerId,
+                ActorRole.Creator => actor.CreatorId,
+                ActorRole.Business => actor.BusinessId,
+                _ => null
+            };
+            if (subjectId is null) throw new ApplicationFailure(FailureKind.Forbidden, "A Customer, Creator or Business profile is required.");
+            var profile = await db.PublicWorkspaceProfiles.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.SubjectId == subjectId && x.Role == actor.Role, ct);
+            if ((profile is null && !options.DevelopmentIdentity) || !await db.CommercePermissions.AsNoTracking().AnyAsync(x =>
+                    x.UserId == actor.UserId && x.Role == actor.Role && x.SubjectId == subjectId && x.IsActive, ct))
+                throw new ApplicationFailure(FailureKind.Forbidden, "This profile is unavailable.");
+            var fixtureRegion = profile is null && actor.Role == ActorRole.Business
+                ? (await directory.BusinessCardAsync(subjectId.Value, ct)).Region : null;
+            var identifiers = await db.AuthIdentifiers.AsNoTracking()
+                .Where(x => x.UserId == actor.UserId && x.IsVerified && x.DeliveryAddress != null
+                    && (x.Kind == "Email" || x.Kind == "Phone"))
+                .Select(x => new { x.Kind, x.DeliveryAddress }).ToListAsync(ct);
+            return Results.Ok(new
+            {
+                role = actor.Role.ToString(),
+                displayName = profile?.DisplayName ?? c.User.Identity?.Name,
+                publicId = profile?.PublicId ?? c.User.FindFirst("publicId")?.Value,
+                email = identifiers.FirstOrDefault(x => x.Kind == "Email")?.DeliveryAddress,
+                phone = identifiers.FirstOrDefault(x => x.Kind == "Phone")?.DeliveryAddress,
+                status = "Active",
+                region = actor.Role == ActorRole.Business && !string.IsNullOrWhiteSpace(profile?.Region) ? profile.Region : fixtureRegion,
+                businessType = actor.Role == ActorRole.Business && !string.IsNullOrWhiteSpace(profile?.Category) ? profile.Category : null
+            });
+        });
         workspace.MapGet("/notifications",(HttpContext c,NotificationService service,CancellationToken ct)=>service.GetAsync(EndpointSupport.Actor(c),ct));
         workspace.MapPost("/notifications/{id:guid}/read",async(Guid id,HttpContext c,NotificationService service,CancellationToken ct)=>
         {await service.ReadAsync(EndpointSupport.Actor(c),id,ct);return Results.NoContent();});

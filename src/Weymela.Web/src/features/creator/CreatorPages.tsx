@@ -409,6 +409,7 @@ export function CreatorEarnings() {
     <>
       <PageHeader
         title="Earnings"
+        description="Track your earnings and payouts."
       />
       <Resource resource={resource}>
         {(data) => (

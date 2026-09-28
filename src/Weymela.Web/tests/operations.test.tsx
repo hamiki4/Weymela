@@ -39,8 +39,24 @@ describe("Operational states", () => {
   it("requires user confirmation before installing an available update", async () => {
     const worker = { postMessage: vi.fn() }; vi.stubGlobal("navigator", { onLine: true, serviceWorker: { addEventListener: vi.fn() } });
     wrap(<ConnectionStatus />); act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: worker })));
-    expect(worker.postMessage).not.toHaveBeenCalled(); await userEvent.click(screen.getByRole("button", { name: "Reload when ready" }));
+    expect(screen.getByRole("status", { name: "Update available" })).toBeVisible();
+    expect(worker.postMessage).not.toHaveBeenCalled(); await userEvent.click(screen.getByRole("button", { name: /^Reload$/ }));
     expect(worker.postMessage).toHaveBeenCalledWith({ type: "ACTIVATE_UPDATE" });
+  });
+  it("dismisses a waiting update for the current session without activating it", async () => {
+    const first = { postMessage: vi.fn() };
+    const second = { postMessage: vi.fn() };
+    vi.stubGlobal("navigator", { onLine: true, serviceWorker: { addEventListener: vi.fn() } });
+    wrap(<ConnectionStatus />);
+    act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: first })));
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss update notice" }));
+    expect(screen.queryByRole("status", { name: "Update available" })).not.toBeInTheDocument();
+    act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: first })));
+    expect(screen.queryByRole("status", { name: "Update available" })).not.toBeInTheDocument();
+    act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: second })));
+    expect(screen.getByRole("status", { name: "Update available" })).toBeVisible();
+    expect(first.postMessage).not.toHaveBeenCalled();
+    expect(second.postMessage).not.toHaveBeenCalled();
   });
   it("never pretends disconnected deposit processing credited funds", async () => {
     mockApi({ "/business/deposit-method": { mode: "Disabled" } }); wrap(<DepositSubmission />);

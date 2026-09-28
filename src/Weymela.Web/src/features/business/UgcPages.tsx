@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
-import type { UgcAssignment, UgcCard, UgcPricing } from "../../api/types";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { post, request, useAction, useResource } from "../../api/client";
+import type { UgcAssignment, UgcCard, UgcPricing, Wallet } from "../../api/types";
+import { BusinessCreationGate } from "./BusinessCreationGate";
 import {
+  ActionLink,
   Badge,
   Button,
   Empty,
@@ -55,8 +57,10 @@ function PlatformList({ platforms }: { platforms: { platform: string }[] }) {
   ) : <span className="muted">Deliver directly to the Business</span>;
 }
 
-function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => void }) {
+function BusinessUgcCard({ item, wallet, onChanged }: { item: UgcCard; wallet: Wallet | null; onChanged: () => void }) {
   const action = useAction();
+  const required = (item.requiredFunding ?? 0) + (item.customerOfferFundedAllocation ?? 0);
+  const shortfall = wallet && required > 0 ? roundMoney(Math.max(0, required - wallet.available)) : 0;
   return (
     <article className="data-card">
       <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Discount Sale" : "UGC Only"} · {item.contentType}</small><h3>{item.title}</h3></div><Badge status={item.status} /></div>
@@ -69,7 +73,16 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
       <p className="fine-print">{item.platformRequirements.length ? "Creator must post on:" : "Creator delivers content to the Business."}</p>
       <PlatformList platforms={item.platformRequirements} />
       {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && item.customerOfferFundedAllocation !== undefined && <p className="fine-print">Customer discount: {amount(item.customerDiscountPercent)}% · Discount funding: {amount(item.customerOfferFundedAllocation)}.</p>}
-      {item.status === "Draft" && <Button onClick={() => void action.run(async (key) => { await post(`/business/ugc/${item.id}/publish`, { version: item.version }, key); onChanged(); })} disabled={action.busy}>{action.busy ? "Publishing…" : "Publish UGC"}</Button>}
+      {item.status === "Draft" && <>
+        <dl className="funds-grid"><div><dt>Available funds</dt><dd>{wallet ? `${amount(wallet.available)} ETB` : "Checking…"}</dd></div><div><dt>UGC + discount funding</dt><dd>{amount(required)} ETB</dd></div>{shortfall > 0 && <div><dt>Need</dt><dd>{amount(shortfall)} ETB more</dd></div>}</dl>
+        {shortfall > 0 && <Notice error>Add funds before publishing this UGC. <Link to="/business/wallet">Add Funds</Link>.</Notice>}
+        <Button onClick={() => void action.run(async (key) => {
+          const latest = await request<Wallet>("/business/wallet");
+          if (latest.available < required) throw new Error(`Need ${amount(required - latest.available)} more before publishing this UGC.`);
+          await post(`/business/ugc/${item.id}/publish`, { version: item.version }, key);
+          onChanged();
+        })} disabled={action.busy || !wallet || required <= 0 || shortfall > 0}>{action.busy ? "Publishing…" : "Publish UGC"}</Button>
+      </>}
       {action.error && <Notice error>{action.error}</Notice>}
     </article>
   );
@@ -78,20 +91,28 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
 export function BusinessUgcPage() {
   const [params] = useSearchParams();
   const openOnly = params.get("filter") === "Open";
-  const pricing = useResource<UgcPricing>("/business/ugc-pricing");
   const opportunities = useResource<UgcCard[]>("/business/ugc");
+  const wallet = useResource<Wallet>("/business/wallet");
+  return <>
+    <PageHeader title="UGC" description="Create and manage Creator content." action={<span className="business-create-action"><ActionLink to="/business/ugc/new" icon="plus">Create UGC</ActionLink></span>} />
+    <Section title={openOnly ? "Open UGC" : "Your UGC"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
+      const visible = openOnly ? rows.filter((item) => item.status === "Open") : rows;
+      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} wallet={wallet.data} onChanged={() => { opportunities.reload(); wallet.reload(); }} />)}</div> : <Empty title={openOnly ? "No open UGC." : "No UGC yet."} />;
+    }}</Resource></Section>
+  </>;
+}
+
+export function CreateBusinessUgcPage() {
+  const navigate = useNavigate();
+  const pricing = useResource<UgcPricing>("/business/ugc-pricing");
   const action = useAction();
   const [form, setForm] = useState<BusinessUgcForm>(emptyForm);
   const set = <K extends keyof BusinessUgcForm>(key: K, value: BusinessUgcForm[K]) => setForm((current) => ({ ...current, [key]: value }));
 
   return (
     <>
-      <PageHeader title="UGC" description="Fixed Creator payment and optional Customer discount." action={<a className="button primary" href="#ugc-create">Create UGC</a>} />
-      <Section title={openOnly ? "Open UGC" : "UGC Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
-        const visible = openOnly ? rows.filter((item) => item.status === "Open") : rows;
-        return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={opportunities.reload} />)}</div> : <Empty title={openOnly ? "No open UGC." : "No UGC yet."} />;
-      }}</Resource></Section>
-      <div id="ugc-create"><Resource resource={pricing}>
+      <PageHeader title="Create UGC" description="Set the brief and review funding." />
+      <BusinessCreationGate>{creationWallet => <Resource resource={pricing}>
         {(config) => {
           const payment = Number(form.creatorPayment) || 0;
           const creators = Number(form.creatorsNeeded) || 0;
@@ -99,13 +120,16 @@ export function BusinessUgcPage() {
           const platformFee = roundMoney(feePerCreator * creators);
           const creatorTotal = roundMoney(payment * creators);
           const requiredFunding = roundMoney(creatorTotal + platformFee);
+          const discountFunding = form.customerOffer ? Number(form.customerRewardBudget) || 0 : 0;
+          const totalFunding = roundMoney(requiredFunding + discountFunding);
+          const shortfall = roundMoney(Math.max(0, totalFunding - creationWallet.available));
           const minimumBudgetMet = config.minimumUgcBudget === null || requiredFunding >= config.minimumUgcBudget;
           const discount = Number(form.customerDiscount) || 0;
           const offerValid = !form.customerOffer || (config.customerOfferPlatformSalePercent !== null && discount > 0 && discount <= 100 && Number(form.customerRewardBudget) > 0);
           const valid = Boolean(form.title.trim() && form.instructions.trim() && form.dueDate && payment >= config.minimumCreatorPayment && creators >= 1 && minimumBudgetMet && (!form.mustPost || form.platforms.length > 0) && offerValid);
           return (
             <div className="content-grid form-layout">
-              <Section title="Create UGC" description="Creator payment and funding use the current effective Admin UGC settings.">
+              <Section title="UGC details" description="Creator payment and funding use the current effective Admin UGC settings.">
                 <form className="form-grid" onSubmit={(event) => {
                   event.preventDefault();
                   if (!valid) return;
@@ -120,8 +144,7 @@ export function BusinessUgcPage() {
                       customerFacingSlogan: null, customerOfferStartsAtUtc: form.customerOffer ? new Date().toISOString() : null,
                       customerOfferEndsAtUtc: form.customerOffer ? new Date(form.dueDate).toISOString() : null,
                     }, key);
-                    setForm(emptyForm);
-                    opportunities.reload();
+                    navigate("/business/ugc");
                   });
                 }}>
                   <Field label="UGC title" wide><input value={form.title} onChange={(e) => set("title", e.target.value)} required /></Field>
@@ -140,17 +163,18 @@ export function BusinessUgcPage() {
                   {form.customerOffer && discount > 100 && <Notice error>Discount must be between 0 and 100%.</Notice>}
                   {!minimumBudgetMet && <Notice error>Required UGC funding is below the configured minimum budget.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}
-                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Creating…" : "Create UGC"}</Button></div>
+                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save UGC Draft"}</Button></div>
                 </form>
               </Section>
               <Section title="Funding Summary" description="The effective Admin UGC Platform Fee is applied to each Creator Payment.">
-                <dl className="funds-grid"><div><dt>Creator Payment</dt><dd>{amount(creatorTotal)}</dd></div><div><dt>Platform Fee</dt><dd>{amount(platformFee)}</dd></div><div><dt>Total Required Funding</dt><dd>{amount(requiredFunding)}</dd></div>{form.customerOffer && <div><dt>Customer Discount</dt><dd>{amount(discount)}%</dd></div>}{form.customerOffer && <div><dt>Customer Reward Budget</dt><dd>{amount(Number(form.customerRewardBudget) || 0)}</dd></div>}</dl>
+                <dl className="funds-grid"><div><dt>Available funds</dt><dd>{amount(creationWallet.available)} ETB</dd></div><div><dt>Creator Payment</dt><dd>{amount(creatorTotal)} ETB</dd></div><div><dt>Platform Fee</dt><dd>{amount(platformFee)} ETB</dd></div><div><dt>UGC Creator funding</dt><dd>{amount(requiredFunding)} ETB</dd></div>{form.customerOffer && <div><dt>Customer Discount</dt><dd>{amount(discount)}%</dd></div>}{form.customerOffer && <div><dt>Customer discount funding</dt><dd>{amount(discountFunding)} ETB</dd></div>}<div><dt>Total funding to publish</dt><dd>{amount(totalFunding)} ETB</dd></div>{totalFunding > 0 && <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : creationWallet.available - totalFunding)} ETB{shortfall > 0 ? " more" : ""}</dd></div>}</dl>
+                {shortfall > 0 && <Notice error><Link to="/business/wallet">Add Funds</Link> before publishing. This draft reserves zero funds.</Notice>}
                 <p className="fine-print">Current Admin UGC fee: {amount(config.platformFeePercent)}%.</p>
               </Section>
             </div>
           );
         }}
-      </Resource></div>
+      </Resource>}</BusinessCreationGate>
     </>
   );
 }

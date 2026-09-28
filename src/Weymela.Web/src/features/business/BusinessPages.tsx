@@ -70,6 +70,7 @@ export function BusinessDashboard() {
           <PageHeader
             eyebrow={data.business.displayName}
             title="Home"
+            description="Manage your promotions and activity."
             action={
               <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
                 Create Promotion
@@ -92,7 +93,7 @@ export function BusinessDashboard() {
           </div>
           <Section title="Quick actions" className="quick-actions-section">
             <div className="actions quick-actions">
-              <ActionLink to="/business/ugc" secondary icon="sparkle">Create UGC</ActionLink>
+              <ActionLink to="/business/ugc/new" secondary icon="sparkle">Create UGC</ActionLink>
               <ActionLink to="/checkout" secondary icon="qr">Checkout / Scan QR</ActionLink>
               <ActionLink to="/business/cashiers" secondary icon="people">Cashier Management</ActionLink>
               <ActionLink to="/business/pricing" secondary icon="settings">Pricing</ActionLink>
@@ -139,8 +140,8 @@ export function BusinessWallet() {
     <>
       <PageHeader
         eyebrow="Advertising Funds"
-        title="Your wallet"
-        description="Add funds when it suits your Business. Reserve them only when you fund a Campaign."
+        title="Wallet"
+        description="Manage your advertising funds."
       />
       <Resource resource={resource}>
         {(wallet) => (
@@ -514,6 +515,7 @@ export function BusinessCampaigns() {
     <>
       <PageHeader
         title="Promotions"
+        description="Create and manage your promotions."
         action={
           <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
             Create Promotion
@@ -537,6 +539,7 @@ export function BusinessRequests() {
     <>
       <PageHeader
         title="Creator Requests"
+        description="Review requests for your promotions."
       />
       <Resource resource={resource}>
         {(rows) => (

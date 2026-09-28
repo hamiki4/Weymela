@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
-import type { BusinessPricing, CampaignTypeCode } from "../../api/types";
+import { Link, useNavigate } from "react-router-dom";
+import { post, request, useAction, useResource } from "../../api/client";
+import type { BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
+import { BusinessCreationGate } from "./BusinessCreationGate";
 import {
   Button,
   Field,
@@ -22,6 +23,10 @@ import {
 const SOCIAL_PLATFORMS = ["TikTok", "Instagram", "YouTube", "Facebook"] as const;
 
 export function CreateCampaign() {
+  return <BusinessCreationGate>{wallet => <CreateCampaignForm wallet={wallet} />}</BusinessCreationGate>;
+}
+
+function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
   const pricing = useResource<BusinessPricing>("/business/pricing");
   const action = useAction();
   const navigate = useNavigate();
@@ -40,6 +45,16 @@ export function CreateCampaign() {
     endUtc: "",
   });
   const [platforms, setPlatforms] = useState<{ platform: string; capacity: number }[]>([]);
+  const [budgetWallet, setBudgetWallet] = useState<Wallet | null>(null);
+  const [balanceBusy, setBalanceBusy] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const refreshBalance = async () => {
+    setBalanceBusy(true);
+    setBalanceError(null);
+    try { setBudgetWallet(await request<Wallet>("/business/wallet")); return true; }
+    catch (error) { setBalanceError(error instanceof Error ? error.message : "Available funds could not be checked."); return false; }
+    finally { setBalanceBusy(false); }
+  };
   const togglePlatform = (platform: string, selected: boolean) => setPlatforms((current) =>
     selected ? [...current, { platform, capacity: 1 }] : current.filter((row) => row.platform !== platform));
   const set = (name: keyof typeof form, value: string) =>
@@ -48,6 +63,7 @@ export function CreateCampaign() {
     <>
       <PageHeader
         title="Create Promotion"
+        description="Set the details and budget for a draft."
       />
       <Resource resource={pricing}>
         {(data) => {
@@ -56,6 +72,10 @@ export function CreateCampaign() {
           );
           if (!price)
             return <Notice error>Promotion pricing is unavailable.</Notice>;
+          const available = budgetWallet?.available ?? wallet.available;
+          const promotionBudget = Number(form.campaignBudget) || 0;
+          const shortfall = Math.max(0, Math.round((promotionBudget - available) * 100) / 100);
+          const remaining = Math.max(0, Math.round((available - promotionBudget) * 100) / 100);
           return (
             <div className="content-grid form-layout">
               <Section
@@ -67,6 +87,9 @@ export function CreateCampaign() {
                   ][step]
                 }
               >
+                {step === 0 && wallet.available === 0 && <Notice>
+                  Available funds: {amount(0)} ETB. You can save a draft now. <Link to="/business/wallet">Add Funds</Link> before publishing.
+                </Notice>}
                 <ol className="stepper" aria-label="Campaign setup progress">
                   {["Promotion", "Creators", "Budget"].map((label, index) => (
                     <li
@@ -81,7 +104,11 @@ export function CreateCampaign() {
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (step < 2) {
+                    if (step === 1) {
+                      void refreshBalance().then(ok => { if (ok) setStep(2); });
+                      return;
+                    }
+                    if (step === 0) {
                       setStep(step + 1);
                       return;
                     }
@@ -242,16 +269,17 @@ export function CreateCampaign() {
                             }
                           />
                         </Field>
-                        <div className="balance-banner">
-                          <strong>{form.title}</strong>
-                          <p>
-                            {campaignType(type)} ·{" "}
-                            {form.category || "All Creator categories"}
-                          </p>
-                          <p>Creating a draft does not reserve funds.</p>
-                        </div>
+                        <dl className="funds-grid">
+                          <div><dt>Available funds</dt><dd>{amount(available)} ETB</dd></div>
+                          <div><dt>Promotion budget</dt><dd>{amount(promotionBudget)} ETB</dd></div>
+                          {promotionBudget > 0 && <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : remaining)} ETB{shortfall > 0 ? " more" : ""}</dd></div>}
+                        </dl>
+                        {shortfall > 0 && <Notice error>Available funds cannot cover this Promotion budget. <Link to="/business/wallet">Add Funds</Link> before funding or publishing.</Notice>}
+                        <p className="fine-print">Saving this draft reserves zero funds. Creators cannot find or request it until you fund and publish it.</p>
+                        <Button variant="secondary" onClick={() => void refreshBalance()} disabled={balanceBusy}>{balanceBusy ? "Checking…" : "Refresh funds"}</Button>
                       </>
                     )}
+                    {balanceError && <Notice error>{balanceError}</Notice>}
                     {action.error && <Notice error>{action.error}</Notice>}
                     <div className="form-actions">
                       {step > 0 && (
@@ -262,7 +290,7 @@ export function CreateCampaign() {
                           Back
                         </Button>
                       )}
-                      <Button type="submit" icon="arrow" disabled={action.busy}>
+                      <Button type="submit" icon="arrow" disabled={action.busy || balanceBusy}>
                         {action.busy
                           ? "Creating…"
                           : step === 2
@@ -275,8 +303,7 @@ export function CreateCampaign() {
               </Section>
               <aside>
                 <Section
-                  title="Your activity pricing"
-                  description="Saved with your Promotion."
+                  title="Activity rates"
                 >
                   <p className="eyebrow">{campaignType(type)}</p>
                   <div className="price-feature">

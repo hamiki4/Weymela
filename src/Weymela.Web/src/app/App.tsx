@@ -12,13 +12,13 @@ import {
 } from "../features/business/BusinessPages";
 import { CreateCampaign } from "../features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
-import { BusinessUgcPage } from "../features/business/UgcPages";
+import { BusinessUgcPage, CreateBusinessUgcPage } from "../features/business/UgcPages";
 import {
   CreatorEarnings,
   CreatorOpportunity,
 } from "../features/creator/CreatorPages";
 import { CreatorDashboard, CreatorDiscover, CreatorPromotions } from "../features/creator/CreatorExperience";
-import { CreatorProfile } from "../features/creator/CreatorProfile";
+import { ProfilePage } from "./ProfilePage";
 import {
   CreatorActiveDetail,
 } from "../features/creator/ActiveCampaigns";
@@ -123,6 +123,7 @@ export function App() {
         </div>
       } />
       <Route element={<ProtectedShell />}>
+        <Route path="/profile" element={<RoleGate roles={["Customer", "Creator", "Business"]}><ProfilePage /></RoleGate>} />
         <Route path="/notifications" element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><Inbox /></RoleGate>} />
         <Route element={<RoleGate roles={["Business"]} />}>
           <Route path="/business" element={<BusinessDashboard />} />
@@ -133,6 +134,7 @@ export function App() {
           <Route path="/business/requests" element={<BusinessRequests />} />
           <Route path="/business/pricing" element={<BusinessPricingPage />} />
           <Route path="/business/ugc" element={<BusinessUgcPage />} />
+          <Route path="/business/ugc/new" element={<CreateBusinessUgcPage />} />
           <Route path="/business/cashiers" element={<BusinessCashiers />} />
         </Route>
         <Route element={<RoleGate roles={["Creator"]} />}>
@@ -147,7 +149,7 @@ export function App() {
           <Route path="/creator/pricing" element={<Navigate to="/creator/earnings" replace />} />
           <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
           <Route path="/creator/earnings" element={<CreatorEarnings />} />
-          <Route path="/creator/profile" element={<CreatorProfile />} />
+          <Route path="/creator/profile" element={<Navigate to="/profile#social-accounts" replace />} />
           <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
         </Route>
         <Route element={<RoleGate roles={["PlatformAdmin"]} />}>

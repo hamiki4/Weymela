@@ -28,11 +28,11 @@ function publicHandle(platform: string, safeUrl: string | undefined) {
   return `@${segment}`;
 }
 
-export function CreatorProfile() {
+export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean }) {
   const { user } = useSession();
   const resource = useResource<SocialAccount[]>("/creator/social-accounts");
   return <>
-    <PageHeader title="Creator Profile" eyebrow={user?.displayName} />
+    {!sectionOnly && <PageHeader title="Creator Profile" eyebrow={user?.displayName} />}
     <Section title="Social Accounts">
       <Resource resource={resource}>{(accounts) => <div className="creator-social-list">
         {platforms.map((platform) => {
@@ -40,6 +40,7 @@ export function CreatorProfile() {
           const url = safeExternal(account?.profileUrl);
           const handle = publicHandle(platform, url);
           return <div className="creator-social-row" key={platform}>
+            <span className="creator-platform-icon" aria-hidden="true">{{ TikTok: "♪", YouTube: "▶", Instagram: "◎", Facebook: "f" }[platform]}</span>
             <div><strong>{platform}</strong>{handle && <small className="creator-social-handle">{handle}</small>}<small>{account ? "Profile on file" : "Not connected"}</small></div>
             {account && <span className="creator-social-status">{account.verificationStatus}</span>}
             {url && <a href={url} target="_blank" rel="noreferrer">View</a>}

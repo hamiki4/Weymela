@@ -30,7 +30,7 @@ export function CreatorDashboard() {
   const promotions = useResource<CreatorCampaign[]>("/creator/campaigns");
   return <>
     <Resource resource={home}>{(data) => <>
-      <PageHeader eyebrow={`Creator · ${data.creator.displayName}`} title="Home" />
+      <PageHeader eyebrow={`Creator · ${data.creator.displayName}`} title="Home" description="Track your promotions and earnings." />
       <div className="metric-grid creator-metrics">
         <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Requests"><Metric label="Pending Requests" value={count(data.requests)} icon="people" /></Link>
         <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Active"><Metric label="Active Promotions" value={count(data.activeCampaigns)} icon="campaign" /></Link>
@@ -92,7 +92,7 @@ export function CreatorDiscover() {
   const filteredPromotions = useMemo(() => promotions.data?.filter((row) => `${row.business.displayName} ${row.title} ${row.slogan ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [], [promotions.data, search]);
   const filteredUgc = useMemo(() => ugc.data?.filter((row) => `${row.business} ${row.title} ${row.slogan ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [], [ugc.data, search]);
   return <>
-    <PageHeader title="Discover" />
+    <PageHeader title="Discover" description="Find funded Promotions and UGC." />
     <div className="creator-discover-controls"><div className="creator-tabs" role="tablist" aria-label="Opportunity type">{(["Promotions", "UGC"] as const).map((item) => <button key={item} role="tab" aria-selected={tab === item} className={tab === item ? "selected" : ""} onClick={() => setTab(item)}>{item}</button>)}</div><label className="creator-search"><Icon name="search" /><span className="sr-only">Search opportunities</span><input aria-label="Search opportunities" placeholder="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} /></label></div>
     {tab === "Promotions" ? <Resource resource={promotions}>{() => filteredPromotions.length ? <div className="creator-opportunity-grid">{filteredPromotions.map((row) => <PromotionOpportunityCard key={row.id} row={row} />)}</div> : <Empty title="No available Promotions" />}</Resource>
       : <Resource resource={ugc}>{() => filteredUgc.length ? <div className="creator-opportunity-grid">{filteredUgc.map((row) => <UGCOpportunityCard key={row.id} row={row} onChanged={ugc.reload} />)}</div> : <Empty title="No available UGC opportunities" />}</Resource>}
@@ -156,7 +156,7 @@ export function CreatorPromotions() {
   const ugcRequests = useResource<UgcRequest[]>("/creator/ugc/requests");
   const refresh = () => { promotions.reload(); requests.reload(); assignments.reload(); ugcRequests.reload(); };
   return <>
-    <PageHeader title="My Promotions" />
+    <PageHeader title="My Promotions" description="Track your requests and active work." />
     <div className="creator-tabs creator-promotion-filters" role="tablist" aria-label="Filter Promotions">{GROUPS.map((item) => <button key={item} role="tab" aria-selected={filter === item} className={filter === item ? "selected" : ""} onClick={() => setSearchParams(item === "Active" ? {} : { filter: item })}>{item}</button>)}</div>
     <Resource resource={promotions}>{(campaignRows) => <Resource resource={requests}>{(requestRows) =>
       <Resource resource={assignments}>{(assignmentRows) => <Resource resource={ugcRequests}>{(ugcRequestRows) => {

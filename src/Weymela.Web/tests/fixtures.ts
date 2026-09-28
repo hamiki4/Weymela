@@ -251,6 +251,10 @@ export const routes: Record<string, unknown> = {
   },
   "/business/ugc": [],
   "/business/wallet": wallet,
+  "/legal/current": [
+    { id: "business-agreement", type: "BusinessAgreement", version: "1", contentHash: "fixture", accepted: true },
+    { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
+  ],
   "/business/pricing": businessPricing,
   "/business/ugc-pricing": ugcPricing,
   "/business/campaigns": [campaign],

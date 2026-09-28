@@ -300,9 +300,9 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
   page.on("framenavigated", onNavigation);
   let stage = "selector-visible";
   try {
-    const menu = page.getByRole("dialog", { name: "Account menu" });
-    if (!await menu.isVisible()) await page.getByRole("button", { name: "Open account menu" }).click();
-    const select = menu.getByLabel("Switch profile", { exact: true });
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    if (!await settings.isVisible()) await page.getByRole("button", { name: "Open Settings" }).click();
+    const select = settings.getByLabel("Switch profile", { exact: true });
     await expect(select).toBeVisible({ timeout: 5000 });
     const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value", { timeout: 3000 });
     expect(value).toBeTruthy();
@@ -335,8 +335,8 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
     const destination = { Customer: /\/customer\/offers(?:[/?#]|$)/, Creator: /\/creator(?:[/?#]|$)/, Business: /\/business(?:[/?#]|$)/ }[label];
     await expect(page).toHaveURL(destination, { timeout: 7000 });
     await expect(page.locator("main h1")).toBeVisible({ timeout: 5000 });
-    await expect(select).toBeVisible({ timeout: 5000 });
-    await expect(select).toHaveValue(value!, { timeout: 5000 });
+    await expect(settings).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("button", { name: "Open Settings" })).toBeVisible();
     await expect(page).toHaveURL(destination);
     expect(paths, "A successful switch must never visit an unauthorized workspace").not.toContain("/unauthorized");
   } catch (error) {
@@ -755,32 +755,34 @@ test("public role shell keeps mobile navigation and profile actions tappable", a
   await expect(navigation.getByRole("link", { name: "Discover", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Transactions", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Cashback", exact: true })).toBeVisible();
-  await expect(navigation.getByRole("link")).toHaveCount(4);
-  await expect(navigation.getByRole("button", { name: "Profile", exact: true })).toBeVisible();
-  const profileButton = navigation.getByRole("button", { name: "Profile", exact: true });
-  await expect(profileButton).toBeVisible();
+  await expect(navigation.getByRole("link")).toHaveCount(5);
+  const profileLink = navigation.getByRole("link", { name: "Profile", exact: true });
+  await expect(profileLink).toHaveAttribute("href", "/profile");
   await expect(navigation.getByRole("button", { name: "More navigation", exact: true })).toHaveCount(0);
-  await profileButton.click();
-  const menu = page.getByRole("dialog", { name: "Account menu" });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link", { name: "Add a profile", exact: true })).toBeVisible();
+  await profileLink.click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Settings" })).not.toBeVisible();
+  await navigation.getByRole("link", { name: "Home", exact: true }).click();
   await expect(page).toHaveURL(/\/customer\/offers$/);
-  await page.keyboard.press("Escape");
-  await expect(menu).not.toBeVisible();
-  const accountButton = page.getByRole("button", { name: "Open account menu" });
-  const target = await accountButton.boundingBox();
+  const settingsButton = page.getByRole("button", { name: "Open Settings" });
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
+  const target = await settingsButton.boundingBox();
   expect(target?.height).toBeGreaterThanOrEqual(44);
-  await accountButton.click();
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link", { name: "Add a profile" })).toBeVisible();
-  await expect(menu.getByLabel("Switch profile", { exact: true })).toBeVisible();
-  await expect(menu.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
-  await expect(menu.getByRole("button", { name: "Close account menu", exact: true })).toBeVisible();
+  await settingsButton.click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("link", { name: "Add Profile" })).toBeVisible();
+  await expect(settings.getByLabel("Switch profile", { exact: true })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Notifications" })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Location" })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Close Settings", exact: true })).toBeVisible();
   const session = await (await context.request.get("/api/session")).json() as SessionUser;
   expect(await page.locator(".sidebar, .topbar, .account-sheet, .more-sheet, .mobile-role-nav").evaluateAll((elements, publicId) =>
     elements.some((element) => element.textContent?.includes(publicId)), session.publicId)).toBe(false);
   await page.keyboard.press("Escape");
-  await expect(menu).not.toBeVisible();
+  await expect(settings).not.toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
@@ -853,8 +855,8 @@ test("multi-role-switching", async ({ page, context }) => {
   await approveLatest(context, "Business", businessPublicId);
   await establishFirebaseSession(context, account.token, "Customer");
   await open(page, "/customer/offers");
-  await page.getByRole("button", { name: "Open account menu" }).click();
-  const select = page.getByRole("dialog", { name: "Account menu" }).getByLabel("Switch profile", { exact: true });
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  const select = page.getByRole("dialog", { name: "Settings" }).getByLabel("Switch profile", { exact: true });
   await expect(select.locator("option")).toHaveCount(3);
   await page.keyboard.press("Escape");
   const beforeSwitch = await context.request.get("/api/session");

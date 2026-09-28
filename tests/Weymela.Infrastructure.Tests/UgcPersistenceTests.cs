@@ -20,6 +20,35 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     private static readonly DateTime Now = new(2026, 9, 17, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public async Task Business_must_accept_current_agreements_before_creating_or_publishing_ugc()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var service = new UgcService(db, new FixedTime(Now));
+        var draft = await service.CreateAsync(state.Business, Input(), "legal-draft", default);
+        var current = await db.LegalDocumentVersions.SingleAsync(x => x.Type == LegalDocumentType.BusinessAgreement);
+        db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.BusinessAgreement, "2", "new-hash", Now));
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+
+        Assert.Equal(draft, await service.CreateAsync(state.Business, Input(), "legal-draft", default));
+        var create = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, Input(), "legal-create-rejected", default));
+        Assert.Equal(FailureKind.Forbidden, create.Kind);
+        var publish = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PublishAsync(state.Business, draft, 0, "legal-publish-rejected", default));
+        Assert.Equal(FailureKind.Forbidden, publish.Kind);
+        Assert.Equal(UgcOpportunityStatus.Draft, (await db.UgcOpportunities.SingleAsync(x => x.Id == draft)).Status);
+        Assert.Empty(await db.UgcReservations.Where(x => x.UgcOpportunityId == draft).ToListAsync());
+
+        var updated = await db.LegalDocumentVersions.SingleAsync(x => x.Type == LegalDocumentType.BusinessAgreement && x.Id != current.Id);
+        db.LegalAcceptances.Add(new(state.Business.UserId, LegalRole.Business, updated.Id, Now, null, null));
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        await service.PublishAsync(state.Business, draft, 0, "legal-publish-accepted", default);
+        Assert.Equal(UgcOpportunityStatus.Open, (await db.UgcOpportunities.SingleAsync(x => x.Id == draft)).Status);
+        db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.BusinessAgreement, "3", "latest-hash", Now));
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        Assert.Equal(draft, await service.PublishAsync(state.Business, draft, 0, "legal-publish-accepted", default));
+    }
+
+    [Fact]
     public async Task Complete_ugc_flow_reserves_1650_and_approval_posts_creator_earning_and_platform_fee_once()
     {
         var state = await Setup();
@@ -253,18 +282,38 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.DoesNotContain("Internal", card.Offer, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Insufficient_available_balance_rolls_back_publish_reservation_and_journal()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1000)]
+    public async Task Insufficient_available_balance_rolls_back_publish_reservation_and_journal(decimal deposit)
     {
-        var state = await Setup(deposit: 1000); await using var db = state.Database.Open();
+        var state = await Setup(deposit); await using var db = state.Database.Open();
         var service = new UgcService(db, new FixedTime(Now));
         var id = await service.CreateAsync(state.Business, Input(), "create-insufficient", default);
+        Assert.DoesNotContain(await service.DiscoverAsync(state.Creator, default), row => row.Id == id);
         var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PublishAsync(state.Business, id, 0, "publish-insufficient", default));
         Assert.Equal(FailureKind.InsufficientFunds, failure.Kind);
+        Assert.DoesNotContain(await service.DiscoverAsync(state.Creator, default), row => row.Id == id);
+        Assert.Equal(FailureKind.Validation, (await Assert.ThrowsAsync<ApplicationFailure>(() => service.RequestAsync(state.Creator, id, "request-unfunded", default))).Kind);
         db.ChangeTracker.Clear();
         Assert.Equal(UgcOpportunityStatus.Draft, (await db.UgcOpportunities.SingleAsync(x => x.Id == id)).Status);
         Assert.Empty(await db.UgcReservations.ToListAsync());
         Assert.False(await db.IdempotencyRecords.AnyAsync(x => x.Key == "publish-insufficient"));
+    }
+
+    [Fact]
+    public async Task Published_ugc_from_an_inactive_Business_is_absent_from_Creator_Discover()
+    {
+        var state = await Setup(); await using var db = state.Database.Open();
+        var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, Input(), "inactive-business-create", default);
+        await service.PublishAsync(state.Business, id, 0, "inactive-business-publish", default);
+        Assert.Contains(await service.DiscoverAsync(state.Creator, default), row => row.Id == id);
+        var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == state.Business.UserId && x.Role == ActorRole.Business);
+        permission.IsActive = false;
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        Assert.DoesNotContain(await service.DiscoverAsync(state.Creator, default), row => row.Id == id);
+        Assert.Equal(FailureKind.Validation, (await Assert.ThrowsAsync<ApplicationFailure>(() => service.RequestAsync(state.Creator, id, "inactive-business-request", default))).Kind);
     }
 
     [Fact]
@@ -443,8 +492,14 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.FinancialConfigurationVersions.Add(new(versionId, configurationId, 1, Guid.NewGuid(), Now,
             Scenario.Price(PromotionType.ViewOnly, versionId), Scenario.Price(PromotionType.ViewPlusCommission, versionId),
             new Money(3000), new Money(4000), new UgcPricingSnapshot(new Money(200), 10m, null, Now, versionId, 3m)));
+        foreach (var type in new[] { LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement })
+        {
+            var id = Guid.NewGuid();
+            db.LegalDocumentVersions.Add(new(id, type, "1", "fixture-hash", Now));
+            db.LegalAcceptances.Add(new(business.UserId, LegalRole.Business, id, Now, null, null));
+        }
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        await new FinancialCommands(db, new FixedTime(Now)).CreditDepositAsync(new(business, new Money(deposit), "ugc-seed-deposit", Now), 0);
+        if (deposit > 0) await new FinancialCommands(db, new FixedTime(Now)).CreditDepositAsync(new(business, new Money(deposit), "ugc-seed-deposit", Now), 0);
         return new(database, business, creator);
     }
 

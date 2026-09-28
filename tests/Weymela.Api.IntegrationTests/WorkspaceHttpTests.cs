@@ -14,6 +14,129 @@ namespace Weymela.Api.IntegrationTests;
 public sealed class WorkspaceHttpTests(PostgresFixture postgres)
 {
     [Fact]
+    public async Task Unfunded_promotion_draft_is_not_discoverable_or_requestable_and_funding_rechecks_available_balance()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        using var business = await fixture.Login("business");
+        using var creator = await fixture.Login("other-creator");
+        var wallet = await business.GetJson("/api/business/wallet");
+        var available = wallet["available"]!.GetValue<decimal>();
+        var budget = available + 1000m;
+        var title = "Funding gate regression";
+        var created = await business.PostJson("/api/business/campaigns", new
+        {
+            title, description = "An original local story", type = "ViewOnly", campaignBudget = budget,
+            requirements = (string?)null, category = (string?)null, region = (string?)null,
+            minimumVerifiedFollowers = (long?)null, startUtc = DateTime.UtcNow.AddMinutes(-1),
+            endUtc = DateTime.UtcNow.AddDays(14), platforms = Array.Empty<object>()
+        });
+        var id = created["id"]!.GetValue<Guid>();
+        Assert.DoesNotContain((await creator.GetJson("/api/creator/discover")).AsArray(), row => row?["id"]?.GetValue<Guid>() == id);
+        var request = await creator.Post($"/api/creator/campaigns/{id}/join", new { message = "Interested", contentConcept = "Local story" });
+        Assert.False(request.IsSuccessStatusCode);
+        var insufficient = await business.Post($"/api/business/campaigns/{id}/fund", new
+        {
+            campaignVersion = 0, walletVersion = wallet["version"]!.GetValue<long>()
+        });
+        Assert.False(insufficient.IsSuccessStatusCode);
+        await using (var db = fixture.Database.Open())
+        {
+            var draft = await db.Promotions.SingleAsync(x => x.Id == id);
+            Assert.Equal(PromotionStatus.Draft, draft.Status);
+            Assert.Equal(0m, draft.ReservedBudget.Amount);
+            Assert.False(await db.CreatorApplications.AnyAsync(x => x.PromotionId == id));
+            Assert.False(await db.CreatorAllocations.AnyAsync(x => x.PromotionId == id));
+        }
+        await business.PostJson("/api/business/wallet/deposits", new
+        {
+            amount = 1000m, expectedVersion = wallet["version"]!.GetValue<long>()
+        });
+        var toppedUp = await business.GetJson("/api/business/wallet");
+        await business.PostJson($"/api/business/campaigns/{id}/fund", new
+        {
+            campaignVersion = 0, walletVersion = toppedUp["version"]!.GetValue<long>()
+        });
+        Assert.DoesNotContain((await creator.GetJson("/api/creator/discover")).AsArray(), row => row?["id"]?.GetValue<Guid>() == id);
+        await business.PostJson($"/api/business/campaigns/{id}/publish", new { version = 1 });
+        Assert.Contains((await creator.GetJson("/api/creator/discover")).AsArray(), row => row?["id"]?.GetValue<Guid>() == id);
+    }
+
+    [Fact]
+    public async Task Current_Business_agreement_blocks_Promotion_creation_until_exact_version_is_accepted()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        using var business = await fixture.Login("business");
+        var version = Guid.NewGuid();
+        await using (var db = fixture.Database.Open())
+        {
+            db.LegalDocumentVersions.Add(new(version, LegalDocumentType.BusinessAgreement, "new-current", "fixture-new-hash", DateTime.UtcNow.AddMinutes(-1)));
+            await db.SaveChangesAsync();
+        }
+        var input = new
+        {
+            title = "Agreement gate regression", description = "An original local story", type = "ViewOnly", campaignBudget = 3000m,
+            requirements = (string?)null, category = (string?)null, region = (string?)null,
+            minimumVerifiedFollowers = (long?)null, startUtc = DateTime.UtcNow.AddMinutes(-1),
+            endUtc = DateTime.UtcNow.AddDays(14), platforms = Array.Empty<object>()
+        };
+        var denied = await business.Post("/api/business/campaigns", input, "agreement-not-current");
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var documents = (await business.GetJson("/api/legal/current")).AsArray();
+        Assert.False(documents.Single(x => x?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
+        await business.PostJson($"/api/legal/{version}/accept", new { contentHash = "fixture-new-hash", confirmed = true });
+        var draft = await business.PostJson("/api/business/campaigns", input, "agreement-now-current");
+        var draftId = draft["id"]!.GetValue<Guid>();
+        var newer = Guid.NewGuid();
+        await using (var db = fixture.Database.Open())
+        {
+            db.LegalDocumentVersions.Add(new(newer, LegalDocumentType.BusinessAgreement, "newer-current", "fixture-newer-hash", DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+        var wallet = await business.GetJson("/api/business/wallet");
+        var funding = new { campaignVersion = 0, walletVersion = wallet["version"]!.GetValue<long>() };
+        Assert.Equal(HttpStatusCode.Forbidden, (await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-outdated-agreement")).StatusCode);
+        await business.PostJson($"/api/legal/{newer}/accept", new { contentHash = "fixture-newer-hash", confirmed = true });
+        var funded = await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-current-agreement");
+        Assert.True(funded.IsSuccessStatusCode);
+        await using (var db = fixture.Database.Open())
+        {
+            db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.BusinessAgreement, "latest-current", "fixture-latest-hash", DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+        Assert.True((await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-current-agreement")).IsSuccessStatusCode);
+    }
+
+    [Theory]
+    [InlineData("customer", "Customer")]
+    [InlineData("creator", "Creator")]
+    [InlineData("business", "Business")]
+    public async Task Own_profile_returns_only_current_role_and_safe_fields(string persona, string role)
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        using var client = await f.Login(persona);
+        var profile = await client.GetJson("/api/profile");
+        Assert.Equal(role, profile["role"]!.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(profile["displayName"]!.GetValue<string>()));
+        Assert.False(string.IsNullOrWhiteSpace(profile["publicId"]!.GetValue<string>()));
+        Assert.Equal("Active", profile["status"]!.GetValue<string>());
+        foreach (var secret in new[] { "token", "secret", "credential", "password", "identifierHash" })
+            Assert.DoesNotContain(secret, profile.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+        if (role != "Business")
+        {
+            Assert.Null(profile["businessType"]?.GetValue<string>());
+            Assert.Null(profile["region"]?.GetValue<string>());
+        }
+    }
+
+    [Fact]
+    public async Task Profile_endpoint_denies_internal_roles()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        using var admin = await f.Login("admin");
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/profile")).StatusCode);
+    }
+
+    [Fact]
     public async Task Creator_social_accounts_are_self_scoped_and_expose_no_credentials()
     {
         await using var f = await ApiFixture.CreateAsync(postgres);

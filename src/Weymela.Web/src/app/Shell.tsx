@@ -99,18 +99,16 @@ export function Brand() {
 export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
   const accountMenu = useRef<HTMLDialogElement>(null);
+  const settingsMenu = useRef<HTMLDialogElement>(null);
   const moreMenu = useRef<HTMLDialogElement>(null);
+  const [deviceMessage, setDeviceMessage] = useState("");
   const navigationSequence = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   if (!user) return null;
   const baseItems = navigation[user.role];
   const items = baseItems;
-  const isPublicProfile =
-    user.role === "Customer" ||
-    user.role === "Creator" ||
-    user.role === "Business";
-  const hasAccountMenuProfile = isPublicProfile || user.role === "Cashier";
+  const hasAccountMenuProfile = user.role === "Cashier";
   const isProductRole = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
   const mobileItems = user.role === "PlatformAdmin"
     ? items.filter(([to]) => ["/admin", "/admin/wallets", "/admin/payouts"].includes(to))
@@ -125,6 +123,34 @@ export function Shell({ children }: { children?: ReactNode }) {
       && location.pathname.startsWith(`${to}/`));
   const overflowIsActive = overflowItems.some(([to]) => itemIsActive(to, location.pathname === to));
   const closeAccountMenu = () => accountMenu.current?.close();
+  const closeSettings = () => settingsMenu.current?.close();
+  const openSettings = () => {
+    setDeviceMessage("");
+    settingsMenu.current?.showModal();
+  };
+  const requestNotifications = async () => {
+    if (!("Notification" in window) || typeof Notification.requestPermission !== "function") {
+      setDeviceMessage("Browser notifications are unavailable on this device.");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setDeviceMessage(`Browser notifications: ${permission}.`);
+    } catch {
+      setDeviceMessage("Browser notification permission could not be requested.");
+    }
+  };
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setDeviceMessage("Location is unavailable on this device.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      () => setDeviceMessage("Location access granted for this request."),
+      (error) => setDeviceMessage(error.code === 1 ? "Location access denied." : "Location could not be determined."),
+      { enableHighAccuracy: false, timeout: 10000 },
+    );
+  };
   const openAccountMenu = () => {
     moreMenu.current?.close();
     accountMenu.current?.showModal();
@@ -164,6 +190,7 @@ export function Shell({ children }: { children?: ReactNode }) {
   };
   const signOutAndClose = () => {
     closeAccountMenu();
+    closeSettings();
     void signOut().then(() => navigate("/sign-in"));
   };
   const prepareNavigation = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -208,7 +235,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           />
         )}
         {renderNavigation(items, "Main navigation")}
-        {isPublicProfile && user.role !== "Business" && user.role !== "Creator" && (
+        {user.role === "Customer" && (
           <Link className="nav-link add-profile-link" to="/onboarding">
             <Icon name="people" />
             Add a profile
@@ -227,7 +254,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           </Button>
         </div>
       </aside>
-      <dialog
+      {!isProductRole && <dialog
         ref={accountMenu}
         id="account-menu"
         className="dialog account-sheet"
@@ -243,11 +270,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             <Icon name="close" />
           </Button>
         </div>
-        {user.role === "Creator"
-          ? <Link className="account-summary account-summary-link" to="/creator/profile" aria-label="Creator Profile" onClick={closeAccountMenu}>
-              {accountIdentity}<Icon name="arrow" />
-            </Link>
-          : <div className="account-summary">{accountIdentity}</div>}
+        <div className="account-summary">{accountIdentity}</div>
         {user.profiles && user.profiles.length > 0 && (user.role !== "PlatformAdmin" || user.profiles.length > 1) && (
           <ProfileSwitcher
             profiles={user.profiles}
@@ -255,32 +278,33 @@ export function Shell({ children }: { children?: ReactNode }) {
             onSwitch={switchProfile}
           />
         )}
-        {isPublicProfile && user.role !== "Business" && (
-          <Link
-            className="account-menu-link"
-            to="/onboarding"
-            onClick={closeAccountMenu}
-          >
-            <Icon name="people" />
-            Add a profile
-          </Link>
-        )}
         <Link className="account-menu-link" to="/notifications" onClick={closeAccountMenu}>
           <Icon name="bell" />
           Notifications
         </Link>
-        {user.role === "Business" && <div className="account-menu-secondary">
-          <Link className="account-menu-link" to="/business/requests" onClick={closeAccountMenu}><Icon name="people" />Creator Requests</Link>
-          <Link className="account-menu-link" to="/checkout" onClick={closeAccountMenu}><Icon name="qr" />Checkout</Link>
-          <Link className="account-menu-link" to="/business/cashiers" onClick={closeAccountMenu}><Icon name="people" />Cashier Management</Link>
-          <Link className="account-menu-link" to="/business/pricing" onClick={closeAccountMenu}><Icon name="settings" />Pricing</Link>
-        </div>}
         <div className="account-menu-actions">
           <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
             Sign out
           </Button>
         </div>
-      </dialog>
+      </dialog>}
+      {isProductRole && <dialog ref={settingsMenu} id="settings-menu" className="dialog settings-sheet" aria-labelledby="settings-title">
+        <div className="dialog-header">
+          <h2 id="settings-title">Settings</h2>
+          <button type="button" className="settings-close" aria-label="Close Settings" onClick={closeSettings}><Icon name="close" size={18} /></button>
+        </div>
+        {user.profiles && <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={async profile => { await switchProfile(profile); closeSettings(); }} />}
+        {user.role !== "Business" && <Link className="settings-row" to="/onboarding" onClick={closeSettings}><Icon name="plus" />Add Profile</Link>}
+        <button type="button" className="settings-row" onClick={() => void requestNotifications()}><Icon name="bell" />Notifications</button>
+        <button type="button" className="settings-row" onClick={requestLocation}><Icon name="location" />Location</button>
+        {user.role === "Creator" && <Link className="settings-row" to="/profile#social-accounts" onClick={closeSettings}><Icon name="globe" />Social Accounts</Link>}
+        {user.role === "Business" && <>
+          <Link className="settings-row" to="/business/cashiers" onClick={closeSettings}><Icon name="people" />Cashier Management</Link>
+          <Link className="settings-row" to="/business/cashiers#create-cashier" onClick={closeSettings}><Icon name="plus" />Create Cashier</Link>
+        </>}
+        {deviceMessage && <p className="settings-device-message" role="status">{deviceMessage}</p>}
+        <button type="button" className="settings-row settings-signout" onClick={signOutAndClose}><Icon name="logout" />Sign Out</button>
+      </dialog>}
       {overflowItems.length > 0 && (
         <dialog
           ref={moreMenu}
@@ -325,19 +349,11 @@ export function Shell({ children }: { children?: ReactNode }) {
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
             )}
-            <Button
-              variant="quiet"
-              className="account-trigger"
-              aria-label="Open account menu"
-              aria-haspopup="dialog"
-              aria-controls="account-menu"
-              onClick={openAccountMenu}
-            >
-              {user.role === "PlatformAdmin" && <Icon name="settings" />}
-              <span className="small-avatar" aria-hidden="true">
-                {user.displayName.slice(0, 1)}
-              </span>
-            </Button>
+            {isProductRole ? <button type="button" className="button button-quiet settings-trigger" aria-label="Open Settings" aria-haspopup="dialog" aria-controls="settings-menu" onClick={openSettings}><Icon name="settings" /></button> :
+              <Button variant="quiet" className="account-trigger" aria-label="Open account menu" aria-haspopup="dialog" aria-controls="account-menu" onClick={openAccountMenu}>
+                {user.role === "PlatformAdmin" && <Icon name="settings" />}
+                <span className="small-avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
+              </Button>}
           </div>
         </header>
         {isProductRole && <div className="product-desktop-nav">{renderNavigation(items, `${roles[user.role]} navigation`)}</div>}

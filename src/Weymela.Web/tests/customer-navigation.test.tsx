@@ -40,6 +40,7 @@ function CurrentPath() {
 
 beforeEach(() => {
   vi.stubGlobal("navigator", { onLine: true });
+  window.sessionStorage.setItem("weymela.profile-key", "Customer:customer-1:-");
 });
 
 describe("Customer mobile navigation", () => {
@@ -55,7 +56,7 @@ describe("Customer mobile navigation", () => {
 
     const navigation = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
     expect(navigation.getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Home", "Discover", "Cashback", "Transactions",
+      "Home", "Discover", "Cashback", "Transactions", "Profile",
     ]);
     expect(navigation.getByRole("link", { name: "Home" })).toHaveAttribute(
       "href",
@@ -73,11 +74,10 @@ describe("Customer mobile navigation", () => {
       "href",
       "/customer/cashback",
     );
-    expect(navigation.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
-    expect(navigation.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
+    expect(navigation.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
   });
 
-  it("opens the existing account sheet without navigating from Profile", async () => {
+  it("navigates to Profile while the gear opens Settings", async () => {
     render(
       <MemoryRouter initialEntries={["/customer/offers"]}>
         <>
@@ -88,19 +88,11 @@ describe("Customer mobile navigation", () => {
     );
 
     const navigation = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
-    await userEvent.click(navigation.getByRole("button", { name: "Profile" }));
-    const accountMenu = screen.getByRole("dialog", { name: "Account menu" });
-    expect(accountMenu).toBeVisible();
-    expect(within(accountMenu).getByLabelText("Switch profile")).toBeVisible();
-    expect(within(accountMenu).getByRole("link", { name: "Add a profile" })).toHaveAttribute(
-      "href",
-      "/onboarding",
-    );
-    expect(screen.getByLabelText("Current route")).toHaveTextContent("/customer/offers");
-
-    await userEvent.click(within(accountMenu).getByRole("button", { name: "Close account menu" }));
-    await userEvent.click(screen.getByRole("button", { name: "Open account menu" }));
-    expect(screen.getByRole("dialog", { name: "Account menu" })).toBeVisible();
+    await userEvent.click(navigation.getByRole("link", { name: "Profile" }));
+    await waitFor(() => expect(screen.getByLabelText("Current route")).toHaveTextContent("/profile"));
+    expect(screen.queryByRole("dialog", { name: "Settings" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Open Settings" }));
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
   });
 
   it("redirects legacy Customer history to Transactions", async () => {

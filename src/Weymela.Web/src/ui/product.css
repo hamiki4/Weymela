@@ -13,9 +13,11 @@
 .product-shell .workspace-label { color: var(--product-secondary); }
 .product-shell .main-content { max-width: 1180px; padding-top: 24px; }
 .product-shell .workspace-footer { display: none; }
-.product-shell .page-heading { gap: 8px; margin-bottom: 18px; }
-.product-shell .page-heading h1 { font-size: clamp(1.55rem, 2.4vw, 2rem); letter-spacing: -.035em; margin-bottom: 0; }
-.product-shell .page-heading .lead { font-size: .86rem; color: var(--product-secondary); }
+.product-shell .page-heading { align-items: flex-start; gap: 10px; margin-bottom: 20px; }
+.product-shell .page-heading > div:first-child { min-width: 0; }
+.product-shell .page-heading .eyebrow { margin: 0 0 5px; font-size: .72rem; line-height: 1.25; }
+.product-shell .page-heading h1 { margin: 0; font-size: clamp(1.6rem, 2.4vw, 2rem); font-weight: 750; line-height: 1.15; letter-spacing: -.035em; }
+.product-shell .page-heading .lead { max-width: none; margin-top: 5px; color: var(--product-secondary); font-size: .9rem; line-height: 1.4; }
 .product-shell .panel { padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; margin-bottom: 28px; }
 .product-shell .section-heading { padding-bottom: 9px; border-bottom: 1px solid var(--product-line); margin-bottom: 12px; }
 .product-shell .section-heading h2 { font-size: 1.05rem; }
@@ -63,10 +65,39 @@
 .product-shell .account-sheet .account-menu-secondary .account-menu-link { min-width: 0; gap: 6px; font-size: .8rem; line-height: 1.2; }
 .product-shell .account-sheet .account-menu-secondary .account-menu-link svg { flex: none; width: 17px; }
 .product-shell .account-sheet .account-menu-actions { margin-top: 2px; padding-top: 2px; }
+.update-notice { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-height: 42px; margin: 0 0 12px auto; padding: 4px 7px 4px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: #111827; font-size: .8rem; line-height: 1.2; }
+.update-notice > span { font-weight: 650; white-space: nowrap; }
+.update-notice button { flex: none; min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: var(--role-accent, #164d38); font: inherit; font-weight: 700; }
+.update-notice .update-dismiss { display: grid; place-items: center; width: 34px; padding: 0; color: #374151; }
 .product-shell .account-sheet .account-menu-actions .button { min-height: 44px; }
 .product-shell .account-sheet .profile-switcher { gap: 4px; margin-bottom: 3px; }
 .product-shell .account-sheet .profile-switcher label { font-size: .76rem; letter-spacing: 0; text-transform: none; }
 .product-shell .account-sheet .profile-switcher select { min-height: 44px; font-size: .86rem; }
+.product-shell .settings-trigger { display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; color: #374151; background: transparent; box-shadow: none; }
+.product-shell .settings-sheet { width: min(350px, calc(100% - 24px)); padding: 10px 16px 12px; border: 1px solid #d1d5db; border-radius: 12px; }
+.product-shell .settings-sheet .dialog-header { align-items: center; margin-bottom: 3px; }
+.product-shell .settings-sheet .dialog-header h2 { margin: 0; padding: 0; font-size: 1.06rem; }
+.settings-close { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 7px; color: #374151; background: transparent; }
+.product-shell .settings-sheet .profile-switcher { margin: 0; padding: 5px 0 9px; gap: 4px; border-bottom: 1px solid var(--product-line); }
+.product-shell .settings-sheet .profile-switcher label { color: #374151; font-size: .82rem; font-weight: 650; letter-spacing: 0; text-transform: none; }
+.product-shell .settings-sheet .profile-switcher select { min-height: 40px; font-size: .84rem; }
+.settings-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 43px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; color: #111827; font: inherit; font-size: .86rem; font-weight: 600; text-align: left; text-decoration: none; }
+.settings-row svg { flex: none; width: 18px; height: 18px; color: var(--role-accent); }
+.settings-signout { border-bottom: 0; }
+.settings-device-message { margin: 7px 0 0; color: #374151; font-size: .77rem; }
+.profile-page { max-width: 720px; }
+.profile-identity { display: flex; align-items: center; gap: 13px; padding: 2px 0 20px; }
+.profile-avatar { display: grid; place-items: center; flex: 0 0 54px; width: 54px; height: 54px; border-radius: 50%; background: var(--role-soft); color: var(--role-accent); font-size: 1.35rem; font-weight: 700; }
+.profile-identity > div { display: grid; min-width: 0; gap: 3px; }
+.profile-identity strong { overflow-wrap: anywhere; color: #111827; font-size: 1.12rem; }
+.profile-identity span:not(.profile-avatar) { color: #374151; font-size: .81rem; }
+.profile-section { margin: 0 0 25px; }
+.profile-section h2 { margin: 0; padding-bottom: 9px; border-bottom: 1px solid var(--product-line); color: #111827; font-size: 1.03rem; }
+.profile-info-rows { margin: 0; }
+.profile-info-row { display: grid; grid-template-columns: minmax(100px, 38%) minmax(0, 1fr); gap: 10px; padding: 11px 2px; border-bottom: 1px solid var(--product-line); font-size: .86rem; }
+.profile-info-row dt { color: #4b5563; }
+.profile-info-row dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #111827; font-weight: 600; }
+#social-accounts { scroll-margin-top: 18px; }
 .product-desktop-nav { display: none; }
 .role-business .business-create-action .button { min-height: 44px; padding: 9px 16px; border-radius: 10px; }
 .business-balance-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 14px 6px; margin-bottom: 16px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); }
@@ -103,6 +134,7 @@
 .role-creator .creator-activity-meta small { width: auto; margin: 0; font-size: .68rem; line-height: 1.25; text-align: right; white-space: nowrap; }
 .role-creator .creator-activity-list p { font-size: .78rem; line-height: 1.35; color: var(--product-secondary); }
 .creator-social-list { display: grid; border-top: 1px solid var(--product-line); }
+.creator-platform-icon { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px; background: var(--role-soft); color: var(--role-accent); font-size: 1rem; font-weight: 800; }
 .creator-social-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; min-height: 54px; padding: 9px 2px; border-bottom: 1px solid var(--product-line); }
 .creator-social-row > div { display: grid; flex: 1; min-width: 110px; gap: 2px; }
 .creator-social-row strong { font-size: .91rem; }
@@ -208,6 +240,7 @@
   .role-business .cashier-row { grid-template-columns: minmax(0, 1fr) auto; }
   .role-business .cashier-row .actions { grid-column: 1 / -1; }
   .product-shell .mobile-role-nav { box-shadow: none; }
+  .product-shell .mobile-role-link { flex: 1 1 auto; }
   .product-shell .mobile-role-link.active { font-weight: 750; box-shadow: inset 0 2px var(--role-accent); }
   .role-business .mobile-role-link span, .role-cashier .mobile-role-link span { white-space: normal; line-height: 1.05; }
 }
@@ -218,6 +251,10 @@
   .product-desktop-nav nav { display: flex; align-items: center; gap: 4px; max-width: 1180px; margin: auto; padding: 4px 24px; }
   .product-desktop-nav .nav-link { min-height: 42px; margin: 0; padding: 8px 12px; white-space: nowrap; }
   .product-shell .main-content { padding: 28px 28px 58px; }
+  .product-shell .page-heading { align-items: center; }
+  .product-shell .page-heading .eyebrow { font-size: .76rem; }
+  .product-shell .page-heading .lead { font-size: .96rem; }
+  .product-shell .section-heading p, .product-shell .funds-grid dt, .product-shell .fine-print, .product-shell .metric-top, .product-shell .metric small, .product-shell .data-card small, .product-shell .field small { font-size: .86rem; line-height: 1.45; }
   .role-creator .creator-metrics, .role-business .fund-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 /* Auth retains the same mounted shell and secure transition lifecycle. */

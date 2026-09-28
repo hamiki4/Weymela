@@ -15,6 +15,26 @@ public sealed class DomainModelTests
     [Fact] public void Effective_promotion_type_minimum_is_enforced_without_business_type_thresholds() { var pricing = Pricing(PromotionType.ViewOnly) with { MinimumPromotionBudget = new Money(1000) }; Assert.Throws<InvalidOperationException>(() => new Promotion(Guid.NewGuid(), "Too small", "", PromotionType.ViewOnly, new Money(999), new(null, null, null, null), Now, Now.AddDays(1), pricing, Now, 30)); }
     [Fact] public void Promotion_requires_funding_before_publish_and_enforces_transitions() { var p = Promotion(); Assert.Throws<InvalidOperationException>(() => p.Publish(Now, Guid.NewGuid())); var w = new BusinessWallet(Guid.NewGuid()); w.CreditDeposit(new Money(6000), Now, Guid.NewGuid()); p.Fund(w, Now, Guid.NewGuid()); p.Publish(Now, Guid.NewGuid()); p.Activate(Now, Guid.NewGuid()); Assert.Equal(PromotionStatus.Active, p.Status); }
     [Fact] public void Applications_only_target_published_or_active_and_duplicates_are_application_policy() { var p = Promotion(); Assert.Throws<InvalidOperationException>(() => new CreatorApplication(p.Id, Guid.NewGuid(), null, null, p, Now, Guid.NewGuid())); var w = new BusinessWallet(Guid.NewGuid()); w.CreditDeposit(new Money(6000), Now, Guid.NewGuid()); p.Fund(w, Now, Guid.NewGuid()); p.Publish(Now, Guid.NewGuid()); var app = new CreatorApplication(p.Id, Guid.NewGuid(), "join", null, p, Now, Guid.NewGuid()); app.Approve(Guid.NewGuid(), Now); Assert.Equal(CreatorApplicationStatus.Approved, app.Status); }
+    [Fact] public void Pending_platform_request_does_not_consume_capacity_but_approved_allocation_does()
+    {
+        var business = Guid.NewGuid();
+        var promotion = new Promotion(business, "Platform Promotion", "Brief", PromotionType.ViewOnly,
+            new Money(6000), new(null, null, null, null), Now, Now.AddDays(30), Pricing(PromotionType.ViewOnly), Now,
+            null, null, null, [(CreatorPlatform.TikTok, 1)], 30);
+        var wallet = new BusinessWallet(business);
+        wallet.CreditDeposit(new Money(6000), Now, Guid.NewGuid());
+        promotion.Fund(wallet, Now, Guid.NewGuid());
+        promotion.Publish(Now, Guid.NewGuid());
+        var creator = Guid.NewGuid();
+        var social = Guid.NewGuid();
+        var pending = new CreatorApplication(promotion.Id, creator, social, CreatorPlatform.TikTok,
+            "Join", null, promotion, Now, Guid.NewGuid());
+        Assert.Equal(1, promotion.Platforms[0].Available);
+        pending.Approve(business, Now);
+        promotion.Allocate(creator, new Money(1000), Now, Guid.NewGuid(), CreatorPlatform.TikTok, social);
+        Assert.Equal(0, promotion.Platforms[0].Available);
+        Assert.Throws<InvalidOperationException>(() => promotion.Allocate(Guid.NewGuid(), new Money(1000), Now, Guid.NewGuid(), CreatorPlatform.TikTok, Guid.NewGuid()));
+    }
     [Fact] public void Allocation_is_bounded_and_cannot_go_negative() { var p = Promotion(); var w = new BusinessWallet(Guid.NewGuid()); w.CreditDeposit(new Money(6000), Now, Guid.NewGuid()); p.Fund(w, Now, Guid.NewGuid()); p.Publish(Now, Guid.NewGuid()); var a = p.Allocate(Guid.NewGuid(), new Money(2500), Now, Guid.NewGuid()); Assert.Throws<InvalidOperationException>(() => p.Allocate(Guid.NewGuid(), new Money(4000), Now, Guid.NewGuid())); p.Activate(Now, Guid.NewGuid()); p.Consume(a.Id, new Money(2500), Now, Guid.NewGuid()); Assert.Equal(0m, a.RemainingAmount.Amount); Assert.Throws<InvalidOperationException>(() => p.Consume(a.Id, new Money(1), Now, Guid.NewGuid())); }
     [Fact] public void View_only_rejects_verified_sales_and_hybrid_accepts() { var view = Promotion(); Assert.Throws<InvalidOperationException>(() => new VerifiedSale(view, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new Money(100), new Money(4), new Money(2), new Money(3), "qr", "key", Now)); var hybrid = Promotion(PromotionType.ViewPlusCommission); var sale = new VerifiedSale(hybrid, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new Money(100), new Money(4), new Money(2), new Money(3), "qr", "key", Now); Assert.Equal(9m, sale.TotalPromotionCharge.Amount); }
     [Fact] public void Earnings_accumulate_and_journal_is_immutable_and_balanced() { var e = new CreatorEarningsAccount(Guid.NewGuid()); e.Earn(new Money(1200), EarningSource.ViewReward, Guid.NewGuid(), Now, Guid.NewGuid()); e.Earn(new Money(900), EarningSource.SaleCommission, Guid.NewGuid(), Now, Guid.NewGuid()); Assert.Equal(2100m, e.AvailableEarnings.Amount); var j = new FinancialJournal("ref", Guid.NewGuid(), null, JournalSourceType.ViewReward, Now); j.AddLine(JournalLineType.Debit, new Money(100), "reserve"); j.AddLine(JournalLineType.Credit, new Money(100), "creator"); j.Post(); Assert.Throws<InvalidOperationException>(() => j.AddLine(JournalLineType.Debit, new Money(1), "x")); }

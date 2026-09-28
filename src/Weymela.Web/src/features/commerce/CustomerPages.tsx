@@ -386,9 +386,10 @@ export function CustomerOffers({ discover = false }: CustomerOffersProps = {}) {
       {discover ? (
         <PageHeader
           title="Discover Promotions"
+          description="Find offers near you."
         />
       ) : (
-        <><PageHeader eyebrow={firstName} title="Home" /><CustomerHomeSummary /></>
+        <><PageHeader eyebrow={firstName} title="Home" description="Discover offers and track your cashback." /><CustomerHomeSummary /></>
       )}
       <CustomerLocationCard
         discover={discover}
@@ -556,6 +557,7 @@ export function CustomerTransactions() {
     <div className="customer-ledger-page">
       <PageHeader
         title="Transactions"
+        description="Review your purchases and rewards."
       />
       <Resource resource={resource}>
         {(rows) => rows.length ? (
@@ -614,6 +616,7 @@ export function CustomerCashback() {
     <div className="customer-ledger-page">
       <PageHeader
         title="Cashback"
+        description="Track your cashback and payouts."
       />
       <Resource resource={resource}>
         {(summary) => {

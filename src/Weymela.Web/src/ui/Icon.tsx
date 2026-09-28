@@ -12,7 +12,7 @@ const paths: Record<string, string> = {
   menu: "M4 6h16M4 12h16M4 18h16",
   money: "M3 5h18v14H3V5Zm9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM6 9v6m12-6v6",
   chart: "M4 3v17h17M8 16v-5m5 5V7m5 9V4",
-  settings: "M4 7h16M4 17h16M8 4v6m8 4v6",
+  settings: "M10 2h4l.5 2.3 1.5.9 2.2-.8 2 3.4-1.7 1.6v1.8l1.7 1.6-2 3.4-2.2-.8-1.5.9L14 22h-4l-.5-2.3-1.5-.9-2.2.8-2-3.4L5 14.6v-1.8L3.3 11l2-3.4 2.2.8 1.5-.9L10 2Zm2 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
   bell: "M5 16h14l-2-3V8a5 5 0 0 0-10 0v5l-2 3Zm5 4h4",
   document: "M6 3h9l4 4v14H6V3Zm9 0v5h4M9 12h7m-7 4h7",
   search: "M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6",

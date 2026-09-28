@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { post, request, useAction, useResource } from "../../api/client";
 import type {
   Applicant,
   BusinessCampaign,
@@ -39,7 +39,6 @@ import {
 export function BusinessCampaignDetail() {
   const { id } = useParams();
   const resource = useResource<BusinessCampaign>(`/business/campaigns/${id}`);
-  const wallet = useResource<Wallet>("/business/wallet");
   const [search, setSearch] = useSearchParams();
   const tab = search.get("tab") ?? "overview";
   const action = useAction();
@@ -48,11 +47,23 @@ export function BusinessCampaignDetail() {
   const [budget, setBudget] = useState<CreatorBudget | null>(null);
   const [value, setValue] = useState("");
   const [fund, setFund] = useState(false);
+  const [fundingWallet, setFundingWallet] = useState<Wallet | null>(null);
+  const [fundCheckBusy, setFundCheckBusy] = useState(false);
+  const [fundCheckError, setFundCheckError] = useState<string | null>(null);
   const [success, setSuccess] = useState("");
   const changed = (message: string) => {
     setSuccess(message);
     resource.reload();
-    wallet.reload();
+  };
+  const openFunding = async () => {
+    setFundCheckBusy(true);
+    setFundCheckError(null);
+    try {
+      setFundingWallet(await request<Wallet>("/business/wallet"));
+      setFund(true);
+    } catch (error) {
+      setFundCheckError(error instanceof Error ? error.message : "Available funds could not be checked.");
+    } finally { setFundCheckBusy(false); }
   };
   const run = (path: string, body: unknown, message: string) =>
     action.run(async (key) => {
@@ -85,6 +96,7 @@ export function BusinessCampaignDetail() {
             {action.error && !applicant && !budget && !fund && (
               <Notice error>{action.error}</Notice>
             )}
+            {fundCheckError && <Notice error>{fundCheckError}</Notice>}
             {["Draft", "Funded", "Published"].includes(c.status) && (
               <div className="callout">
                 <div>
@@ -104,7 +116,7 @@ export function BusinessCampaignDetail() {
                   </p>
                 </div>
                 {c.status === "Draft" ? (
-                  <Button onClick={() => setFund(true)}>Review Funding</Button>
+                  <Button onClick={() => void openFunding()} disabled={fundCheckBusy}>{fundCheckBusy ? "Checking funds…" : "Review Funding"}</Button>
                 ) : (
                   <Button
                     disabled={
@@ -500,52 +512,49 @@ export function BusinessCampaignDetail() {
               title="Confirm Promotion Funding"
               open={fund}
               onClose={() => {
-                if (!action.busy) setFund(false);
+                if (!action.busy) { setFund(false); setFundingWallet(null); }
               }}
             >
-              <Resource resource={wallet}>
-                {(w) => (
+              {fundingWallet && (() => {
+                const w = fundingWallet;
+                const shortfall = Math.max(0, Math.round((c.campaignBudget - w.available) * 100) / 100);
+                const remaining = Math.max(0, Math.round((w.available - c.campaignBudget) * 100) / 100);
+                return (
                   <>
-                    <FundsGrid
-                      values={[
-                        ["Promotion budget", c.campaignBudget],
-                        ["Available Wallet Balance", w.available],
-                        ["Amount that will be Reserved", c.campaignBudget],
-                      ]}
-                    />
-                    <div className="balance-banner">
-                      <strong>Balance after funding</strong>
-                      <p>
-                        {amount(w.available - c.campaignBudget)} Available /{" "}
-                        {amount(w.reserved + c.campaignBudget)} Reserved
-                      </p>
-                    </div>
+                    <dl className="funds-grid">
+                      <div><dt>Available funds</dt><dd>{amount(w.available)} ETB</dd></div>
+                      <div><dt>Promotion budget</dt><dd>{amount(c.campaignBudget)} ETB</dd></div>
+                      <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : remaining)} ETB{shortfall > 0 ? " more" : ""}</dd></div>
+                    </dl>
                     <p className="fine-print">
                       Promotion funding is committed and generally
                       non-refundable. This does not pay Creators before verified
                       activity.
                     </p>
-                    {w.available < c.campaignBudget && (
+                    {shortfall > 0 && (
                       <Notice error>
-                        Your available balance cannot cover this Promotion
-                        Budget. <Link to="/business/wallet">Add Funds</Link> to
-                        continue.
+                        Need {amount(shortfall)} more before funding this Promotion. <Link to="/business/wallet">Add Funds</Link>.
                       </Notice>
                     )}
                     {action.error && <Notice error>{action.error}</Notice>}
                     <Button
-                      disabled={action.busy || w.available < c.campaignBudget}
+                      disabled={action.busy || shortfall > 0}
                       onClick={() =>
                         void action.run(async (key) => {
+                          const latest = await request<Wallet>("/business/wallet");
+                          setFundingWallet(latest);
+                          if (latest.available < c.campaignBudget)
+                            throw new Error(`Need ${amount(c.campaignBudget - latest.available)} more before funding this Promotion.`);
                           await post(
                             `/business/campaigns/${id}/fund`,
                             {
                               campaignVersion: c.version,
-                              walletVersion: w.version,
+                              walletVersion: latest.version,
                             },
                             key,
                           );
                           setFund(false);
+                          setFundingWallet(null);
                           changed("Promotion funded. You can now publish it.");
                         })
                       }
@@ -555,8 +564,8 @@ export function BusinessCampaignDetail() {
                         : "Confirm & Reserve Funds"}
                     </Button>
                   </>
-                )}
-              </Resource>
+                );
+              })()}
             </Dialog>
             <Dialog
               title="Creator Profile"

@@ -23,6 +23,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var fingerprint = RequestFingerprint.Create(JsonSerializer.Serialize(input));
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "CreateUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
+            await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
+                [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             if (!Enum.TryParse<UgcContentType>(input.ContentType, true, out var contentType) || !Enum.IsDefined(contentType))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose Video or Photos.");
             var resources = Resources(input.Resources);
@@ -58,6 +60,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var fingerprint = RequestFingerprint.Create(id.ToString(), expectedVersion.ToString());
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "PublishUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
+            await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
+                [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             var opportunity = await Opportunity(id, token);
             Own(actor, opportunity);
             if (opportunity.Version != expectedVersion) throw Conflict();
@@ -100,7 +104,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "RequestUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
             var opportunity = await Opportunity(id, token);
-            if (opportunity.Status != UgcOpportunityStatus.Open || opportunity.DueDateUtc <= Now || opportunity.ApprovedCreatorCount >= opportunity.CreatorCapacity)
+            if (opportunity.Status != UgcOpportunityStatus.Open || opportunity.ReservedFunding.Amount < opportunity.RequiredFunding.Amount
+                || opportunity.DueDateUtc <= Now || opportunity.ApprovedCreatorCount >= opportunity.CreatorCapacity)
                 throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity is not accepting requests.");
             if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Business
                     && x.SubjectId == opportunity.BusinessId && x.IsActive, token))
@@ -398,11 +403,16 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var requests = await db.UgcCreatorRequests.AsNoTracking().Where(x => x.CreatorId == actor.CreatorId)
             .OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
         var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements)
-            .Where(x => x.Status == UgcOpportunityStatus.Open && x.DueDateUtc > Now).OrderByDescending(x => x.PublishedAtUtc).ToListAsync(ct);
+            .Where(x => x.Status == UgcOpportunityStatus.Open && x.DueDateUtc > Now)
+            .OrderByDescending(x => x.PublishedAtUtc).ToListAsync(ct);
         var businessIds = rows.Select(x => x.BusinessId).Distinct().ToArray();
+        var activeBusinesses = await db.CommercePermissions.AsNoTracking()
+            .Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId) && x.IsActive)
+            .Select(x => x.SubjectId).Distinct().ToListAsync(ct);
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId))
             .ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
-        return rows.Where(x => Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity)
+        return rows.Where(x => activeBusinesses.Contains(x.BusinessId) && x.ReservedFunding.Amount >= x.RequiredFunding.Amount
+                && Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity)
             .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), null, false)).ToArray();
     }
 

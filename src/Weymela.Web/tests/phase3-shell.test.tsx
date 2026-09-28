@@ -27,100 +27,61 @@ function setup(role: Role, path: string, withSecondProfile = false) {
   render(<MemoryRouter initialEntries={[path]}><Routes><Route path="*" element={<Shell />} /></Routes></MemoryRouter>);
 }
 
-afterEach(() => { state.user = null; vi.restoreAllMocks(); });
+afterEach(() => { state.user = null; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-describe("Phase 3 multi-profile shell", () => {
+describe("Profile and Settings shell", () => {
   it.each([
-    ["Customer", "/customer/offers", "role-customer"],
-    ["Creator", "/creator", "role-creator"],
-    ["Business", "/business", "role-business"],
-  ] as const)("uses the %s accent and hides public/internal identifiers", (role, path, theme) => {
-    setup(role, path);
-    expect(document.querySelector(".app-shell")).toHaveClass(theme);
-    expect(document.querySelector(".workspace-label")).toHaveTextContent(`${role} / Weymela`);
-    expect(screen.queryByText("INTERNAL-ID")).not.toBeInTheDocument();
-    expect(screen.queryByText("subject-secret")).not.toBeInTheDocument();
+    ["Customer", "/customer/offers", ["Add Profile"]],
+    ["Creator", "/creator", ["Add Profile", "Social Accounts"]],
+    ["Business", "/business", ["Cashier Management", "Create Cashier"]],
+  ] as const)("separates %s Profile navigation from Settings", async (role, path, extra) => {
+    setup(role, path, true);
+    const mobile = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
+    expect(mobile.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
+    expect(mobile.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Your notifications" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Settings" })).toHaveAttribute("aria-controls", "settings-menu");
+    expect(screen.queryByRole("button", { name: "Open account menu" })).not.toBeInTheDocument();
+    expect(document.querySelector(".topbar-right .small-avatar")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Open Settings" }));
+    const sheet = within(screen.getByRole("dialog", { name: "Settings" }));
+    expect(sheet.getByLabelText("Switch profile")).toBeInTheDocument();
+    expect(sheet.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
+    expect(sheet.getByRole("button", { name: "Location" })).toBeInTheDocument();
+    expect(sheet.getByRole("button", { name: "Sign Out" })).toBeInTheDocument();
+    for (const label of extra) expect(sheet.getByRole("link", { name: label })).toBeInTheDocument();
+    if (role === "Customer") expect(sheet.queryByRole("link", { name: "Social Accounts" })).not.toBeInTheDocument();
+    if (role === "Creator") expect(sheet.getByRole("link", { name: "Social Accounts" })).toHaveAttribute("href", "/profile#social-accounts");
     if (role === "Business") {
-      expect(within(screen.getByRole("navigation", { name: "Mobile navigation" }))
-        .getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
-    } else {
-      const addProfileLinks = screen.getAllByRole("link", { name: "Add a profile", hidden: true });
-      expect(addProfileLinks).toHaveLength(role === "Creator" ? 1 : 2);
-      expect(addProfileLinks.every((link) => link.getAttribute("href") === "/onboarding")).toBe(true);
+      expect(sheet.getByRole("link", { name: "Cashier Management" })).toHaveAttribute("href", "/business/cashiers");
+      expect(sheet.getByRole("link", { name: "Create Cashier" })).toHaveAttribute("href", "/business/cashiers#create-cashier");
+      expect(sheet.queryByRole("link", { name: "Add Profile" })).not.toBeInTheDocument();
     }
-    const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
-    if (role === "Customer") {
-      expect(within(mobile).getByRole("link", { name: "Home" })).toBeInTheDocument();
-      expect(within(mobile).getByRole("link", { name: "Discover" })).toBeInTheDocument();
-      expect(within(mobile).getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/customer/transactions");
-      expect(within(mobile).getByRole("link", { name: "Cashback" })).toBeInTheDocument();
-      expect(within(mobile).getAllByRole("link")).toHaveLength(4);
-      expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
-      expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
-    } else if (role === "Creator") {
-      expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
-        "Home", "Discover", "Promotions", "Earnings",
-      ]);
-      expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
-      expect(within(mobile).getAllByRole("link")).toHaveLength(4);
-      expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
-    } else {
-      expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
-        "Home", "Promotions", "UGC", "Wallet",
-      ]);
-      expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
-      expect(within(mobile).getAllByRole("link")).toHaveLength(4);
-    }
-  });
-
-  it("opens the account menu without exposing identifiers and preserves profile switching", async () => {
-    setup("Customer", "/customer/offers", true);
-    expect(screen.getAllByLabelText("Switch profile")).toHaveLength(2);
-    expect(screen.getAllByLabelText("Switch profile")[0]).toBeEnabled();
-    expect(screen.getAllByLabelText("Switch profile")[1]).toBeEnabled();
-    const ids = screen.getAllByLabelText("Switch profile").map((element) => element.id);
-    expect(new Set(ids).size).toBe(2);
-    expect(document.querySelector(".profile-switcher option")?.getAttribute("value")).toBe("0");
-    const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
-    expect(within(mobile).getByRole("link", { name: "Home" })).toHaveAttribute("href", "/customer/offers");
-    expect(within(mobile).getByRole("link", { name: "Discover" })).toHaveAttribute("href", "/customer/discover");
-    expect(within(mobile).getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/customer/transactions");
-    expect(within(mobile).getByRole("link", { name: "Cashback" })).toHaveAttribute("href", "/customer/cashback");
-    expect(within(mobile).getByRole("button", { name: "Profile" })).toHaveAttribute("aria-controls", "account-menu");
-    expect(within(mobile).queryByRole("button", { name: "More navigation" })).not.toBeInTheDocument();
-    await userEvent.click(within(mobile).getByRole("button", { name: "Profile" }));
-    const profileMenu = screen.getByRole("dialog", { name: "Account menu", hidden: true });
-    expect(within(profileMenu).getByLabelText("Switch profile")).toBeInTheDocument();
-    expect(within(profileMenu).getByRole("link", { name: "Add a profile", hidden: true })).toHaveAttribute("href", "/onboarding");
-    const account = screen.getByRole("button", { name: "Open account menu" });
-    await userEvent.click(within(profileMenu).getByRole("button", { name: "Close account menu", hidden: true }));
-    account.focus();
-    await userEvent.keyboard("{Enter}");
-    const menu = screen.getByRole("dialog", { name: "Account menu", hidden: true });
-    expect(within(menu).getByText("Hana")).toBeInTheDocument();
-    expect(within(menu).getByText("Customer")).toBeInTheDocument();
-    expect(within(menu).getByLabelText("Switch profile")).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Sign out", hidden: true })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Close account menu", hidden: true })).toBeInTheDocument();
-    expect(within(menu).queryByText("INTERNAL-ID")).not.toBeInTheDocument();
-    expect(within(menu).queryByText("PUBLIC-ID")).not.toBeInTheDocument();
-    await userEvent.selectOptions(within(menu).getByLabelText("Switch profile"), "1");
+    expect(sheet.queryByText("INTERNAL-ID")).not.toBeInTheDocument();
+    await userEvent.selectOptions(sheet.getByLabelText("Switch profile"), "1");
     expect(state.switchProfile).toHaveBeenCalledWith(state.user?.profiles?.[1]);
   });
 
-  it("keeps Creator navigation to five destinations and Profile opens the shared account menu", async () => {
-    setup("Creator", "/creator");
-    const mobile = screen.getByRole("navigation", { name: "Mobile navigation" });
-    expect(within(mobile).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Home", "Discover", "Promotions", "Earnings",
-    ]);
-    expect(within(mobile).queryByRole("link", { name: /Find Businesses|Campaign Requests|Payouts|How You Earn|Add a profile/ })).not.toBeInTheDocument();
-    await userEvent.click(within(mobile).getByRole("button", { name: "Profile" }));
-    const menu = screen.getByRole("dialog", { name: "Account menu" });
-    expect(within(menu).getByLabelText("Switch profile")).toBeInTheDocument();
-    expect(within(menu).getByRole("link", { name: "Add a profile" })).toHaveAttribute("href", "/onboarding");
-    expect(within(menu).getByRole("link", { name: "Creator Profile" })).toHaveAttribute("href", "/creator/profile");
-    expect(within(menu).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  it("reports browser notification and location permission results from device APIs", async () => {
+    const permission = vi.fn(async () => "granted" as NotificationPermission);
+    vi.stubGlobal("Notification", { requestPermission: permission });
+    const geolocation = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+    const locate = vi.fn((success: PositionCallback) => success({ timestamp: 0 } as GeolocationPosition));
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: locate } });
+    try {
+      setup("Customer", "/customer/offers");
+      await userEvent.click(screen.getByRole("button", { name: "Open Settings" }));
+      const sheet = within(screen.getByRole("dialog", { name: "Settings" }));
+      await userEvent.click(sheet.getByRole("button", { name: "Notifications" }));
+      expect(permission).toHaveBeenCalledOnce();
+      expect(await sheet.findByRole("status")).toHaveTextContent("granted");
+      await userEvent.click(sheet.getByRole("button", { name: "Location" }));
+      expect(locate).toHaveBeenCalledOnce();
+      expect(sheet.getByRole("status")).toHaveTextContent("Location access granted for this request.");
+    } finally {
+      if (geolocation) Object.defineProperty(navigator, "geolocation", geolocation);
+      else Reflect.deleteProperty(navigator, "geolocation");
+    }
   });
 
   it("keeps internal Admin navigation separate from public add-profile choice", () => {

@@ -76,6 +76,32 @@ public sealed class FundingPersistenceTests(PostgresFixture fixture)
         await using var read = s.Database.Open(); Assert.Equal(4000, (await read.BusinessWallets.SingleAsync()).AvailableBalance.Amount);
     }
 
+    [Fact] public async Task Two_full_budget_Promotions_cannot_spend_the_same_10000_available_funds()
+    {
+        var s = await Scenario.Create(fixture, deposit: 10000, budget: 10000);
+        Guid secondId;
+        await using (var setup = s.Database.Open())
+        {
+            var first = await setup.Promotions.SingleAsync(x => x.Id == s.PromotionId);
+            var second = new Promotion(first.BusinessId, "Second Promotion", "Brief", first.PromotionType,
+                new Money(10000), first.Eligibility with { }, first.StartDateUtc, first.EndDateUtc,
+                first.PricingSnapshot with { }, Scenario.Now, first.PromotionLiveDurationDays);
+            secondId = second.Id;
+            setup.Promotions.Add(second);
+            await setup.SaveChangesAsync();
+        }
+        await using var firstSession = s.Database.Open();
+        await using var secondSession = s.Database.Open();
+        await new FinancialCommands(firstSession).FundPromotionAsync(new(s.Business, s.PromotionId, 0, 1, "first-full-budget", Scenario.Now));
+        var rejected = await Assert.ThrowsAsync<ApplicationFailure>(() => new FinancialCommands(secondSession)
+            .FundPromotionAsync(new(s.Business, secondId, 0, 1, "second-full-budget", Scenario.Now)));
+        Assert.True(rejected.Kind is FailureKind.InsufficientFunds or FailureKind.ConcurrencyConflict);
+        await using var verify = s.Database.Open();
+        Assert.Equal(0m, (await verify.BusinessWallets.SingleAsync()).AvailableBalance.Amount);
+        Assert.Equal(PromotionStatus.Draft, (await verify.Promotions.SingleAsync(x => x.Id == secondId)).Status);
+        Assert.Equal(1, await verify.PromotionReservations.CountAsync());
+    }
+
     [Fact] public async Task Another_business_cannot_fund_campaign()
     {
         var s = await Scenario.Create(fixture); await using var db = s.Database.Open();

@@ -51,7 +51,7 @@ export function BusinessCashiers() {
         </Notice>
       ) : null}
       {action.error ? <Notice error>{action.error}</Notice> : null}
-      <Section title="Add Cashier">
+      <div id="create-cashier"><Section title="Add Cashier">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -85,7 +85,7 @@ export function BusinessCashiers() {
             <Button type="submit">{action.busy ? "Creating…" : "Add Cashier"}</Button>
           </fieldset>
         </form>
-      </Section>
+      </Section></div>
       <Section title="Cashiers">
         <Resource resource={resource}>
           {(cashiers) =>

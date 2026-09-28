@@ -30,7 +30,9 @@ for (const viewport of viewports)
           "/business/campaigns",
           "/business/requests",
           "/business/ugc",
+          "/business/ugc/new",
           "/business/pricing",
+          "/profile",
         ],
       ],
       [
@@ -40,6 +42,7 @@ for (const viewport of viewports)
           "/creator/discover",
           "/creator/promotions",
           "/creator/earnings",
+          "/profile",
         ],
       ],
       [
@@ -63,7 +66,7 @@ for (const viewport of viewports)
           "/notifications",
         ],
       ],
-      ["customer", ["/customer/offers", "/customer/discover", "/customer/transactions", "/customer/cashback"]],
+      ["customer", ["/customer/offers", "/customer/discover", "/customer/transactions", "/customer/cashback", "/profile"]],
       ["cashier", ["/checkout", "/checkout/transactions"]],
     ];
     for (const [role, paths] of screens) {
@@ -128,12 +131,74 @@ for (const viewport of viewports)
             );
           }
         }
+        if (viewport.width <= 430 && role === "business" && path === "/business/campaigns/new") {
+          const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
+          await page.getByLabel("Promotion title").fill(`Responsive funding ${viewport.width}`);
+          await page.getByLabel("Description").fill("Mobile funding layout check.");
+          await page.getByLabel("Start date").fill(new Date(Date.now() - 3600000).toISOString().slice(0, 16));
+          await page.getByLabel("End date").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+          await page.getByRole("button", { name: "Continue" }).click();
+          await page.getByRole("button", { name: "Continue" }).click();
+          await page.getByLabel("Promotion budget").fill(String(available + 1000));
+          await expect(page.getByText("1,000 ETB more", { exact: true })).toBeVisible();
+          await expect(page.getByRole("link", { name: "Add Funds" })).toBeVisible();
+          await layout(page);
+          await screenshot(page, `${viewport.width}-business-promotion-shortfall`);
+        }
+        if (viewport.width <= 430 && role === "business" && path === "/business/ugc") {
+          await expect(page.getByRole("heading", { name: "Your UGC" })).toBeVisible();
+          await expect(page.getByRole("link", { name: "Create UGC" })).toHaveAttribute("href", "/business/ugc/new");
+          await expect(page.getByLabel("UGC title")).toHaveCount(0);
+        }
+        if (viewport.width <= 430 && role === "business" && path === "/business/ugc/new") {
+          const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
+          await expect(page.getByRole("heading", { name: "Create UGC", exact: true })).toBeVisible();
+          const summary = page.locator("section.panel").filter({ has: page.getByRole("heading", { name: "Funding Summary" }) });
+          await page.getByLabel("Creator Payment").fill(String(available + 1000));
+          await expect(summary.getByText("Need", { exact: true })).toBeVisible();
+          await expect(summary.getByRole("link", { name: "Add Funds" })).toBeVisible();
+          await layout(page);
+          await screenshot(page, `${viewport.width}-business-ugc-shortfall`);
+        }
       }
       if (viewport.width <= 430 && ["customer", "creator", "business", "cashier"].includes(role)) {
-        await page.getByRole("button", { name: "Open account menu" }).click();
-        await expect(page.getByRole("dialog", { name: "Account menu" })).toBeVisible();
-        await screenshot(page, `${viewport.width}-${role}-profile-settings`);
-        await page.keyboard.press("Escape");
+        if (role === "cashier") {
+          await page.getByRole("button", { name: "Open account menu" }).click();
+          await expect(page.getByRole("dialog", { name: "Account menu" })).toBeVisible();
+          await screenshot(page, `${viewport.width}-${role}-account-menu`);
+          await page.keyboard.press("Escape");
+        } else {
+          await page.getByRole("button", { name: "Open Settings" }).click();
+          const settings = page.getByRole("dialog", { name: "Settings" });
+          await expect(settings.getByLabel("Switch profile")).toBeVisible();
+          await expect(settings.getByRole("button", { name: "Notifications" })).toBeVisible();
+          await expect(settings.getByRole("button", { name: "Location" })).toBeVisible();
+          if (role === "creator") await expect(settings.getByRole("link", { name: "Social Accounts" })).toBeVisible();
+          if (role === "business") await expect(settings.getByRole("link", { name: "Cashier Management" })).toBeVisible();
+          await layout(page);
+          await screenshot(page, `${viewport.width}-${role}-settings`);
+          await page.keyboard.press("Escape");
+          await expect(settings).not.toBeVisible();
+          await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Profile" }).click();
+          await expect(page).toHaveURL(/\/profile$/);
+          await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
+          if (role === "creator") await expect(page.getByRole("heading", { name: "Social Accounts" })).toBeVisible();
+          if (role === "business") await expect(page.getByRole("heading", { name: "Business Information" })).toBeVisible();
+          await layout(page);
+          await screenshot(page, `${viewport.width}-${role}-profile`);
+          const navBounds = await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox();
+          expect(navBounds).not.toBeNull();
+          expect(navBounds!.y + navBounds!.height).toBeLessThanOrEqual(viewport.height + 1);
+        }
+        const clippedLabels = await page.getByRole("navigation", { name: "Mobile navigation" }).locator(".mobile-role-link").evaluateAll(links => links.flatMap(link => {
+          const label = link.querySelector("span");
+          if (!label) return [];
+          const text = label.getBoundingClientRect();
+          const target = link.getBoundingClientRect();
+          return label.scrollWidth > label.clientWidth + 1 || text.left < target.left - 1 || text.right > target.right + 1
+            ? [label.textContent?.trim() ?? "unknown"] : [];
+        }));
+        expect(clippedLabels, `${role} bottom-navigation labels at ${viewport.width}px`).toEqual([]);
       }
       if (role === "business" || role === "admin") {
         const campaigns = await (
@@ -234,17 +299,52 @@ test("stable buttons and mobile keyboard navigation", async ({
   await open(page, "/business");
   await page.keyboard.press("Tab");
   await expect(skip).toBeFocused();
-  await page.getByRole("button", { name: "Open account menu" }).click();
+  await page.getByRole("button", { name: "Open Settings" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Account menu" }),
+    page.getByRole("dialog", { name: "Settings" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("dialog", { name: "Account menu" }),
+    page.getByRole("dialog", { name: "Settings" }),
   ).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "Open account menu" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Open Settings" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("dialog", { name: "Account menu" }),
+    page.getByRole("dialog", { name: "Settings" }),
   ).toBeVisible();
+});
+
+test("waiting update stays compact, safe and dismissible across mobile widths", async ({ page, context }) => {
+  await login(context, "business");
+  await open(page, "/business");
+  await page.evaluate(() => {
+    const scope = window as Window & { testUpdateActivations?: number };
+    scope.testUpdateActivations = 0;
+    window.dispatchEvent(new CustomEvent("weymela-update", {
+      detail: { postMessage: () => { scope.testUpdateActivations = (scope.testUpdateActivations ?? 0) + 1; } },
+    }));
+  });
+  const notice = page.getByRole("status", { name: "Update available" });
+  for (const width of [320, 360, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(notice).toBeVisible();
+    await expect(notice.getByRole("button", { name: "Reload" })).toBeVisible();
+    await layout(page);
+    const bounds = await notice.boundingBox();
+    const nav = await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(nav).not.toBeNull();
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+    expect(bounds!.y + bounds!.height).toBeLessThan(nav!.y);
+    if (width === 390) await screenshot(page, "390-business-update-notice");
+  }
+  expect(await page.evaluate(() => (window as Window & { testUpdateActivations?: number }).testUpdateActivations)).toBe(0);
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await notice.getByRole("button", { name: "Dismiss update notice" }).click();
+  await expect(notice).not.toBeVisible();
+  await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Promotions" }).click();
+  await expect(page).toHaveURL(/\/business\/campaigns$/);
+  await expect(notice).not.toBeVisible();
 });

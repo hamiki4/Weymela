@@ -10,6 +10,7 @@ import {
   BusinessCampaigns,
 } from "../src/features/business/BusinessPages";
 import { CreateCampaign } from "../src/features/business/CreateCampaign";
+import { BusinessUgcPage, CreateBusinessUgcPage } from "../src/features/business/UgcPages";
 import { BusinessCampaignDetail } from "../src/features/business/CampaignDetail";
 import { PromotionContentReviewQueue } from "../src/features/business/PromotionContentReviewQueue";
 import {
@@ -104,6 +105,14 @@ describe("Business workspace", () => {
     expect(await screen.findByText("No promotions yet.")).toBeVisible();
     expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
   });
+  it("keeps UGC management compact and routes creation to its own page", async () => {
+    mockApi({ "/business/ugc": [] });
+    mount(<BusinessUgcPage />);
+    expect(await screen.findByText("No UGC yet.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Your UGC" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Create UGC" })).toHaveAttribute("href", "/business/ugc/new");
+    expect(screen.queryByLabelText("UGC title")).not.toBeInTheDocument();
+  });
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
@@ -168,6 +177,56 @@ describe("Business workspace", () => {
     expect(api.writes[0].body.platforms).toEqual([]);
     expect(api.writes[0].body).not.toHaveProperty("creatorCommissionPercent");
   });
+  it("checks current Business agreements before opening Promotion creation", async () => {
+    mockApi({ "/legal/current": [
+      { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
+      { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
+    ] });
+    mount(<CreateCampaign />);
+    expect(await screen.findByRole("heading", { name: "Current agreements required" })).toBeVisible();
+    expect(screen.queryByLabelText("Promotion title")).not.toBeInTheDocument();
+  });
+  it("checks current Business agreements before opening UGC creation", async () => {
+    mockApi({ "/legal/current": [
+      { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
+      { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
+    ] });
+    mount(<CreateBusinessUgcPage />);
+    expect(await screen.findByRole("heading", { name: "Current agreements required" })).toBeVisible();
+    expect(screen.queryByLabelText("UGC title")).not.toBeInTheDocument();
+  });
+  it("separates UGC Creator funding from optional Customer discount funding", async () => {
+    mockApi({ "/business/wallet": { ...wallet, totalBalance: 1000, available: 1000, reserved: 0 } });
+    mount(<CreateBusinessUgcPage />);
+    await userEvent.type(await screen.findByLabelText("Creator Payment"), "500");
+    await userEvent.clear(screen.getByLabelText("Creators needed"));
+    await userEvent.type(screen.getByLabelText("Creators needed"), "3");
+    expect(screen.getByText("UGC Creator funding").nextElementSibling).toHaveTextContent("1,650");
+    expect(screen.getByText("Need").nextElementSibling).toHaveTextContent("650 ETB more");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Add Customer discount sale" }));
+    await userEvent.type(screen.getByLabelText("Customer Discount %"), "5");
+    await userEvent.type(screen.getByLabelText("Customer Reward Budget"), "200");
+    expect(screen.getByText("Customer discount funding").nextElementSibling).toHaveTextContent("200");
+    expect(screen.getByText("Need").nextElementSibling).toHaveTextContent("850 ETB more");
+  });
+  it.each([
+    [0, 10000, "10,000", "Need"],
+    [9000, 10000, "1,000", "Need"],
+    [15000, 10000, "5,000", "Remaining after funding"],
+  ])("shows authoritative available funds %i and a %s budget decision", async (available, budget, expected, label) => {
+    mockApi({ "/business/wallet": { ...wallet, totalBalance: available, available, reserved: 0 } });
+    mount(<CreateCampaign />);
+    await userEvent.type(await screen.findByLabelText("Promotion title"), "Local stories");
+    await userEvent.type(screen.getByLabelText("Description"), "A thoughtful visit");
+    await userEvent.type(screen.getByLabelText("Start date"), "2027-09-12T10:00");
+    await userEvent.type(screen.getByLabelText("End date"), "2027-09-20T10:00");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(await screen.findByLabelText("Promotion budget"), String(budget));
+    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByText(expected + " ETB" + (label === "Need" ? " more" : ""))).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create Draft" })).toBeEnabled();
+  });
   it("sends the existing optional slogan and social capacities with the Promotion", async () => {
     const api = mockApi();
     mount(<CreateCampaign />);
@@ -207,12 +266,12 @@ describe("Business workspace", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Review Funding" }),
     );
-    const dialog = screen.getByRole("dialog", {
+    const dialog = await screen.findByRole("dialog", {
       name: "Confirm Promotion Funding",
     });
-    expect(
-      within(dialog).getByText("3,000 Available / 7,000 Reserved"),
-    ).toBeVisible();
+    expect(within(dialog).getByText("4,000 ETB")).toBeVisible();
+    expect(within(dialog).getByText("1,000 ETB")).toBeVisible();
+    expect(within(dialog).getByText("3,000 ETB")).toBeVisible();
     expect(api.writes).toHaveLength(0);
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Confirm & Reserve Funds" }),
@@ -240,9 +299,7 @@ describe("Business workspace", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Review Funding" }),
     );
-    expect(
-      screen.getByRole("button", { name: "Confirm & Reserve Funds" }),
-    ).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Confirm & Reserve Funds" })).toBeDisabled();
   });
   it("approves an applicant and sets Creator Budget in one request", async () => {
     const api = mockApi();

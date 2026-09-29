@@ -25,8 +25,26 @@ def verify(root):
         raise ValueError('Invalid Web Firebase project identity')
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
+    migrations = manifest['migrations']
+    baseline = 'grants/baseline-21/v3-verify.sql'
+    current = [f'grants/current/v3-{name}.sql' for name in
+               ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
+    verifier = 'grants/current/v3-verify.sql'
+    contracts = migrations.get('grantContracts', {})
+    if (contracts.get('from') != {'sourceCommit':'7d537bb8a83ed2757a2149261b8dd7a449f51629',
+                                  'migrationCount':21, 'verifier':baseline}
+            or contracts.get('to') != {'sourceCommit':manifest['commit'],
+                                       'migrationCount':24, 'scripts':current, 'verifier':verifier}
+            or len(migrations.get('migrationOrder', [])) != 24
+            or migrations['migrationOrder'][20] != '20260925212120_RetireSupportSessions'
+            or migrations['migrationOrder'][21:] != [
+                '20260928213157_AlignDepositReviewAuthority',
+                '20260928230108_AddCreatorNumbers',
+                '20260929022846_BindUgcSaleAssignments']):
+        raise ValueError('Grant contract stage/source mismatch')
     checksums = manifest.get('checksums', {})
     required = {'migrations/efbundle', 'migrations/v3-forward.sql', 'migrations/migration-manifest.json'}
+    required.update('migrations/'+name for name in [baseline, *current, verifier])
     required.update(f'images/{p}-image.json' for p in ('api', 'worker', 'web'))
     if not required.issubset(checksums): raise ValueError('Incomplete checksum inventory')
     for name, digest in checksums.items():
@@ -40,6 +58,15 @@ def verify(root):
             raise ValueError('Image metadata mismatch')
     if json.loads((root/'migrations/migration-manifest.json').read_text()) != manifest['migrations']:
         raise ValueError('Migration metadata mismatch')
+    migration_files = migrations.get('files', {})
+    artifact_names = ['efbundle', 'v3-forward.sql', baseline, *current, verifier]
+    if set(migration_files) != set(artifact_names):
+        raise ValueError('Unexpected migration/grant artifact inventory')
+    for name in artifact_names:
+        if migration_files.get(name) != checksums['migrations/'+name]:
+            raise ValueError('Grant/migration checksum binding mismatch')
+    if migration_files[baseline] != '584fab5649ab7b89e3da7f0be75ec38f96988dcaf67853c553d8989fe9fc9d24':
+        raise ValueError('Baseline grant verifier digest mismatch')
     return {'commit': manifest['commit'], 'verifiedArtifacts': len(checksums), 'deploymentAuthorized': False}
 
 if __name__ == '__main__':

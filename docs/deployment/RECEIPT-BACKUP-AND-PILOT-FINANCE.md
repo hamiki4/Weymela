@@ -30,7 +30,16 @@ Later activation sequence, after explicit operational approval: complete the pai
 
 ## Three-migration Pilot precheck
 
-The reviewed order is `20260928213157_AlignDepositReviewAuthority`, `20260928230108_AddCreatorNumbers`, `20260929022846_BindUgcSaleAssignments`. Do **not** apply them in this source-preparation task. For later deployment, confirm actual `__EFMigrationsHistory` and target identity; take the fresh paired local database/receipt backup above; verify `pg_restore --list`, artifact checksums and image digests; run `v3-verify.sql` and reconciliation; rehearse cumulative SQL/grants against an isolated restored Pilot copy. Apply only through the protected migrator after separate authorization, then verify history, grants, pending model, `v3-verify.sql`, reconciliation and receipt keys. Never use routine `Down` migrations on Pilot. Rolling back `AddCreatorNumbers` loses numeric IDs assigned later; prefer a controlled full paired restore when rollback is necessary, with an explicit loss-window decision.
+The reviewed order is `20260928213157_AlignDepositReviewAuthority`, `20260928230108_AddCreatorNumbers`, `20260929022846_BindUgcSaleAssignments`. Do **not** apply them in this source-preparation task. The immutable release package now carries checksummed `migrations/grants/baseline-21/v3-verify.sql` from installed commit `7d537bb8a83ed2757a2149261b8dd7a449f51629` and the exact target grant scripts plus verifier under `migrations/grants/current/`. `migration-manifest.json` binds both grant stages to their source commits and migration counts; `verify-release.py` rejects missing, altered or mismatched grant SQL. Never substitute SQL from a mutable server checkout.
+
+For a later separately authorized Pilot deployment, use this order:
+
+1. Verify the complete release package and its SHA-256 inventory, image digests, Pilot target identity, financial-write freeze, host/Compose preflight, and actual migration history. Require exactly 21 installed migrations ending at `RetireSupportSessions`. Run **only the packaged baseline-21 verifier** against the current database. Do not run the target verifier against old grants.
+2. Create and validate the fresh paired PostgreSQL/receipt backup above, including `pg_restore --list` and both checksums. Restore the pair to an isolated copy for the full upgrade rehearsal before touching live Pilot.
+3. On the isolated copy, apply only the three reviewed migrations under the protected migrator. Install the packaged target grants in the reviewed API, Worker, Migrator, Backup and Migrator-defaults order using their designated owner identities. Verify 24 exact migration IDs, Creator-number backfill, UGC assignment constraints, no pending model changes, reconciliation, receipt keys and **the packaged target verifier**. Keep runtime roles without ownership or `DELETE`.
+4. Only after the rehearsal and a separate live authorization, repeat the migration and grant steps against Pilot from the same verified artifact. Run the target verifier after grants, before starting new images. Deploy only the manifest's immutable API/Web/Worker digests. Recheck readiness, grants, reconciliation, financial freeze and safe smoke.
+
+If any gate fails, stop; do not run a newer verifier on the old state, grant around it manually, or run routine `Down` migrations. Rolling back `AddCreatorNumbers` loses numeric IDs assigned later; prefer a controlled full paired restore when rollback is necessary, with an explicit loss-window decision.
 
 ## Other readiness work
 

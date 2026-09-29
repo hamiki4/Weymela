@@ -138,6 +138,17 @@ public sealed class AccountDeletionService(WeymelaDbContext db, TimeProvider clo
             { cashier.Status = cashier.ActivatedAtUtc is null ? CashierPreauthorizationStatus.Disabled : CashierPreauthorizationStatus.Revoked; cashier.DisabledAtUtc = now; cashier.Version++; }
             foreach (var challenge in await db.EmailAuthChallenges.AsTracking().Where(x => x.UserId == userId).ToListAsync(token))
             { challenge.ConsumedAtUtc ??= now; challenge.RecoveryGrantConsumedAtUtc ??= now; challenge.RecoveryGrantHash = null; }
+            // Keep the row for the no-DELETE runtime contract, but replace the
+            // verifier before the external identity operation can begin.
+            var credential = await db.PasswordCredentials.AsTracking().SingleOrDefaultAsync(x => x.UserId == userId, token);
+            if (credential is not null)
+            {
+                credential.PasswordHash = PasswordCredentialHasher.Hash(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+                credential.ChangedAtUtc = now;
+                credential.FailedAttempts = 0;
+                credential.LockedUntilUtc = null;
+                credential.Version++;
+            }
             foreach (var permission in permissions)
                 db.AccountRoleHistory.Add(new(Guid.NewGuid(), authority.RealActor.UserId, userId, permission.Role,
                     permission.SubjectId, permission.BusinessId, "Deleted", reason, now, correlation));
@@ -182,31 +193,49 @@ public sealed class AccountDeletionService(WeymelaDbContext db, TimeProvider clo
 
 public sealed class AccountIdentityDeletionProcessor(WeymelaDbContext db, IAccountIdentityDeletionProvider provider, TimeProvider clock)
 {
+    private static readonly TimeSpan ClaimLease = TimeSpan.FromMinutes(2);
+
     public async Task<int> ProcessAsync(CancellationToken ct)
     {
         if (!provider.Enabled) return 0;
         var processed = 0;
         for (var i = 0; i < 10; i++)
         {
-            Guid? selected = null;
+            var selected = await new EfUnitOfWork(db).ExecuteAsync(async token =>
+            {
+                var now = clock.GetUtcNow().UtcDateTime;
+                var row = (await db.OutboxMessages.FromSqlInterpolated($"SELECT * FROM v3.\"OutboxMessages\" WHERE \"EventType\"='AccountIdentityDeletion' AND \"ProcessedAtUtc\" IS NULL AND \"FailedAtUtc\" IS NULL AND (\"NextAttemptAtUtc\" IS NULL OR \"NextAttemptAtUtc\"<={now}) ORDER BY \"OccurredAtUtc\", \"Id\" LIMIT 1 FOR UPDATE SKIP LOCKED").ToListAsync(token)).SingleOrDefault();
+                if (row is null) return null;
+                using var document = JsonDocument.Parse(row.Payload);
+                var data = document.RootElement;
+                var userId = data.GetProperty("UserId").GetGuid();
+                var adminId = data.GetProperty("AdminUserId").GetGuid();
+                var correlation = data.GetProperty("CorrelationId").GetGuid();
+                var lifecycle = await db.AccountLifecycles.AsNoTracking().SingleAsync(x => x.UserId == userId, token);
+                if (lifecycle.Status != AccountLifecycleStatus.Closed) throw new InvalidOperationException("Deletion state is invalid.");
+                var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == userId, token);
+                row.AttemptCount++;
+                row.NextAttemptAtUtc = now.Add(ClaimLease);
+                return new ClaimedDeletion(row.Id, userId, adminId, correlation,
+                    binding?.ProjectId, binding?.ExternalSubject);
+            }, ct);
+            if (selected is null) break;
+
             try
             {
-                var found = await new EfUnitOfWork(db).ExecuteAsync(async token =>
+                // The closure and claim are committed before calling the external
+                // provider. Firebase's UserNotFound result is idempotent on replay.
+                if (selected.ProjectId is not null && selected.ExternalSubject is not null)
+                    await provider.DeleteAsync(selected.ProjectId, selected.ExternalSubject, ct);
+
+                await new EfUnitOfWork(db).ExecuteAsync(async token =>
                 {
                     var now = clock.GetUtcNow().UtcDateTime;
-                    var row = (await db.OutboxMessages.FromSqlInterpolated($"SELECT * FROM v3.\"OutboxMessages\" WHERE \"EventType\"='AccountIdentityDeletion' AND \"ProcessedAtUtc\" IS NULL AND \"FailedAtUtc\" IS NULL AND (\"NextAttemptAtUtc\" IS NULL OR \"NextAttemptAtUtc\"<={now}) ORDER BY \"OccurredAtUtc\", \"Id\" LIMIT 1 FOR UPDATE SKIP LOCKED").ToListAsync(token)).SingleOrDefault();
-                    if (row is null) return false;
-                    selected = row.Id;
-                    using var document = JsonDocument.Parse(row.Payload);
-                    var data = document.RootElement;
-                    var userId = data.GetProperty("UserId").GetGuid();
-                    var adminId = data.GetProperty("AdminUserId").GetGuid();
-                    var correlation = data.GetProperty("CorrelationId").GetGuid();
-                    var lifecycle = await db.AccountLifecycles.AsNoTracking().SingleAsync(x => x.UserId == userId, token);
+                    var row = (await db.OutboxMessages.FromSqlInterpolated($"SELECT * FROM v3.\"OutboxMessages\" WHERE \"Id\"={selected.Id} FOR UPDATE").ToListAsync(token)).Single();
+                    if (row.ProcessedAtUtc is not null) return true;
+                    var lifecycle = await db.AccountLifecycles.AsNoTracking().SingleAsync(x => x.UserId == selected.UserId, token);
                     if (lifecycle.Status != AccountLifecycleStatus.Closed) throw new InvalidOperationException("Deletion state is invalid.");
-                    var binding = await db.IdentityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == userId, token);
-                    if (binding is not null) await provider.DeleteAsync(binding.ProjectId, binding.ExternalSubject, token);
-                    var identifiers = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == userId).Select(x => x.Id).ToListAsync(token);
+                    var identifiers = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == selected.UserId).Select(x => x.Id).ToListAsync(token);
                     foreach (var id in identifiers)
                     {
                         var tombstone = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
@@ -215,26 +244,23 @@ public sealed class AccountIdentityDeletionProcessor(WeymelaDbContext db, IAccou
                             .SetProperty(x => x.DeliveryAddress, (string?)null)
                             .SetProperty(x => x.IsVerified, false), token);
                     }
-                    var credential = await db.PasswordCredentials.SingleOrDefaultAsync(x => x.UserId == userId, token);
-                    if (credential is not null) db.PasswordCredentials.Remove(credential);
-                    db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "EntireAccountDeletionCompleted", adminId,
-                        null, null, null, correlation, now, "external-identity-deleted; identifiers-released",
-                        TargetUserId: userId, Operation: "delete-entire-account"));
-                    row.ProcessedAtUtc = now; row.AttemptCount++; row.LastError = null; row.NextAttemptAtUtc = null;
+                    db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "EntireAccountDeletionCompleted", selected.AdminId,
+                        null, null, null, selected.Correlation, now, "external-identity-deleted; identifiers-released",
+                        TargetUserId: selected.UserId, Operation: "delete-entire-account"));
+                    row.ProcessedAtUtc = now; row.LastError = null; row.NextAttemptAtUtc = null;
+                    row.FailureCount = 0;
                     return true;
                 }, ct);
-                if (!found) break;
                 processed++;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch
             {
-                if (selected is null) throw;
                 await new EfUnitOfWork(db).ExecuteAsync(async token =>
                 {
-                    var row = await db.OutboxMessages.SingleAsync(x => x.Id == selected.Value, token);
+                    var row = (await db.OutboxMessages.FromSqlInterpolated($"SELECT * FROM v3.\"OutboxMessages\" WHERE \"Id\"={selected.Id} FOR UPDATE").ToListAsync(token)).Single();
                     if (row.ProcessedAtUtc is not null) return true;
-                    row.AttemptCount++; row.FailureCount++; row.LastError = "ExternalIdentityDeletionUnavailable";
+                    row.FailureCount++; row.LastError = "ExternalIdentityDeletionUnavailable";
                     var now = clock.GetUtcNow().UtcDateTime;
                     if (row.FailureCount >= 5) { row.FailedAtUtc = now; row.NextAttemptAtUtc = null; }
                     else row.NextAttemptAtUtc = now.AddSeconds(Math.Min(300, 5 * Math.Pow(2, row.FailureCount)));
@@ -245,4 +271,7 @@ public sealed class AccountIdentityDeletionProcessor(WeymelaDbContext db, IAccou
         }
         return processed;
     }
+
+    private sealed record ClaimedDeletion(Guid Id, Guid UserId, Guid AdminId, Guid Correlation,
+        string? ProjectId, string? ExternalSubject);
 }

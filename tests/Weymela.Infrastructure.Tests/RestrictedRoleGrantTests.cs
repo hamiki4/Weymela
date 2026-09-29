@@ -99,6 +99,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await AssertWorkerDenialsAsync(workerConnection, apiRole, workerRole,
             new NpgsqlConnectionStringBuilder(database.ConnectionString).Username!);
         await AssertPersistedOutcomesAsync(database, account, workerSeed);
+        await ExerciseAccountDeletionUnderApiRoleAsync(database, apiConnection, apiRole, adminUserId);
         await ExerciseOperationalRolesAsync(database, databaseName, suffix, migratorConnection,
             backupConnection, apiConnection, apiRole, workerRole, migratorRole, backupRole,
             verifyScript);
@@ -402,6 +403,114 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM v3.\"AuditEvents\"";
         Assert.True((long)(await command.ExecuteScalarAsync())! >= 0);
+    }
+
+    private static async Task ExerciseAccountDeletionUnderApiRoleAsync(
+        TestDatabase database, string apiConnection, string apiRole, Guid adminUserId)
+    {
+        var userId = Guid.NewGuid();
+        var email = "delete-reuse-" + userId.ToString("N") + "@example.test";
+        var emailHash = EmailAuthService.HashIdentifier(email);
+        var password = "Before deletion 123!";
+        var originalHash = PasswordCredentialHasher.Hash(password);
+        Guid journalId;
+        Guid baselineAuditId;
+        await using (var owner = database.Open())
+        {
+            owner.CommercePermissions.Add(new(userId, ActorRole.Customer, userId, null, true, false));
+            owner.IdentityBindings.Add(new IdentityBinding { UserId = userId, Provider = "Firebase",
+                ProjectId = "isolated-v3-test", ExternalSubject = "delete-" + userId.ToString("N"),
+                IsActive = true, Version = 1 });
+            owner.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Email",
+                IdentifierHash = emailHash, DeliveryAddress = email, IsVerified = true, CreatedAtUtc = Now });
+            owner.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = userId,
+                PasswordHash = originalHash, WorkFactor = PasswordCredentialHasher.Iterations,
+                CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
+            baselineAuditId = Guid.NewGuid();
+            owner.AuditEvents.Add(new AuditEvent(baselineAuditId, "AccountHistoryRetained", adminUserId,
+                null, null, null, Guid.NewGuid(), Now, "retained"));
+            var journal = new FinancialJournal(Guid.NewGuid().ToString("N"), Guid.NewGuid(), userId,
+                JournalSourceType.ViewReward, Now);
+            journal.AddLine(JournalLineType.Debit, new Money(1m), "FixtureClearing");
+            journal.AddLine(JournalLineType.Credit, new Money(1m), "CreatorPayable");
+            journal.Post();
+            journalId = journal.Id;
+            owner.FinancialJournals.Add(journal);
+            await owner.SaveChangesAsync();
+        }
+
+        await AssertInsufficientPrivilegeAsync(apiConnection,
+            "DELETE FROM v3.\"PasswordCredentials\" WHERE false",
+            "API must not DELETE password credentials");
+        await using (var connection = new NpgsqlConnection(database.ConnectionString))
+        {
+            await connection.OpenAsync();
+            foreach (var (table, column) in new[] {
+                ("OutboxMessages", "ProcessedAtUtc"), ("OutboxMessages", "AttemptCount"),
+                ("OutboxMessages", "LastError"), ("OutboxMessages", "NextAttemptAtUtc"),
+                ("OutboxMessages", "FailedAtUtc"), ("OutboxMessages", "FailureCount"),
+                ("IdentityBindings", "IsActive"), ("IdentityBindings", "Version") })
+            {
+                await using var command = new NpgsqlCommand(
+                    $"SELECT has_column_privilege({QuoteLiteral(apiRole)}, {QuoteLiteral($"v3.{QuoteIdentifier(table)}")}, {QuoteLiteral(column)}, 'UPDATE')",
+                    connection);
+                Assert.True((bool)(await command.ExecuteScalarAsync())!, $"Missing API UPDATE on {table}.{column}");
+            }
+            await using var broad = new NpgsqlCommand($"SELECT has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"OutboxMessages\"', 'UPDATE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"IdentityBindings\"', 'UPDATE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"PasswordCredentials\"', 'DELETE')", connection);
+            await using var reader = await broad.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.False(reader.GetBoolean(0)); Assert.False(reader.GetBoolean(1)); Assert.False(reader.GetBoolean(2));
+        }
+
+        var clock = new ManualClock(Now);
+        var provider = new ReconciledDeletionProvider(database.ConnectionString, userId, emailHash);
+        await using var db = Open(apiConnection);
+        var authority = AuthorityContext.ForAuthenticatedActor(new(adminUserId, ActorRole.PlatformAdmin));
+        var service = new AccountDeletionService(db, clock, provider);
+        var input = new DeleteEntireAccountInput("Approved disposable account cleanup", "DELETE");
+        var operations = AuthorityContext.ForAuthenticatedActor(new(userId, ActorRole.OperationsAdmin));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.DeleteEntireAsync(operations, userId, input, "denied", default));
+        var viewAs = new AuthorityContext(new RealActor(new(userId, ActorRole.OperationsAdmin)),
+            new AdministrativeAuthority(ActorRole.PlatformAdmin));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.DeleteEntireAsync(viewAs, userId, input, "view-as-denied", default));
+        Assert.Equal("Pending", (await service.DeleteEntireAsync(authority, userId, input, "delete-entire", default)).Status);
+        Assert.Equal("Pending", (await service.DeleteEntireAsync(authority, userId, input, "delete-entire", default)).Status);
+        Assert.Equal(0, provider.Calls);
+        Assert.Equal(emailHash, (await db.AuthIdentifiers.AsNoTracking().SingleAsync(x => x.UserId == userId)).IdentifierHash);
+        await using (var prematureReuse = Open(apiConnection))
+        {
+            prematureReuse.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = Guid.NewGuid(), Kind = "Email",
+                IdentifierHash = emailHash, DeliveryAddress = email, CreatedAtUtc = Now });
+            var collision = await Assert.ThrowsAsync<DbUpdateException>(() => prematureReuse.SaveChangesAsync());
+            Assert.Equal(PostgresErrorCodes.UniqueViolation, Assert.IsType<PostgresException>(collision.InnerException).SqlState);
+        }
+        var credential = await db.PasswordCredentials.AsNoTracking().SingleAsync(x => x.UserId == userId);
+        Assert.NotEqual(originalHash, credential.PasswordHash);
+        Assert.False(PasswordCredentialHasher.Verify(password, credential));
+        Assert.False((await db.IdentityBindings.AsNoTracking().SingleAsync(x => x.UserId == userId)).IsActive);
+        Assert.False((await db.CommercePermissions.AsNoTracking().SingleAsync(x => x.UserId == userId)).IsActive);
+
+        var processor = new AccountIdentityDeletionProcessor(db, provider, clock);
+        Assert.Equal(1, await processor.ProcessAsync(default));
+        Assert.True(provider.Deleted);
+        Assert.Equal("Pending", (await service.StatusAsync(authority, userId, default)).Status);
+        Assert.Equal(emailHash, (await db.AuthIdentifiers.AsNoTracking().SingleAsync(x => x.UserId == userId)).IdentifierHash);
+        var attempt = await db.OutboxMessages.AsNoTracking().SingleAsync(x => x.EventType == "AccountIdentityDeletion");
+        Assert.Null(attempt.ProcessedAtUtc);
+        Assert.Equal(1, attempt.FailureCount);
+        clock.Set(Now.AddMinutes(1));
+        Assert.Equal(1, await processor.ProcessAsync(default));
+        Assert.Equal(2, provider.Calls);
+        Assert.Equal("Completed", (await service.StatusAsync(authority, userId, default)).Status);
+        Assert.Equal(0, await processor.ProcessAsync(default));
+        Assert.NotEqual(emailHash, (await db.AuthIdentifiers.AsNoTracking().SingleAsync(x => x.UserId == userId)).IdentifierHash);
+        Assert.True(await db.AuditEvents.AnyAsync(x => x.EventType == "EntireAccountDeletionCompleted" && x.TargetUserId == userId));
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "AccountIdentityDeletion").ToListAsync());
+        Assert.True(await db.FinancialJournals.AnyAsync(x => x.Id == journalId));
+        Assert.True(await db.AuditEvents.AnyAsync(x => x.Id == baselineAuditId));
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = Guid.NewGuid(), Kind = "Email",
+            IdentifierHash = emailHash, DeliveryAddress = email, CreatedAtUtc = clock.GetUtcNow().UtcDateTime });
+        await db.SaveChangesAsync();
     }
 
     private static async Task AssertWorkerDenialsAsync(
@@ -916,6 +1025,37 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         private DateTime current = initial;
         public void Set(DateTime value) => current = value;
         public override DateTimeOffset GetUtcNow() => new(current);
+    }
+
+    private sealed class ReconciledDeletionProvider(string connectionString, Guid userId, string emailHash)
+        : IAccountIdentityDeletionProvider
+    {
+        public bool Enabled => true;
+        public int Calls { get; private set; }
+        public bool Deleted { get; private set; }
+
+        public async Task DeleteAsync(string projectId, string externalSubject, CancellationToken ct)
+        {
+            Assert.Equal("isolated-v3-test", projectId);
+            Assert.Equal("delete-" + userId.ToString("N"), externalSubject);
+            // This independent session proves closure and the outbox claim were
+            // committed before any external identity operation starts.
+            await using var db = Open(connectionString);
+            Assert.Equal(AccountLifecycleStatus.Closed,
+                (await db.AccountLifecycles.AsNoTracking().SingleAsync(x => x.UserId == userId, ct)).Status);
+            Assert.Equal(emailHash,
+                (await db.AuthIdentifiers.AsNoTracking().SingleAsync(x => x.UserId == userId, ct)).IdentifierHash);
+            Assert.Equal(1, await db.OutboxMessages.AsNoTracking()
+                .Where(x => x.EventType == "AccountIdentityDeletion" && x.ProcessedAtUtc == null)
+                .CountAsync(ct));
+            Calls++;
+            if (!Deleted)
+            {
+                Deleted = true;
+                throw new InvalidOperationException("Simulated provider response lost after deletion");
+            }
+            // Equivalent to Firebase UserNotFound: replay is successful.
+        }
     }
 
     private sealed record ApiOutcome(

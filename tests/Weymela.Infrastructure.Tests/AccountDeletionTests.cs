@@ -56,6 +56,10 @@ public sealed class AccountDeletionTests(PostgresFixture fixture)
         db.BusinessWallets.Add(new(business));
         db.AuthIdentifiers.Add(new() { UserId = user, Kind = "Email", IdentifierHash = hash, DeliveryAddress = "reuse@example.test", IsVerified = true, CreatedAtUtc = Now });
         db.IdentityBindings.Add(new() { UserId = user, ProjectId = "test", ExternalSubject = "firebase-test-user", IsActive = true, Version = 1 });
+        var password = "Existing account password 123!";
+        var originalPasswordHash = PasswordCredentialHasher.Hash(password);
+        db.PasswordCredentials.Add(new() { UserId = user, PasswordHash = originalPasswordHash,
+            WorkFactor = PasswordCredentialHasher.Iterations, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
         await db.SaveChangesAsync();
         var pendingCreator = await new RoleEnrollmentService(db, new FixedClock()).SubmitAsync(
             new(user, ActorRole.Customer), new(ActorRole.Creator, "Pending creator", null, null, null, null,
@@ -71,6 +75,10 @@ public sealed class AccountDeletionTests(PostgresFixture fixture)
             new RoleEnrollmentService(db, new FixedClock()).ReviewAsync(new(admin, ActorRole.PlatformAdmin),
                 pendingCreator.Id, true, null, pendingCreator.Version, "approve-closed", default))).Kind);
         Assert.Equal(hash, (await db.AuthIdentifiers.SingleAsync(x => x.UserId == user)).IdentifierHash);
+        var disabledCredential = await db.PasswordCredentials.SingleAsync(x => x.UserId == user);
+        Assert.NotEqual(originalPasswordHash, disabledCredential.PasswordHash);
+        Assert.False(PasswordCredentialHasher.Verify(password, disabledCredential));
+        Assert.Equal(2, disabledCredential.Version);
         Assert.True(await db.BusinessWallets.AnyAsync(x => x.BusinessId == business));
         Assert.Equal("Pending", (await service.DeleteEntireAsync(authority, user, new("Requested deletion", "DELETE"), "delete-entire", default)).Status);
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "AccountIdentityDeletion").ToListAsync());
@@ -83,6 +91,7 @@ public sealed class AccountDeletionTests(PostgresFixture fixture)
         Assert.Null(identifier.DeliveryAddress);
         Assert.False(identifier.IsVerified);
         Assert.False((await db.IdentityBindings.SingleAsync(x => x.UserId == user)).IsActive);
+        Assert.True(await db.PasswordCredentials.AnyAsync(x => x.UserId == user));
         Assert.True(await db.BusinessWallets.AnyAsync(x => x.BusinessId == business));
         Assert.Contains(await db.AuditEvents.ToListAsync(), x => x.ActorId == admin && x.TargetUserId == user && x.EventType == "EntireAccountDeletionCompleted");
         db.AuthIdentifiers.Add(new() { UserId = Guid.NewGuid(), Kind = "Email", IdentifierHash = hash, DeliveryAddress = "reuse@example.test", IsVerified = false, CreatedAtUtc = Now });

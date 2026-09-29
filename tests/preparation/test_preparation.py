@@ -117,7 +117,8 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('Main branch protection is not a prerequisite', policy)
         self.assertIn('Production retains its separate stricter authorization policy', policy)
         self.assertIn('fresh protected paired PostgreSQL/receipt backup', policy)
-        self.assertIn('`v3-verify.sql` before and after', policy)
+        self.assertIn('packaged baseline-21 verifier against the old installed grants', policy)
+        self.assertIn('packaged target verifier after those grants are installed', policy)
         self.assertIn('financial test window stays off by default', policy)
 
     def test_ci_does_not_upload_browser_identity_control(self):
@@ -474,7 +475,30 @@ class ReleaseIntegrityTests(unittest.TestCase):
             (self.root/f"images/{image['component']}-image.json").write_text(json.dumps(image))
         (self.root/'migrations/efbundle').write_text('inert test artifact, not executable')
         (self.root/'migrations/v3-forward.sql').write_text('-- inert fixture')
-        migration = {'commit':commit}
+        baseline = 'grants/baseline-21/v3-verify.sql'
+        current = [f'grants/current/v3-{name}.sql' for name in
+                   ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
+        verifier = 'grants/current/v3-verify.sql'
+        for name in [baseline, *current, verifier]:
+            path = self.root/'migrations'/name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if name == baseline:
+                path.write_bytes((ROOT/'database/grants/baseline-21/v3-verify.sql').read_bytes())
+            else:
+                path.write_text('-- inert grant fixture')
+        order = [f'migration-{i}' for i in range(20)] + [
+            '20260925212120_RetireSupportSessions',
+            '20260928213157_AlignDepositReviewAuthority',
+            '20260928230108_AddCreatorNumbers',
+            '20260929022846_BindUgcSaleAssignments']
+        migration = {'commit':commit, 'migrationOrder':order,
+                     'grantContracts':{
+                         'from':{'sourceCommit':'7d537bb8a83ed2757a2149261b8dd7a449f51629',
+                                 'migrationCount':21,'verifier':baseline},
+                         'to':{'sourceCommit':commit,'migrationCount':24,
+                               'scripts':current,'verifier':verifier}},
+                     'files':{p.relative_to(self.root/'migrations').as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+                              for p in (self.root/'migrations').rglob('*') if p.is_file()}}
         (self.root/'migrations/migration-manifest.json').write_text(json.dumps(migration))
         self.manifest = {'commit':commit,'platform':'linux/amd64','deploymentAuthorized':False,'financialWritesEnabled':False,'images':images,'migrations':migration,'checksums':{p.relative_to(self.root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in self.root.rglob('*') if p.is_file()}}
         self.write_manifest()
@@ -499,6 +523,19 @@ class ReleaseIntegrityTests(unittest.TestCase):
     def test_tampered_migration_artifact_is_rejected(self):
         (self.root/'migrations/efbundle').write_text('altered')
         with self.assertRaisesRegex(ValueError, 'checksum'): release.verify(self.root)
+
+    def test_missing_or_tampered_grant_artifact_is_rejected(self):
+        grant = self.root/'migrations/grants/current/v3-api.sql'
+        grant.write_text('-- altered')
+        with self.assertRaisesRegex(ValueError, 'checksum'): release.verify(self.root)
+        grant.unlink()
+        with self.assertRaises(FileNotFoundError): release.verify(self.root)
+
+    def test_grant_stage_cannot_claim_wrong_source(self):
+        self.manifest['migrations']['grantContracts']['from']['sourceCommit'] = 'b'*40
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, 'Grant contract stage'):
+            release.verify(self.root)
 
     def test_release_with_mismatched_image_source_is_rejected(self):
         self.manifest['images'][0]['commit'] = 'b' * 40

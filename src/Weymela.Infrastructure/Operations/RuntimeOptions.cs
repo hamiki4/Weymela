@@ -127,7 +127,9 @@ public sealed class RuntimeOptions
         var deposits = config["V3:Deposits:Mode"] ?? "Disabled";
         Require(deposits is "Disabled" or "ManualApproval" || dev && deposits == "Development", "No configured deposit provider/approval mechanism.");
         var receiptDirectory = config["V3:Deposits:ReceiptDirectory"] ?? "";
-        if (deposits == "ManualApproval")
+        if (worker)
+            Require(string.IsNullOrEmpty(receiptDirectory), "Worker cannot configure private receipt storage.");
+        else if (deposits == "ManualApproval")
         {
             Require(Path.IsPathFullyQualified(receiptDirectory) && Directory.Exists(receiptDirectory), "A private durable receipt directory is required for manual deposits.");
             if (!dev)

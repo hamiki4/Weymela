@@ -399,10 +399,16 @@ class ComposeIsolationTests(unittest.TestCase):
         config['services']['api']['volumes'] = [v for v in config['services']['api']['volumes']
                                               if v['target'] != '/run/weymela-v3/receipts']
         self.assertTrue(preflight.validate(config, self.manifest()))
-        config = copy.deepcopy(self.config)
-        receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
-        config['services']['web']['volumes'] = [receipt]
-        self.assertTrue(preflight.validate(config, self.manifest()))
+        for part in ('worker', 'web'):
+            config = copy.deepcopy(self.config)
+            receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
+            config['services'][part]['volumes'] = [receipt]
+            self.assertIn(f'{part}: private receipt storage is API-only.',
+                          preflight.validate(config, self.manifest()))
+            config = copy.deepcopy(self.config)
+            config['services'][part].setdefault('environment', {})['V3__Deposits__ReceiptDirectory'] = '/run/weymela-v3/receipts'
+            self.assertIn(f'{part}: private receipt storage is API-only.',
+                          preflight.validate(config, self.manifest()))
         config = copy.deepcopy(self.config)
         receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
         receipt['bind']['create_host_path'] = True

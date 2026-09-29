@@ -185,8 +185,11 @@ def validate(config, manifest):
         secret_sources = _secret_sources(service)
         if (any(key in environment for key in forbidden)
                 or {'v3-firebase-admin.json', 'v3-cookie-protection.pfx'} & secret_sources
-                or any(item.get('target') in ('/run/weymela-v3/keys', '/run/weymela-v3/receipts') for item in service.get('volumes', []))):
+                or any(item.get('target') == '/run/weymela-v3/keys' for item in service.get('volumes', []))):
             errors.append(f'{part}: API authentication secrets are forbidden.')
+        if ('V3__Deposits__ReceiptDirectory' in environment
+                or any(item.get('target') == '/run/weymela-v3/receipts' for item in service.get('volumes', []))):
+            errors.append(f'{part}: private receipt storage is API-only.')
     worker_environment = config['services']['worker'].get('environment', {})
     if worker_environment.get('V3__Auth__Provider') != 'Firebase' or worker_environment.get('V3__Auth__FirebaseProjectId') != 'weymela-pilot':
         errors.append('worker: approved public Firebase project identity is required.')

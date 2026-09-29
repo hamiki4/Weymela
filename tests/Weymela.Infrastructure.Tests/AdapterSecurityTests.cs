@@ -89,6 +89,48 @@ public sealed class AdapterSecurityTests
         }
         finally { directory.Delete(); }
     }
+    [Fact] public void Pilot_api_manual_deposits_require_an_existing_private_receipt_directory()
+    {
+        var directory = Directory.CreateTempSubdirectory("v3-api-receipts-");
+        try
+        {
+            if (OperatingSystem.IsLinux()) File.SetUnixFileMode(directory.FullName,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var config = Config();
+            config["V3:Deposits:Mode"] = "ManualApproval";
+            config["V3:Deposits:ReceiptDirectory"] = directory.FullName;
+            var valid = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
+            Assert.Equal(directory.FullName, valid.ReceiptDirectory);
+            Assert.False(valid.FinancialWritesEnabled);
+
+            config["V3:Deposits:ReceiptDirectory"] = Path.Combine(directory.FullName, "missing");
+            Assert.Contains("private durable receipt directory", Assert.Throws<InvalidOperationException>(() =>
+                RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot")).Message);
+            if (OperatingSystem.IsLinux())
+            {
+                File.SetUnixFileMode(directory.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                    UnixFileMode.UserExecute | UnixFileMode.GroupRead);
+                config["V3:Deposits:ReceiptDirectory"] = directory.FullName;
+                Assert.Contains("mode 0700", Assert.Throws<InvalidOperationException>(() =>
+                    RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot")).Message);
+            }
+        }
+        finally { directory.Delete(); }
+    }
+    [Fact] public void Pilot_worker_manual_deposits_start_without_receipt_storage_or_financial_writes()
+    {
+        var config = Config();
+        config["V3:Deposits:Mode"] = "ManualApproval";
+        config["V3:FinancialWritesEnabled"] = "false";
+        var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot", worker: true);
+        Assert.Equal("ManualApproval", options.DepositMode);
+        Assert.Equal("", options.ReceiptDirectory);
+        Assert.False(options.FinancialWritesEnabled);
+
+        config["V3:Deposits:ReceiptDirectory"] = Path.GetTempPath();
+        Assert.Contains("Worker cannot configure private receipt storage", Assert.Throws<InvalidOperationException>(() =>
+            RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot", worker: true)).Message);
+    }
     [Fact] public void Pilot_modes_replace_only_the_disabled_adapter_registrations()
     {
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
@@ -117,6 +159,8 @@ public sealed class AdapterSecurityTests
         config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production", worker: true));
         var services = new ServiceCollection();
         services.AddWeymelaPersistence(production.ConnectionString).AddPilotAuthenticationAdapters(production);
         Assert.Equal(typeof(DisabledEmailCodeDelivery), services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);

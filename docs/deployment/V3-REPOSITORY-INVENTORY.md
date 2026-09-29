@@ -7,7 +7,7 @@ Authoritative working directory: `/opt/WeymelaV3`. Branch `main`,no commits,no r
 - `Weymela.slnx`,README,safe `.env.example`,`.gitignore`,`.dockerignore`,pinned `.config/dotnet-tools.json`.
 - `src/`:166 approved Domain/Application/Infrastructure/API/Worker/Web source/config/runtime-asset files. No Phase7 runtime source modifications. PostgreSQL schema/migrations and all prior financial/UI rules unchanged.
 - `tests/`:43 source files across Domain/Application/PostgreSQL/HTTP/BrowserHost and new preparation checks; frontend test/E2E source remains under Web. Test **source** is retained; generated screenshots/results/control keys are excluded.
-- `.github/workflows/`:PR/reusable validation,immutable registry release,and manual Pilot review gate.
+- `.github/workflows/`: PR/reusable validation and immutable registry release. Pilot deployment uses the authorized operator procedure after release verification and technical preflight.
 - `docker/`:three Dockerfiles,image-only isolated Compose,three blank/safe Pilot configuration templates,Web headers/proxy,and instructions.
 - `tools/`:CI verification/build/artifact scripts and existing acceptance utilities. Tools do not execute deployment automatically.
 - `docs/`:authoritative architecture/product/UX/finance/security and new Pilot preparation,capacity,adapter/test-user/legal,database/backup/manual acceptance/CI/readiness documents.

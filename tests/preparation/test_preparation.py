@@ -105,6 +105,21 @@ class RepositoryGateTests(unittest.TestCase):
             self.assertNotIn('docker compose up', text)
             self.assertNotIn('ssh ', text)
 
+    def test_pilot_operator_policy_has_no_independent_github_review_gate(self):
+        workflows = ROOT / '.github/workflows'
+        self.assertFalse((workflows / 'pilot-approval.yml').exists())
+        for path in workflows.glob('*.yml'):
+            workflow = path.read_text()
+            self.assertNotIn('V3_PILOT_REVIEW_ENABLED', workflow)
+            self.assertNotRegex(workflow, r'(?m)^\s*environment:\s*v3-pilot\s*$')
+        policy = (ROOT / 'docs/deployment/GITHUB-ACTIONS.md').read_text()
+        self.assertIn('authorized repository/server operator', policy)
+        self.assertIn('Main branch protection is not a prerequisite', policy)
+        self.assertIn('Production retains its separate stricter authorization policy', policy)
+        self.assertIn('fresh protected paired PostgreSQL/receipt backup', policy)
+        self.assertIn('`v3-verify.sql` before and after', policy)
+        self.assertIn('financial test window stays off by default', policy)
+
     def test_ci_does_not_upload_browser_identity_control(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertNotIn('path: .artifacts/', text)
@@ -470,9 +485,25 @@ class ReleaseIntegrityTests(unittest.TestCase):
     def test_complete_release_verifies_without_execution(self):
         self.assertFalse(release.verify(self.root)['deploymentAuthorized'])
 
+    def test_release_cannot_self_authorize_deployment_or_financial_writes(self):
+        for field in ('deploymentAuthorized', 'financialWritesEnabled'):
+            with self.subTest(field=field):
+                self.manifest[field] = True
+                self.write_manifest()
+                with self.assertRaisesRegex(ValueError, 'authorization/freeze'):
+                    release.verify(self.root)
+                self.manifest[field] = False
+        self.write_manifest()
+        self.assertEqual(release.verify(self.root)['commit'], self.manifest['commit'])
+
     def test_tampered_migration_artifact_is_rejected(self):
         (self.root/'migrations/efbundle').write_text('altered')
         with self.assertRaisesRegex(ValueError, 'checksum'): release.verify(self.root)
+
+    def test_release_with_mismatched_image_source_is_rejected(self):
+        self.manifest['images'][0]['commit'] = 'b' * 40
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, 'source/digest'): release.verify(self.root)
 
     def test_cross_directory_checksum_path_is_rejected(self):
         self.manifest['checksums']['../outside'] = '0'*64

@@ -173,6 +173,14 @@ class RepositoryGateTests(unittest.TestCase):
 class ComposeIsolationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        compose_source = (ROOT / 'docker/compose.pilot.yml').read_text()
+        api_source = compose_source.split('  api:\n', 1)[1].split('  worker:\n', 1)[0]
+        cls.receipt_bind_declared = bool(re.search(
+            r'(?m)^      - type: bind\n'
+            r'        source: \$\{V3_RECEIPT_STORAGE_DIRECTORY:[^\n]+\}\n'
+            r'        target: /run/weymela-v3/receipts\n'
+            r'        read_only: false\n'
+            r'        bind: \{ create_host_path: false \}$', api_source))
         cls.directory = tempfile.TemporaryDirectory(prefix='v3-compose-fixture-')
         root = pathlib.Path(cls.directory.name)
         (root / 'receipts').mkdir(mode=0o700)
@@ -235,6 +243,13 @@ class ComposeIsolationTests(unittest.TestCase):
                     'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_RECEIPT_STORAGE_DIRECTORY': str(root/'receipts'),
                     'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
         cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
+        # Some Compose releases omit explicit false values from rendered JSON.
+        # Restore only the source-proven value for preflight fixture checks.
+        if cls.receipt_bind_declared:
+            mounts = [item for item in cls.config['services']['api']['volumes']
+                      if item.get('target') == '/run/weymela-v3/receipts']
+            if len(mounts) == 1 and mounts[0].get('bind', {}).get('create_host_path') is None:
+                mounts[0].setdefault('bind', {})['create_host_path'] = False
 
     @classmethod
     def tearDownClass(cls):
@@ -279,6 +294,7 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertNotIn('volumes', worker)
 
     def test_cookie_certificate_and_persistent_keyring_are_api_only(self):
+        self.assertTrue(self.receipt_bind_declared, 'API receipt source must explicitly forbid host-path creation')
         api = self.config['services']['api']
         self.assertIn('v3-cookie-protection.pfx', {item['source'] for item in api['secrets']})
         key_mount = next(item for item in api['volumes'] if item['target'] == '/run/weymela-v3/keys')
@@ -292,6 +308,7 @@ class ComposeIsolationTests(unittest.TestCase):
             service = self.config['services'][part]
             self.assertNotIn('v3-cookie-protection.pfx', {item['source'] for item in service.get('secrets', [])})
             self.assertNotIn('/run/weymela-v3/keys', {item.get('target') for item in service.get('volumes', [])})
+            self.assertNotIn('/run/weymela-v3/receipts', {item.get('target') for item in service.get('volumes', [])})
 
     def test_firebase_admin_and_resend_secrets_are_api_only(self):
         api = self.config['services']['api']
@@ -370,6 +387,11 @@ class ComposeIsolationTests(unittest.TestCase):
         receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
         config['services']['web']['volumes'] = [receipt]
         self.assertTrue(preflight.validate(config, self.manifest()))
+        config = copy.deepcopy(self.config)
+        receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
+        receipt['bind']['create_host_path'] = True
+        self.assertIn('api: private persistent receipt bind mount is required.',
+                      preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_disabled_or_mismatched_authentication(self):
         for key, value in (

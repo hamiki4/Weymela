@@ -28,6 +28,7 @@ public sealed class RuntimeOptions
     public string CookieCertificatePath { get; init; } = "";
     public string? CookieCertificatePassword { get; init; }
     public string DepositMode { get; init; } = "Disabled";
+    public string ReceiptDirectory { get; init; } = "";
     public string SocialMode { get; init; } = "Disabled";
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
@@ -38,6 +39,8 @@ public sealed class RuntimeOptions
     public int RateLimitMultiplier { get; init; } = 1;
     public string[] TrustedProxies { get; init; } = [];
     public const int RequestBytes = 32 * 1024;
+    public const int ReceiptBytes = 4 * 1024 * 1024;
+    public const int ReceiptRequestBytes = ReceiptBytes + RequestBytes;
 
     public static RuntimeOptions Load(IConfiguration config, string environment, bool worker = false)
     {
@@ -119,6 +122,19 @@ public sealed class RuntimeOptions
         }
         var deposits = config["V3:Deposits:Mode"] ?? "Disabled";
         Require(deposits is "Disabled" or "ManualApproval" || dev && deposits == "Development", "No configured deposit provider/approval mechanism.");
+        var receiptDirectory = config["V3:Deposits:ReceiptDirectory"] ?? "";
+        if (deposits == "ManualApproval")
+        {
+            Require(Path.IsPathFullyQualified(receiptDirectory) && Directory.Exists(receiptDirectory), "A private durable receipt directory is required for manual deposits.");
+            if (!dev)
+            {
+                var directory = new DirectoryInfo(receiptDirectory);
+                Require(directory.LinkTarget is null, "The private receipt directory cannot be a symlink.");
+                if (OperatingSystem.IsLinux())
+                    Require(File.GetUnixFileMode(receiptDirectory) == (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute),
+                        "The private receipt directory must have mode 0700.");
+            }
+        }
         var social = config["V3:Social:Mode"] ?? "Disabled";
         Require(social == "Disabled" || dev && social == "Test", "Live social providers require an approved adapter; test providers cannot run outside Development.");
         Require(!config.GetValue<bool>("V3:Push:Enabled"), "Push is not connected; in-app notifications do not require push.");
@@ -139,7 +155,7 @@ public sealed class RuntimeOptions
             ResendApiKey = resendApiKey, ResendFromAddress = resendFromAddress, ResendFromName = resendFromName,
             FirebaseAdminCredentialsPath = firebaseAdminCredentials,
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
-            CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, SocialMode = social,
+            CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
             FinancialWritesEnabled = financialWrites,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies

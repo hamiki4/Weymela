@@ -131,6 +131,7 @@ REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"wor
 REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_platform_promotional_funding_account() FROM PUBLIC, :"worker_role";
 REVOKE EXECUTE ON FUNCTION v3.check_admin_promotional_funding() FROM PUBLIC, :"worker_role";
+REVOKE EXECUTE ON FUNCTION v3.assign_creator_number() FROM PUBLIC, :"worker_role";
 
 GRANT EXECUTE ON FUNCTION v3.guard_outbox_envelope() TO :"worker_role";
 GRANT EXECUTE ON FUNCTION v3.guard_notification_identity() TO :"worker_role";

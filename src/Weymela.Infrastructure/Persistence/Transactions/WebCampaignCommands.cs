@@ -68,7 +68,7 @@ public sealed partial class FinancialCommands
             throw new ApplicationFailure(FailureKind.Validation, "This Promotion does not match your current profile or has no available Creator capacity.");
         if (!await db.CommercePermissions.AnyAsync(x => x.SubjectId == p.BusinessId && x.Role == ActorRole.Business && x.IsActive, token))
             throw new ApplicationFailure(FailureKind.Validation, "This Promotion is not accepting requests.");
-        if(c.Platform is {} platform && (c.CreatorSocialProfileId is not {} profileId || !await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==c.Actor.CreatorId&&x.Platform==platform&&x.IsActive,token)))
+        if(c.Platform is {} platform && (c.CreatorSocialProfileId is not {} profileId || !await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==c.Actor.CreatorId&&x.Platform==platform&&x.IsActive&&x.VerificationStatus=="Verified",token)))
             throw new ApplicationFailure(FailureKind.Forbidden,"The selected Creator social profile is not available.");
         await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Creator,
             [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], token);

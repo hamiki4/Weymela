@@ -42,7 +42,8 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
     if (!selected || !reason.trim() || (selected.command === "close" && !confirmClose)) return;
     const { row, command } = selected;
     void action.run(async key => {
-      if (row.status === "Pending") await post(`/admin/accounts/preauthorizations/${row.id}/cancel`, { action: "cancel", reason: reason.trim() }, key);
+      if (command === "delete-role") await post(`/admin/accounts/${row.userId ?? row.id}/roles/delete`, { role: row.role, reason: reason.trim() }, key);
+      else if (row.status === "Pending") await post(`/admin/accounts/preauthorizations/${row.id}/cancel`, { action: "cancel", reason: reason.trim() }, key);
       else await post(`/admin/accounts/${row.userId ?? row.id}/lifecycle`, { action: command, reason: reason.trim(), confirmClose: command === "close" }, key);
       setSelected(null); setReason(""); setConfirmClose(false); resource.reload();
     });
@@ -61,25 +62,25 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
     <Resource resource={resource}>{rows => {
       const filtered = area === "Admin" && role ? rows.filter(row => row.role === role) : rows;
       return <DataTable rows={filtered} rowKey={row => `${row.id}-${row.role}`} label={areaTitle[area]} columns={[
-        { label: area, cell: row => <strong>{row.name}</strong> },
+        { label: area, cell: row => <Link to={`/admin/accounts/${row.userId ?? row.id}?role=${row.role}`}><strong>{row.name}</strong></Link> },
         { label: area === "Admin" ? "Role" : "Contact", cell: row => area === "Admin" ? roleName(row.role) : row.safeIdentifier },
         { label: "Status", cell: row => <Badge status={displayStatus(row.status)} /> },
         { label: "Joined", cell: row => row.joinedAtUtc ? date(row.joinedAtUtc) : "—" },
         { label: "Actions", cell: row => <AccountActions row={row} onChoose={command => setSelected({ row, command })} /> },
-      ]} card={row => <div className="admin-mobile-row"><div><strong>{row.name}</strong><small>{area === "Admin" ? roleName(row.role) : row.safeIdentifier}</small></div><div className="admin-mobile-row-meta"><Badge status={displayStatus(row.status)} /><AccountActions row={row} onChoose={command => setSelected({ row, command })} /></div>{row.joinedAtUtc && <small>Joined {date(row.joinedAtUtc)}</small>}</div>} empty={<Empty title={`No ${areaTitle[area].toLowerCase()} match`} message="Try another filter or search term." icon="people" />} />;
+      ]} card={row => <div className="admin-mobile-row"><div><Link to={`/admin/accounts/${row.userId ?? row.id}?role=${row.role}`}><strong>{row.name}</strong></Link><small>{area === "Admin" ? roleName(row.role) : row.safeIdentifier}</small></div><div className="admin-mobile-row-meta"><Badge status={displayStatus(row.status)} /><AccountActions row={row} onChoose={command => setSelected({ row, command })} /></div>{row.joinedAtUtc && <small>Joined {date(row.joinedAtUtc)}</small>}</div>} empty={<Empty title={`No ${areaTitle[area].toLowerCase()} match`} message="Try another filter or search term." icon="people" />} />;
     }}</Resource>
     <Dialog title={selected ? `${commandLabel(selected.command)} ${selected.row.name}` : "Account action"} open={!!selected} onClose={() => { if (!action.busy) { setSelected(null); setReason(""); setConfirmClose(false); } }}>
-      {selected && <form onSubmit={event => { event.preventDefault(); runLifecycle(); }}><Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{selected.command === "close" && <label className="check-line"><input type="checkbox" checked={confirmClose} onChange={event => setConfirmClose(event.target.checked)} /> Confirm terminal closure. Financial and security history remains.</label>}{action.error && <Notice error>{action.error}</Notice>}<div className="actions"><Button type="submit" disabled={action.busy || !reason.trim() || (selected.command === "close" && !confirmClose)}>{action.busy ? "Saving…" : commandLabel(selected.command)}</Button><Button variant="secondary" onClick={() => setSelected(null)} disabled={action.busy}>Cancel</Button></div></form>}
+      {selected && <form onSubmit={event => { event.preventDefault(); runLifecycle(); }}>{selected.command === "delete-role" && <p>This permanently removes this {roleName(selected.row.role)} profile. Other profiles remain available.</p>}<Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{selected.command === "close" && <label className="check-line"><input type="checkbox" checked={confirmClose} onChange={event => setConfirmClose(event.target.checked)} /> Confirm terminal closure. Financial and security history remains.</label>}{action.error && <Notice error>{action.error}</Notice>}<div className="actions"><Button type="submit" className={selected.command === "delete-role" ? "destructive-action" : ""} disabled={action.busy || !reason.trim() || (selected.command === "close" && !confirmClose)}>{action.busy ? "Saving…" : commandLabel(selected.command)}</Button><Button variant="secondary" onClick={() => setSelected(null)} disabled={action.busy}>Cancel</Button></div></form>}
     </Dialog>
   </div>;
 }
 
-function commandLabel(command: string) { return command === "close" ? "Close Account" : command === "cancel" ? "Cancel preauthorization" : command[0].toUpperCase() + command.slice(1); }
+function commandLabel(command: string) { return command === "delete-role" ? "Delete Role" : command === "close" ? "Close Account" : command === "cancel" ? "Cancel preauthorization" : command[0].toUpperCase() + command.slice(1); }
 function roleName(role: string) { return role === "PlatformAdmin" ? "Platform Admin" : role === "OperationsAdmin" ? "Operations Admin" : role; }
 function AccountActions({ row, onChoose }: { row: AdminAccountSummary; onChoose: (command: string) => void }) {
   if (!row.canManage) return <span className="muted">—</span>;
-  const commands = row.status === "Pending" ? ["cancel"] : row.status === "Active" ? ["lock", "deactivate", "close"] : row.status === "Suspended" ? ["unlock", "deactivate", "close"] : row.status === "Disabled" ? ["reactivate", "close"] : [];
-  return commands.length ? <details className="admin-action-menu"><summary aria-label={`Actions for ${row.name}`}>•••</summary><div role="menu">{commands.map(command => <button key={command} type="button" role="menuitem" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onChoose(command); }}>{commandLabel(command)}</button>)}</div></details> : <span className="muted">—</span>;
+  const commands = row.status === "Pending" ? ["cancel"] : row.status === "Active" ? ["lock", "deactivate", "close", "delete-role"] : row.status === "Suspended" ? ["unlock", "deactivate", "close", "delete-role"] : row.status === "Disabled" ? ["reactivate", "close", "delete-role"] : [];
+  return commands.length ? <details className="admin-action-menu"><summary aria-label={`Actions for ${row.name}`}>•••</summary><div role="menu">{commands.map(command => <button key={command} type="button" role="menuitem" className={command === "delete-role" ? "destructive-action" : ""} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onChoose(command); }}>{commandLabel(command)}</button>)}</div></details> : <span className="muted">—</span>;
 }
 
 export function AdminAccountCreate({ area }: { area: AccountArea }) {
@@ -113,14 +114,27 @@ export function AdminAccountDetail() {
   const action = useAction();
   const [reason, setReason] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [deleteEntireOpen, setDeleteEntireOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const manage = true;
+  const deletion = useResource<{ status: string }>(`/admin/accounts/${id}/deletion-status`);
   return <>
     <Link className="back-link" to={areaPath[resource.data?.account.role === "Customer" ? "Customer" : resource.data?.account.role === "Creator" ? "Creator" : resource.data?.account.role === "Business" ? "Business" : "Admin"]}>← Back to list</Link>
-    <Resource resource={resource}>{(detail) => <AccountDetailContent detail={detail} manage={manage} reason={reason} setReason={setReason} confirmClose={confirmClose} setConfirmClose={setConfirmClose} action={action} reload={resource.reload} />}</Resource>
+    <Resource resource={resource}>{(detail) => <AccountDetailContent detail={detail} manage={manage} reason={reason} setReason={setReason} confirmClose={confirmClose} setConfirmClose={setConfirmClose} action={action} reload={resource.reload} deletionStatus={deletion.data?.status} onDeleteEntire={() => setDeleteEntireOpen(true)} onRefreshDeletion={deletion.reload} />}</Resource>
+    <Dialog title="Delete Entire Weymela Account?" open={deleteEntireOpen} onClose={() => { if (!action.busy) setDeleteEntireOpen(false); }}>
+      <p>This removes access to all profiles for this identity. This action cannot be undone. Financial and audit history is retained.</p>
+      <form onSubmit={event => { event.preventDefault(); if (!id || !deleteReason.trim() || deleteConfirmation !== "DELETE") return; void action.run(async key => { await post(`/admin/accounts/${id}/delete-entire`, { reason: deleteReason.trim(), confirmation: deleteConfirmation }, key); setDeleteEntireOpen(false); setDeleteReason(""); setDeleteConfirmation(""); deletion.reload(); resource.reload(); }); }}>
+        <Field label="Deletion reason"><textarea required maxLength={500} value={deleteReason} onChange={event => setDeleteReason(event.target.value)} /></Field>
+        <Field label="Type DELETE to confirm"><input autoComplete="off" value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} /></Field>
+        {action.error && <Notice error>{action.error}</Notice>}
+        <div className="actions"><Button type="button" variant="secondary" onClick={() => setDeleteEntireOpen(false)} disabled={action.busy}>Cancel</Button><Button type="submit" className="destructive-action" disabled={action.busy || !deleteReason.trim() || deleteConfirmation !== "DELETE"}>Delete Entire Account</Button></div>
+      </form>
+    </Dialog>
   </>;
 }
 
-function AccountDetailContent({ detail, manage, reason, setReason, confirmClose, setConfirmClose, action, reload }: { detail: AccountDetail; manage: boolean; reason: string; setReason: (value: string) => void; confirmClose: boolean; setConfirmClose: (value: boolean) => void; action: ReturnType<typeof useAction>; reload: () => void }) {
+function AccountDetailContent({ detail, manage, reason, setReason, confirmClose, setConfirmClose, action, reload, deletionStatus, onDeleteEntire, onRefreshDeletion }: { detail: AccountDetail; manage: boolean; reason: string; setReason: (value: string) => void; confirmClose: boolean; setConfirmClose: (value: boolean) => void; action: ReturnType<typeof useAction>; reload: () => void; deletionStatus?: string; onDeleteEntire: () => void; onRefreshDeletion: () => void }) {
   const account = detail.account;
   const roleData = detail.roleData as Record<string, unknown> | null;
   const targetId = account.userId ?? account.id;
@@ -135,6 +149,10 @@ function AccountDetailContent({ detail, manage, reason, setReason, confirmClose,
     </div>
     {detail.transactions.length > 0 && <Section title="Commerce activity"><div className="stack-list">{detail.transactions.map((transaction) => <div className="amount-row" key={transaction.id}><div><strong>{transaction.purchaseAmount.toLocaleString()} {transaction.currency}</strong><small>{dateTime(transaction.occurredAtUtc)} · {transaction.status}</small></div><span>{transaction.businessId}</span></div>)}</div></Section>}
     {businessId && <BusinessCashiers businessId={businessId} />}
+    {account.role !== "Cashier" && account.status !== "Pending" && <Section title="Entire account" description="Identity-level action affecting every Customer, Creator, Business, and Admin role owned by this account.">
+      {deletionStatus && deletionStatus !== "NotRequested" && <Notice>Identity deletion: {deletionStatus === "Completed" ? "completed; email released" : deletionStatus === "RetryRequired" ? "needs retry" : "pending external identity removal"}.</Notice>}
+      <div className="actions"><Button variant="secondary" className="destructive-action" onClick={onDeleteEntire} disabled={deletionStatus === "Completed" || deletionStatus === "Pending"}>{deletionStatus === "RetryRequired" ? "Retry Entire Account Deletion" : "Delete Entire Account"}</Button>{deletionStatus === "Pending" && <Button variant="secondary" onClick={onRefreshDeletion}>Refresh status</Button>}</div>
+    </Section>}
   </>;
 }
 

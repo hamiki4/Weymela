@@ -135,7 +135,21 @@ public sealed partial class WorkspaceQueries
             permissions.Where(x => x.Role == ActorRole.Creator).Select(x => x.SubjectId).Distinct().Count(),
             permissions.Where(x => x.Role == ActorRole.Business).Select(x => x.SubjectId).Distinct().Count(),
             firstIdentifiers.Count(x => activeUserIds.Contains(x.UserId)));
+        var businessNames = await db.PublicWorkspaceProfiles.AsNoTracking()
+            .Where(x => x.Role == ActorRole.Business).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
+        var promotionNames = promotions.ToDictionary(x => x.Id, x => x.Title);
+        var ugcNames = ugc.ToDictionary(x => x.Id, x => x.Title);
+        var purchases = sales.Select(x => new AdminPurchaseRow(x.Id, x.PromotionId, null, "VIEW_PLUS_SALE",
+                promotionNames.GetValueOrDefault(x.PromotionId, "Promotion"), businessNames.GetValueOrDefault(x.BusinessId, "Business"),
+                x.PurchaseAmount.Amount, x.TotalPromotionCharge.Amount, x.CustomerCashbackAmount.Amount,
+                x.CreatorCommissionAmount.Amount, x.PlatformRevenueAmount.Amount, x.CreatedAtUtc, x.Status.ToString()))
+            .Concat(ugcSales.Select(x => new AdminPurchaseRow(x.Id, x.UgcOpportunityId, x.UgcAssignmentId,
+                "UGC_PLUS_SALE", ugcNames.GetValueOrDefault(x.UgcOpportunityId, "UGC"),
+                businessNames.GetValueOrDefault(x.BusinessId, "Business"), x.PurchaseAmount.Amount,
+                x.TotalOfferCharge.Amount, x.CustomerDiscountAmount.Amount, 0m,
+                x.PlatformRevenueAmount.Amount, x.CreatedAtUtc, "Recorded")))
+            .OrderByDescending(x => x.OccurredAtUtc).Take(100).ToArray();
         return new(start, end, period, promotionTypes, ugcTypes, accounts,
-            wallets.Sum(x => x.TotalBalance.Amount), platform.Unsettled.Amount);
+            wallets.Sum(x => x.TotalBalance.Amount), platform.Unsettled.Amount, purchases);
     }
 }

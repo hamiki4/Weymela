@@ -102,7 +102,7 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
         if(!string.IsNullOrWhiteSpace(input.Platform))
         {if(!Enum.TryParse<CreatorPlatform>(input.Platform,true,out var parsed)||!Enum.IsDefined(parsed))throw new ApplicationFailure(FailureKind.Validation,"Choose a supported Promotion platform.");platform=parsed;}
         if(platform is not null&&input.CreatorSocialProfileId is null)throw new ApplicationFailure(FailureKind.Validation,"Choose one of your Creator social profiles.");
-        if(input.CreatorSocialProfileId is {} profileId&&!await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==actor.CreatorId&&x.IsActive&&x.Platform==platform,ct))
+        if(input.CreatorSocialProfileId is {} profileId&&!await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==actor.CreatorId&&x.IsActive&&x.VerificationStatus=="Verified"&&x.Platform==platform,ct))
             throw new ApplicationFailure(FailureKind.Forbidden,"This social profile is not available to the active Creator.");
         return await Commands.JoinCampaignOnceAsync(new(actor,id,input.Message,input.ContentConcept,new(p.Category,p.Region,p.VerifiedFollowers,p.SocialVerified),Now,input.CreatorSocialProfileId,platform),key,ct);
     }

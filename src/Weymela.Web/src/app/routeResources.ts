@@ -16,6 +16,7 @@ export function routeResources(pathname: string): string[] {
     case "/creator/discover": return ["/creator/discover", "/creator/ugc"];
     case "/creator/promotions": return ["/creator/campaigns", "/creator/requests", "/creator/ugc/assignments", "/creator/ugc/requests"];
     case "/creator/earnings": return ["/creator/earnings"];
+    case "/creator/pricing": return ["/creator/pricing"];
     case "/creator/legal": return ["/legal/current"];
     case "/profile": return ["/profile"];
     case "/creator/profile": return ["/profile"];
@@ -25,6 +26,7 @@ export function routeResources(pathname: string): string[] {
     case "/customer/transactions": return ["/customer/transactions"];
     case "/checkout":
     case "/checkout/transactions": return ["/checkout/recent"];
+    case "/business/transactions": return ["/business/transactions"];
     case "/notifications": return ["/notifications"];
     default:
       if (/^\/business\/campaigns\/[^/]+$/.test(pathname)) return [pathname, "/business/wallet"];

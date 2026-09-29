@@ -187,6 +187,9 @@ public sealed class ProductIntegrationServiceTests(PostgresFixture fixture)
             "Creator", creator, null, "Mimi Creates", "ACTIVE", "v2-creator-once"), default);
         Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == seeded.UserId
             && x.Role == ActorRole.Creator && x.SubjectId == creator && x.IsActive));
+        var creatorProfile = await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == creator && x.Role == ActorRole.Creator);
+        Assert.True(creatorProfile.CreatorNumber >= 1000);
+        Assert.StartsWith("CR-", creatorProfile.PublicId, StringComparison.Ordinal);
 
         var business = Guid.NewGuid();
         await service.SynchronizeProfileAsync(new(seeded.UserId, seeded.BindingId, 1,

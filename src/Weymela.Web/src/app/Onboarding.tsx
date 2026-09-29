@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
 import { actorRoleNameFromWire } from "../api/actorRoleContract";
@@ -21,6 +21,9 @@ const choices = [
   ["Creator", "Promote businesses and earn", "Become a Creator", "role-creator"],
   ["Business", "Create promotions with creators", "Add a Business", "role-business"],
 ] as const;
+const socialPlatforms = ["TikTok", "YouTube", "Instagram", "Facebook"] as const;
+type SocialPlatform = typeof socialPlatforms[number];
+const emptySocial = (): Record<SocialPlatform, string> => ({ TikTok: "", YouTube: "", Instagram: "", Facebook: "" });
 function publicRole(role: Enrollment["role"]): OnboardingRole | null {
   const name = actorRoleNameFromWire(role);
   return name === "Customer" || name === "Creator" || name === "Business" ? name : null;
@@ -45,6 +48,14 @@ function LegacyOnboarding() {
   const [role, setRole] = useState<OnboardingRole | null>(null);
   const [preferredName, setPreferredName] = useState("");
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [category, setCategory] = useState("");
+  const [region, setRegion] = useState("");
+  const [submission, setSubmission] = useState("");
+  const [socialUrls, setSocialUrls] = useState(emptySocial);
+  const [openSocial, setOpenSocial] = useState<SocialPlatform | null>(null);
+  const [submittedRole, setSubmittedRole] = useState<"Creator" | "Business" | null>(null);
+  useEffect(() => { status.reload(); void refresh(); }, []);
   if (loading) return <div className="loading" role="status">Opening your account setup…</div>;
   if (!user) return <Navigate to="/sign-in" replace />;
 
@@ -53,6 +64,8 @@ function LegacyOnboarding() {
     setRole(null);
     setPreferredName("");
     setLegalAccepted(false);
+    setDisplayName(""); setCategory(""); setRegion(""); setSubmission("");
+    setSocialUrls(emptySocial()); setOpenSocial(null);
   };
   const submitCustomer = () => void action.run(async (key) => {
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
@@ -72,6 +85,17 @@ function LegacyOnboarding() {
     await refresh();
     navigate("/customer/offers", { replace: true });
   });
+  const submitAdditional = (selected: "Creator" | "Business") => void action.run(async key => {
+    const socialProfiles = socialPlatforms.filter(platform => socialUrls[platform].trim())
+      .map(platform => ({ platform, profileUrl: socialUrls[platform].trim() }));
+    if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
+    await post("/onboarding/profile", { role: selected, displayName: displayName.trim(),
+      region: region.trim() || null, category: category.trim() || null, submission: submission.trim() || null,
+      socialProfiles: selected === "Creator" ? socialProfiles : [] }, key);
+    cancel();
+    setSubmittedRole(selected);
+    status.reload();
+  });
 
   return <main className="main-content page-shell section-kicker-space onboarding-page">
     <PageHeader eyebrow="Your Weymela account" title="How do you want to use Weymela?"
@@ -80,14 +104,15 @@ function LegacyOnboarding() {
     <Resource resource={status}>{(data) => {
       const pending = new Set(data.profiles.filter((item) => item.status === "Pending" || item.status === 0)
         .map((item) => publicRole(item.role)));
+      if (submittedRole) pending.add(submittedRole);
       const unavailable = new Set(data.profiles.filter((item) => {
         const activeRole = publicRole(item.role);
         return (item.status === "Approved" || item.status === 1) && activeRole !== null
           && !approved.has(activeRole);
       }).map((item) => publicRole(item.role)));
       return <>
-        {data.profiles.length > 0 && <Section title="Your profiles"><div className="stack-list">
-          {data.profiles.map((item) => <div className="amount-row" key={item.id}><div><strong>
+        {data.profiles.some(item => statusLabel(item.status) === "Rejected") && <Section title="Previous requests"><div className="stack-list">
+          {data.profiles.filter(item => statusLabel(item.status) === "Rejected").map((item) => <div className="amount-row" key={item.id}><div><strong>
             {item.displayName || publicRole(item.role) || "Profile"} — {unavailable.has(publicRole(item.role))
               && (item.status === "Approved" || item.status === 1) ? "Unavailable" : statusLabel(item.status)}
           </strong>{item.decisionReason && <small>{item.decisionReason}</small>}</div></div>)}
@@ -95,7 +120,7 @@ function LegacyOnboarding() {
         <Section title="Choose a profile" className="onboarding-choice-section">
           <div className="content-grid profile-choice-grid profile-selection-options">
             {choices.map(([choice, description, actionLabel, className]) => {
-              const state = approved.has(choice) ? "Already added" : pending.has(choice) ? "Pending"
+              const state = approved.has(choice) ? "Already added" : pending.has(choice) ? "Under review"
                 : unavailable.has(choice) ? "Unavailable" : actionLabel;
               const disabled = state !== actionLabel;
               return <button key={choice} className={`profile-choice ${className}${role === choice ? " selected" : ""}`}
@@ -104,12 +129,17 @@ function LegacyOnboarding() {
                   setRole(choice);
                   setPreferredName("");
                   setLegalAccepted(false);
+                  setDisplayName(""); setCategory(""); setRegion(""); setSubmission("");
+                  setSocialUrls(emptySocial()); setOpenSocial(null); setSubmittedRole(null);
                 }}>
                 <strong>{choice}</strong><span>{description}</span><span className="profile-choice-action">{state}</span>
               </button>;
             })}
             {approved.size === 3 && <p className="fine-print">All three profiles are active. Switch profile to use another one.</p>}
           </div>
+          {(["Creator", "Business"] as const).filter(item => pending.has(item)).map(item =>
+            <div className="onboarding-pending-line" role="status" key={item}><strong>Under review</strong>
+              <span>Your {item} profile is waiting for approval.</span></div>)}
           {role === "Customer" && <RoleOnboardingShell role="Customer" title="Use as Customer"
             description="Choose the name you'd like to use in Weymela.">
             <Resource resource={legal}>{(documents) => documents.available ? <form
@@ -137,11 +167,35 @@ function LegacyOnboarding() {
               title="Customer setup isn't available yet." message="Required terms and privacy information have not been published."
               action={<Button variant="secondary" onClick={cancel}>Back</Button>} /></div>}</Resource>
           </RoleOnboardingShell>}
-          {(role === "Creator" || role === "Business") && <RoleOnboardingShell role={role}
+          {(role === "Creator" || role === "Business") && !pending.has(role) && <RoleOnboardingShell role={role}
             title={role === "Creator" ? "Creator setup" : "Business setup"}
-            description={role === "Creator" ? "Your Creator profile is under review."
-              : "Your Business profile is under review."}>
-            <div className="onboarding-under-review" role="status"><p>Your profile request is under review. We’ll notify you when the review is complete.</p></div>
+            description={role === "Creator" ? "Tell us about your Creator profile." : "Tell us about your Business."}>
+            <form className="form-grid onboarding-form role-application-form" onSubmit={event => { event.preventDefault(); submitAdditional(role); }}>
+              <Field label={role === "Creator" ? "Creator name" : "Business name"} wide>
+                <input required maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} /></Field>
+              <Field label={role === "Creator" ? "Creator category (optional)" : "Business type (optional)"}>
+                <input maxLength={80} value={category} onChange={event => setCategory(event.target.value)} /></Field>
+              <Field label="Region (optional)"><input maxLength={80} value={region} onChange={event => setRegion(event.target.value)} /></Field>
+              <Field label={role === "Creator" ? "About your work (optional)" : "About your Business (optional)"} wide>
+                <textarea maxLength={3000} rows={2} value={submission} onChange={event => setSubmission(event.target.value)} /></Field>
+              {role === "Creator" && <div className="form-wide onboarding-social-profiles">
+                <h4>Social Profiles</h4><p>Add at least one public profile link.</p>
+                {socialPlatforms.map(platform => <div className="onboarding-social-row" key={platform}>
+                  <strong>{platform}</strong>
+                  {openSocial === platform ? <div className="onboarding-social-edit">
+                    <input type="url" aria-label={`${platform} profile URL`} placeholder={`https://www.${platform.toLowerCase()}.com/…`}
+                      maxLength={500} value={socialUrls[platform]}
+                      onChange={event => setSocialUrls(current => ({ ...current, [platform]: event.target.value }))} />
+                    <Button type="button" variant="quiet" onClick={() => { setSocialUrls(current => ({ ...current, [platform]: "" })); setOpenSocial(null); }}>Remove</Button>
+                  </div> : <><small>{socialUrls[platform] ? "Added" : "Not added"}</small>
+                    <Button type="button" variant="quiet" onClick={() => setOpenSocial(platform)}>{socialUrls[platform] ? "Edit" : `Add ${platform}`}</Button></>}
+                </div>)}
+              </div>}
+              {action.error && <Notice error>{action.error}</Notice>}
+              <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
+                <Button type="submit" disabled={action.busy || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].trim()))}>
+                  {action.busy ? "Submitting…" : "Submit for Review"}</Button></div>
+            </form>
           </RoleOnboardingShell>}
         </Section>
       </>;

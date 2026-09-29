@@ -43,8 +43,10 @@ public sealed class UgcOpportunity
     public DateTime? PublishedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
     public long Version { get; private set; }
-    public Money PerAssignmentFee => new(decimal.Round(CreatorPayment.Amount
-        * PricingSnapshot.PlatformFeePercent / 100m, 2, MidpointRounding.AwayFromZero), CreatorPayment.Currency);
+    // RequiredFunding and CreatorPayment are frozen per opportunity. Deriving the
+    // difference preserves the terms of opportunities created before gross
+    // commitments became the Business-facing input.
+    public Money PerAssignmentFee => new(RequiredFunding.Amount / CreatorCapacity - CreatorPayment.Amount, CreatorPayment.Currency);
     // Reserve and consume the same rounded per-assignment amount so the final
     // approval cannot strand a fractional-cent residual in the reservation.
     public Money PlatformFee => new(PerAssignmentFee.Amount * CreatorCapacity, CreatorPayment.Currency);
@@ -64,15 +66,14 @@ public sealed class UgcOpportunity
         if (dueDateUtc.Kind != DateTimeKind.Utc || dueDateUtc <= now)
             throw new ArgumentException("UGC due date must be in the future.");
         if (creatorCapacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(creatorCapacity));
-        if (!pricing.IsValid || creatorPayment.Amount < pricing.MinimumCreatorPayment.Amount)
-            throw new InvalidOperationException("Creator payment is below the current minimum.");
+        if (!pricing.IsValid) throw new InvalidOperationException("UGC pricing is unavailable.");
+        var netPayment = NetCreatorPayment(creatorPayment, pricing);
         BusinessId = businessId; Title = title.Trim(); Slogan = Clean(slogan, 160);
         ContentType = contentType; Instructions = instructions.Trim(); ResourcesJson = resourcesJson;
         Location = Clean(location, 160); DueDateUtc = dueDateUtc; ProductProvided = productProvided;
         CreatorMustPurchase = creatorMustPurchase; UsageRights = Clean(usageRights, 2000);
-        CreatorPayment = creatorPayment; CreatorCapacity = creatorCapacity; PricingSnapshot = pricing;
-        RequiredFunding = new Money(decimal.Round(creatorPayment.Amount * creatorCapacity, 2)
-            + PlatformFee.Amount, creatorPayment.Currency);
+        CreatorPayment = netPayment; CreatorCapacity = creatorCapacity; PricingSnapshot = pricing;
+        RequiredFunding = new Money(creatorPayment.Amount * creatorCapacity, creatorPayment.Currency);
         if (pricing.MinimumUgcBudget is { } minimum && RequiredFunding.Amount < minimum.Amount)
             throw new InvalidOperationException("UGC funding is below the current minimum.");
         ReservedFunding = Money.Zero(creatorPayment.Currency); UsedFunding = Money.Zero(creatorPayment.Currency);
@@ -89,7 +90,10 @@ public sealed class UgcOpportunity
 
     public void Publish(BusinessWallet wallet, DateTime now, Guid correlation)
     {
-        Ensure(UgcOpportunityStatus.Draft); wallet.Reserve(RequiredFunding, now, correlation);
+        Ensure(UgcOpportunityStatus.Draft);
+        if (ProductProvided == CreatorMustPurchase)
+            throw new InvalidOperationException("Choose one Product arrangement before publishing UGC.");
+        wallet.Reserve(RequiredFunding, now, correlation);
         ReservedFunding = RequiredFunding; Status = UgcOpportunityStatus.Open; PublishedAtUtc = now; Version++;
     }
     public void ApproveCreator()
@@ -127,7 +131,7 @@ public sealed class UgcOpportunity
         if (string.IsNullOrWhiteSpace(instructions) || instructions.Trim().Length > 4000) throw new ArgumentException("UGC instructions are required.");
         if (dueDateUtc.Kind != DateTimeKind.Utc || dueDateUtc <= now) throw new ArgumentException("UGC due date must be in the future.");
         if (creatorCapacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(creatorCapacity));
-        if (creatorPayment.Amount < PricingSnapshot.MinimumCreatorPayment.Amount) throw new InvalidOperationException("Creator payment is below the current minimum.");
+        var netPayment = NetCreatorPayment(creatorPayment, PricingSnapshot);
         if (requirements.GroupBy(x => x.Platform).Any(x => x.Count() > 1)) throw new ArgumentException("Each UGC platform requirement may be added once.");
         foreach (var item in requirements)
             if (item.MinimumAudience < 0 || string.IsNullOrWhiteSpace(item.Format) || item.Format.Trim().Length > 80)
@@ -135,8 +139,8 @@ public sealed class UgcOpportunity
         Title = title.Trim(); Slogan = Clean(slogan, 160); ContentType = contentType; Instructions = instructions.Trim();
         ResourcesJson = resourcesJson; Location = Clean(location, 160); DueDateUtc = dueDateUtc;
         ProductProvided = productProvided; CreatorMustPurchase = creatorMustPurchase; UsageRights = Clean(usageRights, 2000);
-        CreatorPayment = creatorPayment; CreatorCapacity = creatorCapacity;
-        RequiredFunding = new Money(decimal.Round(creatorPayment.Amount * creatorCapacity, 2) + PlatformFee.Amount, creatorPayment.Currency);
+        CreatorPayment = netPayment; CreatorCapacity = creatorCapacity;
+        RequiredFunding = new Money(creatorPayment.Amount * creatorCapacity, creatorPayment.Currency);
         if (PricingSnapshot.MinimumUgcBudget is { } minimum && RequiredFunding.Amount < minimum.Amount)
             throw new InvalidOperationException("UGC funding is below the current minimum.");
         platformRequirements.Clear();
@@ -153,6 +157,14 @@ public sealed class UgcOpportunity
     }
     private void Ensure(params UgcOpportunityStatus[] allowed)
     { if (!allowed.Contains(Status)) throw new InvalidOperationException($"UGC cannot transition from {Status}."); }
+    private static Money NetCreatorPayment(Money commitment, UgcPricingSnapshot pricing)
+    {
+        var fee = decimal.Round(commitment.Amount * pricing.PlatformFeePercent / 100m, 2, MidpointRounding.AwayFromZero);
+        var net = new Money(commitment.Amount - fee, commitment.Currency);
+        if (net.Amount < pricing.MinimumCreatorPayment.Amount)
+            throw new InvalidOperationException("UGC content commitment is below the current minimum.");
+        return net;
+    }
     private static string? Clean(string? value, int maximum)
     { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > maximum) throw new ArgumentException("UGC information is too long."); return result; }
 }

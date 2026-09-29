@@ -23,6 +23,11 @@ internal static class CommerceEndpoints
             // This is the only transport projection that exposes the one-time token to its issuing Customer.
             return Results.Ok(new QrResponse(qr.SessionId,qr.Token?.Value,qr.ExpiresAtUtc,qr.Replayed));
         });
+        customer.MapPost("/offers/{id:guid}/assignments/{assignmentId:guid}/qr",async(Guid id,Guid assignmentId,HttpContext c,CheckoutService service,CancellationToken ct)=>
+        {
+            var qr=await service.IssueUgcAsync(new(EndpointSupport.Actor(c),id,assignmentId,EndpointSupport.Key(c)),ct);
+            return Results.Ok(new QrResponse(qr.SessionId,qr.Token?.Value,qr.ExpiresAtUtc,qr.Replayed));
+        });
         customer.MapGet("/qr/{id:guid}",async(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>Results.Ok(new{status=await q.QrStatusAsync(EndpointSupport.Actor(c),id,ct)}));
         var checkout=app.MapGroup("/api/checkout").RequireAuthorization("Checkout").AddEndpointFilter<Weymela.Api.Security.ValidatedInputFilter>();
         checkout.MapGet("/recent",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.RecentSalesAsync(EndpointSupport.Actor(c),ct));

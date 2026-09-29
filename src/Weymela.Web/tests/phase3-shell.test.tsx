@@ -32,8 +32,8 @@ afterEach(() => { state.user = null; vi.restoreAllMocks(); vi.unstubAllGlobals()
 describe("Profile and Settings shell", () => {
   it.each([
     ["Customer", "/customer/offers", ["Add Profile"]],
-    ["Creator", "/creator", ["Add Profile", "Social Accounts"]],
-    ["Business", "/business", ["Cashier Management", "Create Cashier"]],
+    ["Creator", "/creator", ["Add Profile", "Social Profiles"]],
+    ["Business", "/business", ["Add Profile", "Cashier Management", "Create Cashier"]],
   ] as const)("separates %s Profile navigation from Settings", async (role, path, extra) => {
     setup(role, path, true);
     const mobile = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
@@ -41,6 +41,8 @@ describe("Profile and Settings shell", () => {
     expect(mobile.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Your notifications" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Settings" })).toHaveAttribute("aria-controls", "settings-menu");
+    expect(screen.getByRole("button", { name: "Open Settings" }).querySelector("svg circle[cx='12'][cy='12']")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Your notifications" }).querySelector("svg[aria-hidden='true']")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open account menu" })).not.toBeInTheDocument();
     expect(document.querySelector(".topbar-right .small-avatar")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open Settings" }));
@@ -50,12 +52,12 @@ describe("Profile and Settings shell", () => {
     expect(sheet.getByRole("button", { name: "Location" })).toBeInTheDocument();
     expect(sheet.getByRole("button", { name: "Sign Out" })).toBeInTheDocument();
     for (const label of extra) expect(sheet.getByRole("link", { name: label })).toBeInTheDocument();
-    if (role === "Customer") expect(sheet.queryByRole("link", { name: "Social Accounts" })).not.toBeInTheDocument();
-    if (role === "Creator") expect(sheet.getByRole("link", { name: "Social Accounts" })).toHaveAttribute("href", "/profile#social-accounts");
+    if (role === "Customer") expect(sheet.queryByRole("link", { name: "Social Profiles" })).not.toBeInTheDocument();
+    if (role === "Creator") expect(sheet.getByRole("link", { name: "Social Profiles" })).toHaveAttribute("href", "/profile#social-profiles");
     if (role === "Business") {
       expect(sheet.getByRole("link", { name: "Cashier Management" })).toHaveAttribute("href", "/business/cashiers");
       expect(sheet.getByRole("link", { name: "Create Cashier" })).toHaveAttribute("href", "/business/cashiers#create-cashier");
-      expect(sheet.queryByRole("link", { name: "Add Profile" })).not.toBeInTheDocument();
+      expect(sheet.getByRole("link", { name: "Add Profile" })).toHaveAttribute("href", "/onboarding");
     }
     expect(sheet.queryByText("INTERNAL-ID")).not.toBeInTheDocument();
     await userEvent.selectOptions(sheet.getByLabelText("Switch profile"), "1");
@@ -98,10 +100,11 @@ describe("Profile and Settings shell", () => {
   ] as const)("marks the Admin section for child route %s", async (path, label, moreActive) => {
     setup("PlatformAdmin", path);
     const mobile = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
-    expect(mobile.getByRole("button", { name: "More navigation" })).toHaveAttribute("aria-pressed", String(moreActive));
+    const more = mobile.getByRole("link", { name: "More navigation" });
+    expect(more).toHaveAttribute("href", "/admin/more");
+    expect(more.classList.contains("active")).toBe(moreActive);
     if (moreActive) {
-      await userEvent.click(mobile.getByRole("button", { name: "More navigation" }));
-      expect(within(screen.getByRole("navigation", { name: "More navigation" })).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+      expect(screen.queryByRole("dialog", { name: "More navigation" })).not.toBeInTheDocument();
     } else {
       expect(mobile.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
     }

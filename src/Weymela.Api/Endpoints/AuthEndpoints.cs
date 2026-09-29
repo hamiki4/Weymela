@@ -131,13 +131,15 @@ internal static class AuthEndpoints
                     DeviceSessionCredentialCookie.Options(development, deviceSession.Session.Session));
             return Results.NoContent();
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
-        app.MapPost("/api/auth/email/start", async (EmailCodeStart input, EmailAuthService auth, CancellationToken ct) =>
+        app.MapPost("/api/auth/email/start", async (EmailCodeStart input, EmailAuthService auth, TimeProvider clock, CancellationToken ct) =>
         {
             if (!Enum.TryParse<EmailCodePurpose>(input.Purpose, true, out var purpose))
                 throw new ApplicationFailure(FailureKind.Validation, "The verification request is invalid.");
-            var result = await auth.StartAsync(input.Identifier, input.Phone, purpose, ct);
-            // Always use the same response shape for conflicts and unknown accounts.
-            return Results.Accepted(value: new { accepted = true, expiresAtUtc = result.ExpiresAtUtc, resendAfterSeconds = result.ResendAfterSeconds });
+            await auth.StartAsync(input.Identifier, input.Phone, purpose, ct);
+            // The public timing metadata must not reveal an existing challenge or
+            // whether Signup was routed to the registered-mailbox sign-in path.
+            return Results.Accepted(value: new { accepted = true,
+                expiresAtUtc = clock.GetUtcNow().UtcDateTime.AddMinutes(10), resendAfterSeconds = 60 });
         }).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
         app.MapPost("/api/auth/email/verify", async (EmailCodeVerify input, EmailAuthService auth, CancellationToken ct) =>
         {

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using Weymela.Api.Security;
 using Weymela.Application;
 using Weymela.Application.Operations;
@@ -47,6 +48,7 @@ internal static class OperationalEndpoints
                 role = actor.Role.ToString(),
                 displayName = profile?.DisplayName ?? c.User.Identity?.Name,
                 publicId = profile?.PublicId ?? c.User.FindFirst("publicId")?.Value,
+                creatorId = actor.Role == ActorRole.Creator ? profile?.CreatorNumber : null,
                 email = identifiers.FirstOrDefault(x => x.Kind == "Email")?.DeliveryAddress,
                 phone = identifiers.FirstOrDefault(x => x.Kind == "Phone")?.DeliveryAddress,
                 status = "Active",
@@ -71,7 +73,27 @@ internal static class OperationalEndpoints
         var business=app.MapGroup("/api/business").RequireAuthorization("Business").AddEndpointFilter<ValidatedInputFilter>();
         business.MapGet("/deposit-method",(RuntimeOptions options)=>Results.Ok(new{mode=options.DevelopmentIdentity?"Development":options.DepositMode}));
         business.MapGet("/deposit-requests",(HttpContext c,DepositService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
-        business.MapPost("/deposit-requests",(DepositSubmission input,HttpContext c,DepositService service,CancellationToken ct)=>service.SubmitAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct));
+        business.MapPost("/deposit-requests",async(HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,DepositService service,CancellationToken ct)=>
+        {
+            var actor=EndpointSupport.Actor(c);
+            if(actor.BusinessId is null || !await db.CommercePermissions.AnyAsync(x=>x.UserId==actor.UserId&&x.Role==ActorRole.Business&&x.SubjectId==actor.BusinessId&&x.IsActive,ct))
+                throw new ApplicationFailure(FailureKind.Forbidden,"Business access is required.");
+            if(!c.Request.HasFormContentType) throw new ApplicationFailure(FailureKind.Validation,"Choose a payment receipt.");
+            var form=await c.Request.ReadFormAsync(ct);
+            if(form.Count!=1||form["amount"].Count!=1||form.Files.Count!=1||form.Files[0].Name!="receipt"
+                ||!decimal.TryParse(form["amount"],NumberStyles.Number,CultureInfo.InvariantCulture,out var amount))
+                throw new ApplicationFailure(FailureKind.Validation,"Enter an amount and choose a payment receipt.");
+            var key=EndpointSupport.Key(c);
+            var proof=await receipts.SaveAsync(actor.BusinessId.Value,key,form.Files[0],ct);
+            return await service.SubmitAsync(actor,new DepositSubmission(amount,"R"+proof,proof),key,ct);
+        });
+        business.MapGet("/deposit-requests/{id:guid}/receipt",async(Guid id,HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,CancellationToken ct)=>
+        {
+            var actor=EndpointSupport.Actor(c);
+            var request=await db.DepositRequests.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id&&x.BusinessId==actor.BusinessId,ct);
+            if(request?.ProofReference is null) throw new ApplicationFailure(FailureKind.NotFound,"Receipt not found.");
+            return await ReceiptResult(c,receipts,request.ProofReference,ct);
+        });
         var admin=app.MapGroup("/api/admin").RequireAuthorization("AdminOperations").AddEndpointFilter<ValidatedInputFilter>();
         admin.MapGet("/operations",async(HttpContext c,OperationalHealth health,CancellationToken ct)=>
         {
@@ -82,10 +104,33 @@ internal static class OperationalEndpoints
         });
         admin.MapGet("/reconciliation",(HttpContext c,ReconciliationService service,CancellationToken ct)=>service.CheckAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         admin.MapGet("/deposit-requests",async(WeymelaDbContext db,CancellationToken ct)=>
-            await db.DepositRequests.AsNoTracking().OrderBy(x=>x.Status).ThenBy(x=>x.SubmittedAtUtc).Take(100)
-                .Select(x=>new{x.Id,x.BusinessId,amount=x.Amount.Amount,status=x.Status.ToString(),x.Provider,x.ExternalReference,x.ProofReference,x.SubmittedAtUtc,x.ReviewedAtUtc,x.Version}).ToListAsync(ct));
+        {
+            var rows=await db.DepositRequests.AsNoTracking().OrderBy(x=>x.Status).ThenBy(x=>x.SubmittedAtUtc).Take(100).ToListAsync(ct);
+            var ids=rows.Select(x=>x.BusinessId).Distinct().ToArray();
+            var names=await db.PublicWorkspaceProfiles.AsNoTracking().Where(x=>x.Role==ActorRole.Business&&ids.Contains(x.SubjectId))
+                .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);
+            return rows.Select(x=>new{x.Id,x.BusinessId,business=names.GetValueOrDefault(x.BusinessId,"Business"),amount=x.Amount.Amount,
+                status=x.Status.ToString(),hasReceipt=x.ProofReference!=null,x.SubmittedAtUtc,x.ReviewedAtUtc,x.Version});
+        });
+        admin.MapGet("/deposit-requests/{id:guid}/receipt",async(Guid id,HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,CancellationToken ct)=>
+        {
+            var actor=EndpointSupport.Actor(c);
+            if(!AdministrativeAuthority.For(new RealActor(actor)).Allows(AdministrativeCapability.DepositReview)
+                ||!await db.CommercePermissions.AnyAsync(x=>x.UserId==actor.UserId&&x.Role==actor.Role&&x.IsActive,ct))
+                throw new ApplicationFailure(FailureKind.Forbidden,"Deposit review access is required.");
+            var request=await db.DepositRequests.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id,ct);
+            if(request?.ProofReference is null) throw new ApplicationFailure(FailureKind.NotFound,"Receipt not found.");
+            return await ReceiptResult(c,receipts,request.ProofReference,ct);
+        });
         admin.MapPost("/deposit-requests/{id:guid}/review",async(Guid id,DepositReview input,HttpContext c,FinancialCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.ReviewDepositAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         app.MapPost("/api/checkout/manual-lookup",()=>Results.Json(new{code="Disabled",message="Manual identity lookup is not enabled. Use the Customer's Offer QR."},statusCode:503)).RequireAuthorization("Checkout");
+    }
+    private static async Task<IResult> ReceiptResult(HttpContext context,PrivateReceiptStore receipts,string proof,CancellationToken ct)
+    {
+        var (bytes,contentType)=await receipts.ReadAsync(proof,ct);
+        context.Response.Headers.CacheControl="private,no-store";
+        context.Response.Headers.ContentDisposition="inline; filename=receipt."+(contentType==PrivateReceiptStore.Jpeg?"jpg":"png");
+        return Results.File(bytes,contentType);
     }
 }

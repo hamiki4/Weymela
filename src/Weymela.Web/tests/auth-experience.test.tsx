@@ -119,9 +119,23 @@ describe("final authentication experience", () => {
     expect(
       await screen.findByRole("heading", { name: "Check your email" }),
     ).toBeVisible();
-    expect(screen.getByText(/If this email can be used to create a Weymela account/)).toBeVisible();
+    expect(screen.getByText(/If this email is already registered, we've sent a code to help you sign in/)).toBeVisible();
     expect(screen.queryByText("We sent a verification code to your email.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Verify" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Resend email" })).toBeDisabled();
+    expect(screen.queryByText(/This email is registered|You already have an account/)).not.toBeInTheDocument();
+  });
+
+  it("resends through the same Create Account request without revealing the backend route", async () => {
+    mocks.startEmailCode.mockResolvedValue(0);
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Check your email" });
+    await userEvent.click(screen.getByRole("button", { name: "Resend email" }));
+    expect(mocks.startEmailCode).toHaveBeenNthCalledWith(2, "owner@example.com", "Signup");
+    expect(screen.getByRole("heading", { name: "Check your email" })).toBeVisible();
   });
 
   it("uses phone and password for full sign-in without starting email", async () => {

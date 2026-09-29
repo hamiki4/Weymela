@@ -274,6 +274,33 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Admin_preauthorized_creator_receives_database_assigned_number_on_activation()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin); var user = Guid.NewGuid();
+        db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = user, Kind = "Email",
+            IdentifierHash = EmailAuthService.HashIdentifier("newcreator@example.test"), DeliveryAddress = "newcreator@example.test",
+            IsVerified = true, CreatedAtUtc = Now });
+        db.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = user, PasswordHash = "private-hash",
+            WorkFactor = 100000, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
+        db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = user, CredentialKind = "Passkey",
+            CredentialIdHash = "private-device", PinVerifier = "private-pin-verifier",
+            EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        await db.SaveChangesAsync();
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
+        var preauth = await service.PreauthorizeAsync(admin, new AccountPreauthorizationInput(
+            "Creator", "newcreator@example.test", null, "New Creator", "CR-ADMIN-EXISTING"), "preauth-creator", default);
+        await service.ActivateAsync(new Actor(user, ActorRole.Creator), preauth.PreauthorizationId, delivery.Code!, default);
+        var profile = await db.PublicWorkspaceProfiles.SingleAsync(x => x.Role == ActorRole.Creator);
+        Assert.True(profile.CreatorNumber >= 1000);
+        Assert.Equal("CR-ADMIN-EXISTING", profile.PublicId);
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Creator
+            && x.SubjectId == profile.SubjectId && x.IsActive));
+    }
+
+    [Fact]
     public async Task Account_lifecycle_is_audited_and_non_platform_actor_is_denied()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();

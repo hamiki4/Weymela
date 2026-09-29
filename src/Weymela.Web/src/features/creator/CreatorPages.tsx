@@ -363,6 +363,8 @@ export function CreatorHowYouEarn() {
                   </dl>
                 </article>
               ))}
+              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Earn the net amount shown on each UGC opportunity when your content is approved.</p></article>
+              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content and customer offer</span><h3>UGC + Sale</h3></div><p>Earn the net UGC content amount shown on the opportunity. Customer purchases do not add a Creator sale commission.</p></article>
             </div>
             <div className="threshold-note">
               <strong>
@@ -416,6 +418,7 @@ export function CreatorEarnings() {
       <PageHeader
         title="Earnings"
         description="Track your earnings and payouts."
+        action={<ActionLink to="/creator/pricing" secondary>How You Earn</ActionLink>}
       />
       <Resource resource={resource}>
         {(data) => (
@@ -442,6 +445,7 @@ export function CreatorEarnings() {
                   label="Earning History"
                   columns={[
                     { label: "Promotion or source", cell: (r) => r.campaign },
+                    { label: "Business", cell: (r) => r.business ?? "—" },
                     { label: "Source", cell: (r) => r.source },
                     {
                       label: "Amount",
@@ -457,7 +461,7 @@ export function CreatorEarnings() {
                         <strong>{amount(r.amount)}</strong>
                       </div>
                       <p className="fine-print">
-                        {r.source} · {date(r.atUtc)}
+                        {r.business ? `${r.business} · ` : ""}{r.sourceType ? `${r.sourceType === "UGC" ? "UGC" : r.sourceType === "VIEW_ONLY" ? "View Only" : "View + Sale"} · ` : ""}{r.source} · {date(r.atUtc)} · {r.status ?? "Earned"}
                       </p>
                     </>
                   )}

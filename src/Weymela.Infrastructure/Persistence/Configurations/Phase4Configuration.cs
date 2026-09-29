@@ -29,7 +29,7 @@ internal static class Phase4Configuration
         qr.ToTable("OfferQrSessions", t =>
         {
             t.HasCheckConstraint("CK_Qr_Expiry", "\"ExpiresAtUtc\" = \"IssuedAtUtc\" + INTERVAL '5 minutes'");
-            t.HasCheckConstraint("CK_Qr_SourceBinding", "(\"Source\" = 'ViewAndSalePromotion' AND \"PromotionId\" IS NOT NULL AND \"CreatorId\" IS NOT NULL AND \"CreatorAllocationId\" IS NOT NULL AND \"UgcCustomerOfferId\" IS NULL) OR (\"Source\" = 'UgcCustomerOffer' AND \"PromotionId\" IS NULL AND \"CreatorId\" IS NULL AND \"CreatorAllocationId\" IS NULL AND \"UgcCustomerOfferId\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_Qr_SourceBinding", "(\"Source\" = 'ViewAndSalePromotion' AND \"PromotionId\" IS NOT NULL AND \"CreatorId\" IS NOT NULL AND \"CreatorAllocationId\" IS NOT NULL AND \"UgcCustomerOfferId\" IS NULL AND \"UgcAssignmentId\" IS NULL) OR (\"Source\" = 'UgcCustomerOffer' AND \"PromotionId\" IS NULL AND \"CreatorAllocationId\" IS NULL AND \"UgcCustomerOfferId\" IS NOT NULL AND ((\"CreatorId\" IS NOT NULL AND \"UgcAssignmentId\" IS NOT NULL) OR (\"CreatorId\" IS NULL AND \"UgcAssignmentId\" IS NULL)))");
             t.HasCheckConstraint("CK_Qr_SaleBinding", "(\"SaleId\" IS NULL OR \"UgcCustomerOfferSaleId\" IS NULL) AND (\"Status\" <> 'Used' OR ((\"Source\" = 'ViewAndSalePromotion' AND \"SaleId\" IS NOT NULL AND \"UgcCustomerOfferSaleId\" IS NULL) OR (\"Source\" = 'UgcCustomerOffer' AND \"SaleId\" IS NULL AND \"UgcCustomerOfferSaleId\" IS NOT NULL)))");
         });
         qr.HasIndex(x => x.TokenHash).IsUnique(); qr.Property(x => x.TokenHash).HasMaxLength(64);
@@ -39,6 +39,8 @@ internal static class Phase4Configuration
             .HasPrincipalKey(x => new { x.Id, x.PromotionId, x.CreatorId }).OnDelete(DeleteBehavior.Restrict);
         qr.HasOne<VerifiedSale>().WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
         qr.HasOne<UgcCustomerOffer>().WithMany().HasForeignKey(x => x.UgcCustomerOfferId).OnDelete(DeleteBehavior.Restrict);
+        qr.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        qr.HasIndex(x => x.UgcAssignmentId);
         qr.HasOne<UgcCustomerOfferSale>().WithMany().HasForeignKey(x => x.UgcCustomerOfferSaleId).OnDelete(DeleteBehavior.Restrict);
         Mapping.Version(qr);
         var payout = model.Entity<PayoutRecord>(); Mapping.Scalars(payout, "BeneficiaryId"); payout.HasKey(x => x.Id);

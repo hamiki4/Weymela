@@ -15,6 +15,7 @@ import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
 import { BusinessUgcPage, CreateBusinessUgcPage } from "../features/business/UgcPages";
 import {
   CreatorEarnings,
+  CreatorHowYouEarn,
   CreatorOpportunity,
 } from "../features/creator/CreatorPages";
 import { CreatorDashboard, CreatorDiscover, CreatorPromotions } from "../features/creator/CreatorExperience";
@@ -35,9 +36,10 @@ import {
   OperationsUgc,
 } from "../features/admin/AdminPages";
 import { AdminAccountCreate, AdminAccountDetail, AdminAccounts } from "../features/admin/AdminAccounts";
+import { AdminMore } from "../features/admin/AdminMore";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
-import { AdminReportsPage, AdminUgcPage, AdminWalletsPage } from "../features/admin/AdminFinancePages";
+import { AdminReportsPage, AdminUgcPage, AdminWalletsPage, OperationsWalletsPage } from "../features/admin/AdminFinancePages";
 import {
   CustomerDiscover,
   CustomerCashback,
@@ -76,6 +78,10 @@ function ProtectedShell() {
 function AdminUgcWorkspace() {
   const { user } = useSession();
   return user?.role === "OperationsAdmin" ? <OperationsUgc /> : <AdminUgcPage />;
+}
+function AdminWalletsWorkspace() {
+  const { user } = useSession();
+  return user?.role === "OperationsAdmin" ? <OperationsWalletsPage /> : <AdminWalletsPage />;
 }
 export function App() {
   const session = useSession();
@@ -130,6 +136,7 @@ export function App() {
         <Route element={<RoleGate roles={["Business"]} />}>
           <Route path="/business" element={<BusinessDashboard />} />
           <Route path="/business/wallet" element={<BusinessWallet />} />
+          <Route path="/business/transactions" element={<CheckoutTransactions />} />
           <Route path="/business/campaigns" element={<BusinessCampaigns />} />
           <Route path="/business/campaigns/new" element={<CreateCampaign />} />
           <Route path="/business/campaigns/:id" element={<BusinessCampaignDetail />} />
@@ -149,11 +156,11 @@ export function App() {
           <Route path="/creator/campaigns" element={<Navigate to="/creator/promotions" replace />} />
           <Route path="/creator/campaigns/:id" element={<CreatorActiveDetail />} />
           <Route path="/creator/requests" element={<Navigate to="/creator/promotions" replace />} />
-          <Route path="/creator/pricing" element={<Navigate to="/creator/earnings" replace />} />
+          <Route path="/creator/pricing" element={<CreatorHowYouEarn />} />
           <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
           <Route path="/creator/earnings" element={<CreatorEarnings />} />
           <Route path="/creator/legal" element={<CreatorLegalPage />} />
-          <Route path="/creator/profile" element={<Navigate to="/profile#social-accounts" replace />} />
+          <Route path="/creator/profile" element={<Navigate to="/profile#social-profiles" replace />} />
           <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />
         </Route>
         <Route element={<RoleGate roles={["PlatformAdmin"]} />}>
@@ -168,7 +175,6 @@ export function App() {
           <Route path="/admin/businesses/new" element={<AdminAccountCreate area="Business" />} />
           <Route path="/admin/admins" element={<AdminAccounts area="Admin" />} />
           <Route path="/admin/admins/new" element={<AdminAccountCreate area="Admin" />} />
-          <Route path="/admin/wallets" element={<AdminWalletsPage />} />
           <Route path="/admin/reports" element={<AdminReportsPage />} />
           <Route path="/admin/settings" element={<AdminFinancialSettings />} />
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
@@ -178,6 +184,8 @@ export function App() {
           <Route path="/admin/operations" element={<OperationsDashboard />} />
         </Route>
         <Route element={<RoleGate roles={["PlatformAdmin", "OperationsAdmin"]} />}>
+          <Route path="/admin/more" element={<AdminMore />} />
+          <Route path="/admin/wallets" element={<AdminWalletsWorkspace />} />
           <Route path="/admin/campaigns" element={<AdminCampaigns />} />
           <Route path="/admin/ugc" element={<AdminUgcWorkspace />} />
           <Route path="/admin/campaigns/:id" element={<AdminCampaignDetail />} />

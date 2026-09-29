@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { post, useAction, useResource } from "../../api/client";
+import { useEffect, useRef, useState } from "react";
+import { postForm, useAction, useResource } from "../../api/client";
 import { Button, Field, MoneyInput, Notice, Resource } from "../../ui/components";
 import { amount, date } from "../../ui/format";
 interface Receipt { id: string; amount: number; status: string; submittedAtUtc: string }
@@ -8,18 +8,28 @@ export function DepositSubmission() {
   return <Resource resource={method}>{data => data.mode === "ManualApproval" ? <ManualDeposit /> : <Notice>Deposits are not connected. No payment will be taken or funds credited.</Notice>}</Resource>;
 }
 export function ManualDeposit() {
-  const [value, setValue] = useState(""); const [reference, setReference] = useState(""); const [submitted, setSubmitted] = useState(false);
+  const [value, setValue] = useState(""); const [receipt, setReceipt] = useState<File | null>(null);
+  const [preview, setPreview] = useState(""); const [submitted, setSubmitted] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const action = useAction(); const history = useResource<Receipt[]>("/business/deposit-requests");
-  return <><p className="fine-print">Submit your completed payment reference for Admin review. Funds become available only after receipt is confirmed.</p>
-    <form onSubmit={event => { event.preventDefault(); void action.run(async key => {
-      await post("/business/deposit-requests", { amount: Number(value), externalReference: reference, proofReference: null }, key);
-      setSubmitted(true); setValue(""); setReference(""); history.reload();
+  useEffect(() => {
+    if (!receipt || typeof URL.createObjectURL !== "function") { setPreview(""); return; }
+    const url = URL.createObjectURL(receipt); setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [receipt]);
+  const remove = () => { setReceipt(null); if (input.current) input.current.value = ""; };
+  return <><p className="fine-print">Upload your payment receipt for Admin review.</p>
+    <form onSubmit={event => { event.preventDefault(); if (!receipt) return; void action.run(async key => {
+      const form = new FormData(); form.set("amount", value); form.set("receipt", receipt);
+      await postForm("/business/deposit-requests", form, key);
+      setSubmitted(true); setValue(""); remove(); history.reload();
     }); }}><fieldset disabled={action.busy}>
       <Field label="Amount"><MoneyInput value={value} onChange={event => { setValue(event.target.value); setSubmitted(false); }} /></Field>
-      <Field label="Payment reference" help="Use the reference from your completed payment. Do not enter passwords or private payment details."><input required maxLength={120} pattern="[A-Za-z0-9._-]+" value={reference} onChange={event => setReference(event.target.value)} /></Field>
-      {action.error && <Notice error>{action.error}</Notice>}{submitted && <Notice>Deposit submitted for review. Your wallet has not been credited yet.</Notice>}
-      <Button type="submit" disabled={!value || !reference || action.busy}>{action.busy ? "Submitting…" : "Submit for Review"}</Button>
+      <Field label="Payment receipt"><input ref={input} type="file" accept="image/jpeg,image/png" aria-label="Payment receipt" className="receipt-file-input" onChange={event => { setReceipt(event.target.files?.[0] ?? null); setSubmitted(false); }} /><Button type="button" variant="secondary" onClick={() => input.current?.click()}>Upload Receipt</Button></Field>
+      {receipt && <div className="receipt-selection"><div className="receipt-thumbnail">{preview && <img src={preview} alt="Selected payment receipt" />}</div><div><span className="receipt-name">{receipt.name}</span><div className="actions"><Button type="button" variant="secondary" onClick={() => input.current?.click()}>Replace</Button><Button type="button" variant="secondary" onClick={remove}>Remove</Button></div></div></div>}
+      {action.error && <Notice error>{action.error}</Notice>}{submitted && <Notice><strong>Under review</strong><br />Your payment is waiting for approval.</Notice>}
+      <Button type="submit" disabled={!value || !receipt || action.busy}>{action.busy ? "Submitting…" : "Submit for Review"}</Button>
     </fieldset></form>
-    <Resource resource={history}>{rows => <>{rows.map(row => <div className="amount-row" key={row.id}><div><strong>{row.status === "Pending" ? "Awaiting review" : row.status === "Approved" ? "Approved" : "Not approved"}</strong><small>{date(row.submittedAtUtc)}</small></div><strong>{amount(row.amount)}</strong></div>)}</>}</Resource>
+    <Resource resource={history}>{rows => <>{rows.map(row => <div className="amount-row" key={row.id}><div><strong>{row.status === "Pending" ? "Under review" : row.status === "Approved" ? "Approved" : "Rejected"}</strong><small>{date(row.submittedAtUtc)}</small></div><strong>{amount(row.amount)}</strong></div>)}</>}</Resource>
   </>;
 }

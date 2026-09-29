@@ -22,7 +22,7 @@ function assignment(id: string, status: string): UgcAssignment {
     status, acceptedRevision: 1, revisionAcceptanceRequired: false, dueDateUtc: "2026-10-10T00:00:00Z",
     instructions: "Create an original video", resources: [], location: null,
     platformRequirements: [{ platform: "TikTok", format: "Video", minimumAudience: null }],
-    feedback: null, submissionUrl: null };
+    feedback: null, submissionUrl: null, productProvided: true, creatorMustPurchase: false };
 }
 function ugcRequest(id: string, status: string): UgcRequest {
   return { id, opportunityId: id, creatorId: "creator", creator: "Bella", status,

@@ -24,7 +24,7 @@ public sealed class SensitiveQrToken
     public override string ToString() => "[REDACTED QR TOKEN]";
 }
 public sealed record IssueOfferQrCommand(Actor Actor, Guid CreatorAllocationId, string IdempotencyKey);
-public sealed record IssueUgcCustomerOfferQrCommand(Actor Actor, Guid UgcCustomerOfferId, string IdempotencyKey);
+public sealed record IssueUgcCustomerOfferQrCommand(Actor Actor, Guid UgcCustomerOfferId, Guid UgcAssignmentId, string IdempotencyKey);
 public sealed record IssuedOfferQr(Guid SessionId, DateTime ExpiresAtUtc, SensitiveQrToken? Token, bool Replayed);
 public sealed record RedeemOfferCommand(Actor Actor, SensitiveQrToken Token, Money PurchaseAmount, string IdempotencyKey);
 public sealed record SaleResult(Guid SaleId, Money PurchaseAmount, Money TotalBusinessCharge, DateTime CreatedAtUtc,

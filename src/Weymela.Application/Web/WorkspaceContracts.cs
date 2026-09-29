@@ -64,7 +64,8 @@ public sealed record CreatorContentSubmissionStatus(int RevisionNumber, string R
 public sealed record BusinessPromotionContentReviewCard(Guid SubmissionId, string Creator, string Promotion,
     string Provider, string ContentReference, int RevisionNumber, DateTime SubmittedAtUtc,
     string ReviewStatus, string? Feedback, DateTime? ReviewedAtUtc);
-public sealed record EarningItem(Guid Id, string Campaign, string Source, decimal Amount, DateTime AtUtc);
+public sealed record EarningItem(Guid Id, string Campaign, string Source, decimal Amount, DateTime AtUtc,
+    string? Business = null, string? SourceType = null, string Status = "Earned");
 public sealed record PayoutItem(Guid Id, string Kind, string Name, decimal Amount, decimal Threshold, string Status,
     DateTime EligibleAtUtc, DateTime? PaidAtUtc, string? Reference);
 public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal MinimumToCashOut, decimal AmountNeeded, decimal EligibleAmount,
@@ -88,9 +89,13 @@ public sealed record AdminReportPeriod(decimal BusinessDeposits, decimal Promoti
 public sealed record AdminReportType(string Type, decimal Allocated, decimal Used, long VerifiedViews, int VerifiedSales,
     decimal CurrentRemaining, decimal CreatorPayments = 0, decimal CustomerDiscounts = 0);
 public sealed record AdminReportAccounts(int Customers, int Creators, int Businesses, int NewAccountsInPeriod);
+public sealed record AdminPurchaseRow(Guid Id, Guid SourceId, Guid? UgcAssignmentId, string SourceType,
+    string Source, string Business, decimal PurchaseAmount, decimal BusinessCharge, decimal CustomerBenefit,
+    decimal CreatorSaleEarning, decimal PlatformShare, DateTime OccurredAtUtc, string Status);
 public sealed record AdminReport(DateTime FromUtc, DateTime ToExclusiveUtc, AdminReportPeriod Activity,
     IReadOnlyList<AdminReportType> Promotions, IReadOnlyList<AdminReportType> Ugc,
-    AdminReportAccounts Accounts, decimal CurrentBusinessWalletBalance, decimal CurrentPlatformUnsettled);
+    AdminReportAccounts Accounts, decimal CurrentBusinessWalletBalance, decimal CurrentPlatformUnsettled,
+    IReadOnlyList<AdminPurchaseRow> Purchases);
 public sealed record OperationsHome(int PendingReviews, int Businesses, int Creators, int Customers,
     int ActiveCampaigns, int PendingCreatorPayouts, int PendingCustomerPayouts);
 public sealed record BusinessOversight(BusinessCard Business, string Status, decimal TotalBalance, decimal Available, decimal Reserved,
@@ -129,13 +134,13 @@ public sealed record CustomerOfferBusiness(string DisplayName, string? Direction
 public sealed record CustomerOfferCreator(string DisplayName);
 public sealed record CustomerOfferCard(Guid Id, string Source, string Offer, CustomerOfferBusiness Business,
     CustomerOfferCreator? Creator, decimal BenefitPercent, string? WatchUrl, string? Slogan = null, string? Location = null,
-    int? RemainingDays = null);
+    int? RemainingDays = null, Guid? UgcAssignmentId = null);
 public sealed record QrResponse(Guid Id, string? Token, DateTime ExpiresAtUtc, bool Replayed);
 public sealed record CheckoutOffer(Guid SessionId, string Offer, CustomerOfferBusiness Business, CustomerOfferCreator? Creator,
     string Customer, DateTime ExpiresAtUtc, string Source, decimal? CustomerDiscountPercent);
 public sealed record CheckoutSaleRow(Guid Id, string Offer, string Source, decimal PurchaseAmount,
-    decimal CustomerDiscount, decimal CustomerPays, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee, DateTime CreatedAtUtc,
-    string? Cashier = null);
+    decimal CustomerDiscount, decimal CustomerPays, decimal BusinessCharge, DateTime CreatedAtUtc,
+    string? Cashier = null, string? Creator = null, string CustomerMasked = "Customer", string Status = "Completed");
 
 public sealed record CashierView(Guid Id, string Name, string MaskedPhone, string Status,
     DateTime CreatedAtUtc, DateTime? ActivatedAtUtc);
@@ -199,14 +204,15 @@ public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string T
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomerOfferStatus = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomerFacingSlogan = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFeePercent = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee = null,
+    bool ProductProvided = false, bool CreatorMustPurchase = false);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason);
 public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,
     string Business, Guid CreatorId, string Creator, decimal CreatorPayment, string Status,
     int AcceptedRevision, bool RevisionAcceptanceRequired, DateTime DueDateUtc, string Instructions,
     IReadOnlyList<string> Resources, string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements,
-    string? Feedback, string? SubmissionUrl);
+    string? Feedback, string? SubmissionUrl, bool ProductProvided = false, bool CreatorMustPurchase = false);
 public sealed record UgcRevisionView(int RevisionNumber, bool IsMaterial, DateTime CreatedAtUtc, string SnapshotJson);
 public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOnlyList<string> Resources,
     bool ProductProvided, bool CreatorMustPurchase, string? UsageRights, int CurrentRevision,

@@ -270,6 +270,32 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Creator_self_profile_returns_database_assigned_number_and_keeps_long_public_id_for_existing_contracts()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        await using (var db = f.Database.Open())
+        {
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile
+            {
+                SubjectId = DevelopmentDirectory.Id(300), Role = Weymela.Application.ActorRole.Creator,
+                DisplayName = "Bella", PublicId = "CR-EXISTING-CHECKOUT"
+            });
+            await db.SaveChangesAsync();
+        }
+        using var creator = await f.Login("creator");
+        var profile = await creator.GetJson("/api/profile");
+        var creatorId = profile["creatorId"]!.GetValue<long>();
+        Assert.True(creatorId >= 1000);
+        Assert.Equal("CR-EXISTING-CHECKOUT", profile["publicId"]!.GetValue<string>());
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await creator.PutAsJsonAsync("/api/profile", new { creatorId = 9999 })).StatusCode);
+        using var otherCreator = await f.Login("other-creator");
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await otherCreator.PutAsJsonAsync("/api/profile", new { creatorId = 9999 })).StatusCode);
+        Assert.Equal(creatorId, (await creator.GetJson("/api/profile"))["creatorId"]!.GetValue<long>());
+        using var customer = await f.Login("customer");
+        Assert.Null((await customer.GetJson("/api/profile"))["creatorId"]?.GetValue<long>());
+    }
+
+    [Fact]
     public async Task Creator_social_accounts_are_self_scoped_and_expose_no_credentials()
     {
         await using var f = await ApiFixture.CreateAsync(postgres);
@@ -358,6 +384,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         Assert.True(future["currentBusinessWalletBalance"]!.GetValue<decimal>() > 0);
         Assert.Equal(2, future["promotions"]!.AsArray().Count);
         Assert.Equal(2, future["ugc"]!.AsArray().Count);
+        Assert.Empty(future["purchases"]!.AsArray());
     }
 
     [Theory]

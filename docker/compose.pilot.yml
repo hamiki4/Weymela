@@ -53,6 +53,7 @@ services:
       V3__EnableDevelopmentIdentity: "false"
       V3__FinancialWritesEnabled: "false"
       V3__Auth__CookieKeyDirectory: /run/weymela-v3/keys
+      V3__Deposits__ReceiptDirectory: /run/weymela-v3/receipts
       V3__Auth__CookieCertificatePath: /run/secrets/v3-cookie-protection.pfx
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/v3-firebase-admin.json
       V3__Security__TrustedProxies__0: "${V3_WEB_PROXY_IP:?Approved isolated proxy IP required}"
@@ -61,6 +62,11 @@ services:
       - type: bind
         source: ${V3_COOKIE_KEYS_DIRECTORY:?Pre-provision protected V3-only key directory}
         target: /run/weymela-v3/keys
+        read_only: false
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${V3_RECEIPT_STORAGE_DIRECTORY:?Pre-provision protected V3-only durable receipt directory}
+        target: /run/weymela-v3/receipts
         read_only: false
         bind: { create_host_path: false }
     networks: [data, edge]

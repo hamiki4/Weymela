@@ -71,7 +71,7 @@ export async function request<T>(
     cache: "no-store",
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       "X-Weymela-Request": "1",
       ...(typeof window !== "undefined" && window.sessionStorage.getItem("weymela.profile-key")
         ? { "X-Weymela-Profile": window.sessionStorage.getItem("weymela.profile-key")! }
@@ -120,6 +120,18 @@ export function post<T = { id: string }>(
     headers: { "Idempotency-Key": key, "X-Weymela-Activity": "1" },
     body: data === undefined ? undefined : JSON.stringify(data),
   });
+}
+export function postForm<T = { id: string }>(path: string, data: FormData, key: string): Promise<T> {
+  return request<T>(path, { method: "POST", headers: { "Idempotency-Key": key, "X-Weymela-Activity": "1" }, body: data });
+}
+export async function privateImage(path: string, signal: AbortSignal): Promise<string> {
+  const response = await fetch(`/api${path}`, {
+    credentials: "same-origin", cache: "no-store", signal,
+    headers: { "X-Weymela-Request": "1", ...(window.sessionStorage.getItem("weymela.profile-key")
+      ? { "X-Weymela-Profile": window.sessionStorage.getItem("weymela.profile-key")! } : {}) },
+  });
+  if (!response.ok) throw new Error("The receipt is unavailable.");
+  return URL.createObjectURL(await response.blob());
 }
 export function useResource<T>(path: string) {
   const [saved, setData] = useState<{ path: string; value: T; generation: number } | null>(() => cachedResource<T>(path));

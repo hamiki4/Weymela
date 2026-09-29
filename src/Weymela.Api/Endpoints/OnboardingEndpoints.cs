@@ -15,7 +15,8 @@ internal static class OnboardingEndpoints
 {
     private sealed record ProfileRequest(string Role, string DisplayName, string? PublicId, string? Region,
         string? Category, string? Submission, Guid? ProposedBusinessId = null,
-        AccountLegalConfirmation? AccountLegal = null);
+        AccountLegalConfirmation? AccountLegal = null,
+        IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null);
     private sealed record ReviewRequest(bool Approve, string? Reason, long ExpectedVersion);
     private sealed record AccountActivationInput(string ActivationSecret, AccountLegalConfirmation? AccountLegal = null);
 
@@ -42,9 +43,9 @@ internal static class OnboardingEndpoints
                 throw new ApplicationFailure(FailureKind.Validation, "Choose an available profile.");
             var actor = new Actor(userId, ActorRole.Customer, CustomerId: Guid.Empty);
             var result = await service.SubmitAsync(actor,
-                new RoleEnrollmentRequest(role, input.DisplayName, input.PublicId, input.Region, input.Category,
+                new RoleEnrollmentRequest(role, input.DisplayName, role == ActorRole.Customer ? input.PublicId : null, input.Region, input.Category,
                     input.Submission, input.ProposedBusinessId, input.AccountLegal,
-                    c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString()),
+                    c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString(), input.SocialProfiles),
                 EndpointSupport.Key(c), ct);
             if (role == ActorRole.Customer && result.Status == RoleEnrollmentStatus.Approved)
             {

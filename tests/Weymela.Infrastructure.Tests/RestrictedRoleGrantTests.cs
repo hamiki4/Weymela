@@ -264,7 +264,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(21, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(24, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -380,7 +380,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             $"SET ROLE {QuoteIdentifier(ownerRole)}",
             "UPDATE v3.\"WorkerCheckpoints\" SET \"LastErrorCode\"='forbidden'",
             "UPDATE v3.\"InAppNotifications\" SET \"PushAttempts\"=1",
-            "UPDATE v3.\"OutboxMessages\" SET \"AttemptCount\"=1",
+            "UPDATE v3.\"OutboxMessages\" SET \"EventType\"='forbidden'",
             "INSERT INTO public.\"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('forbidden', '0')"
         };
         foreach (var command in commands)
@@ -546,11 +546,14 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260924034537_AddAdminAccountAuthorityFoundation",
             "20260925010921_AddViewAsSupportSessions",
             "20260925203153_AddPlatformPromotionalFunding",
-            "20260925212120_RetireSupportSessions"
+            "20260925212120_RetireSupportSessions",
+            "20260928213157_AlignDepositReviewAuthority",
+            "20260928230108_AddCreatorNumbers",
+            "20260929022846_BindUgcSaleAssignments"
         }, actual);
         await reader.CloseAsync();
-        command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','v3') AND c.relkind='S'";
-        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
+        command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='v3' AND c.relkind='S' AND c.relname='creator_number_seq'";
+        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
     private static void AssertGrantScriptContract(System.IO.FileInfo path)
@@ -643,7 +646,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(21L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(24L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

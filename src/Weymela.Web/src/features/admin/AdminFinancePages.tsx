@@ -1,24 +1,21 @@
-import { useState } from "react";
-import { post, useAction, useResource } from "../../api/client";
+import { useEffect, useState } from "react";
+import { post, privateImage, useAction, useResource } from "../../api/client";
 import type { AdminReport, AdminUgcFinance, AdminWallets } from "../../api/types";
 import { Badge, Button, DataTable, Dialog, Empty, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
 import { amount, count, date } from "../../ui/format";
 
-type Deposit = { id: string; businessId: string; amount: number; status: string; provider: string; externalReference: string; proofReference: string | null; submittedAtUtc: string; version: number };
+type Deposit = { id: string; businessId: string; business: string; amount: number; status: string; hasReceipt: boolean; submittedAtUtc: string; version: number };
 const br = (value: number) => `${amount(value)} Br`;
 
 export function AdminWalletsPage() {
   const wallets = useResource<AdminWallets>("/admin/wallets");
-  const deposits = useResource<Deposit[]>("/admin/deposit-requests");
   const action = useAction();
   const [fund, setFund] = useState<{ id: string; name: string } | null>(null);
-  const [reviewBusiness, setReviewBusiness] = useState<{ id: string; name: string } | null>(null);
   const [fundAmount, setFundAmount] = useState("");
   const [reason, setReason] = useState("");
-  const [references, setReferences] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
-  const pending = deposits.data?.filter(row => row.status === "Pending" && row.businessId === reviewBusiness?.id) ?? [];
   return <div className="admin-page"><PageHeader title="Wallets" />{message && <Notice>{message}</Notice>}
+    <DepositReviewSection onReviewed={wallets.reload} />
     <Section title="Business wallets"><Resource resource={wallets}>{data => <DataTable rows={data.businesses} rowKey={row => row.businessId} label="Business wallets" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> },
       { label: "Total", cell: row => br(row.totalBalance), numeric: true },
@@ -28,8 +25,8 @@ export function AdminWalletsPage() {
       { label: "View Only", cell: row => count(row.viewOnlyCount) },
       { label: "View + Sale", cell: row => count(row.viewSaleCount) },
       { label: "Status", cell: row => <Badge status={row.status} /> },
-      { label: "Actions", cell: row => <div className="actions">{row.pendingDeposit > 0 && <Button variant="secondary" onClick={() => setReviewBusiness({ id: row.businessId, name: row.business })}>Review Deposit</Button>}<Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Add Funds</Button></div> },
-    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Total</dt><dd>{br(row.totalBalance)}</dd></div><div><dt>Available</dt><dd>{br(row.available)}</dd></div><div><dt>Reserved</dt><dd>{br(row.reserved)}</dd></div><div><dt>Pending deposit</dt><dd>{br(row.pendingDeposit)}</dd></div><div><dt>View Only</dt><dd>{count(row.viewOnlyCount)}</dd></div><div><dt>View + Sale</dt><dd>{count(row.viewSaleCount)}</dd></div></dl><div className="actions">{row.pendingDeposit > 0 && <Button variant="secondary" onClick={() => setReviewBusiness({ id: row.businessId, name: row.business })}>Review Deposit</Button>}<Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Add Funds</Button></div></div>} empty={<Empty title="No Business wallets" message="Business wallets appear after account activation." />} />}</Resource></Section>
+      { label: "Actions", cell: row => <Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Add Funds</Button> },
+    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Total</dt><dd>{br(row.totalBalance)}</dd></div><div><dt>Available</dt><dd>{br(row.available)}</dd></div><div><dt>Reserved</dt><dd>{br(row.reserved)}</dd></div><div><dt>Pending deposit</dt><dd>{br(row.pendingDeposit)}</dd></div><div><dt>View Only</dt><dd>{count(row.viewOnlyCount)}</dd></div><div><dt>View + Sale</dt><dd>{count(row.viewSaleCount)}</dd></div></dl><div className="actions"><Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Add Funds</Button></div></div>} empty={<Empty title="No Business wallets" message="Business wallets appear after account activation." />} />}</Resource></Section>
     <Section title="Active View / Sale promotions"><Resource resource={wallets}>{data => <DataTable rows={data.promotions} rowKey={row => row.id} label="Active View and Sale promotions" columns={[
       { label: "Business", cell: row => row.business }, { label: "Promotion", cell: row => <strong>{row.title}</strong> }, { label: "Type", cell: row => row.type },
       { label: "Budget", cell: row => br(row.budget), numeric: true }, { label: "Used", cell: row => br(row.used), numeric: true }, { label: "Remaining", cell: row => br(row.remaining), numeric: true },
@@ -38,11 +35,60 @@ export function AdminWalletsPage() {
     <Dialog title={fund ? `Add funds · ${fund.name}` : "Add funds"} open={!!fund} onClose={() => { if (!action.busy) setFund(null); }}>
       {fund && <form onSubmit={event => { event.preventDefault(); void action.run(async key => { await post(`/admin/accounts/businesses/${fund.id}/promotional-funding`, { amount: Number(fundAmount), reason: reason.trim() }, key); setMessage(`Promotional funding added for ${fund.name}.`); setFund(null); setFundAmount(""); setReason(""); wallets.reload(); }); }}><Field label="Amount (ETB)"><MoneyInput value={fundAmount} onChange={event => setFundAmount(event.target.value)} /></Field><Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !fundAmount || !reason.trim()}>{action.busy ? "Adding…" : "Add Promotional Funds"}</Button></form>}
     </Dialog>
-    <Dialog title={reviewBusiness ? `Review deposits · ${reviewBusiness.name}` : "Review deposits"} open={!!reviewBusiness} onClose={() => { if (!action.busy) setReviewBusiness(null); }}>
-      <Resource resource={deposits}>{() => pending.length ? <div className="admin-deposit-list">{pending.map(row => <form key={row.id} onSubmit={event => event.preventDefault()}><strong>{br(row.amount)}</strong><small>{date(row.submittedAtUtc)} · {row.provider}</small><small>External reference: {row.externalReference}</small>{row.proofReference && <small>Proof: {row.proofReference}</small>}<Field label="Confirmation reference"><input required value={references[row.id] ?? ""} onChange={event => setReferences({ ...references, [row.id]: event.target.value })} /></Field><div className="actions"><Button disabled={action.busy || !(references[row.id] ?? "").trim()} onClick={() => void action.run(async key => { await post(`/admin/deposit-requests/${row.id}/review`, { approve: true, expectedVersion: row.version, confirmationReference: references[row.id].trim() }, key); setMessage("Deposit approved and credited through the existing review workflow."); setReferences(previous => { const next = { ...previous }; delete next[row.id]; return next; }); deposits.reload(); wallets.reload(); })}>Approve</Button><Button variant="secondary" disabled={action.busy || !(references[row.id] ?? "").trim()} onClick={() => void action.run(async key => { await post(`/admin/deposit-requests/${row.id}/review`, { approve: false, expectedVersion: row.version, confirmationReference: references[row.id].trim() }, key); setMessage("Deposit rejected."); setReferences(previous => { const next = { ...previous }; delete next[row.id]; return next; }); deposits.reload(); wallets.reload(); })}>Reject</Button></div></form>)}</div> : <Empty title="No pending deposits" message="There are no deposits awaiting review for this Business." />}</Resource>
-      {action.error && <Notice error>{action.error}</Notice>}
-    </Dialog>
   </div>;
+}
+
+export function OperationsWalletsPage() {
+  return <div className="admin-page"><PageHeader title="Wallets" /><DepositReviewSection /></div>;
+}
+
+function ReceiptReviewImage({ id }: { id: string }) {
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    const abort = new AbortController(); let objectUrl = "";
+    void privateImage(`/admin/deposit-requests/${id}/receipt`, abort.signal)
+      .then(value => { objectUrl = value; if (!abort.signal.aborted) setUrl(value); })
+      .catch(() => { if (!abort.signal.aborted) setError(true); });
+    return () => { abort.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [id]);
+  if (error) return <Notice error>The receipt is unavailable.</Notice>;
+  return url ? <img className="admin-receipt-image" src={url} alt="Payment receipt for verification" /> : <p>Loading receipt…</p>;
+}
+
+function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
+  const deposits = useResource<Deposit[]>("/admin/deposit-requests");
+  const action = useAction();
+  const [selected, setSelected] = useState<string | null>(null);
+  const [reference, setReference] = useState("");
+  const [message, setMessage] = useState("");
+  const pending = deposits.data?.filter(row => row.status === "Pending") ?? [];
+  const current = pending.find(row => row.id === selected);
+  const review = (approve: boolean) => {
+    if (!current || !reference.trim()) return;
+    void action.run(async key => {
+      await post(`/admin/deposit-requests/${current.id}/review`, { approve, expectedVersion: current.version, confirmationReference: reference.trim() }, key);
+      setMessage(approve ? "Deposit approved. The wallet balance has been credited." : "Deposit rejected. The wallet balance has not changed.");
+      setSelected(null); setReference(""); deposits.reload(); onReviewed?.();
+    });
+  };
+  return <Section title={`Deposit review · ${pending.length} pending`}>
+    {message && <Notice>{message}</Notice>}
+    <Resource resource={deposits}>{() => pending.length ? <div className="admin-deposit-cards" role="list" aria-label="Pending deposits">{pending.map(row =>
+      <article key={row.id} role="listitem" className="admin-deposit-card"><div><strong>{row.business}</strong><strong>{br(row.amount)}</strong></div>
+        <small>{date(row.submittedAtUtc)} · Pending</small><div className="actions">
+          {row.hasReceipt && <Button variant="secondary" onClick={() => setSelected(row.id)}>Receipt</Button>}
+          <Button variant="secondary" onClick={() => setSelected(row.id)}>Review</Button>
+        </div></article>)}</div> : <Empty title="No pending deposits" message="There are no deposits awaiting review." />}</Resource>
+    <Dialog title={current ? `Review deposit · ${current.business}` : "Review deposit"} open={!!current} onClose={() => { if (!action.busy) { setSelected(null); setReference(""); } }}>
+      {current && <div className="admin-deposit-review"><dl className="admin-mobile-facts"><div><dt>Business</dt><dd>{current.business}</dd></div><div><dt>Amount</dt><dd>{br(current.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(current.submittedAtUtc)}</dd></div><div><dt>Status</dt><dd>Pending</dd></div></dl>
+        {current.hasReceipt ? <ReceiptReviewImage id={current.id} /> : <Notice error>No receipt is attached to this earlier request.</Notice>}
+        <Field label="Confirmation reference or reason code"><input required maxLength={120} pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value={reference} onChange={event => setReference(event.target.value)} /></Field>
+        {action.error && <Notice error>{action.error}</Notice>}
+        <div className="actions"><Button disabled={action.busy || !reference.trim()} onClick={() => review(true)}>Approve</Button><Button variant="secondary" disabled={action.busy || !reference.trim()} onClick={() => review(false)}>Reject</Button></div>
+      </div>}
+    </Dialog>
+  </Section>;
 }
 
 export function AdminUgcPage() {
@@ -77,6 +123,16 @@ export function AdminReportsPage() {
       ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{br(value as number)}</strong></div>)}</div></Section>
       <Section title="Promotion summary"><DataTable rows={report.promotions} rowKey={row => row.type} label="Promotion summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Verified views", cell: row => count(row.verifiedViews) }, { label: "Verified sales", cell: row => count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Views</dt><dd>{count(row.verifiedViews)}</dd></div><div><dt>Sales</dt><dd>{count(row.verifiedSales)}</dd></div></dl></div>} empty={<Empty title="No promotion activity" message="No promotion activity in this period." />} /></Section>
       <Section title="UGC summary"><DataTable rows={report.ugc} rowKey={row => row.type} label="UGC summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Creator payments", cell: row => br(row.creatorPayments), numeric: true }, { label: "Customer discounts", cell: row => row.type === "UGC Only" ? "—" : br(row.customerDiscounts), numeric: true }, { label: "Qualifying sales", cell: row => row.type === "UGC Only" ? "—" : count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Creator payments</dt><dd>{br(row.creatorPayments)}</dd></div>{row.type !== "UGC Only" && <><div><dt>Customer discounts</dt><dd>{br(row.customerDiscounts)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.verifiedSales)}</dd></div></>}</dl></div>} empty={<Empty title="No UGC activity" message="No UGC activity in this period." />} /><p className="admin-period-label">UGC spend is funded consumption across Creator deliveries and Customer offers. Creator payments and Customer discounts are components shown separately.</p></Section>
+      <Section title="Purchase transactions"><DataTable rows={report.purchases ?? []} rowKey={row => row.id} label="Purchase transactions" columns={[
+        { label: "Date", cell: row => date(row.occurredAtUtc) },
+        { label: "Business", cell: row => row.business },
+        { label: "Source", cell: row => `${row.source} · ${row.sourceType === "UGC_PLUS_SALE" ? "UGC + Sale" : "View + Sale"}` },
+        { label: "Purchase", cell: row => br(row.purchaseAmount), numeric: true },
+        { label: "Business charge", cell: row => br(row.businessCharge), numeric: true },
+        { label: "Customer benefit", cell: row => br(row.customerBenefit), numeric: true },
+        { label: "Creator sale earning", cell: row => br(row.creatorSaleEarning), numeric: true },
+        { label: "Platform share", cell: row => br(row.platformShare), numeric: true },
+      ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.source}</strong><Badge status={row.status} /></div><small>{row.business} · {row.sourceType === "UGC_PLUS_SALE" ? "UGC + Sale" : "View + Sale"} · {date(row.occurredAtUtc)}</small><dl className="admin-mobile-facts"><div><dt>Purchase</dt><dd>{br(row.purchaseAmount)}</dd></div><div><dt>Business charge</dt><dd>{br(row.businessCharge)}</dd></div><div><dt>Customer benefit</dt><dd>{br(row.customerBenefit)}</dd></div><div><dt>Creator sale earning</dt><dd>{br(row.creatorSaleEarning)}</dd></div><div><dt>Platform share</dt><dd>{br(row.platformShare)}</dd></div></dl></div>} empty={<Empty title="No purchases in this period" message="Recorded View + Sale and UGC + Sale purchases appear here." />} /></Section>
       <Section title="Accounts"><div className="admin-report-grid">{[["Customers", report.accounts.customers], ["Creators", report.accounts.creators], ["Businesses", report.accounts.businesses], ["New active accounts", report.accounts.newAccountsInPeriod]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{count(value as number)}</strong></div>)}</div><small>Counts include currently active accounts. New accounts are active identities first recorded during the selected period.</small></Section>
       <Section title="Current balances"><div className="admin-report-grid"><div><span>Business wallet balance</span><strong>{br(report.currentBusinessWalletBalance)}</strong></div><div><span>Unsettled Platform revenue</span><strong>{br(report.currentPlatformUnsettled)}</strong></div></div><small>Current balances are shown separately from activity during the selected period.</small></Section>
     </>}</Resource>

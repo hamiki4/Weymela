@@ -158,7 +158,8 @@ describe("V3 Firebase Web adapter", () => {
   it("rejects failed custom-token authentication without exchanging an ID token", async () => {
     signInWithCustomToken.mockRejectedValueOnce(new Error("invalid custom token"));
     const exchange = vi.fn(async () => undefined);
-    await expect(new FirebaseWebAuthAdapter(auth as never, exchange).signInWithCustomToken("bad-token")).rejects.toThrow("invalid custom token");
+    await expect(new FirebaseWebAuthAdapter(auth as never, exchange).signInWithCustomToken("bad-token"))
+      .rejects.toThrow("We could not sign you in. Please try again.");
     expect(exchange).not.toHaveBeenCalled();
   });
 

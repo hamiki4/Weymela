@@ -209,7 +209,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Existing_customer_can_request_creator_without_losing_customer_access()
+    public async Task Existing_customer_can_add_creator_with_server_assigned_number_without_losing_customer_access()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -222,6 +222,85 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var result = await service.SubmitAsync(new Actor(user, ActorRole.Customer, CustomerId: customer), request, "enroll-1", default);
         Assert.Equal(RoleEnrollmentStatus.Pending, result.Status);
         Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Customer && x.IsActive));
+        await service.ReviewAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), result.Id, true, null, result.Version, "approve-creator", default);
+        var creator = await db.PublicWorkspaceProfiles.SingleAsync(x => x.Role == ActorRole.Creator);
+        Assert.True(creator.CreatorNumber >= 1000);
+        Assert.Equal("CR-1", creator.PublicId);
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Customer && x.IsActive));
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Creator && x.SubjectId == creator.SubjectId && x.IsActive));
+    }
+
+    [Fact]
+    public async Task Public_creator_application_requires_valid_social_link_and_activates_only_after_operations_review()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid(); var customer = Guid.NewGuid();
+        db.CommercePermissions.Add(new CommercePermission(user, ActorRole.Customer, customer, null, true, false));
+        await db.SaveChangesAsync();
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var actor = new Actor(user, ActorRole.Customer, CustomerId: customer);
+        var request = new RoleEnrollmentRequest(ActorRole.Creator, "Bella", null, "Addis", "Food", "Recipes",
+            SocialProfiles: [new("TikTok", "https://www.tiktok.com/@bella")]);
+        var missing = await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(actor,
+            request with { SocialProfiles = [] }, "missing-social", default));
+        Assert.Equal(FailureKind.Validation, missing.Kind);
+        var invalid = await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(actor,
+            request with { SocialProfiles = [new("TikTok", "https://evil.example/@bella")] }, "invalid-social", default));
+        Assert.Equal(FailureKind.Validation, invalid.Kind);
+        var pending = await service.SubmitAsync(actor, request, "creator-application", default);
+        var replay = await service.SubmitAsync(actor, request, "creator-application", default);
+        Assert.Equal(pending.Id, replay.Id);
+        Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
+        Assert.StartsWith("CR-", pending.PublicId, StringComparison.Ordinal);
+        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Creator));
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
+        var admin = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
+        var review = Assert.Single(await service.PendingAsync(admin, default));
+        Assert.Equal("Food", review.Category);
+        Assert.Equal("Recipes", review.Submission);
+        Assert.Equal("TikTok", Assert.Single(review.SocialProfiles!).Platform);
+        var approved = await service.ReviewAsync(admin, pending.Id, true, null, pending.Version, "approve", default);
+        Assert.Equal(RoleEnrollmentStatus.Approved, approved.Status);
+        var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Creator);
+        Assert.True(permission.IsActive);
+        var profile = await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == permission.SubjectId);
+        Assert.Equal(pending.PublicId, profile.PublicId);
+        Assert.True(profile.CreatorNumber >= 1000);
+        var social = await db.CreatorSocialProfiles.SingleAsync(x => x.CreatorId == permission.SubjectId);
+        Assert.Equal("SelfReported", social.VerificationStatus);
+        Assert.Equal("https://www.tiktok.com/@bella", social.ProfileUrl);
+    }
+
+    [Fact]
+    public async Task Public_business_application_is_pending_until_review_and_rejection_keeps_role_inactive()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var request = new RoleEnrollmentRequest(ActorRole.Business, "Bella Cafe", null, "Addis", "Restaurant", "Cafe");
+        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request, "business-application", default);
+        Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
+        Assert.StartsWith("BU-", pending.PublicId, StringComparison.Ordinal);
+        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
+        var denied = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ReviewAsync(new Actor(user, ActorRole.Customer),
+            pending.Id, true, null, pending.Version, "self-review", default));
+        Assert.Equal(FailureKind.Forbidden, denied.Kind);
+        foreach (var role in new[] { ActorRole.Business, ActorRole.Creator, ActorRole.Cashier })
+            Assert.Equal(FailureKind.Forbidden, (await Assert.ThrowsAsync<ApplicationFailure>(() => service.ReviewAsync(
+                new Actor(Guid.NewGuid(), role), pending.Id, true, null, pending.Version, $"review-{role}", default))).Kind);
+        var admin = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
+        var rejected = await service.ReviewAsync(admin, pending.Id, false, "Missing business details", pending.Version, "reject", default);
+        Assert.Equal(RoleEnrollmentStatus.Rejected, rejected.Status);
+        Assert.Equal("Missing business details", rejected.DecisionReason);
+        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentRejected").ToListAsync());
+        var reapplied = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
+            "business-reapplication", default);
+        Assert.Equal(RoleEnrollmentStatus.Pending, reapplied.Status);
+        Assert.NotEqual(pending.Id, reapplied.Id);
     }
 
     [Fact]

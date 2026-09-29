@@ -131,6 +131,7 @@ public sealed class UgcCustomerOfferSale
     public Guid Id { get; } = Guid.NewGuid();
     public Guid UgcCustomerOfferId { get; }
     public Guid UgcOpportunityId { get; }
+    public Guid? UgcAssignmentId { get; }
     public Guid BusinessId { get; }
     public Guid CustomerId { get; }
     public Guid CashierId { get; }
@@ -143,16 +144,16 @@ public sealed class UgcCustomerOfferSale
     public string IdempotencyKey { get; }
     public DateTime CreatedAtUtc { get; }
 
-    public UgcCustomerOfferSale(UgcCustomerOffer offer, Guid customerId, Guid cashierId,
+    public UgcCustomerOfferSale(UgcCustomerOffer offer, Guid assignmentId, Guid customerId, Guid cashierId,
         UgcCustomerOfferQuote quote, string qrReference, string idempotencyKey, DateTime now)
     {
-        if (customerId == Guid.Empty || cashierId == Guid.Empty || string.IsNullOrWhiteSpace(qrReference)
+        if (assignmentId == Guid.Empty || customerId == Guid.Empty || cashierId == Guid.Empty || string.IsNullOrWhiteSpace(qrReference)
             || string.IsNullOrWhiteSpace(idempotencyKey) || quote.PurchaseAmount.Amount <= 0
             || quote.CustomerDiscount.Amount <= 0 || quote.CustomerPays.Amount < 0
             || quote.CustomerPays.Add(quote.CustomerDiscount) != quote.PurchaseAmount
             || quote.CustomerDiscount.Add(quote.PlatformFee) != quote.FundConsumption)
             throw new ArgumentException("UGC Customer Offer Sale amounts are invalid.");
-        UgcCustomerOfferId = offer.Id; UgcOpportunityId = offer.UgcOpportunityId;
+        UgcCustomerOfferId = offer.Id; UgcOpportunityId = offer.UgcOpportunityId; UgcAssignmentId = assignmentId;
         BusinessId = offer.BusinessId; CustomerId = customerId; CashierId = cashierId;
         PurchaseAmount = quote.PurchaseAmount; CustomerDiscountAmount = quote.CustomerDiscount;
         CustomerPaysAmount = quote.CustomerPays; PlatformRevenueAmount = quote.PlatformFee;

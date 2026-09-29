@@ -47,12 +47,16 @@ test("Wallets, UGC and Reports use authoritative projections and keep period tot
   await screenshot(page, "admin-redesign-desktop-reports");
 });
 
-test("Operations Admin cannot enter Platform financial pages", async ({ page, context }) => {
+test("Operations Admin reaches deposit review without Platform financial authority", async ({ page, context }) => {
   await login(context, "operations-admin");
   await open(page, "/admin/operations");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  for (const label of ["Wallets", "Reports", "Financial Settings", "Admins"]) await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
-  for (const path of ["/admin/wallets", "/admin/reports", "/admin/settings"]) {
+  await expect(nav.getByRole("link", { name: "Wallets", exact: true })).toBeVisible();
+  for (const label of ["Reports", "Financial Settings", "Admins"]) await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+  await open(page, "/admin/wallets");
+  await expect(page.getByRole("heading", { name: /Deposit review/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Business wallets" })).toHaveCount(0);
+  for (const path of ["/admin/reports", "/admin/settings"]) {
     expect((await context.request.get(`/api${path === "/admin/settings" ? "/admin/financial-settings" : path}`)).status()).toBe(403);
     await page.goto(path);
     await expect(page).toHaveURL(/\/unauthorized$/);
@@ -78,12 +82,12 @@ test("Platform Admin mobile pages use purpose-built rows and compact bottom navi
   await expect(bottom.getByRole("link", { name: "Dashboard" })).toBeVisible();
   await expect(bottom.getByRole("link", { name: "Wallets" })).toBeVisible();
   await expect(bottom.getByRole("link", { name: "Payouts" })).toBeVisible();
-  await bottom.getByRole("button", { name: "More navigation" }).click();
-  const menu = page.getByRole("dialog", { name: "More navigation" });
-  await expect(menu.getByRole("link", { name: "Reports" })).toBeVisible();
-  await menu.getByRole("link", { name: "Reports" }).click();
+  await bottom.getByRole("link", { name: "More navigation" }).click();
+  await expect(page).toHaveURL(/\/admin\/more$/);
+  await expect(page.getByRole("dialog", { name: "More navigation" })).toHaveCount(0);
+  await page.getByRole("main").getByRole("link", { name: "Reports" }).click();
   await expect(page).toHaveURL(/\/admin\/reports$/);
-  await expect(menu).not.toBeVisible();
+  await expect(bottom).toBeVisible();
 });
 
 test("interactive controls keep their colors, borders, opacity and shadow on hover", async ({ page, context }) => {

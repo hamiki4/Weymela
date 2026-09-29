@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Notifications;
+using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Records;
 using Xunit;
 
@@ -31,6 +34,34 @@ public sealed class Phase4CheckoutTests(PostgresFixture fixture)
         await Assert.ThrowsAsync<ApplicationFailure>(() => s.Issue()); await using var db = s.Database.Open();
         Assert.Empty(await s.Queries(db).CustomerOffersAsync(s.Customer)); Assert.Empty(await db.OfferQrSessions.ToListAsync());
     }
+    [Fact] public async Task Manual_checkout_resolves_the_server_assigned_creator_number_and_exact_source()
+    {
+        var s = await Phase4Scenario.Create(fixture);
+        await using var db = s.Database.Open();
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile
+        {
+            SubjectId = s.Creator.CreatorId!.Value, Role = ActorRole.Creator,
+            DisplayName = "Creator", PublicId = "CR-MANUAL-LEGACY"
+        });
+        db.CustomerProfiles.Add(new CustomerProfileRecord
+        {
+            CustomerId = s.Customer.CustomerId!.Value, UserId = s.Customer.UserId,
+            PreferredName = "Customer", CreatedAtUtc = Scenario.Now, UpdatedAtUtc = Scenario.Now
+        });
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord
+        {
+            UserId = s.Customer.UserId, Kind = "Phone",
+            IdentifierHash = EmailAuthService.HashIdentifier("+251900000000"),
+            IsVerified = true, CreatedAtUtc = Scenario.Now
+        });
+        await db.SaveChangesAsync();
+        var creatorNumber = (await db.PublicWorkspaceProfiles.SingleAsync()).CreatorNumber!.Value;
+        var lookup = await s.Checkout(db).ResolveManualAsync(s.Cashier,
+            new(creatorNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), "0900000000"));
+        Assert.Equal(s.AllocationId, Assert.Single(lookup.Offers).Id);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => s.Checkout(db).ResolveManualAsync(s.Cashier,
+            new("CR-MANUAL-LEGACY", "0900000000")));
+    }
     [Fact] public async Task Issue_retry_returns_same_session_reference_without_persisting_recoverable_raw_token()
     {
         var s = await Phase4Scenario.Create(fixture); var qr = await s.Issue(); var repeat = await s.Issue();
@@ -40,7 +71,9 @@ public sealed class Phase4CheckoutTests(PostgresFixture fixture)
     [Fact] public async Task Exact_expiry_boundary_rejects_without_balance_or_qr_mutation()
     {
         var s = await Phase4Scenario.Create(fixture); var qr = await s.Issue(); s.Clock.Now = qr.ExpiresAtUtc;
-        await Assert.ThrowsAsync<ApplicationFailure>(() => s.Redeem(qr)); await using var db = s.Database.Open();
+        var error = await Assert.ThrowsAsync<ApplicationFailure>(() => s.Redeem(qr));
+        Assert.Equal("QR code expired. Ask the Customer to generate a new one.", error.Message);
+        await using var db = s.Database.Open();
         Assert.Empty(await db.VerifiedSales.ToListAsync()); Assert.Equal(OfferQrStatus.Issued, (await db.OfferQrSessions.SingleAsync()).Status);
         Assert.Equal(2000, (await db.CreatorAllocations.SingleAsync()).RemainingAmount.Amount);
     }
@@ -94,6 +127,28 @@ public sealed class Phase4CheckoutTests(PostgresFixture fixture)
         Assert.Contains(journal.Lines, x => x.Account == "CreatorAllocatedReserve" && x.Amount.Amount == 100 && x.Type == JournalLineType.Debit);
         Assert.Contains(await db.OutboxMessages.ToListAsync(), x => x.EventType == "VerifiedSaleRecorded");
         Assert.Contains(await db.AuditEvents.ToListAsync(), x => x.EventType == "VerifiedSale");
+    }
+    [Fact] public async Task View_plus_sale_notifies_exact_creator_earning_and_customer_cashback_once()
+    {
+        var s = await Phase4Scenario.Create(fixture);
+        var qr = await s.Issue();
+        await s.Redeem(qr);
+        await s.Redeem(qr);
+        await using (var db = s.Database.Open())
+        {
+            var processor = new OutboxProcessor(db,
+                new RuntimeOptions { WorkerBatchSize = 100, RecipientBatchSize = 100 },
+                new DisabledPushProvider(), s.Clock);
+            for (var i = 0; i < 10 && await processor.ProcessAsync(default) > 0; i++) { }
+        }
+        await using var verify = s.Database.Open();
+        var creator = Assert.Single(await verify.InAppNotifications.Where(x =>
+            x.EventType == "CreatorCommissionEarned" && x.UserId == s.Creator.UserId).ToListAsync());
+        var customer = Assert.Single(await verify.InAppNotifications.Where(x =>
+            x.EventType == "CustomerCashbackEarned" && x.UserId == s.Customer.UserId).ToListAsync());
+        Assert.Contains("45 ETB", creator.Message);
+        Assert.Contains("1000 ETB", customer.Message);
+        Assert.Contains("20 ETB", customer.Message);
     }
     [Fact] public async Task Exact_budget_boundary_can_be_spent_without_negative_balance()
     {

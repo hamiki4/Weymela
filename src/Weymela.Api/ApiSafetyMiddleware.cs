@@ -20,7 +20,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
         var productFormOrigin = productIntegration.Enabled
             ? " " + new Uri(productIntegration.BeginUrl).GetLeftPart(UriPartial.Authority)
             : "";
-        context.Response.Headers["Content-Security-Policy"]=$"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'{productFormOrigin}";
+        context.Response.Headers["Content-Security-Policy"]=$"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'{productFormOrigin}";
         context.Response.Headers["X-Frame-Options"]="DENY";
         if(!options.Development&&context.Request.IsHttps)context.Response.Headers.StrictTransportSecurity="max-age=31536000";
         if(context.Request.Path.StartsWithSegments("/api"))
@@ -41,14 +41,18 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 if (suppliedProfile.Length > 0 && (activeProfile is null || !WorkspaceAuthentication.MatchesKey(activeProfile, suppliedProfile)))
                 {await Error(context,409,"ProfileContextChanged","This workspace changed in another tab. Refresh before submitting again.");return;}
                 if(!options.Development&&!context.Request.IsHttps){await Error(context,403,"SecureTransportRequired","A secure connection is required.");return;}
-                if(context.Request.ContentLength>RuntimeOptions.RequestBytes){await Error(context,413,"RequestTooLarge","This request is too large.");return;}
+                if(!options.FinancialWritesEnabled&&EndpointSecurity.Financial(context)){await Error(context,503,"FinancialWritesPaused","Financial actions are currently paused. No funds have moved.");return;}
+                var receiptUpload=context.Request.Path.Equals("/api/business/deposit-requests",StringComparison.OrdinalIgnoreCase)
+                    && HttpMethods.IsPost(context.Request.Method);
+                var limit=receiptUpload?RuntimeOptions.ReceiptRequestBytes:RuntimeOptions.RequestBytes;
+                if(context.Request.ContentLength>limit){await Error(context,413,"RequestTooLarge","This request is too large.");return;}
                 // Bound unknown-length/chunked bodies too, including non-Kestrel test hosts. This remains in memory, never on disk.
                 if(context.Request.ContentLength is null)
                 {
                     var payload=new MemoryStream();var buffer=new byte[4096];int read;
                     while((read=await context.Request.Body.ReadAsync(buffer,context.RequestAborted))>0)
                     {
-                        if(payload.Length+read>RuntimeOptions.RequestBytes){payload.Dispose();await Error(context,413,"RequestTooLarge","This request is too large.");return;}
+                        if(payload.Length+read>limit){payload.Dispose();await Error(context,413,"RequestTooLarge","This request is too large.");return;}
                         payload.Write(buffer,0,read);
                     }
                     payload.Position=0;context.Request.Body=payload;context.Request.ContentLength=payload.Length;context.Response.RegisterForDispose(payload);
@@ -56,9 +60,9 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 if(context.Request.ContentLength>0||context.Request.Headers.TransferEncoding.Count>0)
                 {
                     var media=context.Request.ContentType?.Split(';')[0].Trim();
-                    if(media!="application/json"){await Error(context,415,"UnsupportedContentType","Use a JSON request. File uploads are not enabled.");return;}
+                    if(receiptUpload?media!="multipart/form-data":media!="application/json")
+                    {await Error(context,415,"UnsupportedContentType",receiptUpload?"Upload an amount and JPEG or PNG receipt.":"Use a JSON request.");return;}
                 }
-                if(!options.FinancialWritesEnabled&&EndpointSecurity.Financial(context)){await Error(context,503,"FinancialWritesPaused","Financial actions are currently paused. No funds have moved.");return;}
             }
         }
         try { await next(context); }

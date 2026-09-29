@@ -194,15 +194,17 @@ class PilotHostMetadataTests(unittest.TestCase):
         self.firebase = root / 'firebase.json'
         self.certificate = root / 'cookie.pfx'
         self.keys = root / 'keys'
+        self.receipts = root / 'receipts'
         self.firebase.touch(mode=0o400)
         self.certificate.touch(mode=0o400)
         self.keys.mkdir(mode=0o700)
+        self.receipts.mkdir(mode=0o700)
         self.uid, self.gid = os.geteuid(), os.getegid()
 
     def validate(self, uid=None, gid=None):
         return runtime.validate_host_metadata(
             self.firebase, self.certificate, self.keys,
-            self.uid if uid is None else uid, self.gid if gid is None else gid)
+            self.uid if uid is None else uid, self.gid if gid is None else gid, self.receipts)
 
     def test_valid_metadata_uses_lstat_without_reading_secret_contents(self):
         with (
@@ -227,6 +229,14 @@ class PilotHostMetadataTests(unittest.TestCase):
         self.firebase.unlink()
         self.firebase.touch(mode=0o400)
         self.keys.chmod(0o750)
+        self.assertTrue(self.validate())
+
+    def test_receipt_directory_must_remain_private_and_persistent(self):
+        self.receipts.chmod(0o755)
+        self.assertTrue(self.validate())
+        self.receipts.chmod(0o700)
+        self.receipts.rmdir()
+        self.receipts.symlink_to(self.keys, target_is_directory=True)
         self.assertTrue(self.validate())
 
 

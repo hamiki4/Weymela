@@ -324,11 +324,13 @@ export function Dialog({
   open,
   onClose,
   children,
+  className = "",
 }: {
   title: string;
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -338,7 +340,7 @@ export function Dialog({
   }, [open]);
   return (
     <dialog
-      className="dialog"
+      className={`dialog ${className}`}
       ref={ref}
       aria-labelledby={id}
       onClose={onClose}

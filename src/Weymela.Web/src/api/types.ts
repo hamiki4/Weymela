@@ -353,6 +353,9 @@ export interface Earnings {
     source: string;
     amount: number;
     atUtc: string;
+    business?: string | null;
+    sourceType?: string | null;
+    status?: string;
   }[];
   payoutHistory: Payout[];
 }
@@ -384,6 +387,9 @@ export interface AdminReport {
   ugc: { type: string; allocated: number; used: number; verifiedViews: number; verifiedSales: number; currentRemaining: number; creatorPayments: number; customerDiscounts: number }[];
   accounts: { customers: number; creators: number; businesses: number; newAccountsInPeriod: number };
   currentBusinessWalletBalance: number; currentPlatformUnsettled: number;
+  purchases: { id: string; sourceId: string; ugcAssignmentId: string | null; sourceType: string;
+    source: string; business: string; purchaseAmount: number; businessCharge: number; customerBenefit: number;
+    creatorSaleEarning: number; platformShare: number; occurredAtUtc: string; status: string }[];
 }
 export interface OperationsHome {
   pendingReviews: number;
@@ -542,6 +548,8 @@ export interface UgcCard {
   customerFacingSlogan?: string;
   platformFeePercent?: number;
   platformFee?: number;
+  productProvided: boolean;
+  creatorMustPurchase: boolean;
 }
 export interface UgcAssignment {
   id: string;
@@ -562,6 +570,8 @@ export interface UgcAssignment {
   platformRequirements: UgcPlatformRequirement[];
   feedback: string | null;
   submissionUrl: string | null;
+  productProvided: boolean;
+  creatorMustPurchase: boolean;
 }
 export interface UgcRequest {
   id: string;
@@ -638,6 +648,7 @@ export interface PlatformSummary {
 }
 export interface Offer {
   id: string;
+  ugcAssignmentId?: string | null;
   source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;
   offer: string;
   business: {
@@ -730,7 +741,10 @@ export interface CheckoutSaleRow {
   purchaseAmount: number;
   customerDiscount: number;
   customerPays: number;
-  platformFee?: number | null;
+  businessCharge: number;
   createdAtUtc: string;
   cashier: string | null;
+  creator: string | null;
+  customerMasked: string;
+  status: string;
 }

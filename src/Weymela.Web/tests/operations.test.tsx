@@ -64,9 +64,14 @@ describe("Operational states", () => {
   });
   it("submits arbitrary positive deposit for review without claiming wallet credit", async () => {
     const api = mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);
-    await userEvent.type(screen.getByLabelText("Amount"), "17.23"); await userEvent.type(screen.getByLabelText("Payment reference"), "PAY-17");
+    await userEvent.type(screen.getByLabelText("Amount"), "17.23");
+    await userEvent.upload(screen.getByLabelText("Payment receipt"), new File(["receipt"], "receipt.png", { type: "image/png" }));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
-    expect(await screen.findByText(/wallet has not been credited/)).toBeVisible(); expect(api.writes[0].body).toEqual({ amount: 17.23, externalReference: "PAY-17", proofReference: null });
+    expect(await screen.findByText(/Your payment is waiting for approval/)).toBeVisible();
+    expect(api.writes[0].body).toBeInstanceOf(FormData);
+    expect(api.writes[0].body.get("amount")).toBe("17.23");
+    expect(api.writes[0].body.get("receipt")).toBeInstanceOf(File);
+    expect(screen.queryByLabelText("Payment reference")).not.toBeInTheDocument();
   });
 });
 describe("Camera lifecycle", () => {

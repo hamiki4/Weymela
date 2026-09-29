@@ -67,7 +67,8 @@ internal sealed class AttributableFinance(WeymelaDbContext db)
                 account.Earn(amounts.Customer, sale.Id, at, correlation);
                 var entry = account.Entries.Last(); db.CustomerCashbackEntries.Add(entry); db.Entry(entry).Property("JournalId").CurrentValue = j.Id;
                 await operation.EmitEligibility(PayoutBeneficiary.Customer, sale.CustomerId, before, account.AvailableCashback, at, ct);
-                operation.Event(nameof(CustomerCashbackEarned), new { sale.CustomerId, Amount = amounts.Customer, JournalId = j.Id, CorrelationId = correlation }, at);
+                operation.Event(nameof(CustomerCashbackEarned), new { sale.CustomerId, SaleId = sale.Id,
+                    PurchaseAmount = sale.PurchaseAmount, Amount = amounts.Customer, JournalId = j.Id, CorrelationId = correlation }, at);
             }
             operation.Event(nameof(VerifiedSaleRecorded), new { SaleId = sale.Id, JournalId = j.Id, CorrelationId = correlation }, at);
         }

@@ -363,7 +363,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     if (init?.method === "POST") {
       writes.push({
         path,
-        body: init.body ? JSON.parse(String(init.body)) : null,
+        body: init.body instanceof FormData ? init.body : init.body ? JSON.parse(String(init.body)) : null,
         key: new Headers(init.headers).get("Idempotency-Key"),
       });
       const body = path.endsWith("/qr")

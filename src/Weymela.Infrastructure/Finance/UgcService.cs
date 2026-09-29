@@ -65,6 +65,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var opportunity = await Opportunity(id, token);
             Own(actor, opportunity);
             if (opportunity.Version != expectedVersion) throw Conflict();
+            if (opportunity.ProductProvided == opportunity.CreatorMustPurchase)
+                throw new ApplicationFailure(FailureKind.Validation, "Choose one Product arrangement before publishing UGC.");
             var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == opportunity.BusinessId, token);
             var offer = await db.UgcCustomerOffers.SingleOrDefaultAsync(x => x.UgcOpportunityId == opportunity.Id, token);
             var correlation = Guid.NewGuid();
@@ -105,7 +107,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             if (await operation.Replay(actor, "RequestUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
             var opportunity = await Opportunity(id, token);
             if (opportunity.Status != UgcOpportunityStatus.Open || opportunity.ReservedFunding.Amount < opportunity.RequiredFunding.Amount
-                || opportunity.DueDateUtc <= Now || opportunity.ApprovedCreatorCount >= opportunity.CreatorCapacity)
+                || opportunity.DueDateUtc <= Now || opportunity.ApprovedCreatorCount >= opportunity.CreatorCapacity
+                || opportunity.ProductProvided == opportunity.CreatorMustPurchase)
                 throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity is not accepting requests.");
             if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Business
                     && x.SubjectId == opportunity.BusinessId && x.IsActive, token))
@@ -411,9 +414,13 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             .Select(x => x.SubjectId).Distinct().ToListAsync(ct);
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId))
             .ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
+        var offers = await db.UgcCustomerOffers.AsNoTracking()
+            .Where(x => businessIds.Contains(x.BusinessId))
+            .ToDictionaryAsync(x => x.UgcOpportunityId, ct);
         return rows.Where(x => activeBusinesses.Contains(x.BusinessId) && x.ReservedFunding.Amount >= x.RequiredFunding.Amount
+                && x.ProductProvided != x.CreatorMustPurchase
                 && Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity)
-            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), null, false)).ToArray();
+            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), offers.GetValueOrDefault(x.Id), false)).ToArray();
     }
 
     public async Task<IReadOnlyList<UgcRequestView>> CreatorRequestsAsync(Actor actor, CancellationToken ct)
@@ -510,7 +517,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 x.CreatorPayment.Amount, x.Status.ToString(), x.AcceptedRevisionNumber, x.RevisionAcceptanceRequired,
                 opportunity.DueDateUtc, opportunity.Instructions, ParseResources(opportunity.ResourcesJson), opportunity.Location,
                 opportunity.PlatformRequirements.Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(),
-                submission?.Feedback, submission?.SubmissionUrl);
+                submission?.Feedback, submission?.SubmissionUrl, opportunity.ProductProvided, opportunity.CreatorMustPurchase);
         }).ToArray();
     }
 
@@ -541,7 +548,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     }
     private static bool Eligible(IReadOnlyCollection<CreatorSocialProfileRecord> socials, UgcOpportunity opportunity) =>
         opportunity.PlatformRequirements.Where(x => x.MinimumAudience is not null).All(requirement =>
-            socials.Any(s => s.Platform == requirement.Platform && s.SelfReportedAudience >= requirement.MinimumAudience));
+            socials.Any(s => s.Platform == requirement.Platform && s.VerificationStatus == "Verified"
+                && s.VerifiedAudience >= requirement.MinimumAudience));
 
     private FinancialJournal Journal(Actor actor, JournalSourceType source, Money amount, string debit, string credit,
         string key, Guid correlation, Guid opportunityId, Guid? assignmentId, Guid? customerOfferId = null)
@@ -601,18 +609,19 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         return result;
     }
     private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer, bool includeBusinessFinancials) => new(x.Id, x.BusinessId, business,
-        x.Title, x.Slogan, x.ContentType.ToString(), x.Status.ToString(), x.CreatorPayment.Amount, x.CreatorCapacity,
+        x.Title, x.Slogan, x.ContentType.ToString(), x.Status.ToString(),
+        includeBusinessFinancials ? x.RequiredFunding.Amount / x.CreatorCapacity : x.CreatorPayment.Amount, x.CreatorCapacity,
         x.ApprovedCreatorCount, includeBusinessFinancials ? x.RequiredFunding.Amount : null,
         includeBusinessFinancials ? x.ReservedFunding.Amount : null, includeBusinessFinancials ? x.UsedFunding.Amount : null, x.DueDateUtc,
         x.Location, x.PlatformRequirements.Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(), requestStatus, x.Version,
-        includeBusinessFinancials ? offer is not null : null,
-        includeBusinessFinancials ? offer?.CustomerDiscountPercent : null,
+        offer is not null,
+        offer?.CustomerDiscountPercent,
         includeBusinessFinancials ? offer?.FundedLimit.Amount : null,
         includeBusinessFinancials ? offer?.RemainingFunding.Amount : null,
         includeBusinessFinancials ? offer?.Status.ToString() : null,
         includeBusinessFinancials ? offer?.CustomerFacingSlogan : null,
         includeBusinessFinancials ? x.PricingSnapshot.PlatformFeePercent : null,
-        includeBusinessFinancials ? x.PlatformFee.Amount : null);
+        includeBusinessFinancials ? x.PlatformFee.Amount : null, x.ProductProvided, x.CreatorMustPurchase);
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,
         decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)

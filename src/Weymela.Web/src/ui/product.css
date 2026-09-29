@@ -42,6 +42,16 @@
 .product-shell .desktop-data td { color: var(--product-ink); font-size: .86rem; font-variant-numeric: tabular-nums; }
 .product-shell .desktop-data td.numeric { font-weight: 650; }
 .product-shell .data-card .funds-grid { padding: 10px 0; }
+.ugc-arrangement { margin: 8px 0; color: var(--product-ink); line-height: 1.4; }
+.ugc-arrangement strong { font-weight: 700; }
+.ugc-product-choice { display: grid; gap: 6px; }
+.ugc-product-choice legend { margin-bottom: 6px; font-weight: 650; }
+.ugc-product-choice label { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 7px 9px; border: 1px solid var(--product-line); border-radius: 8px; background: #fff; cursor: pointer; }
+.ugc-product-choice label:has(input:checked) { border-color: var(--role-accent, var(--green)); background: var(--role-soft, var(--tint)); }
+.ugc-product-choice input { flex: none; margin: 4px 0 0; accent-color: var(--role-accent, var(--green)); }
+.ugc-product-choice label span { display: grid; min-width: 0; gap: 2px; }
+.ugc-product-choice label small { color: var(--secondary-text); }
+.ugc-draft-arrangement { display: grid; gap: 9px; margin: 10px 0; }
 .product-shell .button { font-weight: 600; min-height: 44px; }
 .product-shell .button.secondary { color: var(--product-ink); border-color: var(--role-border); }
 .product-shell .empty-state { padding: 12px 2px; text-align: left; }
@@ -109,7 +119,7 @@
 .profile-info-row { display: grid; grid-template-columns: minmax(100px, 38%) minmax(0, 1fr); gap: 10px; padding: 11px 2px; border-bottom: 1px solid var(--product-line); font-size: .86rem; }
 .profile-info-row dt { color: #4b5563; }
 .profile-info-row dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #111827; font-weight: 600; }
-#social-accounts { scroll-margin-top: 18px; }
+#social-profiles { scroll-margin-top: 18px; }
 .product-desktop-nav { display: none; }
 .role-business .business-create-action .button { min-height: 44px; padding: 9px 16px; border-radius: 10px; }
 .business-balance-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 14px 6px; margin-bottom: 16px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); }
@@ -146,19 +156,32 @@
 .role-creator .creator-activity-meta small { width: auto; margin: 0; font-size: .68rem; line-height: 1.25; text-align: right; white-space: nowrap; }
 .role-creator .creator-activity-list p { font-size: .78rem; line-height: 1.35; color: var(--product-secondary); }
 .creator-social-list { display: grid; border-top: 1px solid var(--product-line); }
-.creator-platform-icon { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px; background: var(--role-soft); color: var(--role-accent); font-size: 1rem; font-weight: 800; }
-.creator-social-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; min-height: 54px; padding: 9px 2px; border-bottom: 1px solid var(--product-line); }
-.creator-social-row > div { display: grid; flex: 1; min-width: 110px; gap: 2px; }
+.creator-platform-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 9px; color: #fff; }
+.creator-platform-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; }
+.creator-platform-tiktok { background: #111827; }
+.creator-platform-tiktok svg { filter: drop-shadow(-1px -1px #25f4ee) drop-shadow(1px 1px #fe2c55); }
+.creator-platform-youtube { background: #e62117; }
+.creator-platform-youtube svg { fill: #fff; stroke: none; }
+.creator-platform-instagram { background: linear-gradient(35deg, #feda75, #fa7e1e 30%, #d62976 58%, #962fbf 82%, #4f5bd5); }
+.creator-platform-facebook { background: #1877f2; font-family: Arial, sans-serif; font-size: 1.55rem; font-weight: 800; }
+.creator-social-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 56px; padding: 8px 2px; border-bottom: 1px solid var(--product-line); }
+.creator-social-row > div { display: grid; min-width: 0; gap: 2px; }
 .creator-social-row strong { font-size: .91rem; }
 .creator-social-row small { color: var(--product-secondary); }
 .creator-social-row .creator-social-handle { color: var(--product-ink); font-size: .8rem; overflow-wrap: anywhere; }
-.creator-social-row > a { font-size: .82rem; font-weight: 650; color: var(--role-accent); }
+.creator-social-actions { display: flex; align-items: center; gap: 9px; }
+.creator-social-actions a, .creator-social-actions button { padding: 4px 0; border: 0; background: transparent; color: var(--role-accent); font: inherit; font-size: .79rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.creator-social-actions button { cursor: pointer; }
+.creator-social-actions a:hover, .creator-social-actions button:hover { text-decoration: underline; }
+.creator-social-dialog { width: min(420px, calc(100% - 24px)); padding: 18px; }
+.creator-social-dialog input { width: 100%; min-width: 0; max-width: 100%; }
+.creator-social-dialog .actions { flex-wrap: wrap; }
 .creator-social-status { padding: 3px 7px; border-radius: 6px; background: var(--role-soft); color: var(--role-accent); font-size: .72rem; font-weight: 650; }
 .role-creator .creator-discover-cta { padding: 13px 0; margin: 4px 0 20px; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; background: transparent; }
 .role-creator .creator-discover-cta h2 { margin: 0; font-size: 1rem; }
 .role-creator .creator-activity-list { gap: 0; }
 .role-creator .creator-activity-list article { padding: 12px 0; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; }
-.role-creator .creator-opportunity-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px; border-color: var(--role-border); border-radius: 12px; box-shadow: none; }
+.role-creator .creator-opportunity-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px; border-color: #d8d2e8; border-radius: 12px; box-shadow: 0 2px 8px rgb(43 33 70 / 7%); }
 .role-creator .creator-opportunity-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
 .role-creator .creator-opportunity-card h3 { margin: 0; }
 .role-creator .creator-opportunity-card p { margin: 0; }
@@ -166,6 +189,14 @@
 .role-creator .creator-opportunity-meta { color: var(--product-secondary); font-size: .86rem; }
 .role-creator .creator-opportunity-location { display: inline-flex; align-items: center; gap: 4px; color: var(--product-secondary); font-size: .84rem; }
 .role-creator .creator-platform-counts { margin: 3px 0; }
+.role-creator .creator-platform-counts > span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px 3px 3px; font-weight: 650; }
+.role-creator .creator-platform-counts .creator-platform-icon { width: 25px; height: 25px; border-radius: 6px; }
+.role-creator .creator-platform-counts .creator-platform-icon svg { width: 18px; height: 18px; }
+.role-creator .creator-opportunity-type { color: var(--role-accent); font-size: .78rem; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
+.role-creator .creator-opportunity-earn { display: flex; flex-direction: column; gap: 1px; }
+.role-creator .creator-opportunity-earn strong { color: var(--product-ink); font-size: 1rem; }
+.role-creator .creator-opportunity-earn span { color: var(--product-secondary); font-size: .84rem; }
+.role-creator .creator-opportunity-unavailable { color: var(--product-secondary); font-weight: 700; }
 .role-creator .creator-platform-counts .platform-full { color: var(--product-muted); background: #f3f4f6; border-color: #d1d5db; }
 .role-creator .creator-opportunity-card > .button { margin-top: auto; }
 .creator-platform-selector { display: grid; gap: 8px; margin-bottom: 15px; }

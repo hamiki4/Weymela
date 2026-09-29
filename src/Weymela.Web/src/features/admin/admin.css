@@ -14,6 +14,14 @@
 .role-platformadmin .topbar,
 .role-platformadmin .sidebar,
 .role-platformadmin .mobile-role-nav { background: #fff; }
+.admin-more-page { max-width: 620px; padding-bottom: 22px; }
+.admin-more-back { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; color: var(--admin-ink, #111827); font-weight: 650; text-decoration: none; }
+.admin-more-page .page-header { margin-bottom: 12px; }
+.admin-more-group { margin-top: 18px; }
+.admin-more-group h2 { margin: 0 0 5px; color: var(--admin-muted, #4b5563); font-size: .84rem; font-weight: 700; }
+.admin-more-group > div { border-top: 1px solid #e1e7e3; }
+.admin-more-group a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 49px; padding: 8px 2px; border-bottom: 1px solid #e1e7e3; color: var(--admin-ink, #111827); font-weight: 650; text-decoration: none; }
+.admin-more-group a:hover, .admin-more-group a:focus-visible { color: var(--role-accent, #1f2937); }
 .role-platformadmin .topbar { border-bottom-color: #e5e7eb; }
 .role-platformadmin .workspace-label { color: var(--admin-secondary); }
 .role-platformadmin .topbar-identity { color: var(--admin-ink); font-size: .89rem; font-weight: 700; }
@@ -68,6 +76,9 @@
 .admin-action-menu summary::-webkit-details-marker { display: none; }
 .admin-action-menu[open] > div { position: absolute; z-index: 8; right: 0; top: 100%; min-width: 180px; background: #fff; border: 1px solid #d6ded7; border-radius: 7px; box-shadow: 0 8px 24px #17282220; padding: 4px; }
 .admin-action-menu button { display: block; width: 100%; min-height: 40px; padding: 8px 10px; text-align: left; color: var(--admin-ink); background: transparent; border: 0; border-radius: 4px; font-weight: 600; }
+.admin-action-menu .destructive-action, .admin-page .destructive-action { color: #a52727; }
+.admin-page .button.destructive-action { border-color: #a52727; }
+.admin-action-menu[open] > div { max-width: calc(100vw - 24px); }
 .admin-page:has(.admin-action-menu) .desktop-data { overflow: visible; }
 .admin-dashboard-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--admin-line-soft); }
 .admin-dashboard-links > a { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 53px; padding: 11px 3px; color: var(--admin-ink); border-bottom: 1px solid var(--admin-line-soft); font-size: .84rem; font-weight: 600; }
@@ -85,6 +96,13 @@
 .admin-deposit-list { display: grid; gap: 18px; }
 .admin-deposit-list form { display: grid; gap: 6px; padding-bottom: 16px; border-bottom: 1px solid var(--admin-line-soft); }
 .admin-deposit-list small { color: var(--admin-secondary); overflow-wrap: anywhere; }
+.admin-deposit-cards { display: grid; gap: 8px; }
+.admin-deposit-card { display: grid; gap: 6px; min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--admin-line-soft); }
+.admin-deposit-card > div:first-child { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.admin-deposit-card small { color: var(--admin-secondary); }
+.admin-deposit-card .actions, .admin-deposit-review .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-deposit-review { display: grid; gap: 14px; min-width: 0; }
+.admin-receipt-image { display: block; width: 100%; max-height: 60vh; object-fit: contain; background: #f3f5f3; border: 1px solid var(--admin-line-soft); border-radius: 8px; }
 .admin-create { max-width: 880px; }
 @media (max-width: 599px) {
   .role-platformadmin .main-content { padding: 18px 16px 85px; }
@@ -121,3 +139,11 @@
   .admin-ugc-row { grid-template-columns: minmax(230px, 1fr) minmax(0, 3fr); align-items: center; }
   .admin-ugc-row .admin-mobile-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+.admin-profile-request { display: grid; gap: 8px; min-width: 0; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+.admin-profile-request > div:first-child { display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: baseline; }
+.admin-profile-request small, .admin-profile-details { color: var(--secondary-text); font-size: .8rem; }
+.admin-profile-details, .admin-profile-social { display: flex; flex-wrap: wrap; gap: 5px 12px; min-width: 0; overflow-wrap: anywhere; }
+.admin-profile-social { font-size: .82rem; }
+.admin-profile-social a { color: var(--role-accent); }
+.admin-profile-reject { display: grid; gap: 8px; max-width: 440px; }
+.admin-profile-reject input { width: 100%; min-width: 0; }

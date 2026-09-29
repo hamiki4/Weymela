@@ -64,9 +64,10 @@ public sealed partial class WorkspaceQueries
             if(p.ReservedBudget.Amount<=0||!new CreatorEligibility().IsEligible(actor.CreatorId.Value,p.Eligibility,profile))continue;
             if(!activeBusinesses.Contains(p.BusinessId))continue;
             var request=requests.FirstOrDefault(x=>x.PromotionId==p.Id);
-            if(p.UnallocatedBudget.Amount<=0&&request is null)continue;
-            var eligibleSocials=socials.Where(s=>p.Platforms.Any(slot=>slot.Platform==s.Platform&&slot.Available>0)).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience)).ToArray();
-            if(p.Platforms.Count>0&&eligibleSocials.Length==0&&request is null)continue;
+            var allPlatformsFull=p.Platforms.Count>0&&p.Platforms.All(slot=>slot.Available<=0);
+            if(p.UnallocatedBudget.Amount<=0&&request is null&&!allPlatformsFull)continue;
+            var eligibleSocials=socials.Where(s=>s.VerificationStatus=="Verified"&&p.Platforms.Any(slot=>slot.Platform==s.Platform&&slot.Available>0)).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience)).ToArray();
+            if(p.Platforms.Count>0&&eligibleSocials.Length==0&&request is null&&!allPlatformsFull)continue;
             result.Add(new(p.Id,p.PublicPromotionId,businessCards[p.BusinessId],p.Title,p.Description,PromotionTypeLabel(p.PromotionType),
                 p.Eligibility.Requirements,p.Eligibility.Category,p.Eligibility.Market,p.Eligibility.MinimumVerifiedFollowers,p.StartDateUtc,p.EndDateUtc,
                 p.PromotionLiveDurationDays,CreatorPrice(p.PricingSnapshot),request?.Status.ToString(),"Your Creator profile meets this Promotion's requirements.",p.Slogan,p.Location,
@@ -114,9 +115,30 @@ public sealed partial class WorkspaceQueries
     {
         await DemandCreator(actor,ct);var eligibility=await new PayoutService(db,clock).EligibilityAsync(actor,PayoutBeneficiary.Creator,actor.CreatorId!.Value,ct);
         var entries=await db.CreatorEarningEntries.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).OrderByDescending(x=>x.CreatedAtUtc).ToListAsync(ct);
-        var history=new List<EarningItem>();foreach(var e in entries)
-            history.Add(new(e.Id,e.PromotionId is null?(e.Source==EarningSource.Ugc?"UGC":"Account adjustment"):await db.Promotions.Where(x=>x.Id==e.PromotionId).Select(x=>x.Title).SingleAsync(ct),
-                e.Source switch{EarningSource.ViewReward=>"View Earnings",EarningSource.SaleCommission=>"Sale Earnings",EarningSource.Ugc=>"UGC Earnings",_=>"Authorized adjustment"},e.Amount.Amount,e.CreatedAtUtc));
+        var promotionIds=entries.Where(x=>x.PromotionId is not null).Select(x=>x.PromotionId!.Value).Distinct().ToArray();
+        var promotions=await db.Promotions.AsNoTracking().Where(x=>promotionIds.Contains(x.Id))
+            .ToDictionaryAsync(x=>x.Id,x=>new{x.Title,x.BusinessId,x.PromotionType},ct);
+        var assignmentIds=entries.Where(x=>x.UgcAssignmentId is not null).Select(x=>x.UgcAssignmentId!.Value).Distinct().ToArray();
+        var ugcAssignments=await db.UgcAssignments.AsNoTracking().Where(x=>assignmentIds.Contains(x.Id))
+            .ToDictionaryAsync(x=>x.Id,x=>x.UgcOpportunityId,ct);
+        var ugcIds=ugcAssignments.Values.Distinct().ToArray();
+        var ugc=await db.UgcOpportunities.AsNoTracking().Where(x=>ugcIds.Contains(x.Id))
+            .ToDictionaryAsync(x=>x.Id,x=>new{x.Title,x.BusinessId},ct);
+        var businessIds=promotions.Values.Select(x=>x.BusinessId).Concat(ugc.Values.Select(x=>x.BusinessId)).Distinct().ToArray();
+        var businessNames=await db.PublicWorkspaceProfiles.AsNoTracking().Where(x=>x.Role==ActorRole.Business&&businessIds.Contains(x.SubjectId))
+            .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);
+        var history=new List<EarningItem>();
+        foreach(var e in entries)
+        {
+            var promotion=e.PromotionId is { } promotionId && promotions.TryGetValue(promotionId,out var p)?p:null;
+            var ugcSource=e.UgcAssignmentId is { } assignmentId && ugcAssignments.TryGetValue(assignmentId,out var ugcId)
+                && ugc.TryGetValue(ugcId,out var u)?u:null;
+            var businessId=promotion?.BusinessId ?? ugcSource?.BusinessId;
+            history.Add(new(e.Id,promotion?.Title??ugcSource?.Title??"Account adjustment",
+                e.Source switch{EarningSource.ViewReward=>"View Earnings",EarningSource.SaleCommission=>"Sale Earnings",EarningSource.Ugc=>"UGC Earnings",_=>"Authorized adjustment"},
+                e.Amount.Amount,e.CreatedAtUtc,businessId is { } id?businessNames.GetValueOrDefault(id):null,
+                e.Source==EarningSource.Ugc?"UGC":promotion?.PromotionType==PromotionType.ViewOnly?"VIEW_ONLY":"VIEW_PLUS_SALE"));
+        }
         var paid=(await db.PayoutRecords.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).OrderByDescending(x=>x.EligibleAtUtc).ToListAsync(ct))
             .Select(x=>new PayoutItem(x.Id,"Creator","You",x.Amount.Amount,x.ThresholdUsed.Amount,x.Status.ToString(),x.EligibleAtUtc,x.PaidAtUtc,x.Reference)).ToArray();
         return new(eligibility.Available.Amount,eligibility.Threshold.Amount,Math.Max(0,eligibility.Threshold.Amount-eligibility.Available.Amount),eligibility.EligibleAmount.Amount,history,paid,

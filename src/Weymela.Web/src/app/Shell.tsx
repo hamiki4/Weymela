@@ -21,6 +21,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/business/requests", "Requests", "people"],
     ["/business/ugc", "UGC", "sparkle"],
     ["/business/wallet", "Wallet", "wallet"],
+    ["/business/transactions", "Transactions", "document"],
     ["/checkout", "Checkout", "qr"],
     ["/profile", "Profile", "people"],
   ],
@@ -47,6 +48,7 @@ const navigation: Record<Role, [string, string, string][]> = {
   ],
   OperationsAdmin: [
     ["/admin/operations", "Home", "home"],
+    ["/admin/wallets", "Wallets", "wallet"],
     ["/admin/role-enrollments", "Profile Requests", "people"],
     ["/admin/operations/businesses", "Businesses", "business"],
     ["/admin/operations/creators", "Creators", "people"],
@@ -100,7 +102,6 @@ export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
   const accountMenu = useRef<HTMLDialogElement>(null);
   const settingsMenu = useRef<HTMLDialogElement>(null);
-  const moreMenu = useRef<HTMLDialogElement>(null);
   const [deviceMessage, setDeviceMessage] = useState("");
   const navigationSequence = useRef(0);
   const navigate = useNavigate();
@@ -121,7 +122,7 @@ export function Shell({ children }: { children?: ReactNode }) {
     isActive ||
     (!exactNavigationRoots.has(to)
       && location.pathname.startsWith(`${to}/`));
-  const overflowIsActive = overflowItems.some(([to]) => itemIsActive(to, location.pathname === to));
+  const overflowIsActive = location.pathname === "/admin/more" || overflowItems.some(([to]) => itemIsActive(to, location.pathname === to));
   const closeAccountMenu = () => accountMenu.current?.close();
   const closeSettings = () => settingsMenu.current?.close();
   const openSettings = () => {
@@ -152,7 +153,6 @@ export function Shell({ children }: { children?: ReactNode }) {
     );
   };
   const openAccountMenu = () => {
-    moreMenu.current?.close();
     accountMenu.current?.showModal();
   };
   const renderNavigation = (
@@ -184,10 +184,6 @@ export function Shell({ children }: { children?: ReactNode }) {
       ))}
     </nav>
   );
-  const openMoreMenu = () => {
-    closeAccountMenu();
-    moreMenu.current?.showModal();
-  };
   const signOutAndClose = () => {
     closeAccountMenu();
     closeSettings();
@@ -294,10 +290,10 @@ export function Shell({ children }: { children?: ReactNode }) {
           <button type="button" className="settings-close" aria-label="Close Settings" onClick={closeSettings}><Icon name="close" size={18} /></button>
         </div>
         {user.profiles && <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={async profile => { await switchProfile(profile); closeSettings(); }} />}
-        {user.role !== "Business" && <Link className="settings-row" to="/onboarding" onClick={closeSettings}><Icon name="plus" />Add Profile</Link>}
+        <Link className="settings-row" to="/onboarding" onClick={closeSettings}><Icon name="plus" />Add Profile</Link>
         <button type="button" className="settings-row" onClick={() => void requestNotifications()}><Icon name="bell" />Notifications</button>
         <button type="button" className="settings-row" onClick={requestLocation}><Icon name="location" />Location</button>
-        {user.role === "Creator" && <Link className="settings-row" to="/profile#social-accounts" onClick={closeSettings}><Icon name="globe" />Social Accounts</Link>}
+        {user.role === "Creator" && <Link className="settings-row" to="/profile#social-profiles" onClick={closeSettings}><Icon name="globe" />Social Profiles</Link>}
         {user.role === "Business" && <>
           <Link className="settings-row" to="/business/cashiers" onClick={closeSettings}><Icon name="people" />Cashier Management</Link>
           <Link className="settings-row" to="/business/cashiers#create-cashier" onClick={closeSettings}><Icon name="plus" />Create Cashier</Link>
@@ -305,28 +301,6 @@ export function Shell({ children }: { children?: ReactNode }) {
         {deviceMessage && <p className="settings-device-message" role="status">{deviceMessage}</p>}
         <button type="button" className="settings-row settings-signout" onClick={signOutAndClose}><Icon name="logout" />Sign Out</button>
       </dialog>}
-      {overflowItems.length > 0 && (
-        <dialog
-          ref={moreMenu}
-          id="more-navigation"
-          className="dialog more-sheet"
-          aria-labelledby="more-navigation-title"
-        >
-          <div className="dialog-header">
-            <h2 id="more-navigation-title">More navigation</h2>
-            <Button
-              variant="quiet"
-              aria-label="Close more navigation"
-              onClick={() => moreMenu.current?.close()}
-            >
-              <Icon name="close" />
-            </Button>
-          </div>
-          {renderNavigation(overflowItems, "More navigation", () =>
-            moreMenu.current?.close(),
-          )}
-        </dialog>
-      )}
       <div className="workspace">
         <header className="topbar">
           {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") && (
@@ -382,7 +356,7 @@ export function Shell({ children }: { children?: ReactNode }) {
                 to={to}
                 end={exactNavigationRoots.has(to)}
                 className={({ isActive }) =>
-                  `mobile-role-link ${itemIsActive(to, isActive) ? "active" : ""}`
+                  `mobile-role-link ${label.length >= 9 ? "mobile-role-link-wide" : ""} ${itemIsActive(to, isActive) ? "active" : ""}`
                 }
               >
                 <Icon name={icon} />
@@ -391,18 +365,15 @@ export function Shell({ children }: { children?: ReactNode }) {
             ),
           )}
           {overflowItems.length > 0 && (
-            <button
-              type="button"
+            <NavLink
+              to="/admin/more"
+              state={{ from: location.pathname }}
               className={`mobile-role-link ${overflowIsActive ? "active" : ""}`}
               aria-label="More navigation"
-              aria-pressed={overflowIsActive}
-              aria-haspopup="dialog"
-              aria-controls="more-navigation"
-              onClick={openMoreMenu}
             >
               <Icon name="menu" />
               <span>More</span>
-            </button>
+            </NavLink>
           )}
         </nav>
         <footer className="workspace-footer"><span>Weymela</span></footer>

@@ -93,7 +93,7 @@ class RepositoryGateTests(unittest.TestCase):
     def test_source_migration_order_is_exactly_approved_through_phase_i1(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -228,7 +228,8 @@ class ComposeIsolationTests(unittest.TestCase):
                     'V3_API_ENV_FILE': str(root/'api.env'), 'V3_WORKER_ENV_FILE': str(root/'worker.env'),
                     'V3_POSTGRES_PASSWORD_FILE': str(root/'placeholder'), 'V3_COOKIE_CERTIFICATE_FILE': str(cookie),
                     'V3_FIREBASE_ADMIN_CREDENTIALS_FILE': str(firebase),
-                    'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
+                    'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_RECEIPT_STORAGE_DIRECTORY': str(root/'receipts'),
+                    'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
         cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
 
     @classmethod
@@ -278,6 +279,10 @@ class ComposeIsolationTests(unittest.TestCase):
         key_mount = next(item for item in api['volumes'] if item['target'] == '/run/weymela-v3/keys')
         self.assertEqual(key_mount['type'], 'bind')
         self.assertFalse(key_mount.get('read_only', False))
+        receipt_mount = next(item for item in api['volumes'] if item['target'] == '/run/weymela-v3/receipts')
+        self.assertEqual(receipt_mount['type'], 'bind')
+        self.assertFalse(receipt_mount.get('read_only', False))
+        self.assertFalse(receipt_mount['bind']['create_host_path'])
         for part in ('worker', 'web'):
             service = self.config['services'][part]
             self.assertNotIn('v3-cookie-protection.pfx', {item['source'] for item in service.get('secrets', [])})

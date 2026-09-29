@@ -22,6 +22,8 @@ public sealed class PublicWorkspaceProfile
     public ActorRole Role { get; init; }
     public string DisplayName { get; init; } = "";
     public string PublicId { get; init; } = "";
+    // Assigned by PostgreSQL for Creator rows. The long PublicId remains the integration identifier.
+    public long? CreatorNumber { get; private set; }
     public string Region { get; init; } = "";
     public string Category { get; init; } = "";
     public long VerifiedFollowers { get; init; }

@@ -61,6 +61,11 @@ public sealed class EmailAuthService(
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var existingEmail = await db.AuthIdentifiers.AsTracking()
             .SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == identifierHash, ct);
+        // A public Create Account request for a verified identity uses the same
+        // mailbox sign-in challenge as Set up sign-in. Keep the requested purpose
+        // in the public API so callers cannot learn which path was selected.
+        var challengePurpose = purpose == EmailCodePurpose.Signup && existingEmail?.IsVerified == true
+            ? EmailCodePurpose.DeviceEnrollment : purpose;
 
         AuthIdentifierRecord? deliveryEmail;
         if (purpose == EmailCodePurpose.Signup)
@@ -94,7 +99,7 @@ public sealed class EmailAuthService(
             return new(false, now.Add(Lifetime), (int)ResendWindow.TotalSeconds);
         }
         var recent = await db.EmailAuthChallenges.AsTracking()
-            .Where(x => x.IdentifierHash == challengeKeyHash && x.Purpose == purpose.ToString() && x.ConsumedAtUtc == null)
+            .Where(x => x.IdentifierHash == challengeKeyHash && x.Purpose == challengePurpose.ToString() && x.ConsumedAtUtc == null)
             .OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(ct);
         if (recent is not null && recent.LastSentAtUtc is not null && recent.LastSentAtUtc > now - ResendWindow)
         {
@@ -109,7 +114,7 @@ public sealed class EmailAuthService(
             IdentifierHash = challengeKeyHash,
             EmailIdentifierHash = emailHash,
             PhoneIdentifierHash = null,
-            Purpose = purpose.ToString(),
+            Purpose = challengePurpose.ToString(),
             CodeHash = AuthCodeHashing.Hash(code, options.AuthCodeHashKey!),
             CreatedAtUtc = now,
             ExpiresAtUtc = now.Add(Lifetime),
@@ -121,7 +126,7 @@ public sealed class EmailAuthService(
         if (purpose == EmailCodePurpose.Signup) OperationalTelemetry.SignupChallengeCreated.Add(1);
         try
         {
-            await delivery.SendAsync(deliveryAddress, code, purpose, ct);
+            await delivery.SendAsync(deliveryAddress, code, challengePurpose, ct);
             if (purpose == EmailCodePurpose.Signup) OperationalTelemetry.SignupDeliveryAccepted.Add(1);
         }
         catch
@@ -149,7 +154,12 @@ public sealed class EmailAuthService(
         var hash = HashIdentifier(normalizedIdentifier);
         var now = clock.GetUtcNow().UtcDateTime;
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-        var challenge = await db.EmailAuthChallenges.AsTracking().Where(x => x.IdentifierHash == hash && x.Purpose == purpose.ToString())
+        var existingEmail = purpose == EmailCodePurpose.Signup
+            ? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == hash, ct)
+            : null;
+        var challengePurpose = purpose == EmailCodePurpose.Signup && existingEmail?.IsVerified == true
+            ? EmailCodePurpose.DeviceEnrollment : purpose;
+        var challenge = await db.EmailAuthChallenges.AsTracking().Where(x => x.IdentifierHash == hash && x.Purpose == challengePurpose.ToString())
             .OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(ct);
         if (challenge is null || challenge.ConsumedAtUtc is not null || challenge.ExpiresAtUtc <= now || challenge.AttemptCount >= challenge.MaxAttempts)
             throw new AuthChallengeInvalidException();
@@ -167,8 +177,8 @@ public sealed class EmailAuthService(
                 || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct))
             throw new AuthChallengeInvalidException();
         var emailHash = challenge.EmailIdentifierHash ?? challenge.IdentifierHash;
-        var emailIdentifier = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == emailHash, ct);
-        if (purpose == EmailCodePurpose.Signup)
+        var emailIdentifier = existingEmail ?? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == emailHash, ct);
+        if (challengePurpose == EmailCodePurpose.Signup)
         {
             if (emailIdentifier is not null && emailIdentifier.UserId != userId) throw new AuthChallengeInvalidException();
             if (emailIdentifier is null)

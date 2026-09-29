@@ -64,7 +64,8 @@ app.MapPost("/__test/qr/expired", async (TestQrMutation input, WeymelaDbContext 
     var issued = DateTime.UtcNow.AddMinutes(-6);
     var expired = session.Source == OfferQrSource.UgcCustomerOffer
         ? OfferQrSession.ForUgcCustomerOffer(session.CustomerId, session.UgcCustomerOfferId!.Value,
-            session.BusinessId, CheckoutService.HashToken(new SensitiveQrToken(token)), issued, "browser-expired-qr")
+            session.BusinessId, session.CreatorId!.Value, session.UgcAssignmentId!.Value,
+            CheckoutService.HashToken(new SensitiveQrToken(token)), issued, "browser-expired-qr")
         : new OfferQrSession(session.CustomerId, session.PromotionId!.Value, session.CreatorId!.Value,
             session.CreatorAllocationId!.Value, session.BusinessId,
             CheckoutService.HashToken(new SensitiveQrToken(token)), issued, "browser-expired-qr");

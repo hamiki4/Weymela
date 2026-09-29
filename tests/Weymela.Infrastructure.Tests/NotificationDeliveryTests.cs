@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Notifications;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -18,6 +19,65 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
     private static async Task Drain(Phase4Scenario s, int recipients = 100)
     {
         await using var db = s.Database.Open(); for (var i = 0; i < 10; i++) if (await Processor(db, s.Clock, recipients: recipients).ProcessAsync(default) == 0) break;
+    }
+
+    [Fact] public async Task Profile_application_notifications_reach_both_admins_and_applicants_once_with_review_routes()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var platform = Guid.NewGuid(); var operations = Guid.NewGuid();
+        db.CommercePermissions.AddRange(
+            new CommercePermission(platform, ActorRole.PlatformAdmin, platform, null, true, false),
+            new CommercePermission(operations, ActorRole.OperationsAdmin, operations, null, true, false));
+        await db.SaveChangesAsync();
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        foreach (var role in new[] { ActorRole.Creator, ActorRole.Business })
+        foreach (var approve in new[] { true, false })
+        {
+            var applicant = Guid.NewGuid(); var customer = Guid.NewGuid();
+            db.CommercePermissions.Add(new CommercePermission(applicant, ActorRole.Customer, customer, null, true, false));
+            await db.SaveChangesAsync();
+            var request = new RoleEnrollmentRequest(role, $"{role} applicant", null, "Addis", "Local", "Submitted details",
+                SocialProfiles: role == ActorRole.Creator ? [new("Instagram", "https://www.instagram.com/bella/")] : null);
+            var key = $"{role}-{approve}";
+            var pending = await service.SubmitAsync(new Actor(applicant, ActorRole.Customer, CustomerId: customer), request, key, default);
+            await service.SubmitAsync(new Actor(applicant, ActorRole.Customer, CustomerId: customer), request, key, default);
+            await service.ReviewAsync(new Actor(operations, ActorRole.OperationsAdmin), pending.Id, approve,
+                approve ? null : "More details needed", pending.Version, key + "-review", default);
+        }
+        for (var i = 0; i < 10; i++) if (await Processor(db, new TestClock()).ProcessAsync(default) == 0) break;
+        var submissions = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync();
+        Assert.Equal(8, submissions.Count);
+        Assert.All(submissions, x => Assert.Equal("/admin/role-enrollments", x.Route));
+        Assert.Equal(4, submissions.Count(x => x.UserId == platform));
+        Assert.Equal(4, submissions.Count(x => x.UserId == operations));
+        var approved = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentApproved").ToListAsync();
+        Assert.Equal(4, approved.Count);
+        Assert.Equal(2, approved.Count(x => x.Role == ActorRole.Customer));
+        Assert.All(approved, x => Assert.Equal("/onboarding", x.Route));
+        var rejected = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentRejected").ToListAsync();
+        Assert.Equal(2, rejected.Count);
+        Assert.All(rejected, x => { Assert.Equal(ActorRole.Customer, x.Role); Assert.Equal("/onboarding", x.Route);
+            Assert.Contains("More details needed", x.Message, StringComparison.Ordinal); });
+    }
+    [Fact] public async Task Rejected_creator_application_notifies_applicant_in_existing_business_workspace()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid(); var business = Guid.NewGuid();
+        db.CommercePermissions.Add(new CommercePermission(user, ActorRole.Business, business, business, true, false));
+        await db.SaveChangesAsync();
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Business, business),
+            new RoleEnrollmentRequest(ActorRole.Creator, "Owner", null, null, null, null,
+                SocialProfiles: [new("YouTube", "https://www.youtube.com/@owner")]), "creator-from-business", default);
+        await service.ReviewAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), pending.Id, false,
+            "Please add more details", pending.Version, "reject-business-creator", default);
+        for (var i = 0; i < 5 && await Processor(db, new TestClock()).ProcessAsync(default) > 0; i++) { }
+        var notice = await db.InAppNotifications.SingleAsync(x => x.EventType == "RoleEnrollmentRejected");
+        Assert.Equal(user, notice.UserId);
+        Assert.Equal(ActorRole.Business, notice.Role);
+        Assert.Equal("/onboarding", notice.Route);
     }
     [Fact] public async Task View_reward_targets_only_earning_creator_and_duplicate_event_does_not_duplicate_notification()
     {

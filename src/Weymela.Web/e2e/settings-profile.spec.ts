@@ -17,7 +17,7 @@ for (const width of [320, 360, 375, 390, 430]) {
       await expect(settings.getByRole("button", { name: "Notifications" })).toBeVisible();
       await expect(settings.getByRole("button", { name: "Location" })).toBeVisible();
       await expect(settings.getByRole("button", { name: "Sign Out" })).toBeVisible();
-      if (role === "creator") await expect(settings.getByRole("link", { name: "Social Accounts" })).toHaveAttribute("href", "/profile#social-accounts");
+      if (role === "creator") await expect(settings.getByRole("link", { name: "Social Profiles" })).toHaveAttribute("href", "/profile#social-profiles");
       if (role === "business") {
         await expect(settings.getByRole("link", { name: "Cashier Management" })).toBeVisible();
         await expect(settings.getByRole("link", { name: "Create Cashier" })).toBeVisible();
@@ -40,8 +40,8 @@ for (const width of [320, 360, 375, 390, 430]) {
       expect(navBox).not.toBeNull();
       expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(width + 1);
       expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(845);
-      if (role === "customer") await expect(page.getByRole("heading", { name: "Social Accounts" })).toHaveCount(0);
-      if (role === "creator") await expect(page.getByRole("heading", { name: "Social Accounts" })).toBeVisible();
+      if (role === "customer") await expect(page.getByRole("heading", { name: "Social Profiles" })).toHaveCount(0);
+      if (role === "creator") await expect(page.getByRole("heading", { name: "Social Profiles" })).toBeVisible();
       if (role === "business") await expect(page.getByRole("heading", { name: "Business Information" })).toBeVisible();
       if (width === 390) await screenshot(page, `profile-${role}-390`);
       if (role === "business") {
@@ -53,16 +53,16 @@ for (const width of [320, 360, 375, 390, 430]) {
   });
 }
 
-test("Creator Settings opens Social Accounts on the Profile page", async ({ page, context }) => {
+test("Creator Settings opens Social Profiles on the Profile page", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "creator");
   await open(page, "/creator");
   await page.getByRole("button", { name: "Open Settings" }).click();
-  await page.getByRole("dialog", { name: "Settings" }).getByRole("link", { name: "Social Accounts" }).click();
-  await expect(page).toHaveURL(/\/profile#social-accounts$/);
-  await expect(page.getByRole("heading", { name: "Social Accounts" })).toBeVisible();
+  await page.getByRole("dialog", { name: "Settings" }).getByRole("link", { name: "Social Profiles" }).click();
+  await expect(page).toHaveURL(/\/profile#social-profiles$/);
+  await expect(page.getByRole("heading", { name: "Social Profiles" })).toBeVisible();
   await layout(page);
-  await screenshot(page, "creator-social-accounts-390");
+  await screenshot(page, "creator-social-profiles-390");
 });
 
 test("Business Settings opens the existing Create Cashier form", async ({ page, context }) => {

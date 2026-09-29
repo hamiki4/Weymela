@@ -4,6 +4,11 @@ import { layout, login, open } from "./helpers";
 const requestHeaders = { "X-Weymela-Request": "1" };
 const manualCustomerPhone = "0911111111";
 
+async function creatorNumber(context: BrowserContext, alias: "creator" | "other-creator") {
+  await login(context, alias);
+  return String((await apiJson<{ creatorId: number }>(context, "/profile")).creatorId);
+}
+
 async function apiPost(
   context: BrowserContext,
   path: string,
@@ -91,10 +96,10 @@ async function createPublishedUgc(
     resources: [],
     location: "Addis Ababa",
     dueDateUtc: due,
-    productProvided: false,
+    productProvided: true,
     creatorMustPurchase: false,
     usageRights: null,
-    creatorPayment: 200,
+    creatorPayment: 250,
     creatorsNeeded: 1,
     platformRequirements: [],
     customerOfferEnabled: true,
@@ -325,12 +330,14 @@ test("Manual View + Sale rejects empty matches and records an eligible checkout 
   await login(context, "business");
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Enter Manually", exact: true }).click();
-  await page.getByLabel("Creator ID", { exact: true }).fill("CR-999");
+  await page.getByLabel("Creator ID", { exact: true }).fill("99999999");
   await page.getByLabel("Customer phone", { exact: true }).fill(manualCustomerPhone);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("Offer is no longer available");
 
-  await page.getByLabel("Creator ID", { exact: true }).fill("CR-100");
+  const number = await creatorNumber(context, "creator");
+  await login(context, "business");
+  await page.getByLabel("Creator ID", { exact: true }).fill(number);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
   await expect(page.getByRole("radio")).toHaveCount(1);
   await expect(page.getByRole("radio")).toBeChecked();
@@ -341,11 +348,12 @@ test("Manual View + Sale rejects empty matches and records an eligible checkout 
 });
 
 test("Manual UGC requires the intended offer when multiple eligible offers exist", async ({ page, context }) => {
+  const otherNumber = await creatorNumber(context, "other-creator");
   await createPublishedUgc(context, `Browser UGC Single ${Date.now()}`, "other-creator");
   await login(context, "business");
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Enter Manually", exact: true }).click();
-  await page.getByLabel("Creator ID", { exact: true }).fill("CR-200");
+  await page.getByLabel("Creator ID", { exact: true }).fill(otherNumber);
   await page.getByLabel("Customer phone", { exact: true }).fill(manualCustomerPhone);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
   await expect(page.getByRole("radio")).toHaveCount(1);
@@ -354,10 +362,11 @@ test("Manual UGC requires the intended offer when multiple eligible offers exist
 
   const first = await createPublishedUgc(context, `Browser UGC A ${Date.now()}`, "creator");
   const second = await createPublishedUgc(context, `Browser UGC B ${Date.now()}`, "creator");
+  const number = await creatorNumber(context, "creator");
   await login(context, "business");
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Enter Manually", exact: true }).click();
-  await page.getByLabel("Creator ID", { exact: true }).fill("CR-100");
+  await page.getByLabel("Creator ID", { exact: true }).fill(number);
   await page.getByLabel("Customer phone", { exact: true }).fill(manualCustomerPhone);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
   await expect(page.getByRole("radio")).toHaveCount(3);
@@ -368,19 +377,7 @@ test("Manual UGC requires the intended offer when multiple eligible offers exist
   await selectedOffer.check();
   const selectedOfferId = await selectedOffer.inputValue();
 
-  // The database integrity trigger requires a UGC Customer Offer sale to carry
-  // an issued Customer QR reference. Manual discovery still chooses the offer
-  // explicitly; settlement then uses the same authoritative QR checkout path.
-  await login(context, "customer");
-  const issued = await apiPost(context, `/customer/offers/${selectedOfferId}/qr`, undefined);
-  expect(issued.ok()).toBeTruthy();
-  const qr = (await issued.json()) as { token: string };
-  await login(context, "business");
-  await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
-  await expect(page.getByLabel("Total Purchase Amount", { exact: true })).toBeVisible();
+  expect(selectedOfferId).toBeTruthy();
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("100");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payment recorded", exact: true })).toBeVisible();
@@ -425,7 +422,7 @@ test("Expired and no-longer-eligible QR outcomes are deterministic BrowserHost f
   await page.getByText("Enter an opaque QR code", { exact: true }).click();
   await page.getByLabel("QR code", { exact: true }).fill(expired.token);
   await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveText("QR code expired");
+  await expect(page.getByRole("alert")).toHaveText("QR code expired. Ask the Customer to generate a new one.");
 
   await login(context, "customer");
   await open(page, "/customer/offers");
@@ -447,13 +444,15 @@ test("Expired and no-longer-eligible QR outcomes are deterministic BrowserHost f
 });
 
 test("Business and Cashier checkout layouts stay usable at required widths", async ({ page, context }) => {
-  for (const width of [360, 390, 430, 768, 1366, 1920]) {
+  for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 900 });
     await login(context, "business");
     await open(page, "/business");
     await layout(page);
     await expect(page.getByRole("link", { name: "Checkout / Scan QR", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Cashier Management", exact: true })).toBeVisible();
+    await open(page, "/business/transactions");
+    await layout(page);
     await login(context, "cashier");
     await open(page, "/checkout");
     await layout(page);

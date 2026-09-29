@@ -708,6 +708,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<Guid?>("UgcAssignmentId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("UgcCustomerOfferId")
                         .HasColumnType("uuid");
 
@@ -738,6 +741,8 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
+                    b.HasIndex("UgcAssignmentId");
+
                     b.HasIndex("UgcCustomerOfferId");
 
                     b.HasIndex("UgcCustomerOfferSaleId")
@@ -753,7 +758,7 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Qr_SaleBinding", "(\"SaleId\" IS NULL OR \"UgcCustomerOfferSaleId\" IS NULL) AND (\"Status\" <> 'Used' OR ((\"Source\" = 'ViewAndSalePromotion' AND \"SaleId\" IS NOT NULL AND \"UgcCustomerOfferSaleId\" IS NULL) OR (\"Source\" = 'UgcCustomerOffer' AND \"SaleId\" IS NULL AND \"UgcCustomerOfferSaleId\" IS NOT NULL)))");
 
-                            t.HasCheckConstraint("CK_Qr_SourceBinding", "(\"Source\" = 'ViewAndSalePromotion' AND \"PromotionId\" IS NOT NULL AND \"CreatorId\" IS NOT NULL AND \"CreatorAllocationId\" IS NOT NULL AND \"UgcCustomerOfferId\" IS NULL) OR (\"Source\" = 'UgcCustomerOffer' AND \"PromotionId\" IS NULL AND \"CreatorId\" IS NULL AND \"CreatorAllocationId\" IS NULL AND \"UgcCustomerOfferId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_Qr_SourceBinding", "(\"Source\" = 'ViewAndSalePromotion' AND \"PromotionId\" IS NOT NULL AND \"CreatorId\" IS NOT NULL AND \"CreatorAllocationId\" IS NOT NULL AND \"UgcCustomerOfferId\" IS NULL AND \"UgcAssignmentId\" IS NULL) OR (\"Source\" = 'UgcCustomerOffer' AND \"PromotionId\" IS NULL AND \"CreatorAllocationId\" IS NULL AND \"UgcCustomerOfferId\" IS NOT NULL AND ((\"CreatorId\" IS NOT NULL AND \"UgcAssignmentId\" IS NOT NULL) OR (\"CreatorId\" IS NULL AND \"UgcAssignmentId\" IS NULL)))");
                         });
                 });
 
@@ -1379,6 +1384,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("UgcAssignmentId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("UgcCustomerOfferId")
                         .HasColumnType("uuid");
 
@@ -1388,6 +1396,8 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("JournalId");
+
+                    b.HasIndex("UgcAssignmentId");
 
                     b.HasIndex("UgcCustomerOfferId");
 
@@ -3141,6 +3151,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<long?>("CreatorNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValueSql("NULL");
+
                     b.Property<string>("DirectionsUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -3183,12 +3198,18 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.HasKey("SubjectId", "Role");
 
+                    b.HasIndex("CreatorNumber")
+                        .IsUnique()
+                        .HasFilter("\"CreatorNumber\" IS NOT NULL");
+
                     b.HasIndex("Role", "PublicId")
                         .IsUnique();
 
                     b.ToTable("PublicWorkspaceProfiles", "v3", t =>
                         {
                             t.HasCheckConstraint("CK_PublicProfile_CoordinatesPair", "(\"Latitude\" IS NULL AND \"Longitude\" IS NULL) OR (\"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_PublicProfile_CreatorNumber", "(\"Role\"='Creator' AND \"CreatorNumber\" IS NOT NULL AND \"CreatorNumber\" >= 1000) OR (\"Role\"<>'Creator' AND \"CreatorNumber\" IS NULL)");
 
                             t.HasCheckConstraint("CK_PublicProfile_LatitudeRange", "\"Latitude\" IS NULL OR \"Latitude\" BETWEEN -90 AND 90");
 
@@ -3628,6 +3649,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Weymela.Domain.UgcAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("UgcAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Weymela.Domain.UgcCustomerOffer", null)
                         .WithMany()
                         .HasForeignKey("UgcCustomerOfferId")
@@ -3895,6 +3921,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasForeignKey("JournalId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Weymela.Domain.UgcAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("UgcAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Weymela.Domain.UgcCustomerOffer", null)
                         .WithMany()

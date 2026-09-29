@@ -26,6 +26,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
 
         var started = await service.StartAsync("Owner@Example.com", null, EmailCodePurpose.Signup, default);
         Assert.True(started.Accepted); Assert.Single(delivery.Codes); Assert.False(issuer.Called);
+        Assert.Equal(EmailCodePurpose.Signup, delivery.Codes[0].Purpose);
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
 
         var token = await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[0].Code, default);
@@ -62,6 +63,57 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Create_account_for_existing_email_uses_sign_in_delivery_and_preserves_identity()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        var service = new EmailAuthService(db, delivery, issuer, Options(), TimeProvider.System);
+        await service.StartAsync("Owner@Example.com", null, EmailCodePurpose.Signup, default);
+        await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[^1].Code, default);
+        var originalUserId = Assert.Single(issuer.IssuedUserIds);
+        var customerId = Guid.NewGuid();
+        db.CustomerProfiles.Add(new CustomerProfileRecord { CustomerId = customerId,
+            UserId = originalUserId, PreferredName = "Existing customer",
+            CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var started = await service.StartAsync(" OWNER@example.com ", null, EmailCodePurpose.Signup, default);
+        Assert.True(started.Accepted);
+        Assert.Equal(EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Purpose);
+        Assert.Equal("owner@example.com", delivery.Codes[^1].Destination);
+        var challenge = await db.EmailAuthChallenges.OrderByDescending(x => x.CreatedAtUtc).FirstAsync();
+        Assert.Equal(EmailCodePurpose.DeviceEnrollment.ToString(), challenge.Purpose);
+        await service.VerifyAsync(" Owner@Example.com ", EmailCodePurpose.Signup, delivery.Codes[^1].Code, default);
+
+        Assert.Equal([originalUserId, originalUserId], issuer.IssuedUserIds);
+        Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Email").ToListAsync());
+        Assert.Equal(customerId, Assert.Single(await db.CustomerProfiles.ToListAsync()).CustomerId);
+        Assert.Empty(await db.RoleEnrollments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Existing_account_resend_obeys_the_same_sixty_second_limit()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var delivery = new TestDelivery(); var clock = new ManualClock(DateTime.UtcNow);
+        var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), clock);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
+        await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[^1].Code, default);
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
+        var firstSignInCode = delivery.Codes[^1].Code;
+        clock.Advance(TimeSpan.FromSeconds(30));
+        var limited = await service.StartAsync(" OWNER@EXAMPLE.COM ", null, EmailCodePurpose.Signup, default);
+        Assert.InRange(limited.ResendAfterSeconds, 29, 31);
+        Assert.Equal(2, delivery.Codes.Count);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
+        Assert.Equal(3, delivery.Codes.Count);
+        Assert.Equal(EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Purpose);
+        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
+            "owner@example.com", EmailCodePurpose.Signup, firstSignInCode, default));
+    }
+
+    [Fact]
     public async Task Signup_verification_cannot_substitute_a_different_email()
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
@@ -86,6 +138,37 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, code, default));
         Assert.Single(issuer.IssuedUserIds);
         Assert.Equal(1, await db.AuthIdentifiers.CountAsync());
+    }
+
+    [Fact]
+    public async Task Concurrent_signup_verifications_cannot_create_duplicate_email_identities()
+    {
+        var database = await fixture.CreateAsync();
+        var delivery = new TestDelivery();
+        await using (var starterDb = database.Open())
+            await new EmailAuthService(starterDb, delivery, new TestIssuer(), Options(), TimeProvider.System)
+                .StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
+        var code = delivery.Codes.Single().Code;
+
+        async Task<bool> Verify()
+        {
+            await using var db = database.Open();
+            try
+            {
+                await new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System)
+                    .VerifyAsync(" OWNER@EXAMPLE.COM ", EmailCodePurpose.Signup, code, default);
+                return true;
+            }
+            catch (Exception exception) when (exception is AuthChallengeInvalidException
+                or DbUpdateException or Npgsql.NpgsqlException
+                || exception is InvalidOperationException
+                    && exception.InnerException?.InnerException is Npgsql.PostgresException { SqlState: "40001" })
+            { return false; }
+        }
+        var results = await Task.WhenAll(Verify(), Verify());
+        Assert.Single(results, x => x);
+        await using var check = database.Open();
+        Assert.Single(await check.AuthIdentifiers.Where(x => x.Kind == "Email").ToListAsync());
     }
 
     [Fact]
@@ -192,6 +275,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         Assert.Equal(acceptedBefore + 2, OperationalTelemetry.SignupDeliveryAccepted.Value);
         Assert.Equal(continuationBefore + 1, OperationalTelemetry.SignupContinuation.Value);
         Assert.Equal(2, delivery.Codes.Count);
+        Assert.Equal(EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Purpose);
         Assert.All(issuer.IssuedUserIds, issued => Assert.Equal(originalUser, issued));
         Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Email").ToListAsync());
     }

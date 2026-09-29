@@ -235,12 +235,13 @@ async function activateCustomer(context: Parameters<typeof login>[0], account: O
 }
 
 async function submitAdditionalProfile(context: Parameters<typeof login>[0], account: AccountFixture, role: "Creator" | "Business") {
-  const publicId = `${role === "Creator" ? "CR" : "BUS"}-${account.suffix}`;
   const response = await context.request.post("/api/onboarding/profile", {
     headers: { "X-Weymela-Request": "1", "Idempotency-Key": `${role.toLowerCase()}-${account.suffix}` },
-    data: { role, displayName: `${role} ${account.suffix}`, publicId, region: "Addis Ababa", category: "Food", submission: `${role} test profile` },
+    data: { role, displayName: `${role} ${account.suffix}`, region: "Addis Ababa", category: "Food", submission: `${role} test profile`,
+      socialProfiles: role === "Creator" ? [{ platform: "TikTok", profileUrl: `https://www.tiktok.com/@creator${account.suffix.slice(-12)}` }] : [] },
   });
   expect(response.status()).toBe(200);
+  const publicId = (await response.json() as { publicId: string }).publicId;
   const status = await context.request.get("/api/onboarding/status");
   expect(status.status()).toBe(200);
   const body = await status.json() as { profiles: { role: number; status: number; publicId: string }[] };
@@ -735,7 +736,8 @@ test("customer-to-creator choice uses a phase-safe purple shell", async ({ page,
   await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="creator"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add TikTok" })).toBeVisible();
   for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
     await page.setViewportSize(viewport);
     await layout(page);
@@ -812,7 +814,7 @@ test("customer-to-business choice uses a phase-safe blue shell", async ({ page, 
   await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="business"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit for Review" })).toBeVisible();
   for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
     await page.setViewportSize(viewport);
     await layout(page);
@@ -952,12 +954,12 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="creator"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Back", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Back", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^Add a Business/ }).click();
   await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="business"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Back", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Back", exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "phase4a-role-themed-onboarding");
 });

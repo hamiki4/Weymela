@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { actorRoleWireValues } from "../src/api/actorRoleContract";
@@ -128,7 +128,8 @@ describe("shared role-themed onboarding", () => {
       },
     ];
     renderOnboarding();
-    expect(screen.getByRole("button", { name: /Creator.*Pending/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Creator.*Under review/ })).toBeDisabled();
+    expect(screen.getByText("Your Creator profile is waiting for approval.")).toBeVisible();
     expect(screen.queryByText("CR-INTERNAL")).not.toBeInTheDocument();
   });
 
@@ -156,6 +157,40 @@ describe("shared role-themed onboarding", () => {
     expect(screen.getByRole("button", { name: /Customer.*Already added/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
+  });
+
+  it("opens Creator setup, requires one social link, and submits SelfReported profile data", async () => {
+    renderOnboarding();
+    await userEvent.click(screen.getByRole("button", { name: /Become a Creator/ }));
+    expect(screen.getByRole("heading", { name: "Creator setup" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
+    expect(screen.getAllByText("Not added")).toHaveLength(4);
+    for (const platform of ["TikTok", "YouTube", "Instagram", "Facebook"])
+      expect(screen.getByRole("button", { name: `Add ${platform}` })).toBeVisible();
+    await userEvent.type(screen.getByLabelText("Creator name"), "Bella Creates");
+    await userEvent.click(screen.getByRole("button", { name: "Add TikTok" }));
+    await userEvent.type(screen.getByLabelText("TikTok profile URL"), "https://www.tiktok.com/@bella");
+    await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+      role: "Creator", displayName: "Bella Creates", socialProfiles: [{ platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella" }],
+    }), "enroll-key"));
+    expect(mocks.post.mock.calls[0][1]).not.toHaveProperty("publicId");
+    expect(screen.getByText("Your Creator profile is waiting for approval.")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Creator setup" })).not.toBeInTheDocument();
+  });
+
+  it("opens a focused Business form without payment fields", async () => {
+    renderOnboarding();
+    await userEvent.click(screen.getByRole("button", { name: /Add a Business/ }));
+    expect(screen.getByRole("heading", { name: "Business setup" })).toBeVisible();
+    await userEvent.type(screen.getByLabelText("Business name"), "Bella Restaurant");
+    await userEvent.type(screen.getByLabelText("Business type (optional)"), "Restaurant");
+    expect(screen.queryByText(/receipt|payment reference|funding/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+      role: "Business", displayName: "Bella Restaurant", category: "Restaurant",
+    }), "enroll-key"));
+    expect(screen.getByText("Your Business profile is waiting for approval.")).toBeVisible();
   });
 
   it("fails closed with a clear Customer state when legal documents are unavailable", async () => {

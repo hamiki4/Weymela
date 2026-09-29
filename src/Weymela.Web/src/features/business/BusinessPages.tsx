@@ -344,11 +344,11 @@ export function BusinessPricingPage() {
                     </div>
                     <dl className="pricing-card-details">
                       <div>
-                        <dt>Starting Creator Payment</dt>
-                        <dd>{amount(ugcPricing.minimumCreatorPayment)}</dd>
+                        <dt>Content commitment</dt>
+                        <dd>You choose the UGC budget.</dd>
                       </div>
                       <div>
-                        <dt>Platform Fee</dt>
+                        <dt>Weymela service fee</dt>
                         <dd>{amount(ugcPricing.platformFeePercent)}%</dd>
                       </div>
                       {ugcPricing.minimumUgcBudget !== null && (
@@ -357,16 +357,16 @@ export function BusinessPricingPage() {
                           <dd>{amount(ugcPricing.minimumUgcBudget)}</dd>
                         </div>
                       )}
-                      {ugcPricing.customerOfferPlatformSalePercent !== null && (
-                        <div>
-                          <dt>UGC + Sale Platform Fee</dt>
-                          <dd>{amount(ugcPricing.customerOfferPlatformSalePercent)}%</dd>
-                        </div>
-                      )}
                     </dl>
-                    <p className="pricing-card-note">
-                      For UGC + Sale, you choose the Customer Discount and fund the Customer Offer budget.
-                    </p>
+                    <p className="pricing-card-note">The service fee is included in your content commitment.</p>
+                  </article>
+                  <article className="pricing-card pricing-card-business-ugc">
+                    <div className="pricing-card-heading"><span className="pricing-card-kicker">UGC customer offer</span><h3>UGC + Sale</h3></div>
+                    <dl className="pricing-card-details">
+                      <div><dt>Content commitment</dt><dd>You choose the UGC budget.</dd></div>
+                      <div><dt>Customer offer</dt><dd>You choose the discount % and discount budget.</dd></div>
+                      <div><dt>Weymela transaction fee</dt><dd>{ugcPricing.customerOfferPlatformSalePercent === null ? "Not available" : `${amount(ugcPricing.customerOfferPlatformSalePercent)}% per eligible purchase`}</dd></div>
+                    </dl>
                   </article>
                 </div>
                 <p className="fine-print section-kicker-space">

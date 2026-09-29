@@ -14,6 +14,7 @@ internal static class BusinessEndpoints
         g.MapGet("/wallet",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.WalletAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/pricing",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessPricingAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc-pricing",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.UgcPricingAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/transactions",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.RecentSalesAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/cashiers",(HttpContext c,CashierService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),ct));
         g.MapPost("/cashiers",async(CreateCashierInput input,HttpContext c,CashierService service,CancellationToken ct)=>
             Results.Ok(await service.CreateAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct)));

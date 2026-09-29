@@ -63,6 +63,8 @@ internal sealed class UgcCustomerOfferSaleConfiguration : IEntityTypeConfigurati
         Mapping.Scalars(b); b.HasKey(x => x.Id);
         b.HasOne<UgcCustomerOffer>().WithMany().HasForeignKey(x => x.UgcCustomerOfferId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<UgcOpportunity>().WithMany().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => x.UgcAssignmentId);
         b.HasIndex(x => new { x.BusinessId, x.IdempotencyKey }).IsUnique();
         b.Property<Guid>("JournalId"); b.HasOne<FinancialJournal>().WithMany().HasForeignKey("JournalId").OnDelete(DeleteBehavior.Restrict);
     }

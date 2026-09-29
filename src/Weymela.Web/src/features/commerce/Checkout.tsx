@@ -22,13 +22,16 @@ import { useSession } from "../../app/Session";
 
 function CheckoutTransactionList({ rows }: { rows: CheckoutSaleRow[] }) {
   return rows.length ? <div className="stack-list">{rows.map((row) => <div className="amount-row" key={row.id}>
-    <div><strong>{row.offer}</strong><small>{date(row.createdAtUtc)}{row.cashier ? ` · ${row.cashier}` : ""}</small></div>
-    <strong>{amount(row.purchaseAmount)}</strong>
+    <div><strong>{row.offer}</strong><small>{row.source === "UGC_CUSTOMER_OFFER" ? "UGC + Sale" : "View + Sale"} · {date(row.createdAtUtc)} · {row.status}</small>
+      <small>Creator: {row.creator ?? "—"} · Customer: {row.customerMasked}{row.cashier ? ` · Cashier: ${row.cashier}` : ""}</small>
+      <small>Customer benefit: {amount(row.customerDiscount)} ETB · Business charge: {amount(row.businessCharge)} ETB</small></div>
+    <strong>{amount(row.purchaseAmount)} ETB</strong>
   </div>)}</div> : <p className="muted">No checkout transactions yet.</p>;
 }
 
 export function CheckoutTransactions() {
-  const recent = useResource<CheckoutSaleRow[]>("/checkout/recent");
+  const { user } = useSession();
+  const recent = useResource<CheckoutSaleRow[]>(user?.role === "Business" ? "/business/transactions" : "/checkout/recent");
   return <div className="checkout-panel"><PageHeader title="Transactions" /><Section title="Recent purchases"><Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows : []} />}</Resource></Section></div>;
 }
 
@@ -314,6 +317,8 @@ export function Checkout() {
                     <input
                       value={creatorId}
                       onChange={(event) => setCreatorId(event.target.value)}
+                      inputMode="numeric"
+                      pattern="[0-9]+"
                       autoComplete="off"
                       required
                     />

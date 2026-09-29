@@ -92,6 +92,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE v3."AuthIdentifiers" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."EmailAuthChallenges" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."PasswordCredentials" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."IdentityBindings" TO :"api_role";
+GRANT UPDATE ("IsActive", "Version") ON TABLE v3."IdentityBindings" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."CommercePermissions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."RoleEnrollments" TO :"api_role";
@@ -106,6 +107,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE v3."ProductHandoffTransactions" TO :"api_r
 GRANT SELECT, INSERT ON TABLE v3."IdempotencyRecords" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."AuditEvents" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."OutboxMessages" TO :"api_role";
+GRANT UPDATE ("ProcessedAtUtc", "AttemptCount", "LastError", "NextAttemptAtUtc", "FailedAtUtc", "FailureCount") ON TABLE v3."OutboxMessages" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."InAppNotifications" TO :"api_role";
 GRANT UPDATE ("ReadAtUtc", "Version") ON TABLE v3."InAppNotifications" TO :"api_role";
 
@@ -194,6 +196,7 @@ REVOKE EXECUTE ON FUNCTION v3.guard_ugc_customer_offer_sale() FROM PUBLIC, :"api
 REVOKE EXECUTE ON FUNCTION v3.check_ugc_customer_offer_projection() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_platform_promotional_funding_account() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_admin_promotional_funding() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.assign_creator_number() FROM PUBLIC, :"api_role";
 
 GRANT EXECUTE ON FUNCTION v3.check_wallet_journal() TO :"api_role";
 GRANT EXECUTE ON FUNCTION v3.check_earned_account() TO :"api_role";

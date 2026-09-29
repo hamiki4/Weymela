@@ -1,5 +1,5 @@
 :root {
-  font-size: 106.25%;
+  font-size: 112.5%;
   font-family:
     Inter,
     ui-sans-serif,
@@ -353,6 +353,7 @@ td .button {
   gap: 12px;
   margin-left: auto;
 }
+.topbar-right svg { width: 24px; height: 24px; }
 .dev-badge {
   font-size: 0.65rem;
   color: #795c19;
@@ -1096,9 +1097,14 @@ td .button {
 .amount-row:last-child {
   border-bottom: 0;
 }
+.amount-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .amount-row small {
   display: block;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 .amount-row strong {
   font-variant-numeric: tabular-nums;
@@ -1747,7 +1753,7 @@ td .button {
   gap: 0.45rem;
   margin: 0.65rem 0;
 }
-.creator-platform-counts span {
+.creator-platform-counts > span {
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--role-border);
   border-radius: 8px;
@@ -2448,6 +2454,9 @@ td .button {
     font-size: 0.74rem;
     font-weight: 600;
   }
+  .mobile-role-link svg { width: 25px; height: 25px; }
+  .mobile-role-link-wide { flex-grow: 1.25; }
+  .mobile-role-link-wide span { letter-spacing: -0.025em; }
   .mobile-role-link span {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2494,7 +2503,7 @@ td .button {
   margin-bottom: -5px;
 }
 .onboarding-form {
-  width: min(100%, 52rem);
+  width: min(100%, 46rem);
 }
 .role-onboarding-shell {
   width: min(100%, 52rem);
@@ -2547,6 +2556,21 @@ td .button {
 .customer-onboarding-form {
   margin: 0;
 }
+.role-application-form { width: min(100%, 46rem); }
+.onboarding-social-profiles { min-width: 0; }
+.onboarding-social-profiles h4 { margin: 0; font-size: .94rem; }
+.onboarding-social-profiles > p { margin: 3px 0 8px; color: var(--secondary-text); font-size: .8rem; }
+.onboarding-social-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
+  min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.onboarding-social-row strong { font-size: .84rem; }
+.onboarding-social-row small { color: var(--secondary-text); font-size: .76rem; }
+.onboarding-social-row .button { min-height: 36px; padding: 6px 8px; font-size: .77rem; white-space: nowrap; }
+.onboarding-social-edit { grid-column: 1 / -1; display: flex; min-width: 0; gap: 6px; }
+.onboarding-social-edit input { flex: 1; min-width: 0; }
+.onboarding-pending-line { display: flex; flex-wrap: wrap; gap: 3px 9px; padding: 11px 2px;
+  border-bottom: 1px solid var(--line); font-size: .84rem; }
+.onboarding-pending-line strong { color: var(--role-accent); }
+.onboarding-pending-line span { color: var(--secondary-text); }
 .onboarding-under-review {
   display: flex;
   flex-wrap: wrap;
@@ -2833,3 +2857,10 @@ td .button {
 .account-row-status small { color: var(--muted); }
 .activation-secret { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: .75rem; }
 .activation-secret code { padding: .55rem .7rem; border-radius: .5rem; background: var(--surface-strong, #f1ede7); word-break: break-all; }
+.receipt-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.receipt-selection { display: flex; align-items: center; gap: 12px; max-width: 100%; margin: 10px 0 16px; }
+.receipt-selection > div:last-child { min-width: 0; }
+.receipt-thumbnail { width: 72px; height: 72px; flex: 0 0 72px; border: 1px solid #d4ddd6; border-radius: 8px; overflow: hidden; background: #f4f6f4; }
+.receipt-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.receipt-name { display: block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receipt-selection .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }

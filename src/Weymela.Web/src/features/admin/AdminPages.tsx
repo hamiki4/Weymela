@@ -38,9 +38,11 @@ import {
   count,
   date,
   promotionTypeCode,
+  safeExternal,
 } from "../../ui/format";
 import { CampaignTable } from "../business/BusinessPages";
 import { useSession } from "../../app/Session";
+import { actorRoleNameFromWire, type ActorRoleName } from "../../api/actorRoleContract";
 
 export function OperationsDashboard() {
   const resource = useResource<OperationsHome>("/admin/operations/home");
@@ -136,11 +138,36 @@ export function OperationsUgc() {
 export function AdminRoleEnrollments() {
   const resource = useResource<EnrollmentRow[]>("/admin/role-enrollments");
   const action = useAction();
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
   return <><PageHeader eyebrow="People and access" title="Profile requests" description="Approve additional profiles without replacing an existing role." />
-    <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map((row) => <article className="amount-row" key={row.id}><div><strong>{row.role} · {row.displayName}</strong><small>{row.publicId}</small></div><div className="actions"><Button disabled={action.busy} onClick={() => void action.run(async key => { await post(`/admin/role-enrollments/${row.id}/review`, { approve: true, expectedVersion: row.version }, key); resource.reload(); })}>Approve</Button><Button variant="secondary" disabled={action.busy} onClick={() => void action.run(async key => { await post(`/admin/role-enrollments/${row.id}/review`, { approve: false, expectedVersion: row.version }, key); resource.reload(); })}>Reject</Button></div></article>)}</div>{action.error && <Notice error>{action.error}</Notice>}</Section>}</Resource></>;
+    <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map(row =>
+      <article className="admin-profile-request" key={row.id}>
+        <div><strong>{actorRoleNameFromWire(row.role)} · {row.displayName}</strong><small>Submitted {date(row.submittedAtUtc)}</small></div>
+        {(row.category || row.region || row.submission) && <div className="admin-profile-details">
+          {row.category && <span>{actorRoleNameFromWire(row.role) === "Business" ? "Business type" : "Category"}: {row.category}</span>}
+          {row.region && <span>Region: {row.region}</span>}
+          {row.submission && <span>{row.submission}</span>}
+        </div>}
+        {actorRoleNameFromWire(row.role) === "Creator" && <div className="admin-profile-social"><strong>Social Profiles</strong>
+          {(row.socialProfiles ?? []).map(profile => <span key={profile.platform}>{profile.platform} · <a href={safeExternal(profile.profileUrl)} target="_blank" rel="noopener noreferrer">View profile</a></span>)}
+        </div>}
+        <div className="actions"><Button disabled={action.busy} onClick={() => void action.run(async key => {
+          await post(`/admin/role-enrollments/${row.id}/review`, { approve: true, expectedVersion: row.version }, key);
+          resource.reload();
+        })}>Approve</Button><Button variant="secondary" disabled={action.busy} onClick={() => { setRejecting(row.id); setReason(""); }}>Reject</Button></div>
+        {rejecting === row.id && <div className="admin-profile-reject"><Field label="Reason for rejection"><input maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>
+          <div className="actions"><Button type="button" variant="secondary" onClick={() => setRejecting(null)}>Cancel</Button>
+            <Button type="button" disabled={action.busy || !reason.trim()} onClick={() => void action.run(async key => {
+              await post(`/admin/role-enrollments/${row.id}/review`, { approve: false, reason: reason.trim(), expectedVersion: row.version }, key);
+              setRejecting(null); resource.reload();
+            })}>Confirm rejection</Button></div></div>}
+      </article>)}</div>{action.error && <Notice error>{action.error}</Notice>}</Section>}</Resource></>;
 }
 
-type EnrollmentRow = { id: string; role: string; status: string; displayName: string; publicId: string; version: number };
+type EnrollmentRow = { id: string; role: ActorRoleName | number; status: string | number; displayName: string; publicId: string; version: number;
+  region?: string | null; category?: string | null; submission?: string | null; submittedAtUtc: string;
+  socialProfiles?: { platform: string; profileUrl: string }[] | null };
 
 export function AdminDashboard() {
   const resource = useResource<AdminHome>("/admin/home");

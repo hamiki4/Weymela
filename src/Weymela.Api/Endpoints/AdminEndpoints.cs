@@ -86,6 +86,12 @@ internal static class AdminEndpoints
             EndpointSupport.Id(await service.ChangeLifecycleAsync(EndpointSupport.Actor(c),userId,input,EndpointSupport.Key(c),ct)));
         accounts.MapPost("/{userId:guid}/profiles/revoke",async(Guid userId,RevokeAccountProfileInput input,HttpContext c,PlatformAdminAccountService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.RevokeProfileAsync(EndpointSupport.Actor(c),userId,input,EndpointSupport.Key(c),ct)));
+        accounts.MapPost("/{userId:guid}/roles/delete",async(Guid userId,DeleteAccountRoleInput input,HttpContext c,AccountDeletionService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.DeleteRoleAsync(EndpointSupport.Authority(c),userId,input,EndpointSupport.Key(c),ct)));
+        accounts.MapPost("/{userId:guid}/delete-entire",async(Guid userId,DeleteEntireAccountInput input,HttpContext c,AccountDeletionService service,CancellationToken ct)=>
+            Results.Ok(await service.DeleteEntireAsync(EndpointSupport.Authority(c),userId,input,EndpointSupport.Key(c),ct)));
+        accounts.MapGet("/{userId:guid}/deletion-status",(Guid userId,HttpContext c,AccountDeletionService service,CancellationToken ct)=>
+            service.StatusAsync(EndpointSupport.Authority(c),userId,ct));
         accounts.MapPost("/{userId:guid}/revoke",async(Guid userId,HttpContext c,AdminAccountService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.RevokeAsync(EndpointSupport.Actor(c),userId,EndpointSupport.Key(c),ct)));
     }

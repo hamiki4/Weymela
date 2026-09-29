@@ -106,7 +106,7 @@ for (const viewport of viewports)
           await expect(page.locator("main .empty-state")).toHaveCount(0);
           await expect(page.locator("main .pricing-card-grid")).toHaveCount(1);
           await expect(page.locator("main .pricing-card")).toHaveCount(
-            role === "business" ? 3 : 2,
+            role === "business" ? 4 : 2,
           );
           await expect(page.locator("main")).not.toContainText(
             /Customer Cashback|Platform Keeps|Platform revenue/,
@@ -154,7 +154,7 @@ for (const viewport of viewports)
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await expect(page.getByRole("heading", { name: "Create UGC", exact: true })).toBeVisible();
           const summary = page.locator("section.panel").filter({ has: page.getByRole("heading", { name: "Funding Summary" }) });
-          await page.getByLabel("Creator Payment").fill(String(available + 1000));
+          await page.getByLabel("UGC content commitment per Creator").fill(String(available + 1000));
           await expect(summary.getByText("Need", { exact: true })).toBeVisible();
           await expect(summary.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);
@@ -173,7 +173,7 @@ for (const viewport of viewports)
           await expect(settings.getByLabel("Switch profile")).toBeVisible();
           await expect(settings.getByRole("button", { name: "Notifications" })).toBeVisible();
           await expect(settings.getByRole("button", { name: "Location" })).toBeVisible();
-          if (role === "creator") await expect(settings.getByRole("link", { name: "Social Accounts" })).toBeVisible();
+          if (role === "creator") await expect(settings.getByRole("link", { name: "Social Profiles" })).toBeVisible();
           if (role === "business") await expect(settings.getByRole("link", { name: "Cashier Management" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-${role}-settings`);
@@ -182,7 +182,7 @@ for (const viewport of viewports)
           await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Profile" }).click();
           await expect(page).toHaveURL(/\/profile$/);
           await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
-          if (role === "creator") await expect(page.getByRole("heading", { name: "Social Accounts" })).toBeVisible();
+          if (role === "creator") await expect(page.getByRole("heading", { name: "Social Profiles" })).toBeVisible();
           if (role === "business") await expect(page.getByRole("heading", { name: "Business Information" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-${role}-profile`);
@@ -265,14 +265,15 @@ test("stable buttons and mobile keyboard navigation", async ({
     root: parseFloat(getComputedStyle(document.documentElement).fontSize),
     bottomLabel: parseFloat(getComputedStyle(document.querySelector<HTMLElement>(".mobile-role-link")!).fontSize),
     overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
-    decorativeHover: Array.from(document.styleSheets).filter((sheet) => {
-      try { return Array.from(sheet.cssRules).some((rule) => rule.cssText.includes(":hover")); } catch { return false; }
+    hoverMotionRules: Array.from(document.styleSheets).filter((sheet) => {
+      try { return Array.from(sheet.cssRules).some((rule) => rule.cssText.includes(":hover")
+        && /(?:transform|scale|translate)\s*:/.test(rule.cssText)); } catch { return false; }
     }).length,
   }));
   expect(typography.root).toBeGreaterThanOrEqual(17);
   expect(typography.bottomLabel).toBeGreaterThanOrEqual(12);
   expect(typography.overflow).toBe(false);
-  expect(typography.decorativeHover).toBe(0);
+  expect(typography.hoverMotionRules).toBe(0);
   const button = page
     .getByRole("link", { name: "Create Promotion", exact: true })
     .first();

@@ -58,10 +58,12 @@ eventually establish:
 | `/etc/weymela/pilot/firebase-admin.json` | regular, non-symlink | `1654:1654` | `0400` | API secret, read-only |
 | `/etc/weymela-v3/pilot/cookie-protection.pfx` | regular, non-symlink | `1654:1654` | `0400` | API secret, read-only |
 | `/var/lib/weymela-v3/pilot/cookie-keys` | persistent directory | `1654:1654` | `0700` | API bind mount, writable |
+| `/var/lib/weymela-v3/pilot/receipts` | dedicated persistent directory, non-symlink | `1654:1654` | `0700` | API-only bind mount, writable; never Web/wwwroot |
 
 The eventual privileged actions are limited to owner/mode correction on those
 exact paths, for example `chown 1654:1654` followed by `chmod 0400` for each file,
-and `install -d -o 1654 -g 1654 -m 0700` for the key directory. Review the resolved
+and `install -d -o 1654 -g 1654 -m 0700` separately for each protected directory. Receipt files are
+created as `0600` by the API. Review the resolved
 paths before executing any such command. Never use a recursive broad target.
 
 The metadata-only check does not open or hash protected files and never changes

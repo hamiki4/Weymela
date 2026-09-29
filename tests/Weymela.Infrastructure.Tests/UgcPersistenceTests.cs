@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Weymela.Application;
 using Weymela.Application.Web;
 using Weymela.Domain;
@@ -10,6 +13,7 @@ using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Web;
+using Weymela.Infrastructure.Deposits;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -18,6 +22,132 @@ namespace Weymela.Infrastructure.Tests;
 public sealed class UgcPersistenceTests(PostgresFixture fixture)
 {
     private static readonly DateTime Now = new(2026, 9, 17, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task Assignment_migration_preserves_unattributed_history_and_rejects_new_unbound_ugc_qr()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var ugc = new UgcService(db, new FixedTime(Now));
+        var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+        {
+            CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
+            CustomerOfferFundedAllocation = 1000m,
+            CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
+        }, "historical-offer-create", default);
+        await ugc.PublishAsync(state.Business, opportunityId, 0, "historical-offer-publish", default);
+        var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == opportunityId).Select(x => x.Id).SingleAsync();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20260928230108_AddCreatorNumbers");
+        var historicalId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var digest = new string('A', 64);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO v3."OfferQrSessions" ("Id", "CustomerId", "Source", "UgcCustomerOfferId",
+                "BusinessId", "TokenHash", "IssuedAtUtc", "ExpiresAtUtc", "Status", "IdempotencyReference", "Version")
+            VALUES ({historicalId}, {customerId}, 'UgcCustomerOffer', {offerId},
+                {state.Business.BusinessId!.Value}, {digest}, {Now}, {Now.AddMinutes(5)}, 'Issued', 'historical', {0L})
+            """);
+        await migrator.MigrateAsync();
+        var historical = await db.OfferQrSessions.AsNoTracking().SingleAsync(x => x.Id == historicalId);
+        Assert.Null(historical.CreatorId);
+        Assert.Null(historical.UgcAssignmentId);
+        Assert.Equal(offerId, historical.UgcCustomerOfferId);
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO v3."OfferQrSessions" ("Id", "CustomerId", "Source", "UgcCustomerOfferId",
+                "BusinessId", "TokenHash", "IssuedAtUtc", "ExpiresAtUtc", "Status", "IdempotencyReference", "Version")
+            VALUES ({Guid.NewGuid()}, {customerId}, 'UgcCustomerOffer', {offerId},
+                {state.Business.BusinessId!.Value}, {new string('B', 64)}, {Now}, {Now.AddMinutes(5)}, 'Issued', 'new-unbound', {0L})
+            """));
+        var mixed = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO v3."OfferQrSessions" ("Id", "CustomerId", "Source", "UgcCustomerOfferId",
+                "BusinessId", "TokenHash", "IssuedAtUtc", "ExpiresAtUtc", "Status", "IdempotencyReference", "Version")
+            VALUES ({Guid.NewGuid()}, {customerId}, 'ViewAndSalePromotion', {offerId},
+                {state.Business.BusinessId!.Value}, {new string('C', 64)}, {Now}, {Now.AddMinutes(5)}, 'Issued', 'mixed-source', {0L})
+            """));
+        Assert.Equal("CK_Qr_SourceBinding", mixed.ConstraintName);
+        await migrator.MigrateAsync("20260928230108_AddCreatorNumbers");
+        await migrator.MigrateAsync();
+        Assert.Null((await db.OfferQrSessions.AsNoTracking().SingleAsync(x => x.Id == historicalId)).UgcAssignmentId);
+        Assert.False(db.Database.HasPendingModelChanges());
+    }
+
+    [Fact]
+    public async Task Later_ugc_pricing_change_affects_new_commitments_without_repricing_live_creator_net()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var service = new UgcService(db, new FixedTime(Now));
+        var original = await service.CreateAsync(state.Business, Input(), "original-pricing-create", default);
+        await service.PublishAsync(state.Business, original, 0, "original-pricing-publish", default);
+        var configurationId = (await db.FinancialConfigurations.SingleAsync()).Id;
+        var versionId = Guid.NewGuid();
+        db.FinancialConfigurationVersions.Add(new(versionId, configurationId, 2, Phase4Scenario.Admin.UserId, Now,
+            Scenario.Price(PromotionType.ViewOnly, versionId), Scenario.Price(PromotionType.ViewPlusCommission, versionId),
+            new Money(3000), new Money(4000),
+            new UgcPricingSnapshot(new Money(200), 20m, null, Now, versionId, 3m)));
+        await db.SaveChangesAsync();
+        var future = await service.CreateAsync(state.Business, Input() with { Title = "Future UGC terms" }, "future-pricing-create", default);
+        await service.PublishAsync(state.Business, future, 0, "future-pricing-publish", default);
+        db.ChangeTracker.Clear();
+        var cards = await service.DiscoverAsync(state.Creator, default);
+        Assert.Equal(450m, cards.Single(x => x.Id == original).CreatorPayment);
+        Assert.Equal(400m, cards.Single(x => x.Id == future).CreatorPayment);
+        Assert.Equal(10m, (await db.UgcOpportunities.SingleAsync(x => x.Id == original)).PricingSnapshot.PlatformFeePercent);
+        Assert.Equal(20m, (await db.UgcOpportunities.SingleAsync(x => x.Id == future)).PricingSnapshot.PlatformFeePercent);
+    }
+
+    [Fact]
+    public async Task Product_arrangement_is_required_to_publish_and_is_visible_without_changing_ugc_accounting()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var service = new UgcService(db, new FixedTime(Now));
+        var incomplete = await service.CreateAsync(state.Business, Input() with { ProductProvided = false, CreatorMustPurchase = false }, "arrangement-incomplete", default);
+        var before = (await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId)).AvailableBalance.Amount;
+        var missing = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PublishAsync(state.Business, incomplete, 0, "arrangement-missing", default));
+        Assert.Equal(FailureKind.Validation, missing.Kind);
+        Assert.Equal(before, (await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId)).AvailableBalance.Amount);
+        Assert.Empty(await db.UgcReservations.Where(x => x.UgcOpportunityId == incomplete).ToListAsync());
+        await service.UpdateAsync(state.Business, incomplete,
+            new(null, "Create a 30-60 second vertical video.", ["https://example.com/reference"],
+                "Addis Ababa", "90-day digital use", false, ProductProvided: true, CreatorMustPurchase: false),
+            0, "arrangement-complete-draft", default);
+        Assert.True((await db.UgcOpportunities.SingleAsync(x => x.Id == incomplete)).ProductProvided);
+        Assert.Equal(before, (await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId)).AvailableBalance.Amount);
+
+        var conflicting = await service.CreateAsync(state.Business, Input() with { ProductProvided = true, CreatorMustPurchase = true }, "arrangement-conflicting", default);
+        var invalid = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PublishAsync(state.Business, conflicting, 0, "arrangement-both", default));
+        Assert.Equal(FailureKind.Validation, invalid.Kind);
+
+        var provided = await service.CreateAsync(state.Business, Input(), "arrangement-provided", default);
+        var providedCard = (await service.BusinessAsync(state.Business, default)).Single(x => x.Id == provided);
+        Assert.True(providedCard.ProductProvided);
+        Assert.False(providedCard.CreatorMustPurchase);
+
+        var purchase = await service.CreateAsync(state.Business, Input() with { ProductProvided = false, CreatorMustPurchase = true }, "arrangement-purchase", default);
+        var businessDraft = (await service.BusinessAsync(state.Business, default)).Single(x => x.Id == purchase);
+        Assert.False(businessDraft.ProductProvided);
+        Assert.True(businessDraft.CreatorMustPurchase);
+        Assert.Equal(500m, businessDraft.CreatorPayment);
+        await service.PublishAsync(state.Business, purchase, 0, "arrangement-publish", default);
+        var publishedVersion = (await db.UgcOpportunities.SingleAsync(x => x.Id == purchase)).Version;
+        var rewrite = await Assert.ThrowsAsync<ApplicationFailure>(() => service.UpdateAsync(state.Business, purchase,
+            new(null, "Create a 30-60 second vertical video.", [], "Addis Ababa", null, false,
+                ProductProvided: true, CreatorMustPurchase: false), publishedVersion, "arrangement-rewrite", default));
+        Assert.Equal(FailureKind.Validation, rewrite.Kind);
+        var creatorCard = (await service.DiscoverAsync(state.Creator, default)).Single(x => x.Id == purchase);
+        Assert.True(creatorCard.CreatorMustPurchase);
+        Assert.False(creatorCard.ProductProvided);
+        Assert.Equal(450m, creatorCard.CreatorPayment);
+        var request = await service.RequestAsync(state.Creator, purchase, "arrangement-request", default);
+        await service.ReviewRequestAsync(state.Business, request, true, null, "arrangement-approve", default);
+        var assignment = (await service.CreatorAssignmentsAsync(state.Creator, default)).Single(x => x.OpportunityId == purchase);
+        Assert.True(assignment.CreatorMustPurchase);
+        Assert.Equal(450m, assignment.CreatorPayment);
+        Assert.Equal(before - 1500m, (await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId)).AvailableBalance.Amount);
+        Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == purchase).ToListAsync());
+    }
 
     [Fact]
     public async Task Business_must_accept_current_agreements_before_creating_or_publishing_ugc()
@@ -65,10 +195,10 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.ChangeTracker.Clear();
         var opportunity = await db.UgcOpportunities.SingleAsync(x => x.Id == opportunityId);
         var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId);
-        Assert.Equal(1650m, opportunity.RequiredFunding.Amount); Assert.Equal(550m, opportunity.UsedFunding.Amount);
-        Assert.Equal(1100m, opportunity.ReservedFunding.Amount); Assert.Equal(8350m, wallet.AvailableBalance.Amount);
-        Assert.Equal(1100m, wallet.ReservedBalance.Amount);
-        Assert.Equal(500m, (await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == state.Creator.CreatorId)).AvailableEarnings.Amount);
+        Assert.Equal(1500m, opportunity.RequiredFunding.Amount); Assert.Equal(500m, opportunity.UsedFunding.Amount);
+        Assert.Equal(1000m, opportunity.ReservedFunding.Amount); Assert.Equal(8500m, wallet.AvailableBalance.Amount);
+        Assert.Equal(1000m, wallet.ReservedBalance.Amount);
+        Assert.Equal(450m, (await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == state.Creator.CreatorId)).AvailableEarnings.Amount);
         Assert.Single(await db.CreatorEarningEntries.Where(x => x.UgcAssignmentId == assignmentId && x.Source == EarningSource.Ugc).ToListAsync());
         var fee = await db.PlatformRevenueEntries.SingleAsync(x => x.UgcAssignmentId == assignmentId && x.Source == PlatformRevenueSource.UgcFee);
         Assert.Equal(50m, fee.Amount.Amount);
@@ -111,7 +241,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var id = await service.CreateAsync(state.Business, Input(), "ugc-creator-visibility", default);
         await service.PublishAsync(state.Business, id, 0, "ugc-creator-visibility-publish", default);
         var detail = await service.DetailAsync(state.Creator, id, default);
-        Assert.Equal(500m, detail.Opportunity.CreatorPayment);
+        Assert.Equal(450m, detail.Opportunity.CreatorPayment);
         Assert.Null(detail.Opportunity.RequiredFunding);
         Assert.Null(detail.Opportunity.PlatformFeePercent);
         Assert.Null(detail.Opportunity.PlatformFee);
@@ -147,6 +277,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var otherCustomer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
         var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
         IssuedOfferQr qr;
+        Guid expectedAssignmentId;
         await using (var db = state.Database.Open())
         {
             db.CommercePermissions.AddRange(
@@ -162,9 +293,13 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
             }, "offer-create", default);
             await ugc.PublishAsync(state.Business, id, 0, "offer-publish", default);
+            var request = await ugc.RequestAsync(state.Creator, id, "offer-creator-request", default);
+            await ugc.ReviewRequestAsync(state.Business, request, true, null, "offer-creator-approve", default);
+            var assignmentId = await db.UgcAssignments.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
+            expectedAssignmentId = assignmentId;
             var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
             qr = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
-                .IssueUgcAsync(new(customer, offerId, "offer-qr"), default);
+                .IssueUgcAsync(new(customer, offerId, assignmentId, "offer-qr"), default);
         }
         SaleResult result;
         await using (var db = state.Database.Open())
@@ -175,13 +310,41 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
 
         await using var verify = state.Database.Open();
         var sale = await verify.UgcCustomerOfferSales.SingleAsync();
+        Assert.Equal(expectedAssignmentId, sale.UgcAssignmentId);
+        Assert.Equal(expectedAssignmentId, (await verify.OfferQrSessions.SingleAsync()).UgcAssignmentId);
         Assert.Equal(50m, sale.CustomerDiscountAmount.Amount); Assert.Equal(30m, sale.PlatformRevenueAmount.Amount);
         Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
         Assert.Empty(await verify.CustomerCashbackEntries.ToListAsync());
         Assert.Single(await verify.PlatformRevenueEntries.Where(x => x.Source == PlatformRevenueSource.UgcCustomerOfferSaleFee).ToListAsync());
         Assert.Equal(5520m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
-        Assert.Equal(7170m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
+        Assert.Equal(7020m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
         Assert.Equal(OfferQrStatus.Used, (await verify.OfferQrSessions.SingleAsync()).Status);
+        var workspace = new WorkspaceQueries(verify, new PersistentWorkspaceDirectory(verify), new FixedTime(Now));
+        var businessTransaction = Assert.Single(await workspace.RecentSalesAsync(state.Business, default));
+        Assert.Equal("UGC_CUSTOMER_OFFER", businessTransaction.Source);
+        Assert.Equal("Morning Hair Transformation", businessTransaction.Offer);
+        Assert.Equal("Mimi Creator", businessTransaction.Creator);
+        Assert.Equal(80m, businessTransaction.BusinessCharge);
+        Assert.Equal("Completed", businessTransaction.Status);
+        var day = DateOnly.FromDateTime(Now);
+        var adminPurchase = Assert.Single((await workspace.AdminReportAsync(Phase4Scenario.Admin, day, day, default)).Purchases);
+        Assert.Equal("UGC_PLUS_SALE", adminPurchase.SourceType);
+        Assert.Equal(sale.UgcOpportunityId, adminPurchase.SourceId);
+        Assert.Equal(expectedAssignmentId, adminPurchase.UgcAssignmentId);
+        Assert.Equal(0m, adminPurchase.CreatorSaleEarning);
+        Assert.Equal(50m, adminPurchase.CustomerBenefit);
+        Assert.Equal(30m, adminPurchase.PlatformShare);
+        Assert.Single(await workspace.RecentSalesAsync(cashier, default));
+        var unrelatedCashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
+        verify.CommercePermissions.Add(new CommercePermission(unrelatedCashier.UserId, ActorRole.Cashier,
+            unrelatedCashier.UserId, unrelatedCashier.BusinessId, true, true));
+        await verify.SaveChangesAsync();
+        Assert.Empty(await workspace.RecentSalesAsync(unrelatedCashier, default));
+        Assert.DoesNotContain("PlatformFee", JsonSerializer.Serialize(businessTransaction));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new CheckoutService(verify,
+            new CommerceAccessPolicy(verify), new FixedTime(Now))
+            .RedeemAsync(new(cashier, qr.Token!, new Money(1000), "offer-sale-second"), default));
+        Assert.Single(await verify.UgcCustomerOfferSales.ToListAsync());
         var queries = new FinancialQueries(verify, new CommerceAccessPolicy(verify),
             new PersistentWorkspaceDirectory(verify), new FixedTime(Now));
         var transaction = Assert.Single(await queries.CustomerTransactionsAsync(customer, default));
@@ -197,6 +360,118 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var json = JsonSerializer.Serialize(transaction);
         foreach (var internalField in new[] { "CreatorId", "BusinessId", "CreatorAllocationId", "Commission", "Platform", "JournalId", "CorrelationId", "IdempotencyKey" })
             Assert.DoesNotContain(internalField, json);
+        await DrainNotifications(state.Database);
+        Assert.Single(await verify.InAppNotifications.Where(x => x.EventType == "SaleCompleted" && x.UserId == customer.UserId).ToListAsync());
+        Assert.Empty(await verify.InAppNotifications.Where(x => x.EventType == "CreatorCommissionEarned").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Manual_ugc_checkout_keeps_exact_assignment_and_never_pays_a_sale_commission()
+    {
+        var state = await Setup();
+        var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
+        Guid assignmentId;
+        Guid offerId;
+        string creatorNumber;
+        await using (var db = state.Database.Open())
+        {
+            db.CommercePermissions.AddRange(
+                new CommercePermission(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
+                new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
+            db.CustomerProfiles.Add(new CustomerProfileRecord
+            {
+                CustomerId = customer.CustomerId.Value, UserId = customer.UserId,
+                PreferredName = "Customer", CreatedAtUtc = Now, UpdatedAtUtc = Now
+            });
+            db.AuthIdentifiers.Add(new AuthIdentifierRecord
+            {
+                UserId = customer.UserId, Kind = "Phone", IdentifierHash = EmailAuthService.HashIdentifier("+251900000000"),
+                DeliveryAddress = "+251900000000",
+                IsVerified = true, CreatedAtUtc = Now
+            });
+            await db.SaveChangesAsync();
+            var ugc = new UgcService(db, new FixedTime(Now));
+            var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+            {
+                CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
+                CustomerOfferFundedAllocation = 5600m,
+                CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
+            }, "manual-ugc-create", default);
+            await ugc.PublishAsync(state.Business, opportunityId, 0, "manual-ugc-publish", default);
+            var requestId = await ugc.RequestAsync(state.Creator, opportunityId, "manual-ugc-request", default);
+            assignmentId = await ugc.ReviewRequestAsync(state.Business, requestId, true, null, "manual-ugc-approve", default);
+            offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == opportunityId).Select(x => x.Id).SingleAsync();
+            creatorNumber = (await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == state.Creator.CreatorId)).CreatorNumber!.Value.ToString();
+        }
+        await using (var db = state.Database.Open())
+        {
+            var checkout = new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now));
+            var lookup = await checkout.ResolveManualAsync(cashier, new(creatorNumber, "0900000000"), default);
+            Assert.Equal(offerId, Assert.Single(lookup.Offers).Id);
+            var input = new ManualCheckoutConfirmInput(creatorNumber, "0900000000", offerId, 1000m);
+            var result = await checkout.ConfirmManualAsync(cashier, input, "manual-ugc-sale", default);
+            Assert.Equal("UGC_CUSTOMER_OFFER", result.Source);
+            Assert.Equal(result, await checkout.ConfirmManualAsync(cashier, input, "manual-ugc-sale", default));
+        }
+        await using var verify = state.Database.Open();
+        Assert.Equal(assignmentId, (await verify.UgcCustomerOfferSales.SingleAsync()).UgcAssignmentId);
+        var businessHistory = await new WorkspaceQueries(verify, new PersistentWorkspaceDirectory(verify),
+            new FixedTime(Now)).RecentSalesAsync(state.Business, default);
+        Assert.Equal("••••0000", Assert.Single(businessHistory).CustomerMasked);
+        Assert.Single(await verify.FinancialJournals.Where(x => x.SourceType == JournalSourceType.UgcCustomerOfferSale).ToListAsync());
+        Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Two_ugc_purchases_competing_for_the_final_discount_fund_post_only_once()
+    {
+        var state = await Setup();
+        var firstCustomer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var secondCustomer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
+        IssuedOfferQr firstQr;
+        IssuedOfferQr secondQr;
+        await using (var db = state.Database.Open())
+        {
+            db.CommercePermissions.AddRange(
+                new CommercePermission(firstCustomer.UserId, ActorRole.Customer, firstCustomer.CustomerId!.Value, null, true, false),
+                new CommercePermission(secondCustomer.UserId, ActorRole.Customer, secondCustomer.CustomerId!.Value, null, true, false),
+                new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
+            await db.SaveChangesAsync();
+            var ugc = new UgcService(db, new FixedTime(Now));
+            var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+            {
+                CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
+                CustomerOfferFundedAllocation = 80m,
+                CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
+            }, "final-fund-create", default);
+            await ugc.PublishAsync(state.Business, opportunityId, 0, "final-fund-publish", default);
+            var requestId = await ugc.RequestAsync(state.Creator, opportunityId, "final-fund-request", default);
+            var assignmentId = await ugc.ReviewRequestAsync(state.Business, requestId, true, null, "final-fund-approve", default);
+            var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == opportunityId).Select(x => x.Id).SingleAsync();
+            var checkout = new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now));
+            firstQr = await checkout.IssueUgcAsync(new(firstCustomer, offerId, assignmentId, "first-final-qr"), default);
+            secondQr = await checkout.IssueUgcAsync(new(secondCustomer, offerId, assignmentId, "second-final-qr"), default);
+        }
+        async Task<(SaleResult? Sale, Exception? Error)> Redeem(IssuedOfferQr qr, string key)
+        {
+            await using var db = state.Database.Open();
+            try
+            {
+                return (await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
+                    .RedeemAsync(new(cashier, qr.Token!, new Money(1000), key), default), null);
+            }
+            catch (Exception ex) { return (null, ex); }
+        }
+        var results = await Task.WhenAll(Redeem(firstQr, "first-final-sale"), Redeem(secondQr, "second-final-sale"));
+        Assert.Single(results, x => x.Sale is not null);
+        Assert.Single(results, x => x.Error is not null);
+        await using var verify = state.Database.Open();
+        Assert.Single(await verify.UgcCustomerOfferSales.ToListAsync());
+        Assert.Single(await verify.FinancialJournals.Where(x => x.SourceType == JournalSourceType.UgcCustomerOfferSale).ToListAsync());
+        Assert.Equal(0m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
+        Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
     }
 
     [Fact]
@@ -220,9 +495,12 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 CustomerOfferEndsAtUtc = Now.AddDays(7)
             }, "small-offer-create", default);
             await ugc.PublishAsync(state.Business, id, 0, "small-offer-publish", default);
+            var request = await ugc.RequestAsync(state.Creator, id, "small-offer-creator-request", default);
+            await ugc.ReviewRequestAsync(state.Business, request, true, null, "small-offer-creator-approve", default);
+            var assignmentId = await db.UgcAssignments.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
             var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
             qr = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
-                .IssueUgcAsync(new(customer, offerId, "small-offer-qr"), default);
+                .IssueUgcAsync(new(customer, offerId, assignmentId, "small-offer-qr"), default);
         }
         await using (var db = state.Database.Open())
         {
@@ -262,6 +540,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             CustomerOfferEndsAtUtc = Now.AddDays(7)
         }, "visible-create", default);
         await ugc.PublishAsync(state.Business, visible, 0, "visible-publish", default);
+        var request = await ugc.RequestAsync(state.Creator, visible, "visible-creator-request", default);
+        var assignmentId = await ugc.ReviewRequestAsync(state.Business, request, true, null, "visible-creator-approve", default);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE v3."PublicWorkspaceProfiles" SET "Latitude"={9.01m}, "Longitude"={38.72m}
             WHERE "SubjectId"={state.Business.BusinessId} AND "Role"='Business'
@@ -272,10 +552,11 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
 
         var card = Assert.Single(cards);
         Assert.Equal("UGC_CUSTOMER_OFFER", card.Source);
+        Assert.Equal(assignmentId, card.UgcAssignmentId);
         Assert.Equal("Save on your next visit", card.Offer);
         Assert.Equal("Bella Beauty", card.Business.DisplayName);
         Assert.Equal(5m, card.BenefitPercent);
-        Assert.Null(card.Creator);
+        Assert.NotNull(card.Creator);
         Assert.Null(card.WatchUrl);
         Assert.Equal(9.01m, card.Business.Latitude);
         Assert.Equal(38.72m, card.Business.Longitude);
@@ -358,7 +639,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             db.CommercePermissions.Add(new(second.UserId, ActorRole.Creator, second.CreatorId!.Value, null, true, false));
             db.PublicWorkspaceProfiles.Add(new() { SubjectId = second.CreatorId.Value, Role = ActorRole.Creator, DisplayName = "Second Creator", PublicId = "CR-SECOND" });
             db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord { CreatorId = second.CreatorId.Value, Platform = CreatorPlatform.TikTok,
-                ProfileUrl = "https://www.tiktok.com/@second", SelfReportedAudience = 25_000, CreatedAtUtc = Now, UpdatedAtUtc = Now });
+                ProfileUrl = "https://www.tiktok.com/@second", SelfReportedAudience = 25_000,
+                VerificationStatus = "Verified", VerifiedAudience = 25_000, CreatedAtUtc = Now, UpdatedAtUtc = Now });
             await db.SaveChangesAsync();
             var service = new UgcService(db, new FixedTime(Now));
             var id = await service.CreateAsync(state.Business, Input(creators: 1), "ugc-capacity-create", default);
@@ -421,13 +703,13 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.ChangeTracker.Clear();
         var opportunity = await db.UgcOpportunities.Include(x => x.PlatformRequirements).SingleAsync(x => x.Id == id);
         Assert.Equal("Updated transformation", opportunity.Title); Assert.Equal(UgcContentType.Photos, opportunity.ContentType);
-        Assert.Equal(600m, opportunity.CreatorPayment.Amount); Assert.Equal(2, opportunity.CreatorCapacity);
-        Assert.Equal(1320m, opportunity.RequiredFunding.Amount); Assert.Equal("Instagram", opportunity.PlatformRequirements.Single().Platform.ToString());
+        Assert.Equal(540m, opportunity.CreatorPayment.Amount); Assert.Equal(2, opportunity.CreatorCapacity);
+        Assert.Equal(1200m, opportunity.RequiredFunding.Amount); Assert.Equal("Instagram", opportunity.PlatformRequirements.Single().Platform.ToString());
         Assert.Equal(2, await db.UgcRevisions.CountAsync(x => x.UgcOpportunityId == id));
         await service.PublishAsync(state.Business, id, opportunity.Version, "ugc-edit-publish", default);
         db.ChangeTracker.Clear();
         var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId);
-        Assert.Equal(8680m, wallet.AvailableBalance.Amount); Assert.Equal(1320m, wallet.ReservedBalance.Amount);
+        Assert.Equal(8800m, wallet.AvailableBalance.Amount); Assert.Equal(1200m, wallet.ReservedBalance.Amount);
     }
 
     [Fact]
@@ -442,7 +724,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             current.Version, "ugc-locked-update", default));
         Assert.Equal(FailureKind.Validation, failure.Kind);
         db.ChangeTracker.Clear(); current = await db.UgcOpportunities.AsNoTracking().SingleAsync(x => x.Id == id);
-        Assert.Equal(500m, current.CreatorPayment.Amount); Assert.Equal(1650m, current.RequiredFunding.Amount);
+        Assert.Equal(450m, current.CreatorPayment.Amount); Assert.Equal(1500m, current.RequiredFunding.Amount);
     }
 
     [Fact]
@@ -469,6 +751,58 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.All(await verify.InAppNotifications.Where(x => x.EventType == "UgcRequestApproved" || x.EventType == "UgcChangesRequested" || x.EventType == "UgcContentApproved").ToListAsync(), x => Assert.Equal(state.Creator.UserId, x.UserId));
     }
 
+    [Fact]
+    public async Task Approved_receipt_deposit_supplies_authoritative_ugc_publish_funding()
+    {
+        var state = await Setup(0);
+        var admin = Phase4Scenario.Admin;
+        Guid depositId; Guid opportunityId;
+        await using (var db = state.Database.Open())
+        {
+            db.CommercePermissions.Add(new(admin.UserId, admin.Role, admin.UserId, null, true, false));
+            await db.SaveChangesAsync();
+            var pending = await new DepositService(db, new ManualApprovalDepositProvider(), new FixedTime(Now))
+                .SubmitAsync(state.Business, new(10000m, "UGC-BANK-RECEIPT", "r_opaque-test-proof"), "ugc-receipt-submit", default);
+            depositId = pending.Id;
+            Assert.Equal("Pending", pending.Status);
+            Assert.Equal(0m, (await db.BusinessWallets.SingleAsync()).AvailableBalance.Amount);
+            var service = new UgcService(db, new FixedTime(Now));
+            opportunityId = await service.CreateAsync(state.Business, Input(), "ugc-after-receipt-create", default);
+            var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PublishAsync(state.Business, opportunityId, 0, "ugc-before-review", default));
+            Assert.Equal(FailureKind.InsufficientFunds, failure.Kind);
+        }
+        await using (var db = state.Database.Open())
+            await new FinancialCommands(db, new FixedTime(Now)).ReviewDepositAsync(admin, depositId,
+                new(true, 0, "UGC-BANK-CONFIRMED"), "ugc-receipt-review");
+        await using (var db = state.Database.Open())
+        {
+            Assert.Equal(10000m, (await db.BusinessWallets.SingleAsync()).AvailableBalance.Amount);
+            await new UgcService(db, new FixedTime(Now)).PublishAsync(state.Business, opportunityId, 0, "ugc-after-review-publish", default);
+            db.ChangeTracker.Clear();
+            var wallet = await db.BusinessWallets.SingleAsync();
+            Assert.Equal(8500m, wallet.AvailableBalance.Amount);
+            Assert.Equal(1500m, wallet.ReservedBalance.Amount);
+            Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == opportunityId).ToListAsync());
+            Assert.Empty(await new ReconciliationService(db).CheckAsync(admin, default));
+        }
+    }
+
+    [Fact]
+    public async Task Creator_entered_link_cannot_satisfy_verified_ugc_platform_requirement()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var ugc = new UgcService(db, new FixedTime(Now));
+        var opportunity = await ugc.CreateAsync(state.Business, Input(minimumAudience: 0), "ugc-verified-profile-gate", default);
+        await ugc.PublishAsync(state.Business, opportunity, 0, "ugc-verified-profile-publish", default);
+        Assert.Contains(await ugc.DiscoverAsync(state.Creator, default), x => x.Id == opportunity);
+        await new Weymela.Infrastructure.Web.CreatorSocialProfileLinks(db, new FixedTime(Now))
+            .SaveAsync(state.Creator, CreatorPlatform.TikTok, "https://www.tiktok.com/@mimi_new", default);
+        db.ChangeTracker.Clear();
+        Assert.DoesNotContain(await ugc.DiscoverAsync(state.Creator, default), x => x.Id == opportunity);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => ugc.RequestAsync(state.Creator, opportunity, "ugc-manual-link-request", default));
+    }
+
     private async Task<State> Setup(decimal deposit = 10_000)
     {
         var database = await fixture.CreateAsync(); await using var db = database.Open();
@@ -486,6 +820,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         {
             CreatorId = creator.CreatorId.Value, Platform = CreatorPlatform.TikTok,
             ProfileUrl = "https://www.tiktok.com/@mimi", SelfReportedAudience = 20_000,
+            VerificationStatus = "Verified", VerifiedAudience = 20_000,
             CreatedAtUtc = Now, UpdatedAtUtc = Now
         });
         db.FinancialConfigurations.Add(new(configurationId, "PlatformPricing"));

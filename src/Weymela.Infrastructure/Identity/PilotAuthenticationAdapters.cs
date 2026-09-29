@@ -125,13 +125,15 @@ public interface IFirebaseAdminTokenSigner
 }
 
 /// <summary>Owns the Firebase Admin application initialized from an external read-only credential file.</summary>
-public sealed class FirebaseAdminTokenSigner : IFirebaseAdminTokenSigner, IDisposable
+public sealed class FirebaseAdminTokenSigner : IFirebaseAdminTokenSigner, IAccountIdentityDeletionProvider, IDisposable
 {
     private readonly FirebaseApp app;
     private readonly FirebaseAuth auth;
+    private readonly string projectId;
 
     public FirebaseAdminTokenSigner(RuntimeOptions options)
     {
+        projectId = options.FirebaseProjectId;
         try
         {
             var bytes = File.ReadAllBytes(options.FirebaseAdminCredentialsPath);
@@ -161,6 +163,17 @@ public sealed class FirebaseAdminTokenSigner : IFirebaseAdminTokenSigner, IDispo
         try { return await auth.CreateCustomTokenAsync(uid).WaitAsync(ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch { throw new AuthChallengeUnavailableException("Firebase custom-token signing is temporarily unavailable."); }
+    }
+
+    public bool Enabled => true;
+
+    public async Task DeleteAsync(string project, string uid, CancellationToken ct)
+    {
+        if (project != projectId || string.IsNullOrWhiteSpace(uid))
+            throw new InvalidOperationException("External identity binding is invalid.");
+        try { await auth.DeleteUserAsync(uid).WaitAsync(ct); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (FirebaseAuthException error) when (error.AuthErrorCode == AuthErrorCode.UserNotFound) { }
     }
 
     public void Dispose() => app.Delete();
@@ -235,7 +248,9 @@ public static class PilotAuthenticationAdapters
         }
         if (options.FirebaseCustomTokenMode == "FirebaseAdmin")
         {
-            services.AddSingleton<IFirebaseAdminTokenSigner, FirebaseAdminTokenSigner>();
+            services.AddSingleton<FirebaseAdminTokenSigner>();
+            services.AddSingleton<IFirebaseAdminTokenSigner>(sp => sp.GetRequiredService<FirebaseAdminTokenSigner>());
+            services.AddSingleton<IAccountIdentityDeletionProvider>(sp => sp.GetRequiredService<FirebaseAdminTokenSigner>());
             services.Replace(ServiceDescriptor.Scoped<IFirebaseCustomTokenIssuer, FirebaseAdminCustomTokenIssuer>());
         }
         return services;

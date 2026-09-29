@@ -7,6 +7,7 @@ using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Web;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -14,6 +15,24 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
 {
+    [Fact] public async Task Platform_admin_report_keeps_each_view_sale_purchase_and_its_exact_split()
+    {
+        var s=await Phase4Scenario.Create(fixture);
+        var result=await s.Redeem(await s.Issue());
+        await using var db=s.Database.Open();
+        var day=DateOnly.FromDateTime(Scenario.Now);
+        var report=await new WorkspaceQueries(db,new TestDirectory(),s.Clock)
+            .AdminReportAsync(Phase4Scenario.Admin,day,day,default);
+        var purchase=Assert.Single(report.Purchases);
+        Assert.Equal(result.SaleId,purchase.Id);
+        Assert.Equal(s.Seed.PromotionId,purchase.SourceId);
+        Assert.Equal("VIEW_PLUS_SALE",purchase.SourceType);
+        Assert.Equal(1000m,purchase.PurchaseAmount);
+        Assert.Equal(100m,purchase.BusinessCharge);
+        Assert.Equal(20m,purchase.CustomerBenefit);
+        Assert.Equal(45m,purchase.CreatorSaleEarning);
+        Assert.Equal(35m,purchase.PlatformShare);
+    }
     [Fact] public async Task Retiring_support_sessions_preserves_rows_and_audit_correlation_without_runtime_table()
     {
         var database = await fixture.CreateAsync();
@@ -162,7 +181,7 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         var migrations=(await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates","20260922161742_AddCreatorPromotionContentSubmissions","20260922184111_AddPromotionLiveDurationSnapshots","20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout","20260924034537_AddAdminAccountAuthorityFoundation","20260925010921_AddViewAsSupportSessions","20260925203153_AddPlatformPromotionalFunding","20260925212120_RetireSupportSessions"},migrations);
+        Assert.Equal(new[]{"20260911225904_InitialV3Schema","20260911233032_AddViewRewardsQrAndPayouts","20260912011149_AddOperationalSecurityAndNotifications","20260913045523_AddAuthenticationRecovery","20260913054814_AddRoleEnrollments","20260913062900_AddPhoneLoginAliases","20260914022116_AddDevicePinSessionFoundation","20260916042557_AddPasswordCredentials","20260916202055_AddCustomerProfiles","20260917020034_AddProductHandoffTransactions","20260917233008_AddBusinessLedPromotionAndUgc","20260918144832_AddUgcCustomerOffers","20260919120000_AddUgcCustomerDiscountLimit","20260922004528_AddBusinessProfileCoordinates","20260922161742_AddCreatorPromotionContentSubmissions","20260922184111_AddPromotionLiveDurationSnapshots","20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout","20260924034537_AddAdminAccountAuthorityFoundation","20260925010921_AddViewAsSupportSessions","20260925203153_AddPlatformPromotionalFunding","20260925212120_RetireSupportSessions","20260928213157_AlignDepositReviewAuthority","20260928230108_AddCreatorNumbers","20260929022846_BindUgcSaleAssignments"},migrations);
         Assert.False(db.Database.HasPendingModelChanges());
         foreach(var entity in new[]{typeof(OfferQrSession),typeof(CreatorPromotionParticipation),typeof(CreatorPromotionContentSubmission),typeof(PayoutRecord),typeof(IdentityBinding),typeof(DepositRequest),typeof(InAppNotification),typeof(WorkerCheckpoint),typeof(UgcOpportunity),typeof(UgcAssignment),typeof(AdminGrantRecord),typeof(AccountPreauthorizationRecord),typeof(AccountLifecycleRecord)})
         { var model=db.Model.FindEntityType(entity)!;Assert.True(model.FindProperty("xmin")!.IsConcurrencyToken);Assert.True(model.FindProperty("Version")!.IsConcurrencyToken); }

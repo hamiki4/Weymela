@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { post, request, useAction, useResource } from "../../api/client";
 import type { CustomerCashbackSummary as CashbackSummary, CustomerTransaction, Offer, Qr } from "../../api/types";
@@ -106,7 +106,7 @@ function CustomerLocationCard({
 function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm: number | null }) {
   const watchUrl = safeExternal(offer.watchUrl);
   const directionsUrl = safeExternal(offer.business.directionsUrl);
-  const headingId = `customer-offer-${offer.id}`;
+  const headingId = `customer-offer-${offer.id}-${offer.ugcAssignmentId ?? "promotion"}`;
   const customerFacingTitle = offer.slogan?.trim() || offer.offer;
 
   return (
@@ -174,7 +174,7 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             Get Directions
           </a>
         )}
-        <ActionLink to={`/customer/offers/${offer.id}`} icon="qr">
+        <ActionLink to={`/customer/offers/${offer.id}${offer.ugcAssignmentId ? `?assignment=${offer.ugcAssignmentId}` : ""}`} icon="qr">
           Get Offer
         </ActionLink>
       </div>
@@ -339,7 +339,7 @@ function CustomerOfferBrowser({
         ) : visibleRows.length ? (
           <div className="customer-promotion-grid">
             {visibleRows.map((offer) => (
-              <CustomerPromotionCard key={offer.id} offer={offer} distanceKm={offerDistanceKm(offer, coordinates)} />
+              <CustomerPromotionCard key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} distanceKm={offerDistanceKm(offer, coordinates)} />
             ))}
           </div>
         ) : (
@@ -488,7 +488,9 @@ function QrPanel({ offer }: { offer: Offer }) {
             onClick={() =>
               void action.run(async (key) => {
                 const result = await post<Qr>(
-                  `/customer/offers/${offer.id}/qr`,
+                  offer.ugcAssignmentId
+                    ? `/customer/offers/${offer.id}/assignments/${offer.ugcAssignmentId}/qr`
+                    : `/customer/offers/${offer.id}/qr`,
                   {},
                   key,
                 );
@@ -526,6 +528,8 @@ function QrPanel({ offer }: { offer: Offer }) {
 
 export function CustomerOfferQr() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const assignmentId = searchParams.get("assignment");
   const resource = useResource<Offer[]>("/customer/offers");
   return (
     <div className="offer-page">
@@ -534,9 +538,9 @@ export function CustomerOfferQr() {
       </Link>
       <Resource resource={resource}>
         {(rows) => {
-          const offer = rows.find((row) => row.id === id);
+          const offer = rows.find((row) => row.id === id && (row.ugcAssignmentId ?? null) === assignmentId);
           return offer ? (
-            <QrPanel key={offer.id} offer={offer} />
+            <QrPanel key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} />
           ) : (
             <Section title="Offer unavailable">
               <Empty

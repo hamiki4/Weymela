@@ -12,6 +12,7 @@ public sealed class OfferQrSession
     public Guid? PromotionId { get; private set; }
     public Guid? CreatorId { get; private set; }
     public Guid? CreatorAllocationId { get; private set; }
+    public Guid? UgcAssignmentId { get; private set; }
     public Guid? UgcCustomerOfferId { get; private set; }
     public Guid BusinessId { get; private set; }
     public string TokenHash { get; private set; }
@@ -30,12 +31,14 @@ public sealed class OfferQrSession
         CustomerId = customer; Source = OfferQrSource.ViewAndSalePromotion; PromotionId = promotion; CreatorId = creator; CreatorAllocationId = allocation; BusinessId = business;
         TokenHash = tokenHash.ToUpperInvariant(); IssuedAtUtc = issuedAt; ExpiresAtUtc = issuedAt.AddMinutes(5); IdempotencyReference = key;
     }
-    public static OfferQrSession ForUgcCustomerOffer(Guid customer, Guid offer, Guid business,
+    public static OfferQrSession ForUgcCustomerOffer(Guid customer, Guid offer, Guid business, Guid creator, Guid assignment,
         string tokenHash, DateTime issuedAt, string key)
     {
+        if (creator == Guid.Empty || assignment == Guid.Empty) throw new ArgumentException("An exact UGC Creator assignment is required.");
         var session = new OfferQrSession();
         session.Initialize(customer, business, tokenHash, issuedAt, key);
         session.Source = OfferQrSource.UgcCustomerOffer; session.UgcCustomerOfferId = offer;
+        session.CreatorId = creator; session.UgcAssignmentId = assignment;
         return session;
     }
     private void Initialize(Guid customer, Guid business, string tokenHash, DateTime issuedAt, string key)

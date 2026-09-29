@@ -19,11 +19,11 @@ public sealed class NotificationRouter(WeymelaDbContext db)
     {
         // Audit and domain events can describe the same operation. Each event below has one canonical producer.
         var supported = new[] { "CreatorAppliedAudit", "CreatorApprovedAudit", "CreatorRejectedAudit", "CreatorAllocationCreated", "CreatorBudgetIncreasedAudit",
-            "PromotionFunded", "PromotionPublished", "ViewRewardEarned", "CreatorBudgetExhausted", "CreatorPayoutEligible", "CustomerPayoutEligible",
+            "PromotionFunded", "PromotionPublished", "ViewRewardEarned", "CreatorCommissionEarned", "CustomerCashbackEarned", "SaleCompleted", "CreatorBudgetExhausted", "CreatorPayoutEligible", "CustomerPayoutEligible",
             "PayoutPaid", "FinancialConfigurationEffective", "DepositSubmitted", "DepositReviewed",
             "CreatorProfileApproved", "CreatorProfileCorrectionRequested", "CreatorProfileRejected",
             "BusinessProfileApproved", "BusinessProfileCorrectionRequested", "BusinessProfileRejected",
-            "RoleEnrollmentApproved", "RoleEnrollmentRejected",
+            "RoleEnrollmentSubmitted", "RoleEnrollmentApproved", "RoleEnrollmentRejected",
             "UgcRequestReceived", "UgcRequestApproved", "UgcRequestRejected", "UgcContentSubmitted",
             "UgcChangesRequested", "UgcContentApproved", "UgcContentRejected", "UgcMaterialRevision" };
         if (!supported.Contains(row.EventType, StringComparer.Ordinal)) return null;
@@ -58,6 +58,18 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             }
             case "ViewRewardEarned":
                 return Plan("View Reward earned", "Verified activity has added to your earnings.", null, Id("AllocationId"), new NotificationAudience(ActorRole.Creator, Id("CreatorId")));
+            case "CreatorCommissionEarned":
+                return Plan("Purchase earning recorded",
+                    $"You earned {data.GetProperty("Amount").GetProperty("Amount").GetDecimal():0.##} ETB from an eligible purchase.",
+                    null, Id("AllocationId"), new NotificationAudience(ActorRole.Creator, Id("CreatorId"))) with { WorkspacePath = "earnings" };
+            case "CustomerCashbackEarned":
+                return Plan("Purchase cashback recorded",
+                    $"Your {data.GetProperty("PurchaseAmount").GetProperty("Amount").GetDecimal():0.##} ETB purchase earned {data.GetProperty("Amount").GetProperty("Amount").GetDecimal():0.##} ETB cashback.",
+                    null, null, new NotificationAudience(ActorRole.Customer, Id("CustomerId"))) with { WorkspacePath = "transactions" };
+            case "SaleCompleted":
+                return Plan("Purchase discount recorded",
+                    $"Your {data.GetProperty("PurchaseAmount").GetDecimal():0.##} ETB purchase received a {data.GetProperty("CustomerDiscount").GetDecimal():0.##} ETB discount.",
+                    null, null, new NotificationAudience(ActorRole.Customer, Id("CustomerId"))) with { WorkspacePath = "transactions" };
             case "CreatorBudgetExhausted":
             {
                 var allocationId=Id("AllocationId");var a = await db.CreatorAllocations.AsNoTracking().SingleAsync(x => x.Id == allocationId, ct);
@@ -87,7 +99,8 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan("Financial settings updated", "Current pricing or payout terms have changed. Existing Promotion pricing stays unchanged.", null, null, targets.ToArray()) with { WorkspacePath = "pricing", SourceKey = "FinancialConfigurationEffective:" + current.Id };
             }
             case "DepositSubmitted":
-                return Plan("Deposit awaiting review", "A Business submitted a deposit reference. Confirm receipt externally before any approval.", null, null, new NotificationAudience(ActorRole.PlatformAdmin)) with { WorkspacePath = "businesses" };
+                return Plan("Deposit awaiting review", "A Business submitted a payment receipt. Review it against the payment record before approval.", null, null,
+                    new NotificationAudience(ActorRole.PlatformAdmin),new NotificationAudience(ActorRole.OperationsAdmin)) with { WorkspacePath = "wallets" };
             case "DepositReviewed":
             {
                 var depositId=Id("DepositId");var request = await db.DepositRequests.AsNoTracking().SingleAsync(x => x.Id == depositId, ct);
@@ -109,18 +122,32 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan(row.EventType switch{"BusinessProfileApproved"=>"Business profile approved","BusinessProfileCorrectionRequested"=>"Business profile needs changes",_=>"Business profile reviewed"},
                     row.EventType switch{"BusinessProfileApproved"=>"Your Business profile is active.","BusinessProfileCorrectionRequested"=>"Review the requested Business profile corrections.",_=>"Your Business profile was not approved."},null,null,audience) with { WorkspacePath="profiles" };
             }
+            case "RoleEnrollmentSubmitted":
+            {
+                var enrollmentId=Id("Id");var enrollment=await db.RoleEnrollments.AsNoTracking().SingleAsync(x=>x.Id==enrollmentId,ct);
+                if(enrollment.RequestedRole is not (ActorRole.Creator or ActorRole.Business))return null;
+                return Plan("Profile awaiting review", $"A {enrollment.RequestedRole} application is waiting for review.",null,null,
+                    new NotificationAudience(ActorRole.PlatformAdmin),new NotificationAudience(ActorRole.OperationsAdmin))
+                    with { WorkspacePath="role-enrollments" };
+            }
             case "RoleEnrollmentApproved": case "RoleEnrollmentRejected":
             {
                 var enrollmentId=Id("Id");var enrollment=await db.RoleEnrollments.AsNoTracking().SingleAsync(x=>x.Id==enrollmentId,ct);
                 if(enrollment.RequestedRole is not (ActorRole.Creator or ActorRole.Business))return null;
                 if(row.EventType=="RoleEnrollmentApproved")
                 {
-                    var subject=await db.CommercePermissions.AsNoTracking().Where(x=>x.UserId==enrollment.UserId&&x.Role==enrollment.RequestedRole&&x.IsActive).Select(x=>x.SubjectId).SingleAsync(ct);
                     return Plan(enrollment.RequestedRole==ActorRole.Creator?"Creator profile approved":"Business profile approved",
-                        $"Your {enrollment.RequestedRole} profile is active.",null,null,new NotificationAudience(enrollment.RequestedRole,subject)) with { WorkspacePath="profiles" };
+                        $"Your {enrollment.RequestedRole} profile is active. Switch profile to open it.",null,null,
+                        new NotificationAudience(ActorRole.Customer,UserId:enrollment.UserId),
+                        new NotificationAudience(ActorRole.Creator,UserId:enrollment.UserId),
+                        new NotificationAudience(ActorRole.Business,UserId:enrollment.UserId)) with { WorkspacePath="profiles" };
                 }
-                return Plan(enrollment.RequestedRole==ActorRole.Creator?"Creator profile reviewed":"Business profile reviewed",
-                    $"Your {enrollment.RequestedRole} profile was not approved.",null,null,new NotificationAudience(ActorRole.Customer,UserId:enrollment.UserId)) with { WorkspacePath="profiles" };
+                return Plan(enrollment.RequestedRole==ActorRole.Creator?"Creator profile not approved":"Business profile not approved",
+                    string.IsNullOrWhiteSpace(enrollment.DecisionReason) ? $"Your {enrollment.RequestedRole} profile was not approved."
+                        : $"Your {enrollment.RequestedRole} profile was not approved: {enrollment.DecisionReason}",
+                    null,null,new NotificationAudience(ActorRole.Customer,UserId:enrollment.UserId),
+                    new NotificationAudience(ActorRole.Creator,UserId:enrollment.UserId),
+                    new NotificationAudience(ActorRole.Business,UserId:enrollment.UserId)) with { WorkspacePath="profiles" };
             }
             case "UgcRequestReceived":
                 return Plan("New UGC request","A Creator requested to join your UGC opportunity.",null,null,new NotificationAudience(ActorRole.Business,Id("BusinessId"))) with { UgcId=Id("OpportunityId") };
@@ -151,10 +178,10 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         v.ViewPlusCommission.CreatorCommissionPercent, v.CreatorPayoutThreshold });
     public static string Route(NotificationPlan plan, ActorRole role) => role switch
     {
-        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.UgcId is {} au ? $"/admin/ugc/{au}" : plan.CampaignId is {} p ? $"/admin/promotions/{p}" : "/admin/" + (plan.WorkspacePath == "businesses" ? "businesses" : "notifications"),
-        ActorRole.Business => plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/promotions/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
-        ActorRole.Creator => plan.UgcId is {} cu ? $"/creator/ugc/{cu}" : plan.BudgetId is {} a ? $"/creator/promotions/{a}" : "/creator/" + (plan.WorkspacePath is "requests" or "payouts" ? plan.WorkspacePath : "discover"),
-        ActorRole.Customer => plan.WorkspacePath=="profiles"?"/onboarding":"/customer/offers",
+        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.UgcId is {} au ? $"/admin/ugc/{au}" : plan.CampaignId is {} p ? $"/admin/promotions/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
+        ActorRole.Business => plan.WorkspacePath=="profiles"?"/onboarding":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/promotions/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
+        ActorRole.Creator => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="earnings"?"/creator/earnings":plan.UgcId is {} cu ? $"/creator/ugc/{cu}" : plan.BudgetId is {} a ? $"/creator/promotions/{a}" : "/creator/" + (plan.WorkspacePath is "requests" or "payouts" ? plan.WorkspacePath : "discover"),
+        ActorRole.Customer => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/customer/transactions":"/customer/offers",
         _ => "/checkout"
     };
 }

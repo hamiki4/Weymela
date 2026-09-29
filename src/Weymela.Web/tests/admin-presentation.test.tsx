@@ -46,13 +46,13 @@ describe("Platform Admin financial presentation", () => {
   it("reviews a pending deposit through the existing versioned review endpoint", async () => {
     const api = mockApi({
       "/admin/wallets": { businesses: [{ businessId: "biz", business: "Abc Coffee", totalBalance: 1000, available: 700, reserved: 300, pendingDeposit: 150, viewOnlyCount: 0, viewSaleCount: 1, status: "Active" }], promotions: [] },
-      "/admin/deposit-requests": [{ id: "deposit", businessId: "biz", amount: 150, status: "Pending", provider: "ManualApproval", externalReference: "bank-123", proofReference: "proof-123", submittedAtUtc: "2026-09-01T00:00:00Z", version: 3 }],
+      "/admin/deposit-requests": [{ id: "deposit", businessId: "biz", business: "Abc Coffee", amount: 150, status: "Pending", hasReceipt: true, submittedAtUtc: "2026-09-01T00:00:00Z", version: 3 }],
     });
     mount(<AdminWalletsPage />);
-    await userEvent.click((await screen.findAllByRole("button", { name: "Review Deposit" }))[0]);
-    const dialog = screen.getByRole("dialog", { name: /Review deposits/ });
-    expect(within(dialog).getByText("Proof: proof-123")).toBeInTheDocument();
-    await userEvent.type(within(dialog).getByLabelText("Confirmation reference"), "confirmed-123");
+    await userEvent.click((await screen.findAllByRole("button", { name: "Review" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: /Review deposit/ });
+    expect(await within(dialog).findByAltText("Payment receipt for verification")).toBeInTheDocument();
+    await userEvent.type(within(dialog).getByLabelText("Confirmation reference or reason code"), "confirmed-123");
     await userEvent.click(within(dialog).getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(api.writes).toHaveLength(1));
     expect(api.writes[0].path).toBe("/admin/deposit-requests/deposit/review");

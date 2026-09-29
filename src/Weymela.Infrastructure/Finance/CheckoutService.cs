@@ -54,7 +54,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
     public async Task<IssuedOfferQr> IssueCustomerOfferAsync(Actor actor, Guid offerId, string key, CancellationToken ct = default)
     {
         if (await db.UgcCustomerOffers.AsNoTracking().AnyAsync(x => x.Id == offerId, ct))
-            return await IssueUgcAsync(new(actor, offerId, key), ct);
+            throw CheckoutError(FailureKind.Validation, "ASSIGNMENT_REQUIRED", "Choose a Creator for this offer.");
         return await IssueAsync(new(actor, offerId, key), ct);
     }
 
@@ -63,20 +63,25 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         {
             await access.EnsureCustomerAsync(c.Actor, token);
             var op = new FinancialOperation(db);
-            var fp = RequestFingerprint.Create(c.Actor.CustomerId.ToString()!, c.UgcCustomerOfferId.ToString());
+            var fp = RequestFingerprint.Create(c.Actor.CustomerId.ToString()!, c.UgcCustomerOfferId.ToString(), c.UgcAssignmentId.ToString());
             var replay = await op.Replay(c.Actor, "IssueUgcCustomerOfferQr", c.IdempotencyKey, fp, token);
             if (replay is not null)
             {
                 var old = await db.OfferQrSessions.SingleAsync(x => x.Id == Guid.Parse(replay), token);
                 var oldOffer = await db.UgcCustomerOffers.SingleAsync(x => x.Id == old.UgcCustomerOfferId, token);
                 await ValidateUgcOffer(oldOffer, token);
+                if (old.UgcAssignmentId != c.UgcAssignmentId || old.CreatorId is null)
+                    throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
+                await EligibleUgcAssignment(oldOffer, c.UgcAssignmentId, old.CreatorId, token);
                 return new IssuedOfferQr(old.Id, old.ExpiresAtUtc, null, true);
             }
             var offer = await db.UgcCustomerOffers.SingleOrDefaultAsync(x => x.Id == c.UgcCustomerOfferId, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Offer not found.");
             await ValidateUgcOffer(offer, token);
+            var assignment = await EligibleUgcAssignment(offer, c.UgcAssignmentId, null, token);
             var raw = NewToken();
             var session = OfferQrSession.ForUgcCustomerOffer(c.Actor.CustomerId!.Value, offer.Id, offer.BusinessId,
+                assignment.CreatorId, assignment.Id,
                 HashToken(raw), clock.GetUtcNow().UtcDateTime, c.IdempotencyKey);
             db.OfferQrSessions.Add(session);
             op.Remember(c.Actor, "IssueUgcCustomerOfferQr", c.IdempotencyKey, fp, session.Id.ToString(), clock.GetUtcNow().UtcDateTime);
@@ -98,8 +103,9 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         {
             var offer = await db.UgcCustomerOffers.AsNoTracking().SingleAsync(x => x.Id == session.UgcCustomerOfferId, ct);
             await ValidateUgcOffer(offer, ct);
+            var assignment = await EligibleUgcAssignment(offer, session.UgcAssignmentId ?? Guid.Empty, session.CreatorId, ct);
             return new(session.Id, offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off",
-                await directory.BusinessAsync(session.BusinessId, ct), null, session.ExpiresAtUtc,
+                await directory.BusinessAsync(session.BusinessId, ct), await directory.CreatorAsync(assignment.CreatorId, ct), session.ExpiresAtUtc,
                 "UGC_CUSTOMER_OFFER", offer.CustomerDiscountPercent);
         }
         var p = await db.Promotions.AsNoTracking().SingleAsync(x => x.Id == session.PromotionId!.Value, ct);
@@ -146,15 +152,16 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
     private async Task<UgcCustomerOfferSale> ExecuteUgcCustomerOfferSale(Actor actor, OfferQrSession session,
         Money purchase, string key, CancellationToken ct)
         => await ExecuteUgcCustomerOfferSale(actor, session.UgcCustomerOfferId!.Value, session.CustomerId,
-            purchase, session.Id.ToString(), key, ct);
+            session.UgcAssignmentId ?? Guid.Empty, session.CreatorId, purchase, session.Id.ToString(), key, ct);
 
     private async Task<UgcCustomerOfferSale> ExecuteUgcCustomerOfferSale(Actor actor, Guid offerId, Guid customerId,
-        Money purchase, string sourceReference, string key, CancellationToken ct)
+        Guid assignmentId, Guid? creatorId, Money purchase, string sourceReference, string key, CancellationToken ct)
     {
         var offer = await db.UgcCustomerOffers.SingleAsync(x => x.Id == offerId, ct);
         if (offer.BusinessId != actor.BusinessId)
             throw CheckoutError(FailureKind.Forbidden, "WRONG_BUSINESS", "This QR belongs to another business");
         await ValidateUgcOffer(offer, ct);
+        var assignment = await EligibleUgcAssignment(offer, assignmentId, creatorId, ct);
         await access.EnsureCustomerIdAsync(customerId, ct);
         UgcCustomerOfferQuote quote;
         try { quote = offer.Quote(purchase, clock.GetUtcNow().UtcDateTime); }
@@ -162,7 +169,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
 
         var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == offer.BusinessId, ct);
         var correlation = Guid.NewGuid();
-        var sale = new UgcCustomerOfferSale(offer, customerId, actor.UserId, quote,
+        var sale = new UgcCustomerOfferSale(offer, assignment.Id, customerId, actor.UserId, quote,
             sourceReference, RequestFingerprint.Create(actor.UserId.ToString(), key), clock.GetUtcNow().UtcDateTime);
         offer.Consume(quote, wallet, clock.GetUtcNow().UtcDateTime, correlation);
         var journal = new FinancialJournal(Guid.NewGuid().ToString("N"), correlation, actor.UserId,
@@ -192,6 +199,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         db.OutboxMessages.Add(new() { EventType = "SaleCompleted", Payload = System.Text.Json.JsonSerializer.Serialize(new
         {
             SaleId = sale.Id, offer.BusinessId, CustomerId = customerId, UgcCustomerOfferId = offer.Id,
+            UgcAssignmentId = assignment.Id,
             PurchaseAmount = purchase.Amount, CustomerDiscount = quote.CustomerDiscount.Amount,
             CustomerPays = quote.CustomerPays.Amount, PlatformFee = quote.PlatformFee.Amount
         }), OccurredAtUtc = clock.GetUtcNow().UtcDateTime });
@@ -246,9 +254,14 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             from assignment in db.UgcAssignments.AsNoTracking()
             join request in db.UgcCreatorRequests.AsNoTracking()
                 on assignment.UgcCreatorRequestId equals request.Id
+            join permission in db.CommercePermissions.AsNoTracking()
+                on assignment.CreatorId equals permission.SubjectId
             where assignment.CreatorId == creatorId
+                && assignment.Status != UgcAssignmentStatus.Rejected
                 && request.CreatorId == creatorId
+                && request.UgcOpportunityId == assignment.UgcOpportunityId
                 && request.Status == UgcRequestStatus.Approved
+                && permission.Role == ActorRole.Creator && permission.IsActive
                 && ugcOpportunityIds.Contains(assignment.UgcOpportunityId)
             select assignment.UgcOpportunityId).Distinct().ToListAsync(ct);
         var titles = await db.UgcOpportunities.AsNoTracking()
@@ -305,8 +318,12 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             SaleResult result;
             if (selected.Source == "UGC_CUSTOMER_OFFER")
             {
+                var offer = await db.UgcCustomerOffers.SingleAsync(x => x.Id == selected.Id, token);
+                var assignment = await db.UgcAssignments.SingleOrDefaultAsync(x =>
+                    x.UgcOpportunityId == offer.UgcOpportunityId && x.CreatorId == creatorId, token)
+                    ?? throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
                 var sale = await ExecuteUgcCustomerOfferSale(actor, selected.Id, customerId,
-                    new Money(input.PurchaseAmount), $"manual:{selected.Id:D}", key, token);
+                    assignment.Id, creatorId, new Money(input.PurchaseAmount), $"manual:{selected.Id:D}", key, token);
                 result = Result(sale);
                 operation.Remember(actor, "RedeemManualOffer", key, fingerprint, sale.Id.ToString("D"),
                     clock.GetUtcNow().UtcDateTime);
@@ -326,12 +343,15 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             return result;
         }, ct);
 
-    private async Task<Guid> ResolveCreatorAsync(string publicId, CancellationToken ct)
+    private async Task<Guid> ResolveCreatorAsync(string creatorNumber, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(publicId))
+        if (string.IsNullOrWhiteSpace(creatorNumber)
+            || !long.TryParse(creatorNumber.Trim(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var number)
+            || number < 1000)
             throw CheckoutError(FailureKind.NotFound, "NOT_ELIGIBLE", "Offer is no longer available");
         var creator = await db.PublicWorkspaceProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
-            x.Role == ActorRole.Creator && x.PublicId == publicId.Trim(), ct);
+            x.Role == ActorRole.Creator && x.CreatorNumber == number, ct);
         return creator?.SubjectId
             ?? throw CheckoutError(FailureKind.NotFound, "NOT_ELIGIBLE", "Offer is no longer available");
     }
@@ -400,6 +420,21 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         { throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available", ex); }
         await access.EnsureBusinessAsync(offer.BusinessId, ct);
     }
+    private async Task<UgcAssignment> EligibleUgcAssignment(UgcCustomerOffer offer, Guid assignmentId,
+        Guid? creatorId, CancellationToken ct)
+    {
+        var assignment = await db.UgcAssignments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == assignmentId, ct);
+        if (assignment is null || assignment.UgcOpportunityId != offer.UgcOpportunityId
+            || (creatorId is not null && assignment.CreatorId != creatorId)
+            || assignment.Status == UgcAssignmentStatus.Rejected
+            || !await db.UgcCreatorRequests.AsNoTracking().AnyAsync(x => x.Id == assignment.UgcCreatorRequestId
+                && x.CreatorId == assignment.CreatorId && x.UgcOpportunityId == offer.UgcOpportunityId
+                && x.Status == UgcRequestStatus.Approved, ct)
+            || !await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Creator
+                && x.SubjectId == assignment.CreatorId && x.IsActive, ct))
+            throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
+        return assignment;
+    }
     private void ValidateQr(OfferQrSession session, Guid business)
     {
         if (session.BusinessId != business)
@@ -408,7 +443,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         if (session.Status == OfferQrStatus.Used)
             throw CheckoutError(FailureKind.Validation, "USED", "QR code already used");
         if (session.Status == OfferQrStatus.Expired || now >= session.ExpiresAtUtc)
-            throw CheckoutError(FailureKind.Validation, "EXPIRED", "QR code expired");
+            throw CheckoutError(FailureKind.Validation, "EXPIRED", "QR code expired. Ask the Customer to generate a new one.");
         try { session.Validate(business, now); }
         catch (InvalidOperationException)
         { throw CheckoutError(FailureKind.Validation, "INVALID", "Invalid QR code"); }

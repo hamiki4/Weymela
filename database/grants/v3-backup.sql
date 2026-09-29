@@ -153,4 +153,8 @@ GRANT SELECT ON TABLE
     v3."WorkerCheckpoints"
 TO :"backup_role";
 
+-- The sequence state must be present in backup/restore so Creator IDs are never reused.
+REVOKE ALL PRIVILEGES ON SEQUENCE v3.creator_number_seq FROM :"backup_role";
+GRANT SELECT ON SEQUENCE v3.creator_number_seq TO :"backup_role";
+
 COMMIT;

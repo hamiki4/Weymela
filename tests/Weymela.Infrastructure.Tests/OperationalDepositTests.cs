@@ -5,6 +5,7 @@ using Weymela.Infrastructure.Deposits;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Notifications;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -105,5 +106,41 @@ public sealed class OperationalDepositTests(PostgresFixture fixture)
         var results=await Task.WhenAll(Attempt("review-one"),Attempt("review-two")); Assert.Single(results,x=>x);
         await using var read=s.Database.Open(); Assert.Single(await read.FinancialJournals.ToListAsync());
         Assert.Equal(17.23m,(await read.BusinessWallets.SingleAsync()).TotalBalance.Amount);
+    }
+    [Fact] public async Task Approved_deposit_funds_promotion_through_authoritative_available_balance()
+    {
+        var s = await Setup(); await using var db = s.Database.Open();
+        var pending = await Submit(db, s, 10000m);
+        Assert.Equal(0m, (await db.BusinessWallets.SingleAsync()).AvailableBalance.Amount);
+        Assert.Equal(0m, (await db.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new FinancialCommands(db).FundPromotionAsync(
+            new(s.Business, s.PromotionId, 0, 0, "early-promotion", Scenario.Now)));
+        await Review(db, pending.Id);
+        var wallet = await db.BusinessWallets.SingleAsync();
+        Assert.Equal(10000m, wallet.AvailableBalance.Amount);
+        await new FinancialCommands(db).FundPromotionAsync(new(s.Business, s.PromotionId, 0, wallet.Version, "fund-after-approval", Scenario.Now));
+        db.ChangeTracker.Clear();
+        wallet = await db.BusinessWallets.SingleAsync();
+        Assert.Equal(4000m, wallet.AvailableBalance.Amount);
+        Assert.Equal(6000m, wallet.ReservedBalance.Amount);
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(Admin, default));
+    }
+    [Fact] public async Task Deposit_submission_notifies_both_admin_roles_with_wallet_review_route()
+    {
+        var s = await Setup(); var operations = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
+        await using var db = s.Database.Open();
+        db.CommercePermissions.Add(new(operations.UserId, operations.Role, operations.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var pending = await Submit(db, s);
+        var processor = new OutboxProcessor(db, new RuntimeOptions { WorkerBatchSize = 50, RecipientBatchSize = 100 }, new DisabledPushProvider(), new TestClock());
+        for (var i = 0; i < 5 && await processor.ProcessAsync(default) > 0; i++) { }
+        var notices = await db.InAppNotifications.Where(x => x.EventType == "DepositSubmitted").ToListAsync();
+        Assert.Equal(2, notices.Count);
+        Assert.Contains(notices, x => x.UserId == Admin.UserId && x.Role == ActorRole.PlatformAdmin && x.Route == "/admin/wallets");
+        Assert.Contains(notices, x => x.UserId == operations.UserId && x.Role == ActorRole.OperationsAdmin && x.Route == "/admin/wallets");
+        await Review(db, pending.Id);
+        for (var i = 0; i < 5 && await processor.ProcessAsync(default) > 0; i++) { }
+        var reviewed = await db.InAppNotifications.Where(x => x.EventType == "DepositReviewed").ToListAsync();
+        Assert.Contains(reviewed, x => x.UserId == s.Business.UserId && x.Role == ActorRole.Business && x.Route == "/business/wallet");
     }
 }

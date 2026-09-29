@@ -27,7 +27,7 @@ public sealed class OutboxProcessor(WeymelaDbContext db, RuntimeOptions options,
         try { return await new EfUnitOfWork(db).ExecuteAsync(async token =>
     {
         var now = clock.GetUtcNow().UtcDateTime;
-        var row = (await db.OutboxMessages.FromSqlInterpolated($"SELECT * FROM v3.\"OutboxMessages\" WHERE \"ProcessedAtUtc\" IS NULL AND \"FailedAtUtc\" IS NULL AND (\"NextAttemptAtUtc\" IS NULL OR \"NextAttemptAtUtc\" <= {now}) ORDER BY \"OccurredAtUtc\", \"Id\" LIMIT 1 FOR UPDATE SKIP LOCKED").ToListAsync(token)).SingleOrDefault();
+        var row = (await db.OutboxMessages.FromSqlInterpolated($"SELECT * FROM v3.\"OutboxMessages\" WHERE \"EventType\" <> 'AccountIdentityDeletion' AND \"ProcessedAtUtc\" IS NULL AND \"FailedAtUtc\" IS NULL AND (\"NextAttemptAtUtc\" IS NULL OR \"NextAttemptAtUtc\" <= {now}) ORDER BY \"OccurredAtUtc\", \"Id\" LIMIT 1 FOR UPDATE SKIP LOCKED").ToListAsync(token)).SingleOrDefault();
         if (row is null) return false;
         selected = row.Id;
         try

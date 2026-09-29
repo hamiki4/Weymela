@@ -43,6 +43,7 @@ function FirebaseSignIn({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
+  const [resendAfterSeconds, setResendAfterSeconds] = useState(0);
   const [recoveryVerified, setRecoveryVerified] = useState(false);
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<SessionProfile[]>([]);
@@ -76,6 +77,11 @@ function FirebaseSignIn({
         ),
       );
   }, [adapter, onSignedIn]);
+  useEffect(() => {
+    if (!codeSent || resendAfterSeconds <= 0) return;
+    const timer = window.setTimeout(() => setResendAfterSeconds(seconds => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [codeSent, resendAfterSeconds]);
 
   const submit = async (operation: () => Promise<void>) => {
     setBusy(true);
@@ -105,6 +111,7 @@ function FirebaseSignIn({
     setError(null);
     setNotice(null);
     setCodeSent(false);
+    setResendAfterSeconds(0);
     setCode("");
     setRecoveryVerified(false);
     setPassword("");
@@ -114,7 +121,9 @@ function FirebaseSignIn({
   const startAccountEmail = (purpose: "Signup" | "DeviceEnrollment") =>
     submit(async () => {
       if (!adapter) throw new Error("Secure sign-in is unavailable right now.");
-      await adapter.startEmailCode(email, purpose);
+      const delay = await adapter.startEmailCode(email, purpose);
+      setResendAfterSeconds(delay ?? 60);
+      setCode("");
       setCodeSent(true);
     });
   const verifyAccountEmail = (purpose: "Signup" | "DeviceEnrollment") =>
@@ -201,9 +210,11 @@ function FirebaseSignIn({
           code={code}
           setCode={setCode}
           codeSent={codeSent}
-          verificationMessage="If this email can be used to create a Weymela account, you'll receive a verification code."
+          verificationMessage="If this email is already registered, we've sent a code to help you sign in. Otherwise, use the verification code we sent."
           busy={authBusy}
+          resendAfterSeconds={resendAfterSeconds}
           onContinue={() => startAccountEmail("Signup")}
+          onResend={() => startAccountEmail("Signup")}
           onVerify={() => verifyAccountEmail("Signup")}
           onBack={() => changeView("landing")}
         />
@@ -218,7 +229,9 @@ function FirebaseSignIn({
           codeSent={codeSent}
           verificationMessage="If this email is registered, you'll receive a verification code."
           busy={authBusy}
+          resendAfterSeconds={resendAfterSeconds}
           onContinue={() => startAccountEmail("DeviceEnrollment")}
+          onResend={() => startAccountEmail("DeviceEnrollment")}
           onVerify={() => verifyAccountEmail("DeviceEnrollment")}
           onBack={() => changeView("signIn")}
         />
@@ -470,7 +483,9 @@ function EmailAccountFlow(props: {
   codeSent: boolean;
   verificationMessage: string;
   busy: boolean;
+  resendAfterSeconds: number;
   onContinue: () => void;
+  onResend: () => void;
   onVerify: () => void;
   onBack: () => void;
 }) {
@@ -518,6 +533,17 @@ function EmailAccountFlow(props: {
           </Button>
         </fieldset>
       </form>
+      {props.codeSent ? (
+        <div className="auth-link-stack">
+          <button className="auth-secondary-action" type="button"
+            disabled={props.busy || props.resendAfterSeconds > 0} onClick={props.onResend}>
+            Resend email
+          </button>
+          {props.resendAfterSeconds > 0 ? (
+            <p className="muted" role="status">Resend available in {props.resendAfterSeconds}s</p>
+          ) : null}
+        </div>
+      ) : null}
       <button
         className="auth-secondary-action"
         type="button"

@@ -40,15 +40,20 @@ test("authorized account list and detail show a long full email without phone ov
   await page.getByLabel("Display name").fill("Responsive Customer");
   await page.getByRole("button", { name: "Create invitation" }).click();
   await expect(page).toHaveURL(/\/admin\/customers\?created=/);
+  const card = page.locator(".data-card").filter({ hasText: email });
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(page.locator(".data-card .admin-account-email").filter({ hasText: email })).toBeVisible();
+    await expect(card.locator(".admin-account-email")).toHaveText(email);
+    await expect(card.locator(".admin-account-email")).toBeVisible();
     await layout(page);
   }
-  await page.locator(".data-card").filter({ hasText: email }).getByRole("link", { name: "Responsive Customer" }).click();
+  await card.getByRole("link", { name: "Responsive Customer" }).click();
+  await expect(page).toHaveURL(/\/admin\/accounts\/[^/?]+\?role=Customer$/);
+  const detailEmail = page.locator("main .admin-detail-email");
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(page.getByText(email, { exact: true })).toBeVisible();
+    await expect(detailEmail).toHaveText(email);
+    await expect(detailEmail).toBeVisible();
     await layout(page);
   }
 });

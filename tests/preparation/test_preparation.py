@@ -175,6 +175,10 @@ class ComposeIsolationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.directory = tempfile.TemporaryDirectory(prefix='v3-compose-fixture-')
         root = pathlib.Path(cls.directory.name)
+        (root / 'receipts').mkdir(mode=0o700)
+        cls.old_receipt_host, cls.old_receipt_owner = preflight.RECEIPT_HOST, preflight.RECEIPT_OWNER
+        preflight.RECEIPT_HOST = root / 'receipts'
+        preflight.RECEIPT_OWNER = (os.geteuid(), os.getegid())
         code_secret = base64.b64encode(hashlib.sha512(b'compose-code-secret').digest()).decode('ascii')
         pin_secret = base64.b64encode(hashlib.sha512(b'compose-pin-secret').digest()).decode('ascii')
         certificate_password = hashlib.sha256(b'compose-certificate-password').hexdigest()
@@ -234,6 +238,7 @@ class ComposeIsolationTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        preflight.RECEIPT_HOST, preflight.RECEIPT_OWNER = cls.old_receipt_host, cls.old_receipt_owner
         cls.directory.cleanup()
 
     def test_compose_is_image_only_and_digest_pinned(self):
@@ -340,6 +345,30 @@ class ComposeIsolationTests(unittest.TestCase):
     def test_preflight_rejects_unfreeze(self):
         config = copy.deepcopy(self.config)
         config['services']['api']['environment']['V3__FinancialWritesEnabled'] = 'true'
+        self.assertTrue(preflight.validate(config, self.manifest()))
+
+    def test_preflight_accepts_only_matching_bounded_pilot_window(self):
+        from datetime import datetime, timedelta, timezone
+        config = copy.deepcopy(self.config)
+        end = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        for part in ('api', 'worker'):
+            config['services'][part]['environment']['V3__FinancialWritesEnabled'] = 'true'
+            config['services'][part]['environment']['V3__PilotFinancialWritesUntilUtc'] = end
+        self.assertEqual(preflight.validate(config, self.manifest()), [])
+        config['services']['worker']['environment']['V3__PilotFinancialWritesUntilUtc'] = 'disabled'
+        self.assertTrue(preflight.validate(config, self.manifest()))
+        config['services']['worker']['environment']['V3__PilotFinancialWritesUntilUtc'] = end
+        config['services']['api']['environment']['V3__Deposits__Mode'] = 'Disabled'
+        self.assertTrue(preflight.validate(config, self.manifest()))
+
+    def test_preflight_rejects_missing_or_public_receipt_mount(self):
+        config = copy.deepcopy(self.config)
+        config['services']['api']['volumes'] = [v for v in config['services']['api']['volumes']
+                                              if v['target'] != '/run/weymela-v3/receipts']
+        self.assertTrue(preflight.validate(config, self.manifest()))
+        config = copy.deepcopy(self.config)
+        receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
+        config['services']['web']['volumes'] = [receipt]
         self.assertTrue(preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_disabled_or_mismatched_authentication(self):

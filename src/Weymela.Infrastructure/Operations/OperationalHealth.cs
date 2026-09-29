@@ -64,7 +64,7 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
             oldestPendingOutboxAtUtc = await db.OutboxMessages.Where(x => x.ProcessedAtUtc == null && x.FailedAtUtc == null).Select(x => (DateTime?)x.OccurredAtUtc).MinAsync(ct),
             outboxFailures = await db.OutboxMessages.CountAsync(x => x.FailedAtUtc != null, ct),
             notificationFailures = await db.InAppNotifications.CountAsync(x => x.PushState == Persistence.Records.PushDeliveryState.Failed, ct),
-            metrics = OperationalTelemetry.Snapshot(), options.DepositMode, options.SocialMode, options.FinancialWritesEnabled };
+            metrics = OperationalTelemetry.Snapshot(), options.DepositMode, options.SocialMode, FinancialWritesEnabled = options.FinancialWritesActive(DateTime.UtcNow) };
     }
 
     public async Task<object> OperationsDetailsAsync(CancellationToken ct)

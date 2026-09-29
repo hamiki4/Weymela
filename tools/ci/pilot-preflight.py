@@ -8,8 +8,11 @@ import subprocess
 import base64
 import stat
 import hmac
+from datetime import datetime, timedelta, timezone
 
 PLACEHOLDERS = ('placeholder', 'replace-me', 'change-me', 'example', 'external', 'test-only', 'not-a-live')
+RECEIPT_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/receipts')
+RECEIPT_OWNER = (1654, 1654)
 
 def _secret_bytes(value, minimum=32):
     try:
@@ -59,6 +62,27 @@ def _key_directory_source(service):
             return pathlib.Path(item.get('source', ''))
     return None
 
+def _pilot_financial_window(services):
+    api = services['api'].get('environment', {})
+    worker = services['worker'].get('environment', {})
+    state = api.get('V3__FinancialWritesEnabled')
+    until = api.get('V3__PilotFinancialWritesUntilUtc', 'disabled')
+    if (state not in ('true', 'false') or worker.get('V3__FinancialWritesEnabled') != state
+            or worker.get('V3__PilotFinancialWritesUntilUtc', 'disabled') != until):
+        return False
+    if state == 'false':
+        return until == 'disabled'
+    if api.get('V3__Deposits__Mode') != 'ManualApproval':
+        return False
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', until):
+        return False
+    try:
+        end = datetime.strptime(until, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    now = datetime.now(timezone.utc)
+    return now < end <= now + timedelta(hours=4)
+
 def validate(config, manifest):
     errors = []
     expected = {'api', 'worker', 'web', 'postgres'}
@@ -84,8 +108,10 @@ def validate(config, manifest):
             errors.append('Web must use only approved loopback port18080.')
         if part in ('api', 'worker'):
             environment = service.get('environment', {})
-            if environment.get('V3__FinancialWritesEnabled') != 'false' or environment.get('V3__EnableDevelopmentIdentity') != 'false':
-                errors.append(f'{part}: preparation must stay frozen with Development identity disabled.')
+            if environment.get('V3__EnableDevelopmentIdentity') != 'false':
+                errors.append(f'{part}: Development identity must stay disabled.')
+    if not _pilot_financial_window(config['services']):
+        errors.append('api/worker: financial writes require matching default-off or bounded Pilot test-window configuration.')
     api = config['services']['api']
     api_environment = api.get('environment', {})
     required_api = {
@@ -102,7 +128,6 @@ def validate(config, manifest):
         'V3__PublicWebUrl': 'https://pilot.weymela.com',
         'V3__PublicApiUrl': 'https://pilot.weymela.com',
         'V3__Security__TlsEdgeConfirmed': 'true',
-        'V3__FinancialWritesEnabled': 'false',
         'V3__RateLimitMultiplier': '1',
     }
     for key, expected_value in required_api.items():
@@ -136,6 +161,22 @@ def validate(config, manifest):
             errors.append('api: persistent cookie key directory metadata is missing or unsafe.')
     except OSError:
         errors.append('api: persistent cookie key directory metadata is missing or unsafe.')
+    receipt_mounts = [item for item in api.get('volumes', []) if item.get('target') == '/run/weymela-v3/receipts']
+    if (len(receipt_mounts) != 1 or receipt_mounts[0].get('type') != 'bind'
+            or receipt_mounts[0].get('read_only', False)
+            or receipt_mounts[0].get('bind', {}).get('create_host_path') is not False
+            or pathlib.Path(receipt_mounts[0].get('source', '')) != RECEIPT_HOST
+            or api_environment.get('V3__Deposits__ReceiptDirectory') != '/run/weymela-v3/receipts'):
+        errors.append('api: private persistent receipt bind mount is required.')
+    else:
+        try:
+            details = RECEIPT_HOST.lstat()
+            if (not stat.S_ISDIR(details.st_mode) or RECEIPT_HOST.is_symlink()
+                    or (details.st_uid, details.st_gid) != RECEIPT_OWNER
+                    or stat.S_IMODE(details.st_mode) != 0o700):
+                errors.append('api: Pilot receipt host directory owner or mode is unsafe.')
+        except OSError:
+            errors.append('api: Pilot receipt host directory is missing.')
     for part in ('worker', 'web'):
         service = config['services'][part]
         environment = service.get('environment', {})
@@ -144,7 +185,7 @@ def validate(config, manifest):
         secret_sources = _secret_sources(service)
         if (any(key in environment for key in forbidden)
                 or {'v3-firebase-admin.json', 'v3-cookie-protection.pfx'} & secret_sources
-                or any(item.get('target') == '/run/weymela-v3/keys' for item in service.get('volumes', []))):
+                or any(item.get('target') in ('/run/weymela-v3/keys', '/run/weymela-v3/receipts') for item in service.get('volumes', []))):
             errors.append(f'{part}: API authentication secrets are forbidden.')
     worker_environment = config['services']['worker'].get('environment', {})
     if worker_environment.get('V3__Auth__Provider') != 'Firebase' or worker_environment.get('V3__Auth__FirebaseProjectId') != 'weymela-pilot':

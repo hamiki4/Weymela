@@ -6,7 +6,7 @@ Nothing in this runbook was executed against an existing Pilot/Production databa
 
 Use PostgreSQL 17 client tools compatible with the target. A protected service file and `.pgpass`/secret mount supply credentials; never put passwords in command lines or logs. Use a read-only backup account where practical. Choose an explicit V3 database name (`weymela_v3_pilot_*` or `weymela_v3_prod_*`), verify server/database identity with `SELECT current_database(), inet_server_addr(), inet_server_port()`, and compare it to the approved environment record. An arbitrary matching name alone does not authorize a target.
 
-Record release digest, migration list, database identity, UTC timestamp, expected financial freeze state and journal high-water marks. Use restrictive permissions on a NEW empty backup directory, outside the repository and with sufficient free space. Backup files contain sensitive data; encrypt them and retain a verified off-host copy under separately managed keys.
+Record release digest, migration list, database identity, UTC timestamp, expected financial freeze state and journal high-water marks. Use restrictive permissions on a NEW empty backup directory, outside the repository and with sufficient free space. Backup files contain sensitive data. The current Pilot release uses protected server-local backups; optional encrypted off-host recovery may be added only with separately approved existing infrastructure. Record the host-loss recovery limitation.
 
 Example command shape, with concrete approved paths substituted by the operator:
 
@@ -22,7 +22,7 @@ The V3 backup identity is read-only. Apply the reviewed `database/grants/v3-back
 
 ## Private receipt evidence backup
 
-`pg_dump` backs up the opaque `DepositRequests.ProofReference`, **not** its receipt image. The paired encrypted database/receipt procedure and isolated restore verifier are documented in [Private receipt recovery and Pilot financial-test preparation](RECEIPT-BACKUP-AND-PILOT-FINANCE.md). The repository tool exists, and an isolated non-sensitive encryption/restore fixture passes. The live Pilot receipt directory/mount, approved off-host destination/key, and live paired backup/restore are still missing; do not treat the fixture as financial recovery coverage. Keep Pilot and Production paths isolated and protected. Receipt evidence is retained until an approved financial-record retention policy is defined; no automatic deletion is configured.
+`pg_dump` backs up the opaque `DepositRequests.ProofReference`, **not** its receipt image. The required paired server-local database/receipt snapshot and isolated restore check are documented in [Private receipt recovery and Pilot financial-test preparation](RECEIPT-BACKUP-AND-PILOT-FINANCE.md). The optional encrypted off-host tool and isolated fixture remain useful but do not establish live coverage. The Pilot receipt directory/mount and live paired backup/restore still need a separately authorized deployment window. Keep Pilot and Production paths isolated and protected. Receipt evidence is retained until an approved financial-record retention policy is defined; no automatic deletion is configured.
 
 ## Restore — destructive operation requiring separate approval
 

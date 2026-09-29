@@ -16,6 +16,7 @@ import pathlib
 import re
 import stat
 import tempfile
+from datetime import datetime, timedelta, timezone
 
 
 FIREBASE_ADMIN_HOST = pathlib.Path('/etc/weymela/pilot/firebase-admin.json')
@@ -38,6 +39,7 @@ BASE_KEYS = (
     'V3__Security__CameraPolicy',
     'V3__Security__TlsEdgeConfirmed',
     'V3__FinancialWritesEnabled',
+    'V3__PilotFinancialWritesUntilUtc',
     'V3__Deposits__Mode',
     'V3__Social__Mode',
     'V3__Push__Enabled',
@@ -188,7 +190,6 @@ def validate_complete(values: dict[str, str]) -> None:
         'V3__PublicApiUrl': 'https://pilot.weymela.com',
         'V3__Security__CameraPolicy': 'camera=(self), microphone=(), geolocation=(self), payment=(), usb=()',
         'V3__Security__TlsEdgeConfirmed': 'true',
-        'V3__FinancialWritesEnabled': 'false',
         'V3__Deposits__Mode': 'ManualApproval',
         'V3__Social__Mode': 'Disabled',
         'V3__Push__Enabled': 'false',
@@ -200,6 +201,22 @@ def validate_complete(values: dict[str, str]) -> None:
     }
     for key, expected_value in expected.items():
         _require_exact(values, key, expected_value)
+    financial = values['V3__FinancialWritesEnabled']
+    until = values['V3__PilotFinancialWritesUntilUtc']
+    if financial == 'false':
+        _require_exact(values, 'V3__PilotFinancialWritesUntilUtc', 'disabled')
+    elif financial == 'true':
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', until):
+            raise ContractError('V3__PilotFinancialWritesUntilUtc: valid UTC end required.')
+        try:
+            end = datetime.strptime(until, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+        except ValueError as error:
+            raise ContractError('V3__PilotFinancialWritesUntilUtc: valid UTC end required.') from error
+        now = datetime.now(timezone.utc)
+        if not now < end <= now + timedelta(hours=4):
+            raise ContractError('V3__PilotFinancialWritesUntilUtc: window must end within four hours.')
+    else:
+        raise ContractError('V3__FinancialWritesEnabled: explicit boolean required.')
     _validate_connection_string(values['ConnectionStrings__WeymelaV3'])
     resend_key = values['V3__Auth__ResendApiKey']
     if not _RESEND_KEY.fullmatch(resend_key) or any(word in resend_key.lower() for word in _PLACEHOLDERS):
@@ -224,6 +241,7 @@ def assemble(base_path: pathlib.Path, auth_path: pathlib.Path) -> dict[str, str]
     if base['V3__Auth__FirebaseProjectId'] != auth['V3__Auth__FirebaseProjectId']:
         raise ContractError('V3__Auth__FirebaseProjectId differs between operational and authentication inputs.')
     complete = {**base, **auth}
+    complete.setdefault('V3__PilotFinancialWritesUntilUtc', 'disabled')
     validate_complete(complete)
     return complete
 

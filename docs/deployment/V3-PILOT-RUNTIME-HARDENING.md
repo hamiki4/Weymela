@@ -98,5 +98,5 @@ mounts, and persistence privately.
 
 The API alone receives the Firebase Admin JSON, cookie PFX, and writable persistent
 key directory. Worker and Web receive none of them. The API environment must retain
-`V3__FinancialWritesEnabled=false`; the assembler, runtime loader, Compose preflight,
-and tests all reject an attempted unfreeze.
+`V3__FinancialWritesEnabled=false` by default; assembler, runtime loader, Compose preflight,
+and tests permit only a matching bounded Pilot test window after separate authorization.

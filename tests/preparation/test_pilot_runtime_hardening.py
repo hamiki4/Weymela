@@ -9,6 +9,7 @@ import pathlib
 import stat
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 
@@ -141,6 +142,19 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
                 target.update(original)
         self.auth_values['V3__Auth__PinPepper'] = self.auth_values['V3__Auth__CodeHashKey']
         self.assert_invalid()
+
+    def test_bounded_pilot_financial_window_is_explicit_and_expires(self):
+        self.base_values['V3__FinancialWritesEnabled'] = 'true'
+        self.assert_invalid()
+        self.base_values['V3__PilotFinancialWritesUntilUtc'] = (
+            datetime.now(timezone.utc) + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.write_inputs()
+        values = runtime.assemble(self.base, self.auth)
+        self.assertEqual(values['V3__FinancialWritesEnabled'], 'true')
+        for delta in (timedelta(hours=-1), timedelta(hours=5)):
+            self.base_values['V3__PilotFinancialWritesUntilUtc'] = (
+                datetime.now(timezone.utc) + delta).strftime('%Y-%m-%dT%H:%M:%SZ')
+            self.assert_invalid()
 
     def test_shell_like_or_malformed_input_is_rejected_as_data(self):
         for injected in ('$(id)', '`id`', '${HOME}', 'value\\command'):

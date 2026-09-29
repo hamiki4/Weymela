@@ -51,7 +51,8 @@ services:
       DOTNET_ENVIRONMENT: Pilot
       ASPNETCORE_HTTP_PORTS: "8080"
       V3__EnableDevelopmentIdentity: "false"
-      V3__FinancialWritesEnabled: "false"
+      V3__FinancialWritesEnabled: ${V3_PILOT_FINANCIAL_WRITES_ENABLED:-false}
+      V3__PilotFinancialWritesUntilUtc: ${V3_PILOT_FINANCIAL_WRITES_UNTIL_UTC:-disabled}
       V3__Auth__CookieKeyDirectory: /run/weymela-v3/keys
       V3__Deposits__ReceiptDirectory: /run/weymela-v3/receipts
       V3__Auth__CookieCertificatePath: /run/secrets/v3-cookie-protection.pfx
@@ -89,7 +90,8 @@ services:
       DOTNET_ENVIRONMENT: Pilot
       ASPNETCORE_ENVIRONMENT: Pilot
       V3__EnableDevelopmentIdentity: "false"
-      V3__FinancialWritesEnabled: "false"
+      V3__FinancialWritesEnabled: ${V3_PILOT_FINANCIAL_WRITES_ENABLED:-false}
+      V3__PilotFinancialWritesUntilUtc: ${V3_PILOT_FINANCIAL_WRITES_UNTIL_UTC:-disabled}
     networks: [data]
     depends_on:
       postgres: { condition: service_healthy }

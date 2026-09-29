@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Security.Cryptography;
 using System.Text;
+using System.Globalization;
 
 namespace Weymela.Infrastructure.Operations;
 
@@ -32,6 +33,9 @@ public sealed class RuntimeOptions
     public string SocialMode { get; init; } = "Disabled";
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
+    public DateTime? PilotFinancialWritesUntilUtc { get; init; }
+    public bool FinancialWritesActive(DateTime nowUtc) => FinancialWritesEnabled
+        && (PilotFinancialWritesUntilUtc is null || nowUtc < PilotFinancialWritesUntilUtc.Value);
     public int WorkerBatchSize { get; init; } = 20;
     public int RecipientBatchSize { get; init; } = 100;
     public int WorkerIntervalSeconds { get; init; } = 5;
@@ -142,8 +146,27 @@ public sealed class RuntimeOptions
         var recipientBatch = config.GetValue("V3:Worker:RecipientBatchSize", 100); var multiplier = config.GetValue("V3:RateLimitMultiplier", 1);
         Require(batch is >= 1 and <= 50 && interval is >= 2 and <= 60 && recipientBatch is >= 1 and <= 200, "Worker limits must be bounded.");
         Require(multiplier is >= 1 and <= 20 && (dev || multiplier == 1), "Rate-limit overrides are development-only.");
-        var financialWrites = config.GetValue("V3:FinancialWritesEnabled", dev);
-        Require(dev || !financialWrites, "Financial writes must remain disabled outside Development.");
+        var financialSetting = config["V3:FinancialWritesEnabled"] ?? (dev ? "true" : "false");
+        Require(financialSetting is "true" or "false", "Financial writes require an explicit boolean setting.");
+        var financialWrites = financialSetting == "true";
+        var untilSetting = config["V3:PilotFinancialWritesUntilUtc"];
+        DateTime? pilotFinancialWritesUntilUtc = null;
+        if (environment == "Pilot" && financialWrites)
+        {
+            Require(DateTime.TryParseExact(untilSetting, "yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var until),
+                "Pilot financial writes require an explicit UTC test-window end.");
+            var now = DateTime.UtcNow;
+            Require(until > now && until <= now.AddHours(4), "Pilot financial test window must end within four hours.");
+            Require(worker || deposits == "ManualApproval", "Pilot financial testing requires manual deposit approval.");
+            pilotFinancialWritesUntilUtc = until;
+        }
+        else
+        {
+            Require(dev || !financialWrites, "Financial writes must remain disabled outside Pilot testing and Development.");
+            Require(string.IsNullOrEmpty(untilSetting) || untilSetting == "disabled",
+                "A financial test-window end is only valid during an enabled Pilot window.");
+        }
         var proxies = config.GetSection("V3:Security:TrustedProxies").Get<string[]>() ?? [];
         Require(proxies.All(p => System.Net.IPAddress.TryParse(p, out _)), "Trusted proxies must be explicit IP addresses.");
         return new()
@@ -157,7 +180,7 @@ public sealed class RuntimeOptions
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
             CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
-            FinancialWritesEnabled = financialWrites,
+            FinancialWritesEnabled = financialWrites, PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies
         };
     }

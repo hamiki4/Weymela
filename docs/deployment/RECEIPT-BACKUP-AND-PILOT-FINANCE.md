@@ -1,82 +1,37 @@
 # Private receipt recovery and Pilot financial-test preparation
 
-This is an operator runbook, not authorization to deploy, migrate, unfreeze financial writes, or alter Production. The paired-backup tool is [`tools/ops/receipt-backup.py`](../../tools/ops/receipt-backup.py). Its fixture mode proves the encryption and restore mechanics; it is **not** an off-host backup or a PostgreSQL restore rehearsal.
+This is a source runbook, not authorization to deploy, migrate, enable financial writes, or alter Production. Weymela's existing private server-storage and server-local backup pattern is approved for this release. There is no new storage provider or encryption-key infrastructure.
 
-## Current state and prerequisites
+## Storage and recovery boundary
 
-The committed Pilot Compose template binds `/var/lib/weymela-v3/pilot/receipts` only into the API at `/run/weymela-v3/receipts`. Production's intended, separate path is `/var/lib/weymela-v3/production/receipts`. Both require API UID/GID `1654:1654`, directory `0700`, receipt files `0600`, no symlinks, and no public serving. The live Pilot API inspected on 2026-09-29 has **no receipt bind mount**, and the Pilot host receipt directory does not yet exist. Do not create or mount it as part of a backup test without deployment authorization.
+Historical Production V2 runs an API-only Docker volume `creatorpay-prod-deposit-proofs` mounted at `/app/data/deposit-proofs`; an older V3 integration Pilot uses the same API-only named-volume pattern. Current Weymela V3 already uses the equivalent persistent-server pattern with a dedicated API-only host bind: Pilot `/var/lib/weymela-v3/pilot/receipts` to `/run/weymela-v3/receipts`. This directory must be `1654:1654`, mode `0700`; receipt files are `0600`. Web and Worker receive no receipt mount. Keep the current opaque `ProofReference`, private authorization, JPEG/PNG and 4 MiB limit. Production's V3 path is separate and is **not** changed here.
 
-Existing Pilot PostgreSQL dumps are local. No approved off-host destination, encryption public key, or paired receipt backup job was identified in the repository or inspected Pilot backup-directory inventory. The encrypted off-host transfer is implemented as a pinned-host-key SFTP/SCP upload followed by a full read-back checksum, but cannot run until an owner supplies a private destination, a dedicated SSH identity, pinned host key, and an approved GPG recipient fingerprint. Do not reuse an unrelated SSH key or copy private decryption keys to the application host. The remote directory must be pre-provisioned private and non-public; its operator must control access and backup retention. The local GPG home and backup output directory must be `0700`; SSH identity `0600`. All credentials and private keys remain outside Git and logs.
+The Pilot host directory and API mount are not provisioned in the live Pilot yet. Before a later deployment, the operator must create only this dedicated Pilot host directory with the required owner/mode, check that it is a real directory, render Compose, verify the API-only bind and disabled host-path auto-creation, then run a non-sensitive write/read/delete fixture inside the API container. Do not create a real deposit during mount verification.
 
-The approved financial evidence backup is **one encrypted archive** containing a PostgreSQL custom-format dump and the flat opaque receipt files, with an internal manifest of their filenames, UTC creation time, sizes, and SHA-256 hashes. The ciphertext has a separate SHA-256 sidecar. The tool refuses symlinks, unexpected/transient receipt names, wrong owner/mode, oversized files, missing PostgreSQL `pg_restore --list` validation, an unapproved source path, and a production backup without explicit stopped-writer confirmation. It uploads the ciphertext off-host and downloads it again to compare SHA-256 before reporting success. `pg_restore` from PostgreSQL 17 is required in the protected backup context; the host inspected here does not currently have it. Encryption is GPG public-key encryption; only the independent recovery context should hold the private key.
+Existing Pilot PostgreSQL backups are server-local. No approved off-host receipt backup destination/key or paired receipt job was found. Their absence is **not** a new release gate. Server-local backups cannot recover from loss or compromise of the host; record that disaster-recovery limit honestly. The optional [encrypted off-host tool](../../tools/ops/receipt-backup.py) from commit `49768853` remains available if an approved destination/key is established later. Its isolated fixture proves only tool mechanics, not live receipt recovery. Do not generate an ad hoc key or introduce a new provider.
 
-## Make a consistent backup set — future authorized window
+## Required paired local backup before migration or financial testing
 
-1. Record exact environment, release commit/image digests, migration history, PostgreSQL server/database identity, UTC time, approved loss window, financial freeze state, and journal high-water marks. Confirm sufficient protected local and off-host capacity. Check the backup account is read-only and uses external service/pass files. Never put passwords in commands or logs.
-2. In a separately approved maintenance window, stop **only** the Pilot V3 API and Worker and verify they remain stopped. This prevents new `ProofReference` rows or receipt files while the pair is captured. A dynamic configuration flag alone is not a filesystem/database snapshot. Do not stop Production or V2.
-3. Create a fresh unique `0600` PostgreSQL 17 custom-format dump in a protected `0700` directory, using the exact Pilot backup service. Run `sha256sum` and `pg_restore --list` on that dump. Verify the server/database identity before dumping. Keep the writers stopped. Do not use a prior dump and a later receipt directory as if they were one recovery point.
-4. Run the paired tool with explicit approved paths and key fingerprint. The arguments below are a **shape**, not live credentials or authorization:
+1. Record release commit/image digests, exact Pilot database identity, migration baseline, UTC timestamp, expected loss window and journal high-water marks. Confirm sufficient capacity in the existing protected Pilot backup area. Use PostgreSQL **17** `pg_dump` and `pg_restore` (the Pilot PostgreSQL 17 container has compatible tools if the host does not). Keep credentials outside source, command lines and logs.
+2. In a separately authorized maintenance window, stop only the Pilot V3 API and Worker and verify both remain stopped. This freezes both new receipt files and database `ProofReference` rows. The filesystem and database have no shared transaction.
+3. Create a fresh unique custom-format Pilot database dump in a `0700` protected directory as a `0600` file. Record SHA-256 and run `pg_restore --list`. Never substitute an old dump. Preserve migration history and the exact database identity in the backup record.
+4. While writers remain stopped, inventory `/var/lib/weymela-v3/pilot/receipts`. Reject symlinks, unexpected names and wrong ownership/modes. Valid receipt names are `r_` plus 64 lowercase hexadecimal characters. Make a protected local archive preserving opaque names and numeric ownership/modes; record each file's size and SHA-256, archive SHA-256 and UTC snapshot time in a protected manifest beside the matching dump. A zero-receipt archive is valid only when the matching database has no receipt references.
+5. Restore the database dump into a **new isolated** PostgreSQL database and the receipt archive into a **new isolated** private directory. Verify dump list, restored checksums, `1654:1654`/`0700`/`0600`, `v3-verify.sql`, financial reconciliation, and that restored non-null `DepositRequests.ProofReference` keys match restored files. Do not overwrite live files or restore to the live database. Record the paired restore result and retain the backup set under the existing protected server-local policy. Resume only the approved Pilot services in their prior financial-write state.
 
-   ```sh
-   python3 tools/ops/receipt-backup.py backup \
-     --environment pilot \
-     --receipts /var/lib/weymela-v3/pilot/receipts \
-     --db-dump /approved/protected/new-pilot.dump \
-     --output-dir /approved/protected/backup-sets \
-     --gpg-home /approved/protected/public-keyring \
-     --recipient APPROVED_FULL_FINGERPRINT \
-     --writers-stopped \
-     --offhost-user APPROVED_BACKUP_USER \
-     --offhost-host APPROVED_BACKUP_HOST \
-     --offhost-dir /approved/private/pilot \
-     --ssh-key /approved/protected/backup-ssh-key \
-     --known-hosts /approved/protected/backup-known-hosts
-   ```
+A database restore without corresponding receipt evidence is incomplete. A stopped-writer paired capture gives a consistent operational point; it does not claim atomicity between PostgreSQL and the filesystem. If either source changes during capture, discard that candidate pair and repeat. Receipt files are retained **until an approved financial-record retention policy is defined**; no automatic deletion period is introduced.
 
-5. Record the tool's ciphertext size, SHA-256, receipt count, paired database dump SHA-256, upload/read-back result, start/end UTC, and protected off-host location in the operations record. Retain the local dump/checksum until the recovery owner confirms the off-host set; do not delete prior backups as part of this procedure. Only then resume the approved services in their prior financial-write state.
+If an approved off-host destination/key later exists, the existing optional tool can encrypt the pair, upload with pinned SSH host key, read it back, compare SHA-256, and verify an isolated restore. That is an enhancement to disaster recovery, not a prerequisite imposed by this release.
 
-This procedure obtains consistency by stopping writers across **both** captures. PostgreSQL and the receipt filesystem have no shared transaction and there is no claimed cross-system atomic snapshot. If the stop or source-stability check fails, discard the candidate set and repeat the complete pair. A database restore without matching receipt evidence is incomplete.
+## Pilot financial-write test window: prepared, not enabled
 
-## Verify a restore without touching live data
+Normal Pilot defaults to `V3_PILOT_FINANCIAL_WRITES_ENABLED=false` and `V3_PILOT_FINANCIAL_WRITES_UNTIL_UTC=disabled` in Compose. API and Worker receive the same values. Runtime startup and the protected API environment assembler reject an ambiguous window; Compose preflight checks agreement. A Pilot-only enabled window requires a UTC end strictly in the future and no more than four hours away, and `ManualApproval` on API. Production remains denied by runtime validation; Production Compose/config is unchanged. The API middleware automatically blocks financial mutations when the window expires. Journal, idempotency, reconciliation, reviewer authority and database guards remain in force.
 
-Retrieve the encrypted archive from the protected off-host target into a new private staging directory. Compare its SHA-256 with the recorded checksum, then decrypt using the recovery key in an isolated recovery context. The tool permits only a **new** restore directory outside live Weymela paths; it does not extract symlinks or arbitrary paths:
-
-```sh
-python3 tools/ops/receipt-backup.py verify-restore \
-  --archive /approved/protected/backup-sets/EXACT.receiptset.gpg \
-  --expected-sha256 EXACT_SHA256 \
-  --restore-dir /approved/isolated/new-verification-directory \
-  --gpg-home /approved/protected/recovery-keyring
-```
-
-The verifier compares every restored byte count and SHA-256 against the encrypted internal manifest and sets receipt directory/file owner to `1654:1654`, modes `0700`/`0600`. It leaves `database.dump` for an independently authorized restore into a **new empty isolated** PostgreSQL database. Check `pg_restore --list`, restore the dump, run `database/grants/v3-verify.sql` and financial reconciliation, compare all non-null `DepositRequests.ProofReference` opaque keys with restored receipt filenames, and verify a representative image through an authorized private read path. Preserve the manifest/checksum and results as protected evidence. Remove only the isolated verification restore after review; never overwrite or delete live receipts. An actual environment replacement requires separate approval, protected pre-restore backup, and a controlled switch.
-
-Receipt files are **retained until an approved financial-record retention policy is defined**. This procedure creates no automatic receipt deletion or retention period.
-
-## Current Pilot financial-write guards and later activation
-
-Pilot is frozen at multiple layers:
-
-- The API and Worker in `docker/compose.pilot.yml` explicitly set `V3__FinancialWritesEnabled: "false"`; an env-file edit cannot override those entries. The protected API env assembler in `tools/ops/pilot-runtime.py` requires `false`, and `tools/ci/pilot-preflight.py` requires both services frozen.
-- `RuntimeOptions.Load` rejects `FinancialWritesEnabled=true` outside Development, including Pilot. The API middleware returns `FinancialWritesPaused` for classified financial mutations. There is no unfreeze endpoint. `V3__Deposits__Mode=ManualApproval` is already the Pilot provider setting, but it does not credit a wallet on receipt submission.
-- Platform Admin's `/api/admin/reconciliation` is read-only and must return no mismatches before and after controlled tests. Existing journal, trigger, idempotency, approval, and role guards remain authoritative.
-
-Changing one environment value **cannot** activate manual Pilot testing. A separately reviewed, Pilot-only activation patch must: (1) permit the flag only for `Pilot` with an explicit protected approval marker and startup validation; keep `Production` denied; (2) make the Pilot Compose API and Worker flags explicit, default-false controlled values, and update the protected assembler/preflight/tests accordingly; (3) require the approved backup/restore evidence, applied migrations, receipt mount, healthy Worker/readiness, financial reconciliation, and a named test window before restart; (4) verify the effective value after restart without exposing secrets. Only then may an authorized operator change the protected Pilot configuration and recreate the affected Pilot services. Reversal is the same controlled setting back to `false` plus a Pilot-only restart. Run reconciliation before activation, after each receipt approval/rejection and funding/checkout exercise, and after refreeze. Never edit wallet balances directly or disable triggers. Do not change Production configuration. No activation code/config change is made in this phase.
+Later activation sequence, after explicit operational approval: complete the paired backup/isolated restore above; apply the three reviewed migrations; verify receipt mount, `v3-verify.sql`, reconciliation and healthy API/Worker. Set `true` and a bounded `YYYY-MM-DDTHH:MM:SSZ` end in the protected Pilot Compose interpolation and assembled API environment, rerun preflight, restart only Pilot API/Worker, verify effective state and execute the named manual test. Reconcile after test actions. Deactivate by setting `false`/`disabled`, reassembling the protected API environment, rerunning preflight, restarting only Pilot services, proving financial mutations blocked again and reconciling. The expiry is a fail-safe, not a substitute for deactivation. Never edit wallets directly or bypass triggers.
 
 ## Three-migration Pilot precheck
 
-The new migrations in the committed source, in chronological order, are:
+The reviewed order is `20260928213157_AlignDepositReviewAuthority`, `20260928230108_AddCreatorNumbers`, `20260929022846_BindUgcSaleAssignments`. Do **not** apply them in this source-preparation task. For later deployment, confirm actual `__EFMigrationsHistory` and target identity; take the fresh paired local database/receipt backup above; verify `pg_restore --list`, artifact checksums and image digests; run `v3-verify.sql` and reconciliation; rehearse cumulative SQL/grants against an isolated restored Pilot copy. Apply only through the protected migrator after separate authorization, then verify history, grants, pending model, `v3-verify.sql`, reconciliation and receipt keys. Never use routine `Down` migrations on Pilot. Rolling back `AddCreatorNumbers` loses numeric IDs assigned later; prefer a controlled full paired restore when rollback is necessary, with an explicit loss-window decision.
 
-1. `20260928213157_AlignDepositReviewAuthority` — expands the existing guarded deposit review to active Operations Admin as well as Platform Admin.
-2. `20260928230108_AddCreatorNumbers` — backfills stable numeric Creator IDs ordered by existing `PublicId`, then uses a PostgreSQL sequence/trigger for new Creators.
-3. `20260929022846_BindUgcSaleAssignments` — adds nullable exact UGC assignment attribution and source-binding guards; historical ambiguous rows remain null.
+## Other readiness work
 
-Before any later Pilot migration: confirm the **actual** `__EFMigrationsHistory` baseline and target identity; archive a fresh protected Pilot custom-format DB dump and successful `pg_restore --list`; capture and verify the matching encrypted off-host receipt set; verify the release manifest commit, migration order, checksums of bundle/forward SQL and source, and image digests; run `v3-verify.sql` and reconciliation; rehearse the exact cumulative forward SQL and grants against a restored isolated Pilot copy. Apply the reviewed bundle only with the protected migrator through `tools/ops/run-v3-migrations.py` after separate approval. Then re-run history, grants, `v3-verify.sql`, reconciliation, receipt-key checks, and readiness before financial activation. Never run a `Down` migration on Pilot as routine rollback. `AddCreatorNumbers` down removes the numeric column/sequence and loses IDs assigned after migration; where rollback is needed, prefer restoring the complete protected pre-migration database/receipt pair into an approved replacement environment, with an explicit loss-window decision. Pilot migrations are **not applied** by this document.
-
-## Pilot-only external identity deletion rehearsal
-
-After the new image is separately deployed, identify a **dedicated disposable Pilot identity** with no real user's data or unresolved financial obligations. If none exists, stop without creating/deleting a real user. Record its normalized email and current Firebase/Pilot-local binding in a protected test record. A real Platform Admin, without View As, requests `Delete Entire Account` with reason and `DELETE`; confirm all roles become inaccessible immediately and the `AccountIdentityDeletion` outbox item is processed by the API's Firebase Admin adapter. Verify external Firebase deletion succeeds, the local identifier is released **after** that success, email can enter a new Create Account flow, and retained journal/audit/financial rows reconcile. Exercise an idempotent retry and capture failure/retry behavior without exposing credentials or PII. This remains an unexecuted Pilot test.
-
-## Production Worker log rotation — recommendation only
-
-Read-only Docker inspection on 2026-09-29 found the existing Production Worker uses `json-file` with **no** `max-size` or `max-file`. In a separately approved Production maintenance change, add service-level Docker logging limits such as `max-size: "10m"` and `max-file: "3"` to the Production Worker's managed Compose definition, then recreate only that service so the new container receives the limits. Verify `docker inspect` afterward and retain logs according to the approved operational policy. Do not truncate its current log or change Production in this phase.
+Live Firebase Delete Entire Account reconciliation remains a later Pilot-only test using a dedicated disposable identity. Do not delete a real user. Production Worker Docker `json-file` log rotation remains a separate change; the documented recommendation is `max-size: 10m`, `max-file: 3`. Do not modify Production in this task.

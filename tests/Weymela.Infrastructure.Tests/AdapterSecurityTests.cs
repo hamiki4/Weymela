@@ -64,6 +64,31 @@ public sealed class AdapterSecurityTests
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
     }
+    [Fact] public void Pilot_financial_test_window_is_bounded_and_expires_without_restart()
+    {
+        var directory = Directory.CreateTempSubdirectory("v3-pilot-receipts-");
+        try
+        {
+            if (OperatingSystem.IsLinux()) File.SetUnixFileMode(directory.FullName,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var config = Config();
+            config["V3:Deposits:Mode"] = "ManualApproval";
+            config["V3:Deposits:ReceiptDirectory"] = directory.FullName;
+            config["V3:FinancialWritesEnabled"] = "true";
+            config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
+            Assert.True(options.FinancialWritesActive(DateTime.UtcNow));
+            Assert.False(options.FinancialWritesActive(options.PilotFinancialWritesUntilUtc!.Value));
+            config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(5).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+            config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            config["V3:Deposits:Mode"] = "Disabled";
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+        }
+        finally { directory.Delete(); }
+    }
     [Fact] public void Pilot_modes_replace_only_the_disabled_adapter_registrations()
     {
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
@@ -88,6 +113,10 @@ public sealed class AdapterSecurityTests
         config["V3:Auth:EmailDeliveryMode"] = "Disabled";
         config["V3:Auth:FirebaseCustomTokenMode"] = "Disabled";
         var production = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        config["V3:FinancialWritesEnabled"] = "true";
+        config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
         var services = new ServiceCollection();
         services.AddWeymelaPersistence(production.ConnectionString).AddPilotAuthenticationAdapters(production);
         Assert.Equal(typeof(DisabledEmailCodeDelivery), services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);

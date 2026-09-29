@@ -78,11 +78,11 @@ export function OperationsBusinesses() {
   const resource = useResource<OperationsBusinessView[]>("/admin/businesses");
   return <><PageHeader eyebrow="Business operations" title="Businesses" description="Operational Business status and campaign activity. Wallet balances remain restricted to Platform Admin." />
     <Resource resource={resource}>{(rows) => <Section title="Business accounts"><DataTable rows={rows} rowKey={(r) => r.business.id} label="Operational Business accounts" columns={[
-      { label: "Business", cell: (r) => <><strong>{r.business.displayName}</strong><small>{r.business.region}</small></> },
+      { label: "Business", cell: (r) => <><strong>{r.business.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.business.region}</small></> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
       { label: "Active Campaigns", cell: (r) => count(r.activeCampaigns), numeric: true },
       { label: "Last Deposit", cell: (r) => date(r.lastDepositUtc) },
-    ]} card={(r) => <><div className="card-head"><h3>{r.business.displayName}</h3><Badge status={r.status} /></div><p>{r.business.region}</p><p className="fine-print">{count(r.activeCampaigns)} active campaigns · Last deposit {date(r.lastDepositUtc)}</p></>} empty={<Empty title="No Business accounts yet" message="Approved Business accounts appear here." />} /></Section>}</Resource>
+    ]} card={(r) => <><div className="card-head"><h3>{r.business.displayName}</h3><Badge status={r.status} /></div>{r.fullEmail && <p className="admin-account-email">{r.fullEmail}</p>}<p>{r.business.region}</p><p className="fine-print">{count(r.activeCampaigns)} active campaigns · Last deposit {date(r.lastDepositUtc)}</p></>} empty={<Empty title="No Business accounts yet" message="Approved Business accounts appear here." />} /></Section>}</Resource>
   </>;
 }
 
@@ -90,11 +90,11 @@ export function OperationsCreators() {
   const resource = useResource<OperationsCreatorView[]>("/admin/creators");
   return <><PageHeader eyebrow="Creator operations" title="Creators" description="Operational Creator status and campaign participation. Payout amounts are handled in the payout queue." />
     <Resource resource={resource}>{(rows) => <Section title="Creator accounts"><DataTable rows={rows} rowKey={(r) => r.creator.id} label="Operational Creator accounts" columns={[
-      { label: "Creator", cell: (r) => <Person person={r.creator} /> },
+      { label: "Creator", cell: (r) => <><Person person={r.creator} />{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}</> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
       { label: "Active Campaigns", cell: (r) => count(r.activeCampaigns), numeric: true },
       { label: "Payout Queue", cell: (r) => <Badge status={r.payoutEligible ? "Eligible" : "No pending payout"} /> },
-    ]} card={(r) => <><div className="card-head"><Person person={r.creator} /><Badge status={r.status} /></div><p>{count(r.activeCampaigns)} active campaigns</p><Badge status={r.payoutEligible ? "Eligible for payout" : "No pending payout"} /></>} empty={<Empty title="No Creator accounts yet" message="Approved Creators appear here." icon="people" />} /></Section>}</Resource>
+    ]} card={(r) => <><div className="card-head"><Person person={r.creator} /><Badge status={r.status} /></div>{r.fullEmail && <p className="admin-account-email">{r.fullEmail}</p>}<p>{count(r.activeCampaigns)} active campaigns</p><Badge status={r.payoutEligible ? "Eligible for payout" : "No pending payout"} /></>} empty={<Empty title="No Creator accounts yet" message="Approved Creators appear here." icon="people" />} /></Section>}</Resource>
   </>;
 }
 
@@ -102,9 +102,9 @@ export function OperationsCustomers() {
   const resource = useResource<OperationsCustomerView[]>("/admin/customers");
   return <><PageHeader eyebrow="Customer operations" title="Customers" description="Operational Customer status for support and account review." />
     <Resource resource={resource}>{(rows) => <Section title="Customer accounts"><DataTable rows={rows} rowKey={(r) => r.customer.id} label="Operational Customer accounts" columns={[
-      { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong><small>{r.customer.publicId}</small></> },
+      { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
-    ]} card={(r) => <div className="card-head"><div><strong>{r.customer.displayName}</strong><small>{r.customer.publicId}</small></div><Badge status={r.status} /></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
+    ]} card={(r) => <div className="card-head"><div><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></div><Badge status={r.status} /></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
   </>;
 }
 
@@ -143,7 +143,7 @@ export function AdminRoleEnrollments() {
   return <><PageHeader eyebrow="People and access" title="Profile requests" description="Approve additional profiles without replacing an existing role." />
     <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map(row =>
       <article className="admin-profile-request" key={row.id}>
-        <div><strong>{actorRoleNameFromWire(row.role)} · {row.displayName}</strong><small>Submitted {date(row.submittedAtUtc)}</small></div>
+        <div><strong>{actorRoleNameFromWire(row.role)} · {row.displayName}</strong>{row.fullEmail && <small className="admin-account-email">{row.fullEmail}</small>}<small>Submitted {date(row.submittedAtUtc)}</small></div>
         {(row.category || row.region || row.submission) && <div className="admin-profile-details">
           {row.category && <span>{actorRoleNameFromWire(row.role) === "Business" ? "Business type" : "Category"}: {row.category}</span>}
           {row.region && <span>Region: {row.region}</span>}
@@ -167,7 +167,7 @@ export function AdminRoleEnrollments() {
 
 type EnrollmentRow = { id: string; role: ActorRoleName | number; status: string | number; displayName: string; publicId: string; version: number;
   region?: string | null; category?: string | null; submission?: string | null; submittedAtUtc: string;
-  socialProfiles?: { platform: string; profileUrl: string }[] | null };
+  socialProfiles?: { platform: string; profileUrl: string }[] | null; fullEmail?: string | null };
 
 export function AdminDashboard() {
   const resource = useResource<AdminHome>("/admin/home");

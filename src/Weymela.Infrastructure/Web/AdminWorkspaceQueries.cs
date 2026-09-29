@@ -27,14 +27,19 @@ public sealed partial class WorkspaceQueries
     {
         DemandCapability(actor, AdministrativeCapability.BusinessOperationalVisibility);
         var wallets = await db.BusinessWallets.AsNoTracking().OrderBy(x => x.BusinessId).ToListAsync(ct);
+        var owners = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Business).ToListAsync(ct);
+        var emails = await VerifiedAccountEmailsAsync(owners.Select(x => x.UserId), ct);
         var result = new List<OperationsBusinessView>();
         foreach (var wallet in wallets)
         {
+            var owner = owners.FirstOrDefault(x => x.SubjectId == wallet.BusinessId && x.IsActive)
+                ?? owners.FirstOrDefault(x => x.SubjectId == wallet.BusinessId);
             result.Add(new(await directory.BusinessCardAsync(wallet.BusinessId, ct),
                 await db.CommercePermissions.AnyAsync(x => x.SubjectId == wallet.BusinessId && x.Role == ActorRole.Business && x.IsActive, ct) ? "Active" : "Inactive",
                 await db.Promotions.CountAsync(x => x.BusinessId == wallet.BusinessId && x.Status == PromotionStatus.Active, ct),
                 await db.WalletEntries.Where(x => x.BusinessId == wallet.BusinessId && x.Movement == "Deposit")
-                    .OrderByDescending(x => x.CreatedAtUtc).Select(x => (DateTime?)x.CreatedAtUtc).FirstOrDefaultAsync(ct)));
+                    .OrderByDescending(x => x.CreatedAtUtc).Select(x => (DateTime?)x.CreatedAtUtc).FirstOrDefaultAsync(ct),
+                owner is null ? null : emails.GetValueOrDefault(owner.UserId)));
         }
         return result;
     }
@@ -44,12 +49,14 @@ public sealed partial class WorkspaceQueries
         DemandCapability(actor, AdministrativeCapability.CreatorOperationalVisibility);
         var threshold = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, ct)).CreatorPayoutThreshold.Amount;
         var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Creator).ToListAsync(ct);
+        var emails = await VerifiedAccountEmailsAsync(permissions.Select(x => x.UserId), ct);
         var result = new List<OperationsCreatorView>();
         foreach (var group in permissions.GroupBy(x => x.SubjectId))
         {
             var available = (await db.CreatorEarningsAccounts.AsNoTracking().SingleOrDefaultAsync(x => x.CreatorId == group.Key, ct))?.AvailableEarnings.Amount ?? 0;
             result.Add(new(await directory.CreatorCardAsync(group.Key, ct), group.Any(x => x.IsActive) ? "Active" : "Inactive",
-                await db.CreatorAllocations.CountAsync(x => x.CreatorId == group.Key && x.Status == CreatorAllocationStatus.Active, ct), available >= threshold));
+                await db.CreatorAllocations.CountAsync(x => x.CreatorId == group.Key && x.Status == CreatorAllocationStatus.Active, ct),
+                available >= threshold, emails.GetValueOrDefault(group.First().UserId)));
         }
         return result;
     }
@@ -58,10 +65,21 @@ public sealed partial class WorkspaceQueries
     {
         DemandCapability(actor, AdministrativeCapability.CustomerOperationalVisibility);
         var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Customer).ToListAsync(ct);
+        var emails = await VerifiedAccountEmailsAsync(permissions.Select(x => x.UserId), ct);
         var result = new List<OperationsCustomerView>();
         foreach (var group in permissions.GroupBy(x => x.SubjectId))
-            result.Add(new(await directory.CustomerCardAsync(group.Key, ct), group.Any(x => x.IsActive) ? "Active" : "Inactive"));
+            result.Add(new(await directory.CustomerCardAsync(group.Key, ct), group.Any(x => x.IsActive) ? "Active" : "Inactive",
+                emails.GetValueOrDefault(group.First().UserId)));
         return result;
+    }
+
+    private async Task<Dictionary<Guid, string>> VerifiedAccountEmailsAsync(IEnumerable<Guid> userIds, CancellationToken ct)
+    {
+        var ids = userIds.Distinct().ToArray();
+        var rows = await db.AuthIdentifiers.AsNoTracking().Where(x => ids.Contains(x.UserId)
+            && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null).ToListAsync(ct);
+        return rows.GroupBy(x => x.UserId).ToDictionary(x => x.Key,
+            x => x.OrderByDescending(y => y.CreatedAtUtc).First().DeliveryAddress!);
     }
 
     public async Task<IReadOnlyList<OperationsCampaignView>> OperationsCampaignsAsync(Actor actor, CancellationToken ct)

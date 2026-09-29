@@ -33,7 +33,8 @@ public sealed record AdminAccountSummary(
     string? Association,
     DateTime? LastActivityAtUtc,
     bool CanManage,
-    DateTime? JoinedAtUtc = null);
+    DateTime? JoinedAtUtc = null,
+    string? FullEmail = null);
 
 public sealed record AdminAuditItem(
     Guid Id,

@@ -34,4 +34,18 @@ public sealed class AuthorityContextSecurityTests
         Assert.Equal(actor, context.RealActor.Identity);
         Assert.Equal(actor, context.CommandActor);
     }
+
+    [Theory]
+    [InlineData(ActorRole.PlatformAdmin)]
+    [InlineData(ActorRole.OperationsAdmin)]
+    public void Viewed_customer_claim_cannot_keep_real_admin_pii_authority(ActorRole realRole)
+    {
+        var principal = WorkspaceAuthentication.Principal(new Actor(Guid.NewGuid(), realRole), "Admin", "admin");
+        principal.AddIdentity(new ClaimsIdentity([
+            new Claim(AuthorityClaimTypes.ViewedRole, ActorRole.Customer.ToString()),
+            new Claim(AuthorityClaimTypes.ViewedUserId, Guid.NewGuid().ToString())]));
+
+        var failure = Assert.Throws<ApplicationFailure>(() => WorkspaceAuthentication.Authority(principal));
+        Assert.Equal("ForgedAuthorityContext", failure.Code);
+    }
 }

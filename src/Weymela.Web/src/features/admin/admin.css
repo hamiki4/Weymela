@@ -63,8 +63,11 @@
 .admin-toolbar label { display: grid; gap: 4px; font-size: .76rem; font-weight: 600; color: var(--admin-secondary); }
 .admin-toolbar :is(input, select) { min-height: 40px; }
 .admin-mobile-row { display: grid; gap: 7px; }
-.admin-mobile-row > div:first-child:not(.admin-mobile-row-meta) { display: grid; gap: 2px; }
+.admin-mobile-row > div:first-child:not(.admin-mobile-row-meta) { display: grid; gap: 2px; min-width: 0; }
 .admin-mobile-row small { color: var(--admin-muted); font-size: .73rem; }
+.admin-account-contact { min-width: 0; }
+.admin-account-email { display: block; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.admin-detail-email { margin: -10px 0 22px; color: var(--admin-secondary); }
 .admin-mobile-row-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .admin-mobile-row-meta strong { min-width: 0; overflow-wrap: anywhere; }
 .admin-mobile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; margin: 8px 0; }
@@ -140,7 +143,7 @@
   .admin-ugc-row .admin-mobile-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 .admin-profile-request { display: grid; gap: 8px; min-width: 0; padding: 12px 2px; border-bottom: 1px solid var(--line); }
-.admin-profile-request > div:first-child { display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: baseline; }
+.admin-profile-request > div:first-child { display: grid; gap: 3px; min-width: 0; }
 .admin-profile-request small, .admin-profile-details { color: var(--secondary-text); font-size: .8rem; }
 .admin-profile-details, .admin-profile-social { display: flex; flex-wrap: wrap; gap: 5px 12px; min-width: 0; overflow-wrap: anywhere; }
 .admin-profile-social { font-size: .82rem; }

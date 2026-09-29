@@ -5,8 +5,10 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Development;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
@@ -17,6 +19,67 @@ namespace Weymela.Api.IntegrationTests;
 [Collection("V3 HTTP PostgreSQL")]
 public sealed class WorkspaceHttpTests(PostgresFixture postgres)
 {
+    [Fact]
+    public async Task Full_email_is_limited_to_authorized_admin_account_and_review_projections()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        var directory = fixture.App.Services.GetRequiredService<DevelopmentDirectory>();
+        static string Email(string alias) => $"private-{alias}@example.test";
+        await using (var db = fixture.Database.Open())
+        {
+            foreach (var alias in new[] { "customer", "creator", "business" })
+                db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = directory.Get(alias).Actor.UserId,
+                    Kind = "Email", IdentifierHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Email(alias)))).ToLowerInvariant(),
+                    DeliveryAddress = Email(alias), IsVerified = true, CreatedAtUtc = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+            await new RoleEnrollmentService(db, TimeProvider.System).SubmitAsync(directory.Get("customer").Actor,
+                new RoleEnrollmentRequest(ActorRole.Creator, "Review applicant", null, "Addis", "Food", "Profile request",
+                    SocialProfiles: [new("TikTok", "https://www.tiktok.com/@reviewapplicant")]),
+                "private-email-review", default);
+        }
+
+        using var platform = await fixture.Login("admin");
+        var customerId = directory.Get("customer").Actor.UserId;
+        var accounts = (await platform.GetJson("/api/admin/accounts?role=Customer")).AsArray();
+        var account = accounts.Single(x => x!["userId"]!.GetValue<Guid>() == customerId)!;
+        Assert.Equal(Email("customer"), account["fullEmail"]!.GetValue<string>());
+        Assert.NotEqual(Email("customer"), account["safeIdentifier"]!.GetValue<string>());
+        var search = (await platform.GetJson($"/api/admin/accounts?role=Customer&search={Uri.EscapeDataString(Email("customer"))}")).AsArray();
+        Assert.Contains(search, x => x!["userId"]!.GetValue<Guid>() == customerId);
+        var detail = await platform.GetJson($"/api/admin/accounts/{customerId}?role=Customer");
+        Assert.Equal(Email("customer"), detail["account"]!["fullEmail"]!.GetValue<string>());
+        Assert.DoesNotContain(Email("customer"), detail["transactions"]!.ToJsonString());
+
+        using var operations = await fixture.Login("operations-admin");
+        foreach (var (path, alias) in new[] {
+            ("/api/admin/customers", "customer"), ("/api/admin/creators", "creator"),
+            ("/api/admin/businesses", "business") })
+            Assert.Contains((await operations.GetJson(path)).AsArray(), x => x!["fullEmail"]?.GetValue<string>() == Email(alias));
+        Assert.Contains((await operations.GetJson("/api/admin/role-enrollments")).AsArray(),
+            x => x!["fullEmail"]?.GetValue<string>() == Email("customer"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await operations.GetAsync("/api/admin/accounts?role=Customer")).StatusCode);
+
+        foreach (var alias in new[] { "customer", "creator", "business", "cashier" })
+        {
+            using var nonAdmin = await fixture.Login(alias);
+            foreach (var path in new[] { "/api/admin/accounts?role=Customer", "/api/admin/customers",
+                "/api/admin/creators", "/api/admin/businesses", "/api/admin/role-enrollments" })
+                Assert.Equal(HttpStatusCode.Forbidden, (await nonAdmin.GetAsync(path)).StatusCode);
+        }
+        using var anonymous = fixture.Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/admin/customers")).StatusCode);
+        using var creator = await fixture.Login("creator");
+        using var customer = await fixture.Login("customer");
+        foreach (var response in new[] { await creator.GetJson("/api/creator/discover"),
+            await customer.GetJson("/api/customer/offers"), await customer.GetJson("/api/customer/transactions") })
+        {
+            var payload = response.ToJsonString();
+            Assert.DoesNotContain("\"fullEmail\"", payload);
+            foreach (var alias in new[] { "customer", "creator", "business" })
+                Assert.DoesNotContain(Email(alias), payload);
+        }
+    }
+
     [Fact]
     public async Task Unfunded_promotion_draft_is_not_discoverable_or_requestable_and_funding_rechecks_available_balance()
     {

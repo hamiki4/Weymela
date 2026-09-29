@@ -19,7 +19,7 @@ public sealed record CreatorApplicationSocialProfile(string Platform, string Pro
 public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollmentStatus Status, string DisplayName,
     string PublicId, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc, string? DecisionReason, long Version,
     string? Region = null, string? Category = null, string? Submission = null,
-    IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null);
+    IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null, string? FullEmail = null);
 
 public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider clock)
 {
@@ -113,12 +113,16 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     public async Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(Actor admin, CancellationToken ct)
     {
         if (!AdministrativeAuthority.For(new RealActor(admin)).Allows(AdministrativeCapability.AccountReview)) throw Denied();
-        return (await db.RoleEnrollments.AsNoTracking().Where(x => x.Status == RoleEnrollmentStatus.Pending)
-            .OrderBy(x => x.SubmittedAtUtc).ToListAsync(ct)).Select(Summary).ToList();
+        var rows = await db.RoleEnrollments.AsNoTracking().Where(x => x.Status == RoleEnrollmentStatus.Pending)
+            .OrderBy(x => x.SubmittedAtUtc).ToListAsync(ct);
+        var userIds = rows.Select(x => x.UserId).Distinct().ToArray();
+        var emails = await db.AuthIdentifiers.AsNoTracking().Where(x => userIds.Contains(x.UserId)
+                && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null)
+            .ToListAsync(ct);
+        return rows.Select(row => Summary(row) with { FullEmail = emails
+            .Where(x => x.UserId == row.UserId).OrderByDescending(x => x.CreatedAtUtc)
+            .Select(x => x.DeliveryAddress).FirstOrDefault() }).ToList();
     }
-
-    public Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(CancellationToken ct)
-        => PendingAsync(new Actor(Guid.Empty, ActorRole.PlatformAdmin), ct);
 
     public async Task<RoleEnrollmentSummary> ReviewAsync(Actor admin, Guid id, bool approve, string? reason, long expectedVersion, string idempotencyKey, CancellationToken ct)
     {

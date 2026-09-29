@@ -31,7 +31,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         Assert.StartsWith("CU-", first.PublicId, StringComparison.Ordinal);
         Assert.DoesNotContain("USER-CONTROLLED", first.PublicId, StringComparison.Ordinal);
         Assert.Single(await db.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Customer).ToListAsync());
-        Assert.Empty(await service.PendingAsync(default));
+        Assert.Empty(await service.PendingAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
         var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Customer);
         Assert.True(permission.IsActive);
         var projected = await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == permission.SubjectId && x.Role == ActorRole.Customer);
@@ -249,14 +249,21 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
             request with { SocialProfiles = [new("TikTok", "https://evil.example/@bella")] }, "invalid-social", default));
         Assert.Equal(FailureKind.Validation, invalid.Kind);
         var pending = await service.SubmitAsync(actor, request, "creator-application", default);
+        const string reviewEmail = "creator-review@example.test";
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = user, Kind = "Email",
+            IdentifierHash = EmailAuthService.HashIdentifier(reviewEmail), DeliveryAddress = reviewEmail,
+            IsVerified = true, CreatedAtUtc = DateTime.UtcNow });
+        await db.SaveChangesAsync();
         var replay = await service.SubmitAsync(actor, request, "creator-application", default);
         Assert.Equal(pending.Id, replay.Id);
         Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
         Assert.StartsWith("CR-", pending.PublicId, StringComparison.Ordinal);
         Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Creator));
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
+        Assert.Null(Assert.Single(await service.MineAsync(user, default)).FullEmail);
         var admin = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
         var review = Assert.Single(await service.PendingAsync(admin, default));
+        Assert.Equal(reviewEmail, review.FullEmail);
         Assert.Equal("Food", review.Category);
         Assert.Equal("Recipes", review.Submission);
         Assert.Equal("TikTok", Assert.Single(review.SocialProfiles!).Platform);

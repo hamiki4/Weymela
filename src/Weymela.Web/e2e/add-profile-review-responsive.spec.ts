@@ -84,10 +84,12 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     await expect(admin).toHaveURL(/\/admin\/role-enrollments/);
     await expect(admin.getByText("https://www.instagram.com/hana/", { exact: true })).toHaveCount(0);
     const creator = admin.locator(".admin-profile-request").filter({ hasText: "Creator · Hana" });
+    await expect(creator.getByText(email, { exact: true })).toBeVisible();
     await expect(creator.getByText("Instagram")).toBeVisible();
     await expect(creator.getByRole("link", { name: "View profile" })).toHaveAttribute("href", "https://www.instagram.com/hana");
     for (const width of [320, 360, 375, 390, 430]) {
       await admin.setViewportSize({ width, height: 844 });
+      await expect(creator.getByText(email, { exact: true })).toBeVisible();
       await layout(admin);
     }
     await creator.getByRole("button", { name: "Approve" }).click();

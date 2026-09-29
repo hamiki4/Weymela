@@ -111,6 +111,7 @@ export interface AdminAccountSummary {
   lastActivityAtUtc: string | null;
   canManage: boolean;
   joinedAtUtc?: string | null;
+  fullEmail: string | null;
 }
 export interface AdminAuditItem {
   id: string;
@@ -421,16 +422,19 @@ export interface OperationsBusinessView {
   status: string;
   activeCampaigns: number;
   lastDepositUtc: string | null;
+  fullEmail: string | null;
 }
 export interface OperationsCreatorView {
   creator: CreatorCard;
   status: string;
   activeCampaigns: number;
   payoutEligible: boolean;
+  fullEmail: string | null;
 }
 export interface OperationsCustomerView {
   customer: { id: string; displayName: string; publicId: string };
   status: string;
+  fullEmail: string | null;
 }
 export interface OperationsCampaignView {
   id: string;

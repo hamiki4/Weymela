@@ -81,6 +81,9 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         var invitedPlatform = Assert.Single(admins, item => item.Id == platform.PreauthorizationId);
         Assert.Equal("Platform target", invitedPlatform.Name);
         Assert.StartsWith("n", invitedPlatform.SafeIdentifier, StringComparison.Ordinal);
+        Assert.Equal("new-platform@example.test", invitedPlatform.FullEmail);
+        Assert.Equal("new-platform@example.test", (await service.DetailAsync(admin, platform.PreauthorizationId, default)).Account.FullEmail);
+        Assert.Single(await service.ListAsync(admin, new AdminAccountFilterInput(Role: "Admin", Search: "new-platform@example.test"), default));
         var cashier = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PreauthorizeAsync(admin,
             new AccountPreauthorizationInput("Cashier", "new-cashier@example.test", null, "Not allowed"), "cashier", default));
         Assert.Equal(FailureKind.Validation, cashier.Kind);

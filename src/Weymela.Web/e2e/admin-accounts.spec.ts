@@ -32,6 +32,27 @@ test("Platform Admin has role-specific account areas and can preauthorize an Adm
   await layout(page);
 });
 
+test("authorized account list and detail show a long full email without phone overflow", async ({ page, context }) => {
+  await login(context, "admin");
+  const email = `very.long.account-holder.${Date.now()}@example.test`;
+  await open(page, "/admin/customers/new");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Display name").fill("Responsive Customer");
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  await expect(page).toHaveURL(/\/admin\/customers\?created=/);
+  for (const width of [320, 360, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.locator(".data-card .admin-account-email").filter({ hasText: email })).toBeVisible();
+    await layout(page);
+  }
+  await page.locator(".data-card").filter({ hasText: email }).getByRole("link", { name: "Responsive Customer" }).click();
+  for (const width of [320, 360, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.getByText(email, { exact: true })).toBeVisible();
+    await layout(page);
+  }
+});
+
 test("recipient activates a Platform Admin-created Customer with own credentials and consent", async ({ page, context }) => {
   await login(context, "admin");
   await open(page, "/admin/customers");

@@ -101,9 +101,9 @@ public sealed record OperationsHome(int PendingReviews, int Businesses, int Crea
 public sealed record BusinessOversight(BusinessCard Business, string Status, decimal TotalBalance, decimal Available, decimal Reserved,
     int ActiveCampaigns, DateTime? LastDepositUtc);
 public sealed record CreatorOversight(CreatorCard Creator, string Status, int ActiveCampaigns, decimal AvailableEarnings, bool PayoutEligible);
-public sealed record OperationsBusinessView(BusinessCard Business, string Status, int ActiveCampaigns, DateTime? LastDepositUtc);
-public sealed record OperationsCreatorView(CreatorCard Creator, string Status, int ActiveCampaigns, bool PayoutEligible);
-public sealed record OperationsCustomerView(CustomerCard Customer, string Status);
+public sealed record OperationsBusinessView(BusinessCard Business, string Status, int ActiveCampaigns, DateTime? LastDepositUtc, string? FullEmail = null);
+public sealed record OperationsCreatorView(CreatorCard Creator, string Status, int ActiveCampaigns, bool PayoutEligible, string? FullEmail = null);
+public sealed record OperationsCustomerView(CustomerCard Customer, string Status, string? FullEmail = null);
 public sealed record OperationsCampaignView(Guid Id, string PublicId, Guid BusinessId, string Business, string Title,
     string Type, int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version,
     int PromotionLiveDurationDays, string? Slogan = null, string? Location = null);

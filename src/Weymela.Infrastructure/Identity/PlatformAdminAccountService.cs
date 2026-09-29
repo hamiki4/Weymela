@@ -612,7 +612,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             permissions.FirstOrDefault(x => x.Role == role)?.BusinessId?.ToString("D"), activity ?? preauth?.CreatedAtUtc,
             role != ActorRole.Cashier && status is not ("Closed" or "Revoked" or "Cancelled")
                 && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending),
-            status == "Pending" ? null : joined);
+            status == "Pending" ? null : joined, email);
     }
 
     private static AdminCommerceTransaction Transaction(VerifiedSale x)

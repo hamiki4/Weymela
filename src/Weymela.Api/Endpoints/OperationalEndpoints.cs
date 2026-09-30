@@ -49,6 +49,7 @@ internal static class OperationalEndpoints
                 displayName = profile?.DisplayName ?? c.User.Identity?.Name,
                 publicId = profile?.PublicId ?? c.User.FindFirst("publicId")?.Value,
                 creatorId = actor.Role == ActorRole.Creator ? profile?.CreatorNumber : null,
+                hasCreatorPhoto = actor.Role == ActorRole.Creator && profile?.CreatorPhotoKey is not null,
                 email = identifiers.FirstOrDefault(x => x.Kind == "Email")?.DeliveryAddress,
                 phone = identifiers.FirstOrDefault(x => x.Kind == "Phone")?.DeliveryAddress,
                 status = "Active",

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 PLACEHOLDERS = ('placeholder', 'replace-me', 'change-me', 'example', 'external', 'test-only', 'not-a-live')
 RECEIPT_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/receipts')
+CREATOR_PHOTO_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/creator-photos')
 RECEIPT_OWNER = (1654, 1654)
 
 def _secret_bytes(value, minimum=32):
@@ -177,6 +178,22 @@ def validate(config, manifest):
                 errors.append('api: Pilot receipt host directory owner or mode is unsafe.')
         except OSError:
             errors.append('api: Pilot receipt host directory is missing.')
+    photo_mounts = [item for item in api.get('volumes', []) if item.get('target') == '/run/weymela-v3/creator-photos']
+    if (len(photo_mounts) != 1 or photo_mounts[0].get('type') != 'bind'
+            or photo_mounts[0].get('read_only', False)
+            or photo_mounts[0].get('bind', {}).get('create_host_path') is not False
+            or pathlib.Path(photo_mounts[0].get('source', '')) != CREATOR_PHOTO_HOST
+            or api_environment.get('V3__CreatorPhotos__Directory') != '/run/weymela-v3/creator-photos'):
+        errors.append('api: private persistent Creator photo bind mount is required.')
+    else:
+        try:
+            details = CREATOR_PHOTO_HOST.lstat()
+            if (not stat.S_ISDIR(details.st_mode) or CREATOR_PHOTO_HOST.is_symlink()
+                    or (details.st_uid, details.st_gid) != RECEIPT_OWNER
+                    or stat.S_IMODE(details.st_mode) != 0o700):
+                errors.append('api: Pilot Creator photo host directory owner or mode is unsafe.')
+        except OSError:
+            errors.append('api: Pilot Creator photo host directory is missing.')
     for part in ('worker', 'web'):
         service = config['services'][part]
         environment = service.get('environment', {})
@@ -190,6 +207,9 @@ def validate(config, manifest):
         if ('V3__Deposits__ReceiptDirectory' in environment
                 or any(item.get('target') == '/run/weymela-v3/receipts' for item in service.get('volumes', []))):
             errors.append(f'{part}: private receipt storage is API-only.')
+        if ('V3__CreatorPhotos__Directory' in environment
+                or any(item.get('target') == '/run/weymela-v3/creator-photos' for item in service.get('volumes', []))):
+            errors.append(f'{part}: private Creator photo storage is API-only.')
     worker_environment = config['services']['worker'].get('environment', {})
     if worker_environment.get('V3__Auth__Provider') != 'Firebase' or worker_environment.get('V3__Auth__FirebaseProjectId') != 'weymela-pilot':
         errors.append('worker: approved public Firebase project identity is required.')

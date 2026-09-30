@@ -23,6 +23,7 @@ FIREBASE_ADMIN_HOST = pathlib.Path('/etc/weymela/pilot/firebase-admin.json')
 COOKIE_CERTIFICATE_HOST = pathlib.Path('/etc/weymela-v3/pilot/cookie-protection.pfx')
 COOKIE_KEYS_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/cookie-keys')
 RECEIPTS_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/receipts')
+CREATOR_PHOTOS_HOST = pathlib.Path('/var/lib/weymela-v3/pilot/creator-photos')
 
 BASE_KEYS = (
     'ASPNETCORE_ENVIRONMENT',
@@ -309,11 +310,13 @@ def _metadata(path: pathlib.Path, kind: str, uid: int, gid: int, mode: int) -> l
 
 def validate_host_metadata(firebase: pathlib.Path, certificate: pathlib.Path,
                            keys: pathlib.Path, uid: int = 1654, gid: int = 1654,
-                           receipts: pathlib.Path = RECEIPTS_HOST) -> list[str]:
+                           receipts: pathlib.Path = RECEIPTS_HOST,
+                           creator_photos: pathlib.Path = CREATOR_PHOTOS_HOST) -> list[str]:
     errors = _metadata(firebase, 'file', uid, gid, 0o400)
     errors += _metadata(certificate, 'file', uid, gid, 0o400)
     errors += _metadata(keys, 'directory', uid, gid, 0o700)
     errors += _metadata(receipts, 'directory', uid, gid, 0o700)
+    errors += _metadata(creator_photos, 'directory', uid, gid, 0o700)
     return errors
 
 
@@ -330,6 +333,7 @@ def _parser() -> argparse.ArgumentParser:
     metadata.add_argument('--cookie-certificate', type=pathlib.Path, default=COOKIE_CERTIFICATE_HOST)
     metadata.add_argument('--cookie-keys', type=pathlib.Path, default=COOKIE_KEYS_HOST)
     metadata.add_argument('--receipts', type=pathlib.Path, default=RECEIPTS_HOST)
+    metadata.add_argument('--creator-photos', type=pathlib.Path, default=CREATOR_PHOTOS_HOST)
     metadata.add_argument('--expected-uid', type=int, default=1654)
     metadata.add_argument('--expected-gid', type=int, default=1654)
     return parser
@@ -352,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         errors = validate_host_metadata(arguments.firebase_admin, arguments.cookie_certificate,
                                         arguments.cookie_keys, arguments.expected_uid,
-                                        arguments.expected_gid, arguments.receipts)
+                                        arguments.expected_gid, arguments.receipts, arguments.creator_photos)
         print(json.dumps({'status': 'valid' if not errors else 'invalid', 'errors': errors}, indent=2))
         return 1 if errors else 0
     except ContractError as error:

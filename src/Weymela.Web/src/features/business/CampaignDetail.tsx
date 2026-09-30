@@ -206,7 +206,7 @@ export function BusinessCampaignDetail() {
                   {data.applicants.map((a) => (
                     <article className="data-card" key={a.id}>
                       <div className="card-head">
-                        <Person person={a.creator} detail />
+                        <Person person={a.creator} detail photo />
                         <Badge status={a.status} />
                       </div>
                       <p>
@@ -278,7 +278,7 @@ export function BusinessCampaignDetail() {
                   columns={[
                     {
                       label: "Creator",
-                      cell: (r) => <Person person={r.creator} />,
+                      cell: (r) => <Person person={r.creator} photo />,
                     },
                     {
                       label: "Creator Budget",
@@ -328,7 +328,7 @@ export function BusinessCampaignDetail() {
                   card={(r) => (
                     <>
                       <div className="card-head">
-                        <Person person={r.creator} />
+                        <Person person={r.creator} photo />
                         <Badge status={r.status} />
                       </div>
                       <FundsGrid
@@ -573,7 +573,7 @@ export function BusinessCampaignDetail() {
               open={!!profile}
               onClose={() => setProfile(null)}
             >
-              {profile && <CreatorProfile person={profile} />}
+              {profile && <CreatorProfile person={profile} photo />}
             </Dialog>
           </>
         );

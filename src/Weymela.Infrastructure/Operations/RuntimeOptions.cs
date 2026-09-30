@@ -30,6 +30,7 @@ public sealed class RuntimeOptions
     public string? CookieCertificatePassword { get; init; }
     public string DepositMode { get; init; } = "Disabled";
     public string ReceiptDirectory { get; init; } = "";
+    public string CreatorPhotoDirectory { get; init; } = "";
     public string SocialMode { get; init; } = "Disabled";
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
@@ -141,6 +142,18 @@ public sealed class RuntimeOptions
                         "The private receipt directory must have mode 0700.");
             }
         }
+        var creatorPhotoDirectory = config["V3:CreatorPhotos:Directory"] ?? "";
+        if (worker)
+            Require(string.IsNullOrEmpty(creatorPhotoDirectory), "Worker cannot configure private Creator photo storage.");
+        else if (!dev || !string.IsNullOrEmpty(creatorPhotoDirectory))
+        {
+            Require(Path.IsPathFullyQualified(creatorPhotoDirectory) && Directory.Exists(creatorPhotoDirectory), "A private durable Creator photo directory is required for the API.");
+            var directory = new DirectoryInfo(creatorPhotoDirectory);
+            Require(directory.LinkTarget is null && creatorPhotoDirectory != receiptDirectory, "Creator photos require a separate private directory.");
+            if (OperatingSystem.IsLinux())
+                Require(File.GetUnixFileMode(creatorPhotoDirectory) == (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute),
+                    "The private Creator photo directory must have mode 0700.");
+        }
         var social = config["V3:Social:Mode"] ?? "Disabled";
         Require(social == "Disabled" || dev && social == "Test", "Live social providers require an approved adapter; test providers cannot run outside Development.");
         Require(!config.GetValue<bool>("V3:Push:Enabled"), "Push is not connected; in-app notifications do not require push.");
@@ -180,7 +193,7 @@ public sealed class RuntimeOptions
             ResendApiKey = resendApiKey, ResendFromAddress = resendFromAddress, ResendFromName = resendFromName,
             FirebaseAdminCredentialsPath = firebaseAdminCredentials,
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
-            CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, SocialMode = social,
+            CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, CreatorPhotoDirectory = creatorPhotoDirectory, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
             FinancialWritesEnabled = financialWrites, PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies

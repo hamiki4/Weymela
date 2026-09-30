@@ -265,7 +265,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(25, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(26, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -427,10 +427,13 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var emailHash = EmailAuthService.HashIdentifier(email);
         var password = "Before deletion 123!";
         var originalHash = PasswordCredentialHasher.Hash(password);
+        var photoCreatorId = Guid.NewGuid();
         Guid journalId;
         Guid baselineAuditId;
         await using (var owner = database.Open())
         {
+            owner.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = photoCreatorId,
+                Role = ActorRole.Creator, DisplayName = "Photo grant Creator", PublicId = "CR-PHOTO-GRANT-" + photoCreatorId.ToString("N") });
             owner.CommercePermissions.Add(new(userId, ActorRole.Customer, userId, null, true, false));
             owner.IdentityBindings.Add(new IdentityBinding { UserId = userId, Provider = "Firebase",
                 ProjectId = "isolated-v3-test", ExternalSubject = "delete-" + userId.ToString("N"),
@@ -456,6 +459,17 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await AssertInsufficientPrivilegeAsync(apiConnection,
             "DELETE FROM v3.\"PasswordCredentials\" WHERE false",
             "API must not DELETE password credentials");
+        var photoKey = "p_" + new string('a', 64);
+        await using (var api = Open(apiConnection))
+        {
+            Assert.Equal(1, await api.PublicWorkspaceProfiles.Where(x => x.SubjectId == photoCreatorId && x.Role == ActorRole.Creator)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CreatorPhotoKey, photoKey)));
+            Assert.Equal(photoKey, (await api.PublicWorkspaceProfiles.AsNoTracking()
+                .SingleAsync(x => x.SubjectId == photoCreatorId && x.Role == ActorRole.Creator)).CreatorPhotoKey);
+        }
+        await AssertInsufficientPrivilegeAsync(apiConnection,
+            "UPDATE v3.\"PublicWorkspaceProfiles\" SET \"DisplayName\"=\"DisplayName\" WHERE false",
+            "API must not update unrelated public profile columns");
         await using (var connection = new NpgsqlConnection(database.ConnectionString))
         {
             await connection.OpenAsync();
@@ -463,17 +477,19 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
                 ("OutboxMessages", "ProcessedAtUtc"), ("OutboxMessages", "AttemptCount"),
                 ("OutboxMessages", "LastError"), ("OutboxMessages", "NextAttemptAtUtc"),
                 ("OutboxMessages", "FailedAtUtc"), ("OutboxMessages", "FailureCount"),
-                ("IdentityBindings", "IsActive"), ("IdentityBindings", "Version") })
+                ("IdentityBindings", "IsActive"), ("IdentityBindings", "Version"),
+                ("PublicWorkspaceProfiles", "CreatorPhotoKey") })
             {
                 await using var command = new NpgsqlCommand(
                     $"SELECT has_column_privilege({QuoteLiteral(apiRole)}, {QuoteLiteral($"v3.{QuoteIdentifier(table)}")}, {QuoteLiteral(column)}, 'UPDATE')",
                     connection);
                 Assert.True((bool)(await command.ExecuteScalarAsync())!, $"Missing API UPDATE on {table}.{column}");
             }
-            await using var broad = new NpgsqlCommand($"SELECT has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"OutboxMessages\"', 'UPDATE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"IdentityBindings\"', 'UPDATE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"PasswordCredentials\"', 'DELETE')", connection);
+            await using var broad = new NpgsqlCommand($"SELECT has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"OutboxMessages\"', 'UPDATE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"IdentityBindings\"', 'UPDATE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"PasswordCredentials\"', 'DELETE'), has_table_privilege({QuoteLiteral(apiRole)}, 'v3.\"PublicWorkspaceProfiles\"', 'UPDATE'), has_column_privilege({QuoteLiteral(apiRole)}, 'v3.\"PublicWorkspaceProfiles\"', 'DisplayName', 'UPDATE')", connection);
             await using var reader = await broad.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
             Assert.False(reader.GetBoolean(0)); Assert.False(reader.GetBoolean(1)); Assert.False(reader.GetBoolean(2));
+            Assert.False(reader.GetBoolean(3)); Assert.False(reader.GetBoolean(4));
         }
 
         var clock = new ManualClock(Now);
@@ -673,7 +689,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260928213157_AlignDepositReviewAuthority",
             "20260928230108_AddCreatorNumbers",
             "20260929022846_BindUgcSaleAssignments",
-            "20260929203557_AddUgcPlatformCapacities"
+            "20260929203557_AddUgcPlatformCapacities",
+            "20260930031549_AddCreatorProfilePhotos"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='v3' AND c.relkind='S' AND c.relname='creator_number_seq'";
@@ -770,7 +787,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(25L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(26L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

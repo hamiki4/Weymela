@@ -10,6 +10,7 @@ import {
   ActionLink,
   Badge,
   Button,
+  CreatorAvatar,
   Empty,
   Field,
   Notice,
@@ -74,6 +75,8 @@ function ProductArrangementChoice({ value, onChange, name = "product-arrangement
 
 function BusinessUgcCard({ item, wallet, onChanged }: { item: UgcCard; wallet: Wallet | null; onChanged: () => void }) {
   const action = useAction();
+  const [creatorDetail, setCreatorDetail] = useState<UgcDetail | null>(null);
+  const [creatorError, setCreatorError] = useState("");
   const [arrangement, setArrangement] = useState<BusinessUgcForm["productArrangement"]>("");
   const arrangementReady = item.productProvided !== item.creatorMustPurchase;
   const required = (item.requiredFunding ?? 0) + (item.customerOfferFundedAllocation ?? 0);
@@ -91,6 +94,34 @@ function BusinessUgcCard({ item, wallet, onChanged }: { item: UgcCard; wallet: W
       {item.platformCapacities?.length ? <PlatformOccupancy slots={item.platformCapacities} />
         : <PlatformList platforms={item.platformRequirements} />}
       {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && item.customerOfferFundedAllocation !== undefined && <p className="fine-print">Customer discount: {amount(item.customerDiscountPercent)}% · Discount funding: {amount(item.customerOfferFundedAllocation)}.</p>}
+      {item.status !== "Draft" && <>
+        <Button variant="secondary" onClick={() => {
+          if (creatorDetail) { setCreatorDetail(null); return; }
+          setCreatorError("");
+          void request<UgcDetail>(`/business/ugc/${item.id}`).then(setCreatorDetail)
+            .catch(error => setCreatorError(error instanceof Error ? error.message : "Creator requests are unavailable."));
+        }}>{creatorDetail ? "Hide Creators" : "Creator requests & assignments"}</Button>
+        {creatorError && <Notice error>{creatorError}</Notice>}
+        {creatorDetail && <div className="business-ugc-creator-list">
+          <h4>Creator requests</h4>
+          {creatorDetail.requests.length ? creatorDetail.requests.map(row => <div className="business-ugc-creator-row" key={row.id}>
+            <CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} />
+            <div><strong>{row.creator}</strong><small>{row.creatorNumber != null ? `Creator #${row.creatorNumber}` : "Creator"}</small></div>
+            <Badge status={row.status} />
+            {row.status === "Pending" && <div className="actions"><Button disabled={action.busy} onClick={() => void action.run(async key => {
+              await post(`/business/ugc/requests/${row.id}/approve`, { reason: null }, key);
+              setCreatorDetail(await request<UgcDetail>(`/business/ugc/${item.id}`)); onChanged();
+            })}>Approve</Button><Button variant="quiet" disabled={action.busy} onClick={() => void action.run(async key => {
+              await post(`/business/ugc/requests/${row.id}/reject`, { reason: null }, key);
+              setCreatorDetail(await request<UgcDetail>(`/business/ugc/${item.id}`)); onChanged();
+            })}>Reject</Button></div>}
+          </div>) : <p className="muted">No Creator requests yet.</p>}
+          {!!creatorDetail.assignments.length && <><h4>Approved Creators</h4>{creatorDetail.assignments.map(row => <div className="business-ugc-creator-row" key={row.id}>
+            <CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} />
+            <div><strong>{row.creator}</strong><small>{row.creatorNumber != null ? `Creator #${row.creatorNumber}` : "Creator"}</small></div><Badge status={row.status} />
+          </div>)}</>}
+        </div>}
+      </>}
       {item.status === "Draft" && <>
         {!arrangementReady && <div className="ugc-draft-arrangement"><ProductArrangementChoice name={`product-arrangement-${item.id}`} value={arrangement} onChange={setArrangement} /><Button variant="secondary" disabled={!arrangement || action.busy} onClick={() => void action.run(async (key) => {
           const detail = await request<UgcDetail>(`/business/ugc/${item.id}`);

@@ -122,6 +122,7 @@ CREATE TEMP TABLE _v3_expected_update_columns (
     PRIMARY KEY (role_kind, schema_name, table_name, column_name)
 ) ON COMMIT DROP;
 INSERT INTO _v3_expected_update_columns VALUES
+    ('api', 'v3', 'PublicWorkspaceProfiles', 'CreatorPhotoKey'),
     ('api', 'v3', 'IdentityBindings', 'IsActive'),
     ('api', 'v3', 'IdentityBindings', 'Version'),
     ('api', 'v3', 'OutboxMessages', 'ProcessedAtUtc'),

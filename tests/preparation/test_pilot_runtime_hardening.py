@@ -209,16 +209,18 @@ class PilotHostMetadataTests(unittest.TestCase):
         self.certificate = root / 'cookie.pfx'
         self.keys = root / 'keys'
         self.receipts = root / 'receipts'
+        self.photos = root / 'creator-photos'
         self.firebase.touch(mode=0o400)
         self.certificate.touch(mode=0o400)
         self.keys.mkdir(mode=0o700)
         self.receipts.mkdir(mode=0o700)
+        self.photos.mkdir(mode=0o700)
         self.uid, self.gid = os.geteuid(), os.getegid()
 
     def validate(self, uid=None, gid=None):
         return runtime.validate_host_metadata(
             self.firebase, self.certificate, self.keys,
-            self.uid if uid is None else uid, self.gid if gid is None else gid, self.receipts)
+            self.uid if uid is None else uid, self.gid if gid is None else gid, self.receipts, self.photos)
 
     def test_valid_metadata_uses_lstat_without_reading_secret_contents(self):
         with (

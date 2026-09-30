@@ -19,6 +19,7 @@ using Weymela.Api.Auth;
 using Weymela.Api.Endpoints;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Persistence.Records;
 
 // This executable owns its one disposable database/container. It never accepts an external connection string.
 await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
@@ -26,6 +27,9 @@ await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
     .WithCreateParameterModifier(p=>{foreach(var binding in p.HostConfig.PortBindings.Values.SelectMany(x=>x))binding.HostIP="127.0.0.1";}).Build();
 await postgres.StartAsync();
 var root=Path.GetFullPath(Environment.GetEnvironmentVariable("V3_SOURCE_ROOT")??Directory.GetCurrentDirectory());
+var creatorPhotoDirectory = Directory.CreateTempSubdirectory("v3-browser-creator-photos-");
+if (OperatingSystem.IsLinux()) File.SetUnixFileMode(creatorPhotoDirectory.FullName,
+    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 var key=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 var testBuildRevision=Environment.GetEnvironmentVariable("V3_TEST_BUILD_REVISION")??"local";
 await using var app=ApiHost.Build(["--environment","Development"],builder=>
@@ -35,7 +39,8 @@ await using var app=ApiHost.Build(["--environment","Development"],builder=>
     builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>
     {
         ["ConnectionStrings:WeymelaV3"]=postgres.GetConnectionString(),["V3:EnableDevelopmentIdentity"]="true",
-        ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:Auth:PinPepper"]=Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20",["V3:TestBuildRevision"]=testBuildRevision
+        ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:Auth:PinPepper"]=Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20",["V3:TestBuildRevision"]=testBuildRevision,
+        ["V3:CreatorPhotos:Directory"]=creatorPhotoDirectory.FullName
     });
     builder.Services.AddSingleton<IEmailCodeDelivery, BrowserEmailCodeDelivery>();
     builder.Services.AddScoped<IFirebaseCustomTokenIssuer, BrowserFirebaseCustomTokenIssuer>();
@@ -47,6 +52,12 @@ await using(var scope=app.Services.CreateAsyncScope())
 {
     var db=scope.ServiceProvider.GetRequiredService<WeymelaDbContext>();await db.Database.MigrateAsync();
     await DevelopmentWorkspaceSeed.SeedAsync(db,scope.ServiceProvider.GetRequiredService<DevelopmentDirectory>(),scope.ServiceProvider.GetRequiredService<DevelopmentViewProvider>(),TimeProvider.System);
+    if (!await db.PublicWorkspaceProfiles.AnyAsync(x => x.Role == ActorRole.Creator && x.SubjectId == DevelopmentDirectory.Id(300)))
+    {
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = DevelopmentDirectory.Id(300), Role = ActorRole.Creator,
+            DisplayName = "Bella", PublicId = "CR-BROWSER-PHOTO", Region = "Addis Ababa", Category = "Food" });
+        await db.SaveChangesAsync();
+    }
     await BrowserFixtureSeed.EnsureManualCheckoutCustomerAsync(db);
 }
 app.MapGet("/__test/email-code", (string identifier) =>
@@ -147,6 +158,7 @@ if(!OperatingSystem.IsWindows())File.SetUnixFileMode(control,UnixFileMode.UserRe
 Console.WriteLine("Isolated V3 browser host ready. Control file: .artifacts/browser-host.json");
 await app.WaitForShutdownAsync();
 await worker;
+creatorPhotoDirectory.Delete(recursive: true);
 
 static async Task<OfferQrSession?> FindQrAsync(string token, WeymelaDbContext db, CancellationToken ct)
 {

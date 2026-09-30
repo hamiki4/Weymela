@@ -47,6 +47,8 @@ describe("full profile page", () => {
     expect(screen.queryByText(base.publicId)).not.toBeInTheDocument();
     expect(screen.queryByText("Public ID")).not.toBeInTheDocument();
     expect(screen.getByText("Creator ID 7205")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add photo" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit creator id/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /creator id/i })).not.toBeInTheDocument();
     for (const platform of ["tiktok", "youtube", "instagram", "facebook"])
@@ -68,6 +70,25 @@ describe("full profile page", () => {
     expect(screen.queryByText("BU-100")).not.toBeInTheDocument();
     expect(screen.queryByText("Creator ID 7205")).not.toBeInTheDocument();
     expect(screen.queryByText("Public ID")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add photo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change photo" })).not.toBeInTheDocument();
+  });
+
+  it("shows initials when a referenced Creator photo cannot be retrieved", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/profile") return Response.json({ ...base, role: "Creator", hasCreatorPhoto: true });
+      if (path === "/creator/social-accounts") return Response.json([]);
+      if (path === "/creator/photo") return new Response(null, { status: 404 });
+      return Response.json({}, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<MemoryRouter><ProfilePage /></MemoryRouter>);
+    const avatar = await screen.findByLabelText("Bella profile photo");
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/creator/photo", expect.any(Object)));
+    expect(avatar).toHaveTextContent("B");
+    expect(avatar.querySelector("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change photo" })).toBeVisible();
   });
 
   it("adds, views, edits, and removes the Creator's own URL through the small dialog", async () => {

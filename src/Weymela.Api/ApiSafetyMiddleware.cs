@@ -44,7 +44,10 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 if(!options.FinancialWritesActive(DateTime.UtcNow)&&EndpointSecurity.Financial(context)){await Error(context,503,"FinancialWritesPaused","Financial actions are currently paused. No funds have moved.");return;}
                 var receiptUpload=context.Request.Path.Equals("/api/business/deposit-requests",StringComparison.OrdinalIgnoreCase)
                     && HttpMethods.IsPost(context.Request.Method);
-                var limit=receiptUpload?RuntimeOptions.ReceiptRequestBytes:RuntimeOptions.RequestBytes;
+                var photoUpload=context.Request.Path.Equals("/api/creator/photo",StringComparison.OrdinalIgnoreCase)
+                    && HttpMethods.IsPost(context.Request.Method);
+                var fileUpload=receiptUpload||photoUpload;
+                var limit=fileUpload?RuntimeOptions.ReceiptRequestBytes:RuntimeOptions.RequestBytes;
                 if(context.Request.ContentLength>limit){await Error(context,413,"RequestTooLarge","This request is too large.");return;}
                 // Bound unknown-length/chunked bodies too, including non-Kestrel test hosts. This remains in memory, never on disk.
                 if(context.Request.ContentLength is null)
@@ -60,8 +63,8 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 if(context.Request.ContentLength>0||context.Request.Headers.TransferEncoding.Count>0)
                 {
                     var media=context.Request.ContentType?.Split(';')[0].Trim();
-                    if(receiptUpload?media!="multipart/form-data":media!="application/json")
-                    {await Error(context,415,"UnsupportedContentType",receiptUpload?"Upload an amount and JPEG or PNG receipt.":"Use a JSON request.");return;}
+                    if(fileUpload?media!="multipart/form-data":media!="application/json")
+                    {await Error(context,415,"UnsupportedContentType",fileUpload?"Choose a JPEG or PNG image.":"Use a JSON request.");return;}
                 }
             }
         }

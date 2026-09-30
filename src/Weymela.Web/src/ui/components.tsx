@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
-import { ApiError } from "../api/client";
+import { ApiError, privateImage } from "../api/client";
 import type { Activity, CreatorCard } from "../api/types";
 import { amount, count, dateTime, safeExternal, statusLabel } from "./format";
 import { Icon } from "./Icon";
@@ -358,32 +358,48 @@ export function Dialog({
     </dialog>
   );
 }
+export function CreatorAvatar({ name, path, large = false, revision = 0 }: { name: string; path?: string; large?: boolean; revision?: number }) {
+  const [image, setImage] = useState<string | null>(null);
+  useEffect(() => {
+    setImage(null);
+    if (!path) return;
+    const abort = new AbortController();
+    let objectUrl: string | null = null;
+    void privateImage(path, abort.signal).then(url => { objectUrl = url; if (!abort.signal.aborted) setImage(url); else URL.revokeObjectURL(url); })
+      .catch(() => { if (!abort.signal.aborted) setImage(null); });
+    return () => { abort.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [path, revision]);
+  return <span className={large ? "profile-avatar creator-photo-avatar" : "avatar creator-photo-avatar"} aria-label={`${name} profile photo`}>
+    {image ? <img src={image} alt="" onError={() => setImage(null)} /> : name.trim().slice(0, 1).toUpperCase()}
+  </span>;
+}
 export function Person({
   person,
   detail = false,
+  photo = false,
 }: {
   person: CreatorCard;
   detail?: boolean;
+  photo?: boolean;
 }) {
   return (
     <div className="person">
-      <span className="avatar" aria-hidden="true">
-        {person.displayName.slice(0, 1)}
-      </span>
+      {photo ? <CreatorAvatar name={person.displayName} path={`/business/creator-photos/${person.id}`} />
+        : <span className="avatar" aria-hidden="true">{person.displayName.slice(0, 1)}</span>}
       <div>
         <strong>{person.displayName}</strong>
         <small>
-          {person.publicId}
+          {photo && person.creatorNumber != null ? `Creator #${person.creatorNumber}` : person.publicId}
           {detail && ` · ${person.category}`}
         </small>
       </div>
     </div>
   );
 }
-export function CreatorProfile({ person }: { person: CreatorCard }) {
+export function CreatorProfile({ person, photo = false }: { person: CreatorCard; photo?: boolean }) {
   return (
     <div className="profile">
-      <Person person={person} detail />
+      <Person person={person} detail photo={photo} />
       <div className="mini-metrics">
         <div>
           <span>Verified followers</span>

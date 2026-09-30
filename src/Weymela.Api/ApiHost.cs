@@ -49,6 +49,7 @@ public static class ApiHost
         builder.Services.AddScoped<UgcService>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddSingleton<PrivateReceiptStore>();
+        builder.Services.AddSingleton<CreatorPhotoStore>();builder.Services.AddScoped<CreatorPhotoService>();
         builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();builder.Services.AddScoped<DeviceAccessService>();builder.Services.AddScoped<DevicePinRecoveryService>();
         builder.Services.AddScoped<ProductIntegrationService>();
         builder.Services.AddScoped<AdminAccountService>();
@@ -126,7 +127,7 @@ public static class ApiHost
         });
         app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapCreatorPhotoEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

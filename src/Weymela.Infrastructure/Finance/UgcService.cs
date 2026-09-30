@@ -516,8 +516,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var requestRows = await db.UgcCreatorRequests.AsNoTracking().Where(x => x.UgcOpportunityId == id).OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
         if (isCreator) requestRows = requestRows.Where(x => x.CreatorId == actor.CreatorId).ToList();
         var creatorIds = requestRows.Select(x => x.CreatorId).Distinct().ToArray();
-        var creatorNames = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Creator && creatorIds.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
-        var requests = requestRows.Select(x => new UgcRequestView(x.Id, id, x.CreatorId, creatorNames.GetValueOrDefault(x.CreatorId, "Creator"), x.Status.ToString(), x.RequestedAtUtc, x.RejectionReason)).ToArray();
+        var creatorProfiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Creator && creatorIds.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, ct);
+        var requests = requestRows.Select(x => new UgcRequestView(x.Id, id, x.CreatorId, creatorProfiles.GetValueOrDefault(x.CreatorId)?.DisplayName ?? "Creator", x.Status.ToString(), x.RequestedAtUtc, x.RejectionReason, creatorProfiles.GetValueOrDefault(x.CreatorId)?.CreatorNumber)).ToArray();
         var assignmentRows = await db.UgcAssignments.AsNoTracking().Where(x => x.UgcOpportunityId == id && (!isCreator || x.CreatorId == actor.CreatorId)).ToListAsync(ct);
         var assignments = await AssignmentViews(assignmentRows, ct);
         var revisions = await db.UgcRevisions.AsNoTracking().Where(x => x.UgcOpportunityId == id)
@@ -575,7 +575,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 x.CreatorPayment.Amount, x.Status.ToString(), x.AcceptedRevisionNumber, x.RevisionAcceptanceRequired,
                 opportunity.DueDateUtc, opportunity.Instructions, ParseResources(opportunity.ResourcesJson), opportunity.Location,
                 PostingRequirements(opportunity).Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(),
-                submission?.Feedback, submission?.SubmissionUrl, opportunity.ProductProvided, opportunity.CreatorMustPurchase);
+                submission?.Feedback, submission?.SubmissionUrl, opportunity.ProductProvided, opportunity.CreatorMustPurchase,
+                profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.CreatorNumber);
         }).ToArray();
     }
 

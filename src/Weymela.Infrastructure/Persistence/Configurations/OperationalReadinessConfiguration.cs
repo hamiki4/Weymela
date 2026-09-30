@@ -21,12 +21,14 @@ internal static class OperationalReadinessConfiguration
             t.HasCheckConstraint("CK_PublicProfile_LongitudeRange", "\"Longitude\" IS NULL OR \"Longitude\" BETWEEN -180 AND 180");
             t.HasCheckConstraint("CK_PublicProfile_CoordinatesPair", "(\"Latitude\" IS NULL AND \"Longitude\" IS NULL) OR (\"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL)");
             t.HasCheckConstraint("CK_PublicProfile_CreatorNumber", "(\"Role\"='Creator' AND \"CreatorNumber\" IS NOT NULL AND \"CreatorNumber\" >= 1000) OR (\"Role\"<>'Creator' AND \"CreatorNumber\" IS NULL)");
+            t.HasCheckConstraint("CK_PublicProfile_CreatorPhotoKey", "\"CreatorPhotoKey\" IS NULL OR (\"Role\"='Creator' AND \"CreatorPhotoKey\" ~ '^p_[0-9a-f]{64}$')");
         });
         profile.Property(x => x.CreatorNumber).HasDefaultValueSql("NULL").ValueGeneratedOnAdd();
         profile.HasIndex(x => x.CreatorNumber).IsUnique().HasFilter("\"CreatorNumber\" IS NOT NULL");
         profile.Property(x => x.DisplayName).HasMaxLength(120); profile.Property(x => x.PublicId).HasMaxLength(80);
         profile.Property(x => x.Region).HasMaxLength(80); profile.Property(x => x.Category).HasMaxLength(80);
         profile.Property(x => x.PortfolioUrl).HasMaxLength(500); profile.Property(x => x.DirectionsUrl).HasMaxLength(500);
+        profile.Property(x => x.CreatorPhotoKey).HasMaxLength(66);
         profile.Property(x => x.Latitude).HasPrecision(9, 6); profile.Property(x => x.Longitude).HasPrecision(9, 6);
         profile.HasIndex(x => new { x.Role, x.PublicId }).IsUnique();
 

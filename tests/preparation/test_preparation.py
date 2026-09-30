@@ -90,10 +90,10 @@ class RepositoryGateTests(unittest.TestCase):
                                 'FinancialConfigurationVersions'):
             self.assertNotIn(f'v3."{forbidden_table}"', sql)
 
-    def test_source_migration_order_is_exactly_approved_through_ugc_capacity(self):
+    def test_source_migration_order_includes_approved_creator_photo_reference(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -200,8 +200,11 @@ class ComposeIsolationTests(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory(prefix='v3-compose-fixture-')
         root = pathlib.Path(cls.directory.name)
         (root / 'receipts').mkdir(mode=0o700)
+        (root / 'creator-photos').mkdir(mode=0o700)
         cls.old_receipt_host, cls.old_receipt_owner = preflight.RECEIPT_HOST, preflight.RECEIPT_OWNER
+        cls.old_photo_host = preflight.CREATOR_PHOTO_HOST
         preflight.RECEIPT_HOST = root / 'receipts'
+        preflight.CREATOR_PHOTO_HOST = root / 'creator-photos'
         preflight.RECEIPT_OWNER = (os.geteuid(), os.getegid())
         code_secret = base64.b64encode(hashlib.sha512(b'compose-code-secret').digest()).decode('ascii')
         pin_secret = base64.b64encode(hashlib.sha512(b'compose-pin-secret').digest()).decode('ascii')
@@ -257,6 +260,7 @@ class ComposeIsolationTests(unittest.TestCase):
                     'V3_POSTGRES_PASSWORD_FILE': str(root/'placeholder'), 'V3_COOKIE_CERTIFICATE_FILE': str(cookie),
                     'V3_FIREBASE_ADMIN_CREDENTIALS_FILE': str(firebase),
                     'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_RECEIPT_STORAGE_DIRECTORY': str(root/'receipts'),
+                    'V3_CREATOR_PHOTO_STORAGE_DIRECTORY': str(root/'creator-photos'),
                     'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
         cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
         # Some Compose releases omit explicit false values from rendered JSON.
@@ -266,10 +270,15 @@ class ComposeIsolationTests(unittest.TestCase):
                       if item.get('target') == '/run/weymela-v3/receipts']
             if len(mounts) == 1 and mounts[0].get('bind', {}).get('create_host_path') is None:
                 mounts[0].setdefault('bind', {})['create_host_path'] = False
+        photos = [item for item in cls.config['services']['api']['volumes']
+                  if item.get('target') == '/run/weymela-v3/creator-photos']
+        if len(photos) == 1 and photos[0].get('bind', {}).get('create_host_path') is None:
+            photos[0].setdefault('bind', {})['create_host_path'] = False
 
     @classmethod
     def tearDownClass(cls):
         preflight.RECEIPT_HOST, preflight.RECEIPT_OWNER = cls.old_receipt_host, cls.old_receipt_owner
+        preflight.CREATOR_PHOTO_HOST = cls.old_photo_host
         cls.directory.cleanup()
 
     def test_compose_is_image_only_and_digest_pinned(self):
@@ -320,11 +329,16 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertEqual(receipt_mount['type'], 'bind')
         self.assertFalse(receipt_mount.get('read_only', False))
         self.assertFalse(receipt_mount['bind']['create_host_path'])
+        photo_mount = next(item for item in api['volumes'] if item['target'] == '/run/weymela-v3/creator-photos')
+        self.assertEqual(photo_mount['type'], 'bind')
+        self.assertFalse(photo_mount.get('read_only', False))
+        self.assertFalse(photo_mount['bind']['create_host_path'])
         for part in ('worker', 'web'):
             service = self.config['services'][part]
             self.assertNotIn('v3-cookie-protection.pfx', {item['source'] for item in service.get('secrets', [])})
             self.assertNotIn('/run/weymela-v3/keys', {item.get('target') for item in service.get('volumes', [])})
             self.assertNotIn('/run/weymela-v3/receipts', {item.get('target') for item in service.get('volumes', [])})
+            self.assertNotIn('/run/weymela-v3/creator-photos', {item.get('target') for item in service.get('volumes', [])})
 
     def test_firebase_admin_and_resend_secrets_are_api_only(self):
         api = self.config['services']['api']
@@ -399,6 +413,7 @@ class ComposeIsolationTests(unittest.TestCase):
         config['services']['api']['volumes'] = [v for v in config['services']['api']['volumes']
                                               if v['target'] != '/run/weymela-v3/receipts']
         self.assertTrue(preflight.validate(config, self.manifest()))
+
         for part in ('worker', 'web'):
             config = copy.deepcopy(self.config)
             receipt = next(v for v in config['services']['api']['volumes'] if v['target'] == '/run/weymela-v3/receipts')
@@ -414,6 +429,20 @@ class ComposeIsolationTests(unittest.TestCase):
         receipt['bind']['create_host_path'] = True
         self.assertIn('api: private persistent receipt bind mount is required.',
                       preflight.validate(config, self.manifest()))
+
+    def test_preflight_rejects_missing_or_public_creator_photo_mount(self):
+        config = copy.deepcopy(self.config)
+        config['services']['api']['volumes'] = [v for v in config['services']['api']['volumes']
+                                               if v['target'] != '/run/weymela-v3/creator-photos']
+        self.assertIn('api: private persistent Creator photo bind mount is required.',
+                      preflight.validate(config, self.manifest()))
+        for part in ('worker', 'web'):
+            config = copy.deepcopy(self.config)
+            photo = next(v for v in config['services']['api']['volumes']
+                         if v['target'] == '/run/weymela-v3/creator-photos')
+            config['services'][part]['volumes'] = [photo]
+            self.assertIn(f'{part}: private Creator photo storage is API-only.',
+                          preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_disabled_or_mismatched_authentication(self):
         for key, value in (

@@ -91,6 +91,7 @@ export interface CreatorCard {
   verifiedViews: number;
   socialVerified: boolean;
   portfolioUrl: string | null;
+  creatorNumber?: number | null;
 }
 export interface Activity {
   id: string;
@@ -571,6 +572,7 @@ export interface UgcAssignment {
   business: string;
   creatorId: string;
   creator: string;
+  creatorNumber?: number | null;
   creatorPayment: number;
   status: string;
   acceptedRevision: number;
@@ -590,6 +592,7 @@ export interface UgcRequest {
   opportunityId: string;
   creatorId: string;
   creator: string;
+  creatorNumber?: number | null;
   status: string;
   requestedAtUtc: string;
   rejectionReason: string | null;

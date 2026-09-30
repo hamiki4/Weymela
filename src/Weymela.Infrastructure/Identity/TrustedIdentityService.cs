@@ -159,7 +159,7 @@ public sealed class PersistentWorkspaceDirectory(WeymelaDbContext db) : IWorkspa
         return new(p.DisplayName, SafeUrl(p.DirectionsUrl), p.Latitude, p.Longitude);
     }
     public async Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct)
-    { var p = await Profile(id, ActorRole.Creator, ct); return new(id, p.DisplayName, p.PublicId, p.Region, p.Category, p.VerifiedFollowers, p.VerifiedViews, p.SocialVerified, SafeUrl(p.PortfolioUrl)); }
+    { var p = await Profile(id, ActorRole.Creator, ct); return new(id, p.DisplayName, p.PublicId, p.Region, p.Category, p.VerifiedFollowers, p.VerifiedViews, p.SocialVerified, SafeUrl(p.PortfolioUrl), p.CreatorNumber); }
     public async Task<CustomerCard> CustomerCardAsync(Guid id, CancellationToken ct)
     { var p = await Profile(id, ActorRole.Customer, ct); return new(id, p.DisplayName, p.PublicId); }
     public async Task<PublicBusiness> BusinessAsync(Guid id, CancellationToken ct)

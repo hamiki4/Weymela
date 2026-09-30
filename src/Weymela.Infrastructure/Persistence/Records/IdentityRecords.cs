@@ -30,6 +30,7 @@ public sealed class PublicWorkspaceProfile
     public long VerifiedViews { get; init; }
     public bool SocialVerified { get; init; }
     public string? PortfolioUrl { get; init; }
+    public string? CreatorPhotoKey { get; set; }
     public string? DirectionsUrl { get; init; }
     public decimal? Latitude { get; init; }
     public decimal? Longitude { get; init; }

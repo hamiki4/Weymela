@@ -10,7 +10,7 @@ public sealed record CreatorRequestCard(Guid Id,Guid CampaignId,string Campaign,
 public sealed record BusinessCard(Guid Id, string DisplayName, string Region, string? DirectionsUrl);
 public sealed record CustomerCard(Guid Id, string DisplayName, string PublicId);
 public sealed record CreatorCard(Guid Id, string DisplayName, string PublicId, string Region, string Category,
-    long VerifiedFollowers, long VerifiedViews, bool SocialVerified, string? PortfolioUrl);
+    long VerifiedFollowers, long VerifiedViews, bool SocialVerified, string? PortfolioUrl, long? CreatorNumber = null);
 public interface IWorkspaceDirectory : IPublicIdentityDirectory
 {
     Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct);
@@ -215,12 +215,12 @@ public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string T
     IReadOnlyList<UgcPlatformCapacityView>? PlatformCapacities = null,
     IReadOnlyList<UgcEligibleSocialProfile>? EligibleSocialProfiles = null);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
-    string Status, DateTime RequestedAtUtc, string? RejectionReason);
+    string Status, DateTime RequestedAtUtc, string? RejectionReason, long? CreatorNumber = null);
 public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,
     string Business, Guid CreatorId, string Creator, decimal CreatorPayment, string Status,
     int AcceptedRevision, bool RevisionAcceptanceRequired, DateTime DueDateUtc, string Instructions,
     IReadOnlyList<string> Resources, string? Location, IReadOnlyList<UgcPlatformRequirementView> PlatformRequirements,
-    string? Feedback, string? SubmissionUrl, bool ProductProvided = false, bool CreatorMustPurchase = false);
+    string? Feedback, string? SubmissionUrl, bool ProductProvided = false, bool CreatorMustPurchase = false, long? CreatorNumber = null);
 public sealed record UgcRevisionView(int RevisionNumber, bool IsMaterial, DateTime CreatedAtUtc, string SnapshotJson);
 public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOnlyList<string> Resources,
     bool ProductProvided, bool CreatorMustPurchase, string? UsageRights, int CurrentRevision,

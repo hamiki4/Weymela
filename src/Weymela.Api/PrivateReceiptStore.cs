@@ -18,7 +18,7 @@ public sealed class PrivateReceiptStore(RuntimeOptions options)
         if (options.DepositMode != "ManualApproval" || string.IsNullOrEmpty(options.ReceiptDirectory))
             throw new ApplicationFailure(FailureKind.Validation, "Receipt deposits are unavailable.");
         if (receipt.Length is < 1 or > RuntimeOptions.ReceiptBytes)
-            throw new ApplicationFailure(FailureKind.Validation, "Choose a JPEG or PNG receipt smaller than 4 MB.");
+            throw new ApplicationFailure(FailureKind.Validation, "Receipt must be 4 MB or smaller.");
         if (receipt.ContentType is not (Jpeg or Png))
             throw new ApplicationFailure(FailureKind.Validation, "Choose a JPEG or PNG receipt.");
 

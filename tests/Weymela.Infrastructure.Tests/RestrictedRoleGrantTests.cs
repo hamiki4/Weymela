@@ -93,6 +93,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var account = await ExerciseApiFlowsAsync(apiConnection, adminUserId);
         var workerSeed = await SeedWorkerFlowAsync(database, account.CreatorId, account.CreatorUserId);
         await ExerciseWorkerFlowsAsync(workerConnection, workerSeed);
+        await ExerciseAdminReportsUnderApiRoleAsync(apiConnection, adminUserId);
 
         await AssertApiDenialsAsync(apiConnection, workerConnection, apiRole, workerRole,
             new NpgsqlConnectionStringBuilder(database.ConnectionString).Username!);
@@ -103,6 +104,16 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await ExerciseOperationalRolesAsync(database, databaseName, suffix, migratorConnection,
             backupConnection, apiConnection, apiRole, workerRole, migratorRole, backupRole,
             verifyScript);
+
+        // A broader verification SELECT must be rejected even if all required columns work.
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"GRANT SELECT ON v3.\"PromotionViewVerifications\" TO {QuoteIdentifier(apiRole)}");
+        await Assert.ThrowsAsync<PostgresException>(() => ExecuteScriptAsync(database.ConnectionString,
+            verifyScript, VerifyVariables(apiRole, workerRole, migratorRole, backupRole, databaseName)));
+        await ExecuteOwnerAsync(database.ConnectionString,
+            $"REVOKE SELECT ON v3.\"PromotionViewVerifications\" FROM {QuoteIdentifier(apiRole)}");
+        await ExecuteScriptAsync(database.ConnectionString, apiScript,
+            [("api_role", apiRole), ("database_name", databaseName)]);
 
         // The verifier must reject excess access, not merely prove that required grants exist.
         await ExecuteOwnerAsync(database.ConnectionString,
@@ -917,6 +928,26 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             GRANT INSERT ("IdentifierHash")
                 ON TABLE v3."AuthIdentifiers" TO {QuoteIdentifier(workerRole)};
             """);
+    }
+
+    private static async Task ExerciseAdminReportsUnderApiRoleAsync(string connection, Guid adminUserId)
+    {
+        await using var db = new TestDatabase(connection).Open();
+        var queries = new WorkspaceQueries(db, new PersistentWorkspaceDirectory(db), TimeProvider.System);
+        var admin = new Actor(adminUserId, ActorRole.PlatformAdmin);
+        Assert.NotNull(await queries.AdminWalletsAsync(admin, default));
+        Assert.NotNull(await queries.AdminReportAsync(admin, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), default));
+        foreach (var role in new[] { ActorRole.OperationsAdmin, ActorRole.Customer, ActorRole.Creator, ActorRole.Business, ActorRole.Cashier })
+        {
+            await Assert.ThrowsAsync<ApplicationFailure>(() => queries.AdminWalletsAsync(new Actor(Guid.NewGuid(), role), default));
+            await Assert.ThrowsAsync<ApplicationFailure>(() => queries.AdminReportAsync(new Actor(Guid.NewGuid(), role), new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), default));
+        }
+        await AssertInsufficientPrivilegeAsync(connection, "SELECT * FROM v3.\"PromotionViewVerifications\"", "API cannot read raw verification evidence");
+        foreach (var statement in new[] { "SELECT \"ExternalContentId\" FROM v3.\"PromotionViewVerifications\"",
+            "DELETE FROM v3.\"PromotionViewVerifications\" WHERE false",
+            "UPDATE v3.\"PromotionViewVerifications\" SET \"IsAnomaly\"=true WHERE false",
+            "INSERT INTO v3.\"PromotionViewVerifications\" DEFAULT VALUES" })
+            await AssertInsufficientPrivilegeAsync(connection, statement, "Verification access remains read-only and column-scoped");
     }
 
     private static async Task ExecuteScriptAsync(

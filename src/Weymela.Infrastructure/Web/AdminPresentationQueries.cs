@@ -28,7 +28,8 @@ public sealed partial class WorkspaceQueries
             active.Contains(w.BusinessId) ? "Active" : "Inactive")).OrderBy(x => x.Business).ToArray();
         var current = promotions.Where(x => x.Status == PromotionStatus.Active).ToArray();
         var ids = current.Select(x => x.Id).ToArray();
-        var views = await db.PromotionViewVerifications.AsNoTracking().Where(x => ids.Contains(x.PromotionId) && !x.IsAnomaly && !x.IsBaseline).ToListAsync(ct);
+        var views = await db.PromotionViewVerifications.AsNoTracking().Where(x => ids.Contains(x.PromotionId) && !x.IsAnomaly && !x.IsBaseline)
+            .Select(x => new { x.PromotionId, x.CurrentVerifiedViews, x.PreviousVerifiedViews }).ToListAsync(ct);
         var sales = await db.VerifiedSales.AsNoTracking().Where(x => ids.Contains(x.PromotionId) && x.Status == VerifiedSaleStatus.Recorded).ToListAsync(ct);
         var promotionRows = current.Select(x => new AdminPromotionWallet(x.Id, names.GetValueOrDefault(x.BusinessId, "Business"), x.Title,
             PromotionTypeLabel(x.PromotionType), x.TotalBudget.Amount, x.UsedBudget.Amount, x.RemainingBudget.Amount,
@@ -77,7 +78,8 @@ public sealed partial class WorkspaceQueries
         var offers = await db.UgcCustomerOffers.AsNoTracking().ToListAsync(ct);
         var assignments = await db.UgcAssignments.AsNoTracking().ToListAsync(ct);
         var assignmentUgc = assignments.ToDictionary(x => x.Id, x => x.UgcOpportunityId);
-        var views = await db.PromotionViewVerifications.AsNoTracking().Where(x => x.VerifiedAtUtc >= start && x.VerifiedAtUtc < end && !x.IsAnomaly && !x.IsBaseline).ToListAsync(ct);
+        var views = await db.PromotionViewVerifications.AsNoTracking().Where(x => x.VerifiedAtUtc >= start && x.VerifiedAtUtc < end && !x.IsAnomaly && !x.IsBaseline)
+            .Select(x => new { x.PromotionId, x.CurrentVerifiedViews, x.PreviousVerifiedViews }).ToListAsync(ct);
         var sales = await db.VerifiedSales.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end && x.Status == VerifiedSaleStatus.Recorded).ToListAsync(ct);
         var ugcSales = await db.UgcCustomerOfferSales.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);
         var earnings = await db.CreatorEarningEntries.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);

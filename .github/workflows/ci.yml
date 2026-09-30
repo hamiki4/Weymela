@@ -174,6 +174,8 @@ jobs:
       - name: All rendered E2E and responsive/security flows
         timeout-minutes: 60
         run: bash tools/ci/browser-tests.sh
+      - name: Image upload transport through Web and edge proxies
+        run: python3 tools/ci/test-image-upload-proxy.py
       - name: Safe browser evidence only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

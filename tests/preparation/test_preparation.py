@@ -134,7 +134,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('https://securetoken.googleapis.com', headers)
         self.assertNotIn('recaptcha', headers.lower())
         config = (ROOT / 'docker/web/nginx.conf').read_text()
-        self.assertIn('proxy_cache_bypass 1', config)
+        self.assertIn('proxy_cache_bypass 1', (ROOT / 'docker/web/api-proxy.conf').read_text())
         self.assertIn("add_header Cache-Control 'no-cache'", config)
         self.assertNotIn('$request_uri', config)
         self.assertNotIn('$http_authorization', config)

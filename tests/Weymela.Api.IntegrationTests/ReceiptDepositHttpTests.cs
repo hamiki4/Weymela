@@ -1,4 +1,6 @@
 using System.Net;
+using System.Buffers.Binary;
+using Weymela.Api;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -17,6 +19,39 @@ namespace Weymela.Api.IntegrationTests;
 public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
 {
     private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=");
+
+    // Valid PNG with a CRC-checked ancillary chunk; exact byte boundaries without large image dimensions.
+    private static byte[] SizedPng(int size)
+    {
+        var payload = new byte[size - Png.Length - 12];
+        Array.Fill(payload, (byte)'x');
+        "Comment\0"u8.CopyTo(payload);
+        var chunk = new byte[payload.Length + 12];
+        BinaryPrimitives.WriteInt32BigEndian(chunk, payload.Length);
+        "tEXt"u8.CopyTo(chunk.AsSpan(4));
+        payload.CopyTo(chunk, 8);
+        uint crc = 0xffffffff;
+        foreach (var value in chunk.AsSpan(4, payload.Length + 4))
+        {
+            crc ^= value;
+            for (var bit = 0; bit < 8; bit++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xedb88320u : crc >> 1;
+        }
+        BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(chunk.Length - 4), ~crc);
+        return [.. Png[..^12], .. chunk, .. Png[^12..]];
+    }
+
+    [Theory]
+    [InlineData(65752)]
+    [InlineData(4 * 1024 * 1024)]
+    public async Task Valid_receipt_transport_boundaries_are_accepted_by_api(int size)
+    {
+        var bytes = SizedPng(size);
+        Assert.True(PrivateReceiptStore.ValidImage(bytes, "image/png"));
+        var (host, directory) = await Host(fixture);
+        try { await using (host) { using var business = await host.Login("business");
+            Assert.Equal(HttpStatusCode.OK, (await Submit(business, bytes: bytes)).StatusCode); } }
+        finally { Directory.Delete(directory, true); }
+    }
 
     private static async Task<(ApiFixture Host, string Directory)> Host(PostgresFixture fixture)
     {
@@ -47,6 +82,22 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
         return (await db.BusinessWallets.AsNoTracking().SingleAsync(x => x.BusinessId == Weymela.Infrastructure.Development.DevelopmentDirectory.Id(100))).AvailableBalance.Amount;
     }
 
+    [Fact]
+    public async Task Jpeg_receipt_is_accepted_and_mislabeled_png_is_rejected()
+    {
+        var (host, directory) = await Host(fixture);
+        try
+        {
+            await using (host)
+            {
+                using var business = await host.Login("business");
+                Assert.Equal(HttpStatusCode.OK, (await Submit(business, bytes: CreatorPhotoHttpTests.Jpeg, media: "image/jpeg")).StatusCode);
+                Assert.Equal(HttpStatusCode.BadRequest, (await Submit(business, media: "image/jpeg")).StatusCode);
+            }
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     [Fact] public async Task Frozen_financial_writes_reject_receipt_before_storage_with_typed_response()
     {
         var directory = Path.Combine(Path.GetTempPath(), "weymela-frozen-receipt-" + Guid.NewGuid().ToString("N"));
@@ -57,7 +108,7 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
                 new Dictionary<string, string?> { ["V3:Deposits:Mode"] = "ManualApproval",
                     ["V3:Deposits:ReceiptDirectory"] = directory, ["V3:FinancialWritesEnabled"] = "false" }));
             using var business = await host.Login("business");
-            var response = await Submit(business);
+            var response = await Submit(business, bytes: SizedPng(65752));
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
             Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
             var error = await response.Content.ReadFromJsonAsync<JsonNode>();
@@ -127,7 +178,9 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
                 var corruptPng = Png.ToArray(); corruptPng[20] ^= 0x01;
                 Assert.Equal(HttpStatusCode.BadRequest, (await Submit(business, bytes: corruptPng)).StatusCode);
                 Assert.Equal(HttpStatusCode.BadRequest, (await Submit(business, media: "image/heic")).StatusCode);
-                Assert.Equal(HttpStatusCode.BadRequest, (await Submit(business, bytes: new byte[4 * 1024 * 1024 + 1])).StatusCode);
+                var oversized = await Submit(business, bytes: SizedPng(4 * 1024 * 1024 + 1));
+                Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+                Assert.Contains("Receipt must be 4 MB or smaller.", await oversized.Content.ReadAsStringAsync());
                 var valid = await Submit(business);
                 Assert.Equal(HttpStatusCode.OK, valid.StatusCode);
                 var id = (await valid.Content.ReadFromJsonAsync<JsonNode>())!["id"]!.GetValue<Guid>();

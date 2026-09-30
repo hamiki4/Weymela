@@ -104,3 +104,24 @@ test("frozen receipt submission shows the typed pause without claiming a deposit
   await expect(page.getByText("Your payment is waiting for approval.")).toHaveCount(0);
   expect(posts).toBe(1);
 });
+
+
+test("receipt larger than 4 MiB is rejected locally without a POST", async ({ page, context }) => {
+  await page.route("**/api/session", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), developmentMode: false } });
+  });
+  await page.route("**/api/account/security", route => route.fulfill({ json: { passwordEnrolled: true, phoneEnrolled: true } }));
+  await page.route("**/api/business/deposit-method", route => route.fulfill({ json: { mode: "ManualApproval" } }));
+  let posts = 0;
+  await page.route("**/api/business/deposit-requests", route => {
+    if (route.request().method() === "POST") posts++;
+    return route.fulfill({ json: [] });
+  });
+  await login(context, "business"); await open(page, "/business/wallet");
+  await page.getByLabel("Amount", { exact: true }).fill("3000");
+  await page.getByLabel("Payment receipt").setInputFiles({ name: "large.png", mimeType: "image/png", buffer: Buffer.alloc(4 * 1024 * 1024 + 1) });
+  await expect(page.getByText("Receipt must be 4 MB or smaller.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
+  expect(posts).toBe(0);
+});

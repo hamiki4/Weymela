@@ -114,6 +114,21 @@ VALUES
     ('worker', 'v3', 'PayoutRecords', true, false, false),
     ('worker', 'v3', 'DepositRequests', true, false, false);
 
+CREATE TEMP TABLE _v3_expected_select_columns (
+    role_kind text NOT NULL,
+    schema_name name NOT NULL,
+    table_name name NOT NULL,
+    column_name name NOT NULL,
+    PRIMARY KEY (role_kind, schema_name, table_name, column_name)
+) ON COMMIT DROP;
+INSERT INTO _v3_expected_select_columns VALUES
+    ('api', 'v3', 'PromotionViewVerifications', 'PromotionId'),
+    ('api', 'v3', 'PromotionViewVerifications', 'CurrentVerifiedViews'),
+    ('api', 'v3', 'PromotionViewVerifications', 'PreviousVerifiedViews'),
+    ('api', 'v3', 'PromotionViewVerifications', 'IsAnomaly'),
+    ('api', 'v3', 'PromotionViewVerifications', 'IsBaseline'),
+    ('api', 'v3', 'PromotionViewVerifications', 'VerifiedAtUtc');
+
 CREATE TEMP TABLE _v3_expected_update_columns (
     role_kind text NOT NULL,
     schema_name name NOT NULL,
@@ -277,7 +292,10 @@ BEGIN
         LOOP
             expected_value := COALESCE((SELECT t.can_select FROM _v3_expected_tables t
                 WHERE t.role_kind = runtime.role_kind AND t.schema_name = column_row.schema_name
-                  AND t.table_name = column_row.table_name), false);
+                  AND t.table_name = column_row.table_name), false) OR EXISTS (
+                SELECT 1 FROM _v3_expected_select_columns s
+                WHERE s.role_kind = runtime.role_kind AND s.schema_name = column_row.schema_name
+                    AND s.table_name = column_row.table_name AND s.column_name = column_row.column_name);
             actual := has_column_privilege(runtime.role_name,
                 format('%I.%I', column_row.schema_name, column_row.table_name),
                 column_row.column_name, 'SELECT');

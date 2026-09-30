@@ -52,3 +52,33 @@ Existing published UGC opportunities keep their original global Creator capacity
 ## Other readiness work
 
 Live Firebase Delete Entire Account reconciliation remains a later Pilot-only test using a dedicated disposable identity. Do not delete a real user. Production Worker Docker `json-file` log rotation remains a separate change; the documented recommendation is `max-size: 10m`, `max-file: 3`. Do not modify Production in this task.
+
+## Image-upload transport correction
+
+The canonical Pilot host edge currently forwards to Web on loopback `18080` and
+has Nginx's default 1 MiB request limit. Web previously limited every request to
+32 KiB. Both layers must permit the existing API image contract: JPEG/PNG files
+up to 4 MiB, with bounded multipart overhead. The immutable Web image now allows
+5 MiB only on `/api/business/deposit-requests` and `/api/creator/photo`; ordinary
+API routes retain 32 KiB. API file validation remains authoritative at 4 MiB.
+
+At the next separately authorized Pilot deployment, back up the active canonical
+HTTPS site and install the reviewed `pilot-image-uploads.nginx.conf` snippet from
+the exact release source commit inside that server. Verify the source checksum,
+run `nginx -t`, and reload the edge only under deployment authorization. The
+snippet inherits the site's trusted forwarding headers; do not install it in
+Production or substitute the historical V2/V3 integration template. If another
+edge configuration has a `location ^~ /api/`, use exact matching upload locations
+there so it cannot shadow the approved route overrides. Do not raise global
+limits. Verify a 65,752-byte and a 4 MiB valid receipt traverse both proxies while
+financial writes are OFF and return API `FinancialWritesPaused`, plus oversized
+requests fail with a bounded JSON 413. Do not open the financial window until the
+restricted-role Admin Wallet/Reports checks also pass.
+
+Pilot already has 26 migrations after release `36675262706` (`0e710000`). For this
+correction, verify the installed database with that immutable release's packaged
+target verifier before installing the new packaged grants. Do not run the
+historical baseline-24 verifier against the installed 26-migration database, and
+do not reapply either migration. The new package still carries the unchanged
+26-migration inventory and the new target grant/verifier checksums; run its target
+verifier only after its column SELECT contract has been installed.

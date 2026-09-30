@@ -62,6 +62,23 @@ describe("Operational states", () => {
     mockApi({ "/business/deposit-method": { mode: "Disabled" } }); wrap(<DepositSubmission />);
     expect(await screen.findByText(/Deposits are not connected/)).toBeVisible(); expect(screen.queryByRole("button", { name: /Submit|Add Funds/ })).not.toBeInTheDocument();
   });
+  it("rejects receipts over 4 MiB before sending a request", async () => {
+    const api = mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);
+    await userEvent.type(screen.getByLabelText("Amount"), "3000");
+    await userEvent.upload(screen.getByLabelText("Payment receipt"), new File([new Uint8Array(4 * 1024 * 1024 + 1)], "large.png", { type: "image/png" }));
+    expect(await screen.findByText("Receipt must be 4 MB or smaller.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
+    expect(api.writes).toHaveLength(0);
+  });
+  it("maps a non-JSON proxy 413 to the receipt size message", async () => {
+    mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);
+    await screen.findByLabelText("Amount");
+    await userEvent.type(screen.getByLabelText("Amount"), "3000");
+    await userEvent.upload(screen.getByLabelText("Payment receipt"), new File(["png"], "receipt.png", { type: "image/png" }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>413</html>", { status: 413 })));
+    await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
+    expect(await screen.findByText("Receipt must be 4 MB or smaller.")).toBeVisible();
+  });
   it("submits arbitrary positive deposit for review without claiming wallet credit", async () => {
     const api = mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);
     await userEvent.type(screen.getByLabelText("Amount"), "17.23");

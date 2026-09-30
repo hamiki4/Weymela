@@ -18,6 +18,19 @@ LIBEXPAT_SHA256 = '2e56946bc495cbed9eb1ad70859a79cba9db6420016453e065a0628848b32
 LIBEXPAT_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk'
 
 
+class UploadProxyContractTests(unittest.TestCase):
+    def test_only_existing_upload_routes_receive_bounded_headroom(self):
+        web = (ROOT / 'docker/web/nginx.conf').read_text()
+        edge = (ROOT / 'docs/deployment/pilot-image-uploads.nginx.conf').read_text()
+        self.assertIn('client_max_body_size 32k;', web)
+        for text in (web, edge):
+            self.assertIn('^/api/(business/deposit-requests|creator/photo)$', text)
+            self.assertEqual(text.count('client_max_body_size 5m;'), 1)
+            self.assertNotIn('client_max_body_size 0;', text)
+            self.assertIn('"code":"RequestTooLarge"', text)
+        self.assertIn('COPY docker/web/api-proxy.conf', DOCKERFILE)
+
+
 class ShellFixture(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory(prefix='v3-web-security-test-')

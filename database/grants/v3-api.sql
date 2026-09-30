@@ -169,6 +169,11 @@ TO :"api_role";
 
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."OfferQrSessions" TO :"api_role";
 
+-- Admin Wallet/Reports read only approved view counters and their filter columns.
+GRANT SELECT ("PromotionId", "CurrentVerifiedViews", "PreviousVerifiedViews",
+    "IsAnomaly", "IsBaseline", "VerifiedAtUtc")
+ON TABLE v3."PromotionViewVerifications" TO :"api_role";
+
 GRANT SELECT ON TABLE
     v3."WorkerCheckpoints"
 TO :"api_role";

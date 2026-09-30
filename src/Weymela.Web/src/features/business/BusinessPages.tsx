@@ -67,9 +67,7 @@ export function BusinessDashboard() {
     <Resource resource={resource}>
       {(data) => (
         <>
-          <PageHeader
-            title="Home"
-          />
+          <PageHeader title="Home" compact />
           <Link className="business-balance-summary" to="/business/wallet" aria-label="Available funds, view wallet">
             <div><span>Available</span><strong>{amount(data.wallet.available)}</strong></div>
             <div><span>Total</span><strong>{amount(data.wallet.totalBalance)}</strong></div>
@@ -89,6 +87,7 @@ export function BusinessDashboard() {
               <ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink>
               <ActionLink to="/business/ugc/new" secondary icon="sparkle">Create UGC</ActionLink>
               <ActionLink to="/checkout" secondary icon="qr">Checkout / Scan QR</ActionLink>
+              <ActionLink to="/business/transactions" secondary icon="document">Transactions</ActionLink>
               <ActionLink to="/business/cashiers" secondary icon="people">Cashier Management</ActionLink>
               <ActionLink to="/business/pricing" secondary icon="settings">Pricing</ActionLink>
             </div>
@@ -132,9 +131,7 @@ export function BusinessWallet() {
   const { user } = useSession();
   return (
     <>
-      <PageHeader
-        title="Wallet"
-      />
+      <PageHeader title="Wallet" compact />
       <Resource resource={resource}>
         {(wallet) => (
           <>
@@ -484,7 +481,7 @@ export function BusinessCampaigns() {
   return (
     <>
       <PageHeader
-        title="Promotions"
+        title="Promotions" compact
         action={
           <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
             Create Promotion

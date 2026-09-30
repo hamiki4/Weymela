@@ -19,7 +19,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
     {
         // Audit and domain events can describe the same operation. Each event below has one canonical producer.
         var supported = new[] { "CreatorAppliedAudit", "CreatorApprovedAudit", "CreatorRejectedAudit", "CreatorAllocationCreated", "CreatorBudgetIncreasedAudit",
-            "PromotionFunded", "PromotionPublished", "ViewRewardEarned", "CreatorCommissionEarned", "CustomerCashbackEarned", "SaleCompleted", "CreatorBudgetExhausted", "CreatorPayoutEligible", "CustomerPayoutEligible",
+            "PromotionFunded", "PromotionPublished", "ViewRewardEarned", "CreatorCommissionEarned", "CustomerCashbackEarned", "SaleCompleted", "VerifiedSaleRecorded", "BusinessPurchaseRecorded", "CreatorBudgetExhausted", "CreatorPayoutEligible", "CustomerPayoutEligible",
             "PayoutPaid", "FinancialConfigurationEffective", "DepositSubmitted", "DepositReviewed",
             "CreatorProfileApproved", "CreatorProfileCorrectionRequested", "CreatorProfileRejected",
             "BusinessProfileApproved", "BusinessProfileCorrectionRequested", "BusinessProfileRejected",
@@ -70,6 +70,14 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan("Purchase discount recorded",
                     $"Your {data.GetProperty("PurchaseAmount").GetDecimal():0.##} ETB purchase received a {data.GetProperty("CustomerDiscount").GetDecimal():0.##} ETB discount.",
                     null, null, new NotificationAudience(ActorRole.Customer, Id("CustomerId"))) with { WorkspacePath = "transactions" };
+            case "VerifiedSaleRecorded": case "BusinessPurchaseRecorded":
+            {
+                // Older VerifiedSaleRecorded outbox envelopes predate Business notifications.
+                if (!data.TryGetProperty("BusinessId", out var business) || !data.TryGetProperty("PurchaseAmount", out var amount))
+                    return null;
+                return Plan("New sale", $"New sale — {amount.GetDecimal():0.##} ETB.", null, null,
+                    new NotificationAudience(ActorRole.Business, business.GetGuid())) with { WorkspacePath = "transactions" };
+            }
             case "CreatorBudgetExhausted":
             {
                 var allocationId=Id("AllocationId");var a = await db.CreatorAllocations.AsNoTracking().SingleAsync(x => x.Id == allocationId, ct);
@@ -179,7 +187,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
     public static string Route(NotificationPlan plan, ActorRole role) => role switch
     {
         ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.UgcId is {} au ? $"/admin/ugc/{au}" : plan.CampaignId is {} p ? $"/admin/promotions/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
-        ActorRole.Business => plan.WorkspacePath=="profiles"?"/onboarding":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/promotions/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
+        ActorRole.Business => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/business/transactions":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/promotions/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
         ActorRole.Creator => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="earnings"?"/creator/earnings":plan.UgcId is {} cu ? $"/creator/ugc/{cu}" : plan.BudgetId is {} a ? $"/creator/promotions/{a}" : "/creator/" + (plan.WorkspacePath is "requests" or "payouts" ? plan.WorkspacePath : "discover"),
         ActorRole.Customer => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/customer/transactions":"/customer/offers",
         _ => "/checkout"

@@ -418,6 +418,13 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         await using (var db = state.Database.Open())
             result = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
                 .RedeemAsync(new(cashier, qr.Token!, new Money(1000), "offer-sale"), default);
+        await using (var db = state.Database.Open())
+        {
+            var replay = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
+                .RedeemAsync(new(cashier, qr.Token!, new Money(1000), "offer-sale"), default);
+            Assert.Equal(result.SaleId, replay.SaleId);
+            Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "BusinessPurchaseRecorded").ToListAsync());
+        }
         Assert.Equal("UGC_CUSTOMER_OFFER", result.Source); Assert.Equal(950m, result.CustomerPays!.Value.Amount);
         Assert.Equal(50m, result.CustomerDiscount!.Value.Amount); Assert.Equal(80m, result.TotalBusinessCharge.Amount);
 
@@ -475,6 +482,10 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             Assert.DoesNotContain(internalField, json);
         await DrainNotifications(state.Database);
         Assert.Single(await verify.InAppNotifications.Where(x => x.EventType == "SaleCompleted" && x.UserId == customer.UserId).ToListAsync());
+        var businessNotice = Assert.Single(await verify.InAppNotifications.Where(x =>
+            x.EventType == "BusinessPurchaseRecorded" && x.UserId == state.Business.UserId).ToListAsync());
+        Assert.Equal("/business/transactions", businessNotice.Route);
+        Assert.Contains("1000 ETB", businessNotice.Message);
         Assert.Empty(await verify.InAppNotifications.Where(x => x.EventType == "CreatorCommissionEarned").ToListAsync());
     }
 

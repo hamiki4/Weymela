@@ -12,17 +12,18 @@ public sealed partial class WorkspaceQueries
         if(actor.BusinessId is null)throw new ApplicationFailure(FailureKind.Forbidden,"Checkout permission is required.");
         if(actor.Role==ActorRole.Business) await DemandBusiness(actor,ct);
         else await Access.EnsureScannerAsync(actor,actor.BusinessId.Value,ct);
+        var limit = actor.Role == ActorRole.Cashier ? 50 : int.MaxValue;
         var rows=new List<CheckoutSaleRow>();
         var promotionSalesQuery = db.VerifiedSales.AsNoTracking().Where(x => x.BusinessId == actor.BusinessId);
         if (actor.Role == ActorRole.Cashier)
             promotionSalesQuery = promotionSalesQuery.Where(x => x.CashierId == actor.UserId);
         var promotionSales=await promotionSalesQuery
-            .OrderByDescending(x=>x.CreatedAtUtc).Take(50).ToListAsync(ct);
+            .OrderByDescending(x=>x.CreatedAtUtc).Take(limit).ToListAsync(ct);
         var offerSalesQuery = db.UgcCustomerOfferSales.AsNoTracking().Where(x => x.BusinessId == actor.BusinessId);
         if (actor.Role == ActorRole.Cashier)
             offerSalesQuery = offerSalesQuery.Where(x => x.CashierId == actor.UserId);
         var offerSales=await offerSalesQuery
-            .OrderByDescending(x=>x.CreatedAtUtc).Take(50).ToListAsync(ct);
+            .OrderByDescending(x=>x.CreatedAtUtc).Take(limit).ToListAsync(ct);
         var assignmentIds=offerSales.Where(x=>x.UgcAssignmentId is not null).Select(x=>x.UgcAssignmentId!.Value).Distinct().ToArray();
         var assignmentCreators=await db.UgcAssignments.AsNoTracking().Where(x=>assignmentIds.Contains(x.Id))
             .ToDictionaryAsync(x=>x.Id,x=>x.CreatorId,ct);
@@ -30,6 +31,9 @@ public sealed partial class WorkspaceQueries
         var creatorNames=await db.PublicWorkspaceProfiles.AsNoTracking()
             .Where(x=>x.Role==ActorRole.Creator && creatorIds.Contains(x.SubjectId))
             .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);
+        var creatorNumbers=await db.PublicWorkspaceProfiles.AsNoTracking()
+            .Where(x=>x.Role==ActorRole.Creator && creatorIds.Contains(x.SubjectId) && x.CreatorNumber!=null)
+            .ToDictionaryAsync(x=>x.SubjectId,x=>x.CreatorNumber,ct);
         var customerIds=promotionSales.Select(x=>x.CustomerId).Concat(offerSales.Select(x=>x.CustomerId)).Distinct().ToArray();
         var customerUsers=await db.CustomerProfiles.AsNoTracking().Where(x=>customerIds.Contains(x.CustomerId))
             .ToDictionaryAsync(x=>x.CustomerId,x=>x.UserId,ct);
@@ -51,7 +55,9 @@ public sealed partial class WorkspaceQueries
         rows.AddRange(promotionSales.Select(x=>new CheckoutSaleRow(x.Id,titles.GetValueOrDefault(x.PromotionId,"View & Sale"),
             "VIEW_AND_SALE_PROMOTION",x.PurchaseAmount.Amount,x.CustomerCashbackAmount.Amount,x.PurchaseAmount.Amount,
             x.TotalPromotionCharge.Amount,x.CreatedAtUtc,promotionCashiers.GetValueOrDefault(x.CashierId),
-            creatorNames.GetValueOrDefault(x.CreatorId),Masked(x.CustomerId))));
+            creatorNames.GetValueOrDefault(x.CreatorId),Masked(x.CustomerId),x.Status.ToString(),
+            actor.Role==ActorRole.Business?creatorNumbers.GetValueOrDefault(x.CreatorId):null,
+            actor.Role==ActorRole.Business?x.CreatorCommissionAmount.Amount:null)));
         var offerIds=offerSales.Select(x=>x.UgcCustomerOfferId).Distinct().ToArray();
         var offers=await db.UgcCustomerOffers.AsNoTracking().Where(x=>offerIds.Contains(x.Id)).ToDictionaryAsync(x=>x.Id,ct);
         var ugcIds=offers.Values.Select(x=>x.UgcOpportunityId).Distinct().ToArray();
@@ -61,8 +67,10 @@ public sealed partial class WorkspaceQueries
             "UGC_CUSTOMER_OFFER",x.PurchaseAmount.Amount,x.CustomerDiscountAmount.Amount,x.CustomerPaysAmount.Amount,
             x.TotalOfferCharge.Amount,x.CreatedAtUtc,promotionCashiers.GetValueOrDefault(x.CashierId),
             x.UgcAssignmentId is { } assignmentId && assignmentCreators.TryGetValue(assignmentId,out var creatorId)
-                ? creatorNames.GetValueOrDefault(creatorId) : null,Masked(x.CustomerId))));
-        return rows.OrderByDescending(x=>x.CreatedAtUtc).Take(50).ToArray();
+                ? creatorNames.GetValueOrDefault(creatorId) : null,Masked(x.CustomerId),"Completed",
+            actor.Role==ActorRole.Business && x.UgcAssignmentId is { } linkedId && assignmentCreators.TryGetValue(linkedId,out var linkedCreator)
+                ? creatorNumbers.GetValueOrDefault(linkedCreator) : null)));
+        return rows.OrderByDescending(x=>x.CreatedAtUtc).Take(limit).ToArray();
     }
 
     public async Task<SaleResult> CheckoutResultAsync(Actor actor,Guid saleId,CancellationToken ct)

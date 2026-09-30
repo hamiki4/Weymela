@@ -308,7 +308,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             </Link>
           )}
           <span className="workspace-label">
-            {roles[user.role]} {user.role !== "Business" && <span className="muted">/ Weymela</span>}
+            {roles[user.role]} {!isProductRole && <span className="muted">/ Weymela</span>}
           </span>
           {user.role === "PlatformAdmin" && <strong className="topbar-identity">{user.displayName}</strong>}
           <div className="topbar-right">

@@ -3,7 +3,6 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { post, request, useAction, useResource } from "../../api/client";
 import type { CustomerCashbackSummary as CashbackSummary, CustomerTransaction, Offer, Qr } from "../../api/types";
-import { useSession } from "../../app/Session";
 import {
   ActionLink,
   Button,
@@ -375,21 +374,15 @@ function CustomerHomeSummary() {
 }
 
 export function CustomerOffers({ discover = false }: CustomerOffersProps = {}) {
-  const { user } = useSession();
   const customerLocation = useCustomerLocation();
   const resource = useResource<Offer[]>("/customer/offers");
-  const name = user?.displayName?.trim();
-  const firstName = name ? name.split(/\s+/)[0] : "Customer";
 
   return (
     <div className="customer-home-page">
       {discover ? (
-        <PageHeader
-          title="Discover Promotions"
-          description="Find offers near you."
-        />
+        <PageHeader title="Discover Promotions" compact />
       ) : (
-        <><PageHeader eyebrow={firstName} title="Home" description="Discover offers and track your cashback." /><CustomerHomeSummary /></>
+        <><PageHeader title="Home" compact /><CustomerHomeSummary /></>
       )}
       <CustomerLocationCard
         discover={discover}
@@ -559,10 +552,7 @@ export function CustomerTransactions() {
   const resource = useResource<CustomerTransaction[]>("/customer/transactions");
   return (
     <div className="customer-ledger-page">
-      <PageHeader
-        title="Transactions"
-        description="Review your purchases and rewards."
-      />
+      <PageHeader title="Transactions" compact />
       <Resource resource={resource}>
         {(rows) => rows.length ? (
           <section className="customer-ledger-list" aria-label="Customer transactions">
@@ -572,7 +562,7 @@ export function CustomerTransactions() {
                 <article className="customer-transaction-card" key={`${row.source}-${row.purchasedAtUtc}-${index}`}>
                   <header>
                     <div>
-                      <span className="customer-transaction-source">{ugc ? "Customer Offer" : "View + Sale Promotion"}</span>
+                    <span className="customer-transaction-source">{ugc ? "UGC + Sale" : "View + Sale"}</span>
                       <h2>{row.business}</h2>
                     </div>
                     <time dateTime={row.purchasedAtUtc}>{dateTime(row.purchasedAtUtc)}</time>
@@ -618,10 +608,7 @@ export function CustomerCashback() {
   const resource = useResource<CashbackSummary>("/customer/cashback");
   return (
     <div className="customer-ledger-page">
-      <PageHeader
-        title="Cashback"
-        description="Track your cashback and payouts."
-      />
+      <PageHeader title="Cashback" compact />
       <Resource resource={resource}>
         {(summary) => {
           const available = summary.availableCashback.amount;

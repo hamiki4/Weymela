@@ -16,23 +16,37 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, date } from "../../ui/format";
+import { amount, date, dateTime } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 
 function CheckoutTransactionList({ rows }: { rows: CheckoutSaleRow[] }) {
-  return rows.length ? <div className="stack-list">{rows.map((row) => <div className="amount-row" key={row.id}>
-    <div><strong>{row.offer}</strong><small>{row.source === "UGC_CUSTOMER_OFFER" ? "UGC + Sale" : "View + Sale"} · {date(row.createdAtUtc)} · {row.status}</small>
-      <small>Creator: {row.creator ?? "—"} · Customer: {row.customerMasked}{row.cashier ? ` · Cashier: ${row.cashier}` : ""}</small>
-      <small>Customer benefit: {amount(row.customerDiscount)} ETB · Business charge: {amount(row.businessCharge)} ETB</small></div>
-    <strong>{amount(row.purchaseAmount)} ETB</strong>
-  </div>)}</div> : <p className="muted">No checkout transactions yet.</p>;
+  return rows.length ? <div className="business-transaction-list">{rows.map((row) => <article className="business-transaction-card" key={`${row.source}-${row.id}`}>
+    <div className="business-transaction-main"><div><strong>{row.offer}</strong><small>{row.source === "UGC_CUSTOMER_OFFER" ? "UGC + Sale" : "View + Sale"} · {dateTime(row.createdAtUtc)} · {row.status}</small></div>
+      <strong>{amount(row.purchaseAmount)} ETB</strong></div>
+    <div className="business-transaction-context">
+      <span>Creator: {row.creator ?? "—"}{row.creatorNumber ? ` · #${row.creatorNumber}` : ""}</span>
+      <span>Customer: {row.customerMasked}</span>
+      {row.cashier && <span>Cashier: {row.cashier}</span>}
+      <span>{row.source === "UGC_CUSTOMER_OFFER" ? "Customer discount" : "Customer cashback"}: {amount(row.customerDiscount)} ETB</span>
+      {row.creatorEarning != null && <span>Creator earning: {amount(row.creatorEarning)} ETB</span>}
+      <span>Business charge: {amount(row.businessCharge)} ETB</span>
+    </div>
+  </article>)}</div> : <p className="muted">No transactions yet.</p>;
 }
 
 export function CheckoutTransactions() {
   const { user } = useSession();
+  const [source, setSource] = useState("ALL");
+  const business = user?.role === "Business";
   const recent = useResource<CheckoutSaleRow[]>(user?.role === "Business" ? "/business/transactions" : "/checkout/recent");
-  return <div className="checkout-panel"><PageHeader title="Transactions" /><Section title="Recent purchases"><Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows : []} />}</Resource></Section></div>;
+  return <div className="checkout-panel"><PageHeader title="Transactions" compact={business} />
+    {business && <div className="transaction-filters" role="group" aria-label="Transaction source">
+      {[["ALL", "All"], ["VIEW_AND_SALE_PROMOTION", "View + Sale"], ["UGC_CUSTOMER_OFFER", "UGC + Sale"]].map(([value, label]) =>
+        <button key={value} type="button" aria-pressed={source === value} onClick={() => setSource(value)}>{label}</button>)}
+    </div>}
+    <Section title={business ? "Purchases" : "Recent purchases"}><Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows.filter((row) => !business || source === "ALL" || row.source === source) : []} />}</Resource></Section>
+  </div>;
 }
 
 export function Checkout() {

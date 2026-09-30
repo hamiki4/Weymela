@@ -160,7 +160,7 @@ export const earnings = {
     {
       id: "earning",
       campaign: "Coffee stories",
-      source: "View Reward",
+      source: "View Earnings",
       amount: 200,
       atUtc: "2026-09-11T12:00:00Z",
     },

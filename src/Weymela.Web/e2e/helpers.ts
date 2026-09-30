@@ -45,7 +45,7 @@ export async function layout(page: Page) {
     for (const element of document.querySelectorAll<HTMLElement>(
       "main input,main select,main textarea,main button,main .button,main h1,main h2,main th",
     )) {
-      if (!element.checkVisibility()) continue;
+      if (!element.checkVisibility() || element.classList.contains("sr-only")) continue;
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       if (

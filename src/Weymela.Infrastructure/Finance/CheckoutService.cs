@@ -203,6 +203,10 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             PurchaseAmount = purchase.Amount, CustomerDiscount = quote.CustomerDiscount.Amount,
             CustomerPays = quote.CustomerPays.Amount, PlatformFee = quote.PlatformFee.Amount
         }), OccurredAtUtc = clock.GetUtcNow().UtcDateTime });
+        db.OutboxMessages.Add(new() { EventType = "BusinessPurchaseRecorded",
+            Payload = System.Text.Json.JsonSerializer.Serialize(new { SaleId = sale.Id, sale.BusinessId,
+                PurchaseAmount = sale.PurchaseAmount.Amount }),
+            OccurredAtUtc = clock.GetUtcNow().UtcDateTime });
         return sale;
     }
 

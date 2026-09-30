@@ -59,18 +59,20 @@ export function PageHeader({
   title,
   description,
   action,
+  compact = false,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   action?: ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <header className="page-heading">
+    <header className={`page-heading${compact ? " page-heading-compact" : ""}`}>
       <div>
-        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-        <h1>{title}</h1>
-        {description && <p className="lead">{description}</p>}
+        {!compact && eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h1 className={compact ? "sr-only" : undefined}>{title}</h1>
+        {!compact && description && <p className="lead">{description}</p>}
       </div>
       {action && <div className="heading-action">{action}</div>}
     </header>

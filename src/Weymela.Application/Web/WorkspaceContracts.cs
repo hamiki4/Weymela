@@ -140,7 +140,8 @@ public sealed record CheckoutOffer(Guid SessionId, string Offer, CustomerOfferBu
     string Customer, DateTime ExpiresAtUtc, string Source, decimal? CustomerDiscountPercent);
 public sealed record CheckoutSaleRow(Guid Id, string Offer, string Source, decimal PurchaseAmount,
     decimal CustomerDiscount, decimal CustomerPays, decimal BusinessCharge, DateTime CreatedAtUtc,
-    string? Cashier = null, string? Creator = null, string CustomerMasked = "Customer", string Status = "Completed");
+    string? Cashier = null, string? Creator = null, string CustomerMasked = "Customer", string Status = "Completed",
+    long? CreatorNumber = null, decimal? CreatorEarning = null);
 
 public sealed record CashierView(Guid Id, string Name, string MaskedPhone, string Status,
     DateTime CreatedAtUtc, DateTime? ActivatedAtUtc);

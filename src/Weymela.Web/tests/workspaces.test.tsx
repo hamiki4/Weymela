@@ -41,7 +41,7 @@ import {
   CustomerTransactions,
   CustomerCashback,
 } from "../src/features/commerce/CustomerPages";
-import { Checkout } from "../src/features/commerce/Checkout";
+import { Checkout, CheckoutTransactions } from "../src/features/commerce/Checkout";
 import {
   campaign,
   detail,
@@ -79,6 +79,29 @@ beforeEach(() => {
 });
 
 describe("Business workspace", () => {
+  it("filters the authoritative Business purchase projection without changing amounts", async () => {
+    mockApi({ "/business/transactions": [
+      { id: "view-sale", offer: "Coffee stories", source: "VIEW_AND_SALE_PROMOTION", purchaseAmount: 1000,
+        customerDiscount: 20, customerPays: 1000, businessCharge: 100, creatorEarning: 45,
+        creator: "Mina", creatorNumber: 1001, cashier: "Cashier A", customerMasked: "••••1234",
+        status: "Recorded", createdAtUtc: "2026-09-29T12:00:00Z" },
+      { id: "ugc-sale", offer: "Product story", source: "UGC_CUSTOMER_OFFER", purchaseAmount: 800,
+        customerDiscount: 40, customerPays: 760, businessCharge: 64, creatorEarning: null,
+        creator: "Mina", creatorNumber: 1001, cashier: "Cashier A", customerMasked: "••••5678",
+        status: "Completed", createdAtUtc: "2026-09-29T13:00:00Z" },
+    ] });
+    const rendered = mount(<CheckoutTransactions />);
+    await screen.findByText("Coffee stories");
+    expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
+    expect(screen.getByText("Creator earning: 45 ETB")).toBeVisible();
+    expect(screen.queryByText("Creator earning: 800 ETB")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "UGC + Sale" }));
+    expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(1);
+    expect(screen.getByText("Product story")).toBeVisible();
+    expect(screen.queryByText("Coffee stories")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
+  });
   it("groups authoritative advertising fund balances", async () => {
     mount(<BusinessDashboard />);
     expect(
@@ -661,11 +684,29 @@ describe("Creator workspace", () => {
   });
   it("shows friendly earning sources", async () => {
     mount(<CreatorEarnings />);
-    expect((await screen.findAllByText("View Reward")).length).toBeGreaterThan(
+    expect((await screen.findAllByText("Verified views")).length).toBeGreaterThan(
       0,
     );
     expect(screen.queryByText("VIEW_REWARD")).not.toBeInTheDocument();
     expect(screen.queryByText("One balance.")).not.toBeInTheDocument();
+  });
+  it("shows Creator income from attributed entries without treating purchase totals as earnings", async () => {
+    mockCreatorApi({ "/creator/earnings": { ...earnings, history: [
+      { id: "sale-income", campaign: "Coffee stories", business: "Bella Restaurant", source: "Sale Earnings",
+        sourceType: "VIEW_PLUS_SALE", amount: 30, atUtc: "2026-09-29T16:47:00Z" },
+      { id: "ugc-income", campaign: "Product story", business: "Bella Restaurant", source: "UGC Earnings",
+        sourceType: "UGC", amount: 4500, atUtc: "2026-09-28T12:00:00Z" },
+    ] } });
+    const rendered = mount(<CreatorEarnings />);
+    await screen.findByRole("heading", { name: "Earning History" });
+    const cards = rendered.container.querySelectorAll(".mobile-data .data-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("Bella Restaurant");
+    expect(cards[0]).toHaveTextContent("View + Sale");
+    expect(cards[0]).toHaveTextContent("+30 ETB");
+    expect(cards[1]).toHaveTextContent("UGC content");
+    expect(cards[1]).toHaveTextContent("+4,500 ETB");
+    expect(rendered.container).not.toHaveTextContent("1,000 ETB");
   });
   it("shows threshold eligibility without payout calendar dates", async () => {
     mount(<CreatorEarnings />);

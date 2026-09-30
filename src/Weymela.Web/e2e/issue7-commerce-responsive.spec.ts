@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { layout, login, open } from "./helpers";
 
-for (const width of [320, 360, 375, 390, 430]) {
+for (const width of [320, 360, 375, 390, 393, 430]) {
   test(`Issue 7 commerce pages remain compact at ${width}px`, async ({ page, context }) => {
     test.setTimeout(120000);
     await page.setViewportSize({ width, height: 900 });

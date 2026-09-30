@@ -26,6 +26,7 @@ for (const viewport of viewports)
         [
           "/business",
           "/business/wallet",
+          "/business/transactions",
           "/business/campaigns/new",
           "/business/campaigns",
           "/business/requests",

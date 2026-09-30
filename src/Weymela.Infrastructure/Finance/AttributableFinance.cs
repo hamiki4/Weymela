@@ -70,7 +70,9 @@ internal sealed class AttributableFinance(WeymelaDbContext db)
                 operation.Event(nameof(CustomerCashbackEarned), new { sale.CustomerId, SaleId = sale.Id,
                     PurchaseAmount = sale.PurchaseAmount, Amount = amounts.Customer, JournalId = j.Id, CorrelationId = correlation }, at);
             }
-            operation.Event(nameof(VerifiedSaleRecorded), new { SaleId = sale.Id, JournalId = j.Id, CorrelationId = correlation }, at);
+            operation.Event(nameof(VerifiedSaleRecorded), new {
+                SaleId = sale.Id, sale.BusinessId, PurchaseAmount = sale.PurchaseAmount.Amount,
+                JournalId = j.Id, CorrelationId = correlation }, at);
         }
         if (amounts.Platform.Amount > 0)
         {

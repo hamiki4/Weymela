@@ -293,6 +293,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var business = new Actor(Guid.NewGuid(), ActorRole.Business, businessId);
+        db.CommercePermissions.Add(new CommercePermission(business.UserId, ActorRole.Business,
+            businessId, businessId, true, true));
         var financial = new FinancialCommands(db);
         await financial.CreditDepositAsync(new(business, new Money(10000),
             "restricted-worker-deposit", now.AddDays(-2)), 0);
@@ -321,6 +323,13 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             Payload = JsonSerializer.Serialize(new { BeneficiaryId = creatorId }),
             OccurredAtUtc = now.AddMinutes(-2)
         });
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            EventType = "BusinessPurchaseRecorded",
+            Payload = JsonSerializer.Serialize(new { SaleId = Guid.NewGuid(), BusinessId = businessId,
+                PurchaseAmount = 1000m }),
+            OccurredAtUtc = now.AddMinutes(-1)
+        });
         db.InAppNotifications.Add(new InAppNotification
         {
             UserId = creatorUserId, Role = ActorRole.Creator,
@@ -330,7 +339,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             NextPushAtUtc = now.AddMinutes(-1)
         });
         await db.SaveChangesAsync();
-        return new(promotion.Id, allocationId, creatorId, creatorUserId);
+        return new(promotion.Id, allocationId, creatorId, creatorUserId, business.UserId);
     }
 
     private static async Task ExerciseWorkerFlowsAsync(string connectionString, WorkerSeed seed)
@@ -357,6 +366,9 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Assert.Equal(PushDeliveryState.Delivered,
             (await db.InAppNotifications.SingleAsync(x =>
                 x.SourceKey == "restricted-worker-push")).PushState);
+        var saleNotice = await db.InAppNotifications.SingleAsync(x =>
+            x.EventType == "BusinessPurchaseRecorded" && x.UserId == seed.BusinessUserId);
+        Assert.Equal("/business/transactions", saleNotice.Route);
     }
 
     private static async Task AssertApiDenialsAsync(
@@ -1071,5 +1083,6 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         Guid PromotionId,
         Guid AllocationId,
         Guid CreatorId,
-        Guid CreatorUserId);
+        Guid CreatorUserId,
+        Guid BusinessUserId);
 }

@@ -358,6 +358,46 @@
 .sign-in-form h2 { font-size: 1.6rem; }
 .sign-in-secure { color: #374151; }
 .profile-choice { padding: 12px 0; border: 0; border-top: 1px solid #dfe4e1; border-bottom: 1px solid #dfe4e1; border-radius: 0; background: transparent; }
+
+/* Shared mobile workspace treatment keeps the role label and actions visible. */
+.product-shell:is(.role-business, .role-creator, .role-customer) .topbar {
+  height: auto; min-height: calc(58px + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top); border-bottom: 0; background: #f7f8f6;
+}
+.product-shell:is(.role-business, .role-creator, .role-customer) .topbar-brand .brand-mark { width: 34px; height: 34px; }
+.product-shell:is(.role-business, .role-creator, .role-customer) .topbar-brand .brand-wordmark { width: 96px; }
+.product-shell:is(.role-business, .role-creator, .role-customer) .workspace-label {
+  min-width: 0; color: var(--product-ink); font-size: .88rem; font-weight: 750;
+}
+.product-shell .page-heading.page-heading-compact { min-height: 0; margin: 0 0 10px; padding: 0; }
+.product-shell .page-heading.page-heading-compact:has(.heading-action) { justify-content: flex-end; }
+.product-shell:is(.role-business, .role-creator, .role-customer) .data-card,
+.product-shell:is(.role-business, .role-creator, .role-customer) .campaign-card,
+.product-shell:is(.role-business, .role-creator, .role-customer) .creator-promotion-row {
+  min-width: 0; padding: 12px; border: 1px solid var(--product-line); border-radius: 12px;
+  background: #fff; box-shadow: 0 2px 8px #17243d0b;
+}
+.product-shell:is(.role-business, .role-creator, .role-customer) .card-stack,
+.product-shell:is(.role-business, .role-creator, .role-customer) .creator-promotion-list { gap: 9px; }
+.role-customer .customer-transaction-card { padding: 12px; border: 1px solid var(--product-line); border-radius: 12px; background: #fff; box-shadow: 0 2px 8px #17243d0b; }
+.role-customer .customer-ledger-list { gap: 9px; }
+.transaction-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.transaction-filters button { min-height: 38px; padding: 7px 11px; border: 1px solid var(--product-line); border-radius: 9px; background: #fff; color: var(--product-ink); font: inherit; font-size: .81rem; font-weight: 650; }
+.transaction-filters button[aria-pressed="true"] { border-color: var(--role-accent); background: var(--role-soft); color: var(--role-accent); }
+.business-transaction-list { display: grid; gap: 9px; }
+.business-transaction-card { min-width: 0; padding: 12px; border: 1px solid var(--product-line); border-radius: 12px; background: #fff; box-shadow: 0 2px 8px #17243d0b; }
+.business-transaction-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; min-width: 0; }
+.business-transaction-main > div { display: grid; gap: 3px; min-width: 0; }
+.business-transaction-main strong, .business-transaction-context span { overflow-wrap: anywhere; }
+.business-transaction-main > strong { flex: none; color: var(--role-accent); white-space: nowrap; }
+.business-transaction-main small { color: var(--product-secondary); line-height: 1.3; }
+.business-transaction-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--product-line); color: var(--product-secondary); font-size: .76rem; }
+@media (max-width: 350px) {
+  .product-shell:is(.role-business, .role-creator, .role-customer) .topbar { gap: 3px; padding-inline: 8px; }
+  .product-shell:is(.role-business, .role-creator, .role-customer) .topbar-brand .brand-wordmark { width: 72px; }
+  .product-shell:is(.role-business, .role-creator, .role-customer) .workspace-label { font-size: .82rem; }
+  .business-transaction-context { grid-template-columns: 1fr; }
+}
 @media (min-width: 1100px) {
   .sign-in-form { padding: 48px 24px; }
 }

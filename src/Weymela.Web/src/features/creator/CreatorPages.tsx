@@ -27,6 +27,7 @@ import {
   campaignType,
   count,
   date,
+  dateTime,
   isViewAndSale,
   isViewOnly,
 } from "../../ui/format";
@@ -416,11 +417,7 @@ export function CreatorEarnings() {
   const [requested, setRequested] = useState(false);
   return (
     <>
-      <PageHeader
-        title="Earnings"
-        description="Track your earnings and payouts."
-        action={<ActionLink to="/creator/pricing" secondary>How You Earn</ActionLink>}
-      />
+      <PageHeader title="Earnings" compact action={<ActionLink to="/creator/pricing" secondary>How You Earn</ActionLink>} />
       <Resource resource={resource}>
         {(data) => (
           <>
@@ -445,24 +442,23 @@ export function CreatorEarnings() {
                   rowKey={(r) => r.id}
                   label="Earning History"
                   columns={[
-                    { label: "Promotion or source", cell: (r) => r.campaign },
-                    { label: "Business", cell: (r) => r.business ?? "—" },
-                    { label: "Source", cell: (r) => r.source },
+                    { label: "Business", cell: (r) => r.business ?? r.campaign },
+                    { label: "Source", cell: (r) => r.sourceType === "UGC" ? "UGC content" : r.source === "Sale Earnings" ? "View + Sale" : r.source === "View Earnings" ? "Verified views" : r.source },
                     {
                       label: "Amount",
-                      cell: (r) => amount(r.amount),
+                      cell: (r) => `+${amount(r.amount)} ETB`,
                       numeric: true,
                     },
-                    { label: "Date", cell: (r) => date(r.atUtc) },
+                    { label: "Date", cell: (r) => dateTime(r.atUtc) },
                   ]}
                   card={(r) => (
                     <>
                       <div className="card-head">
-                        <strong>{r.campaign}</strong>
-                        <strong>{amount(r.amount)}</strong>
+                        <strong>{r.business ?? r.campaign}</strong>
+                        <strong>+{amount(r.amount)} ETB</strong>
                       </div>
                       <p className="fine-print">
-                        {r.business ? `${r.business} · ` : ""}{r.sourceType ? `${r.sourceType === "UGC" ? "UGC" : r.sourceType === "VIEW_ONLY" ? "View Only" : "View + Sale"} · ` : ""}{r.source} · {date(r.atUtc)} · {r.status ?? "Earned"}
+                        {r.sourceType === "UGC" ? "UGC content" : r.source === "Sale Earnings" ? "View + Sale" : r.source === "View Earnings" ? "Verified views" : r.source} · {dateTime(r.atUtc)} · {r.campaign}
                       </p>
                     </>
                   )}

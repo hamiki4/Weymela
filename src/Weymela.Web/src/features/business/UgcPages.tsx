@@ -121,7 +121,7 @@ export function BusinessUgcPage() {
   const opportunities = useResource<UgcCard[]>("/business/ugc");
   const wallet = useResource<Wallet>("/business/wallet");
   return <>
-    <PageHeader title="UGC" action={<span className="business-create-action"><ActionLink to="/business/ugc/new" icon="plus">Create UGC</ActionLink></span>} />
+    <PageHeader title="UGC" compact action={<span className="business-create-action"><ActionLink to="/business/ugc/new" icon="plus">Create UGC</ActionLink></span>} />
     <Section title={openOnly ? "Open UGC" : "Your UGC"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
       const visible = openOnly ? rows.filter((item) => item.status === "Open") : rows;
       return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} wallet={wallet.data} onChanged={() => { opportunities.reload(); wallet.reload(); }} />)}</div> : <Empty title={openOnly ? "No open UGC." : "No UGC yet."} />;

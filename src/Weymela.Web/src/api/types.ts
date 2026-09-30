@@ -759,4 +759,6 @@ export interface CheckoutSaleRow {
   creator: string | null;
   customerMasked: string;
   status: string;
+  creatorNumber?: number | null;
+  creatorEarning?: number | null;
 }

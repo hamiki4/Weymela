@@ -7,6 +7,7 @@ using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Web;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -146,9 +147,35 @@ public sealed class Phase4CheckoutTests(PostgresFixture fixture)
             x.EventType == "CreatorCommissionEarned" && x.UserId == s.Creator.UserId).ToListAsync());
         var customer = Assert.Single(await verify.InAppNotifications.Where(x =>
             x.EventType == "CustomerCashbackEarned" && x.UserId == s.Customer.UserId).ToListAsync());
+        var business = Assert.Single(await verify.InAppNotifications.Where(x =>
+            x.EventType == "VerifiedSaleRecorded" && x.UserId == s.Seed.Business.UserId).ToListAsync());
         Assert.Contains("45 ETB", creator.Message);
         Assert.Contains("1000 ETB", customer.Message);
         Assert.Contains("20 ETB", customer.Message);
+        Assert.Contains("1000 ETB", business.Message);
+        Assert.Equal("/business/transactions", business.Route);
+    }
+    [Fact] public async Task One_verified_sale_feeds_scoped_role_projections_without_extra_earning_rows()
+    {
+        var s = await Phase4Scenario.Create(fixture);
+        await s.Redeem(await s.Issue());
+        await using var db = s.Database.Open();
+        var workspace = new WorkspaceQueries(db, new TestDirectory(), s.Clock);
+        var business = Assert.Single(await workspace.RecentSalesAsync(s.Seed.Business, default));
+        Assert.Equal("VIEW_AND_SALE_PROMOTION", business.Source);
+        Assert.Equal(1000m, business.PurchaseAmount);
+        Assert.Equal(45m, business.CreatorEarning);
+        Assert.Equal(20m, business.CustomerDiscount);
+        Assert.Equal(100m, business.BusinessCharge);
+        var cashier = Assert.Single(await workspace.RecentSalesAsync(s.Cashier, default));
+        Assert.Null(cashier.CreatorEarning);
+        Assert.Single(await s.Queries(db).CustomerTransactionsAsync(s.Customer));
+        Assert.Contains((await workspace.EarningsAsync(s.Creator, default)).History,
+            x => x.Source == "Sale Earnings" && x.Amount == 45m);
+        Assert.Single(await db.VerifiedSales.ToListAsync());
+        Assert.Single(await db.CreatorEarningEntries.Where(x => x.Source == EarningSource.SaleCommission).ToListAsync());
+        await Assert.ThrowsAsync<ApplicationFailure>(() => workspace.RecentSalesAsync(
+            s.Seed.Business with { BusinessId = Guid.NewGuid() }, default));
     }
     [Fact] public async Task Exact_budget_boundary_can_be_spent_without_negative_balance()
     {

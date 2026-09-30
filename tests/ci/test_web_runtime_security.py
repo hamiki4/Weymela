@@ -18,6 +18,20 @@ LIBEXPAT_SHA256 = '2e56946bc495cbed9eb1ad70859a79cba9db6420016453e065a0628848b32
 LIBEXPAT_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk'
 
 
+class CreatorPhotoCspTests(unittest.TestCase):
+    def test_object_urls_are_allowed_only_as_images(self):
+        header = (ROOT / 'docker/web/security-headers.conf').read_text()
+        policy = header.split('Content-Security-Policy "', 1)[1].split('" always;', 1)[0]
+        directives = dict((part.strip().split(' ', 1) for part in policy.split(';')))
+        self.assertEqual(directives, {
+            'default-src': "'self'", 'base-uri': "'self'", 'object-src': "'none'",
+            'frame-ancestors': "'none'", 'script-src': "'self'", 'style-src': "'self'",
+            'img-src': "'self' data: blob:",
+            'connect-src': "'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com",
+            'frame-src': "'self'", 'manifest-src': "'self'", 'worker-src': "'self'",
+        })
+
+
 class UploadProxyContractTests(unittest.TestCase):
     def test_only_existing_upload_routes_receive_bounded_headroom(self):
         web = (ROOT / 'docker/web/nginx.conf').read_text()

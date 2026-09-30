@@ -74,7 +74,29 @@ public sealed class UgcDomainTests
         Assert.Equal(0, opportunity.ApprovedCreatorCount);
         opportunity.ApproveCreator();
         Assert.Equal(1, opportunity.ApprovedCreatorCount);
-        Assert.Throws<InvalidOperationException>(opportunity.ApproveCreator);
+        Assert.Throws<InvalidOperationException>(() => opportunity.ApproveCreator());
+    }
+
+    [Fact]
+    public void Platform_slots_are_independent_of_posting_requirements_and_approval_is_bounded()
+    {
+        var opportunity = new UgcOpportunity(Guid.NewGuid(), "Platform UGC", null, UgcContentType.Video,
+            "Create content.", "[]", null, Now.AddDays(14), true, false, null, new Money(500), 2,
+            Pricing, Now,
+            [(CreatorPlatform.TikTok, "Social post", null), (CreatorPlatform.Instagram, "Social post", null)],
+            [(CreatorPlatform.TikTok, 1), (CreatorPlatform.Instagram, 1)]);
+        var wallet = new BusinessWallet(opportunity.BusinessId);
+        wallet.CreditDeposit(opportunity.RequiredFunding, Now, Guid.NewGuid());
+        opportunity.Publish(wallet, Now, Guid.NewGuid());
+
+        _ = new UgcCreatorRequest(opportunity.Id, Guid.NewGuid(), Now, CreatorPlatform.TikTok, Guid.NewGuid());
+        Assert.All(opportunity.PlatformCapacities, slot => Assert.Equal(0, slot.ApprovedCount));
+        opportunity.ApproveCreator(CreatorPlatform.TikTok);
+        Assert.Equal(1, opportunity.PlatformCapacities.Single(x => x.Platform == CreatorPlatform.TikTok).ApprovedCount);
+        Assert.Equal(0, opportunity.PlatformCapacities.Single(x => x.Platform == CreatorPlatform.Instagram).ApprovedCount);
+        Assert.Throws<InvalidOperationException>(() => opportunity.ApproveCreator(CreatorPlatform.TikTok));
+        opportunity.ApproveCreator(CreatorPlatform.Instagram);
+        Assert.Equal(2, opportunity.ApprovedCreatorCount);
     }
 
     [Fact]

@@ -12,15 +12,10 @@ for (const width of [375, 1366])
     const title = `Local stories ${width}-${Date.now()}`;
     await page.getByLabel("Promotion title", { exact: true }).fill(title);
     await page
-      .getByLabel("Description", { exact: true })
-      .fill("An original story from our neighbourhood.");
-    await page
       .getByLabel("Promotion type", { exact: true })
       .selectOption("ViewPlusCommission");
-    const start = new Date(Date.now() - 3600000).toISOString().slice(0, 16);
-    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16);
-    await page.getByLabel("Start date", { exact: true }).fill(start);
-    await page.getByLabel("End date", { exact: true }).fill(end);
+    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    await page.getByLabel("Promotion ends", { exact: true }).fill(end);
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page
       .getByLabel("Requirements", { exact: true })
@@ -30,6 +25,7 @@ for (const width of [375, 1366])
     await page
       .getByLabel("Minimum verified followers", { exact: true })
       .fill("1000");
+    await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
     await layout(page);
     await screenshot(page, `${width}-flow-creator-requirements`);
     await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -64,6 +60,8 @@ for (const width of [375, 1366])
       .locator("article")
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     await card.getByRole("link", { name: "Request to Join" }).click();
+    await page.getByRole("radiogroup", { name: "Choose platform" })
+      .getByRole("radio", { name: "https://www.tiktok.com/@elias" }).check();
     await page
       .getByLabel("Short message", { exact: true })
       .fill("I would love to create this.");

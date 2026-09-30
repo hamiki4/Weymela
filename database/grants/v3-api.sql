@@ -78,6 +78,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."UgcCustomerOffers",
     v3."UgcCreatorRequests",
     v3."UgcOpportunities",
+    v3."UgcPlatformCapacities",
     v3."UgcPlatformRequirements",
     v3."UgcReservations",
     v3."UgcRevisions",
@@ -137,6 +138,9 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."UgcOpportunities",
     v3."UgcSubmissions"
 TO :"api_role";
+
+GRANT SELECT, INSERT ON TABLE v3."UgcPlatformCapacities" TO :"api_role";
+GRANT UPDATE ("Capacity", "ApprovedCount") ON TABLE v3."UgcPlatformCapacities" TO :"api_role";
 
 GRANT SELECT, INSERT ON TABLE
     v3."CreatorEarningEntries",

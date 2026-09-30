@@ -26,21 +26,22 @@ def verify(root):
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
     migrations = manifest['migrations']
-    baseline = 'grants/baseline-21/v3-verify.sql'
+    baseline = 'grants/baseline-24/v3-verify.sql'
     current = [f'grants/current/v3-{name}.sql' for name in
                ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
     verifier = 'grants/current/v3-verify.sql'
     contracts = migrations.get('grantContracts', {})
-    if (contracts.get('from') != {'sourceCommit':'7d537bb8a83ed2757a2149261b8dd7a449f51629',
-                                  'migrationCount':21, 'verifier':baseline}
+    if (contracts.get('from') != {'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',
+                                  'migrationCount':24, 'verifier':baseline}
             or contracts.get('to') != {'sourceCommit':manifest['commit'],
-                                       'migrationCount':24, 'scripts':current, 'verifier':verifier}
-            or len(migrations.get('migrationOrder', [])) != 24
+                                       'migrationCount':25, 'scripts':current, 'verifier':verifier}
+            or len(migrations.get('migrationOrder', [])) != 25
             or migrations['migrationOrder'][20] != '20260925212120_RetireSupportSessions'
             or migrations['migrationOrder'][21:] != [
                 '20260928213157_AlignDepositReviewAuthority',
                 '20260928230108_AddCreatorNumbers',
-                '20260929022846_BindUgcSaleAssignments']):
+                '20260929022846_BindUgcSaleAssignments',
+                '20260929203557_AddUgcPlatformCapacities']):
         raise ValueError('Grant contract stage/source mismatch')
     checksums = manifest.get('checksums', {})
     required = {'migrations/efbundle', 'migrations/v3-forward.sql', 'migrations/migration-manifest.json'}
@@ -65,7 +66,7 @@ def verify(root):
     for name in artifact_names:
         if migration_files.get(name) != checksums['migrations/'+name]:
             raise ValueError('Grant/migration checksum binding mismatch')
-    if migration_files[baseline] != '584fab5649ab7b89e3da7f0be75ec38f96988dcaf67853c553d8989fe9fc9d24':
+    if migration_files[baseline] != 'ef06c1b2690ba02db3329027c49b4286684ff9e6e898225cba9d0c82e9c287b0':
         raise ValueError('Baseline grant verifier digest mismatch')
     return {'commit': manifest['commit'], 'verifiedArtifacts': len(checksums), 'deploymentAuthorized': False}
 

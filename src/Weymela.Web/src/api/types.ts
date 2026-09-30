@@ -525,6 +525,12 @@ export interface UgcPlatformRequirement {
   format: string;
   minimumAudience: number | null;
 }
+export interface UgcPlatformCapacity {
+  platform: string;
+  capacity: number;
+  approved: number;
+  available: number;
+}
 export interface UgcCard {
   id: string;
   businessId: string;
@@ -542,6 +548,8 @@ export interface UgcCard {
   dueDateUtc: string;
   location: string | null;
   platformRequirements: UgcPlatformRequirement[];
+  platformCapacities?: UgcPlatformCapacity[];
+  eligibleSocialProfiles?: { id: string; platform: string; profileUrl: string }[] | null;
   requestStatus: string | null;
   version: number;
   customerOfferEnabled?: boolean;

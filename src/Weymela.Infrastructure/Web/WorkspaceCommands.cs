@@ -29,7 +29,7 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             Enum.TryParse<PromotionType>(input.Type,true,out var parsed)&&Enum.IsDefined(parsed)?parsed:throw new ApplicationFailure(FailureKind.Validation,"Choose View Only or View & Sale.");
         if(string.IsNullOrWhiteSpace(input.Title)||input.Title.Length>120||input.Description.Length>3000||input.Requirements?.Length>2000||input.Category?.Length>80||input.Region?.Length>80)
             throw new ApplicationFailure(FailureKind.Validation,"Use a title up to 120 characters and a concise Promotion brief.");
-        if(input.MinimumVerifiedFollowers<0||input.StartUtc.Kind!=DateTimeKind.Utc||input.EndUtc.Kind!=DateTimeKind.Utc||input.EndUtc<=Now)
+        if(input.MinimumVerifiedFollowers<0||(input.StartUtc is { } start && start.Kind!=DateTimeKind.Utc)||input.EndUtc.Kind!=DateTimeKind.Utc||input.EndUtc<=Now)
             throw new ApplicationFailure(FailureKind.Validation,"Check the follower requirement and Promotion dates.");
         var platforms=new List<(CreatorPlatform Platform,int Capacity)>();
         foreach(var row in input.Platforms??[])
@@ -41,7 +41,8 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
         if(platforms.GroupBy(x=>x.Platform).Any(x=>x.Count()>1))throw new ApplicationFailure(FailureKind.Validation,"Add each Promotion platform once.");
         var resources=(input.Resources??[]).Where(x=>!string.IsNullOrWhiteSpace(x)).Select(SafeExternalUrl).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return await Commands.CreateCampaignOnceAsync(new(actor,input.Title,input.Description,type,Amount(input.CampaignBudget),
-            new(Clean(input.Category),input.MinimumVerifiedFollowers,Clean(input.Region),Clean(input.Requirements)),input.StartUtc,input.EndUtc,Now,
+            new(Clean(input.Category),input.MinimumVerifiedFollowers,Clean(input.Region),Clean(input.Requirements)),
+            input.StartUtc ?? Now,input.EndUtc,Now,
             Clean(input.Slogan),Clean(input.Location),JsonSerializer.Serialize(resources),platforms),key,ct);
     }
     public async Task<Guid> DepositAsync(Actor actor,DepositInput input,string key,CancellationToken ct)

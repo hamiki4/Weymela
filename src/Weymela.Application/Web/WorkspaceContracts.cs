@@ -155,7 +155,7 @@ public sealed record ManualCheckoutConfirmInput(string CreatorId, string Custome
 
 public sealed record PromotionPlatformInput(string Platform, int Capacity);
 public sealed record CreateCampaignInput(string Title, string Description, string Type, decimal CampaignBudget, string? Requirements,
-    string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime StartUtc, DateTime EndUtc,
+    string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime? StartUtc, DateTime EndUtc,
     string? Slogan = null, string? Location = null, IReadOnlyList<string>? Resources = null,
     IReadOnlyList<PromotionPlatformInput>? Platforms = null);
 public sealed record DepositInput(decimal Amount, long ExpectedVersion);
@@ -173,13 +173,17 @@ public sealed record ConfirmPaymentInput(string Reference);
 public sealed record SettlementInput(decimal Amount, string Reference);
 
 public sealed record UgcPlatformRequirementInput(string Platform, string Format, long? MinimumAudience);
+public sealed record UgcPlatformCapacityInput(string Platform, int Capacity);
+public sealed record UgcPlatformCapacityView(string Platform, int Capacity, int Approved, int Available);
+public sealed record UgcEligibleSocialProfile(Guid Id, string Platform, string ProfileUrl);
 public sealed record CreateUgcInput(string Title, string? Slogan, string ContentType, string Instructions,
     IReadOnlyList<string>? Resources, string? Location, DateTime DueDateUtc, bool ProductProvided,
     bool CreatorMustPurchase, string? UsageRights, decimal CreatorPayment, int CreatorsNeeded,
     IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements,
     bool CustomerOfferEnabled = false, decimal? CustomerDiscountPercent = null,
     decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
-    DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null);
+    DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null,
+    IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null);
 public sealed record UgcReviewInput(string? Reason);
 public sealed record UgcSubmissionInput(string SubmissionUrl);
 public sealed record UgcRevisionInput(string? Slogan, string Instructions, IReadOnlyList<string>? Resources,
@@ -189,7 +193,8 @@ public sealed record UgcRevisionInput(string? Slogan, string Instructions, IRead
     IReadOnlyList<UgcPlatformRequirementInput>? PlatformRequirements = null,
     bool? CustomerOfferEnabled = null, decimal? CustomerDiscountPercent = null,
     decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
-    DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null);
+    DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null,
+    IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null);
 public sealed record UgcPlatformRequirementView(string Platform, string Format, long? MinimumAudience);
 public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string Title, string? Slogan,
     string ContentType, string Status, decimal CreatorPayment, int CreatorsNeeded, int ApprovedCreators,
@@ -205,7 +210,9 @@ public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string T
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CustomerFacingSlogan = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFeePercent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee = null,
-    bool ProductProvided = false, bool CreatorMustPurchase = false);
+    bool ProductProvided = false, bool CreatorMustPurchase = false,
+    IReadOnlyList<UgcPlatformCapacityView>? PlatformCapacities = null,
+    IReadOnlyList<UgcEligibleSocialProfile>? EligibleSocialProfiles = null);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason);
 public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,

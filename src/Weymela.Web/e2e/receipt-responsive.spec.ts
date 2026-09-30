@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { layout, login, open } from "./helpers";
+import { layout, login, open, screenshot } from "./helpers";
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
 
-for (const width of [320, 360, 375, 390, 430]) {
+for (const width of [320, 360, 375, 390, 393, 430]) {
   test(`receipt upload and Admin review stay compact at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.route("**/api/session", async route => {
@@ -23,7 +23,8 @@ for (const width of [320, 360, 375, 390, 430]) {
     });
     await login(context, "business");
     await open(page, "/business/wallet");
-    await expect(page.getByText("Upload your payment receipt for Admin review.")).toBeVisible();
+    await expect(page.getByLabel("Payment receipt")).toBeAttached();
+    await expect(page.getByText("Upload your payment receipt for Admin review.")).toHaveCount(0);
     await expect(page.getByLabel("Payment reference")).toHaveCount(0);
     await page.getByLabel("Amount", { exact: true }).fill("10000");
     await page.getByLabel("Payment receipt").setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
@@ -35,6 +36,7 @@ for (const width of [320, 360, 375, 390, 430]) {
     expect(thumbnail!.width).toBeLessThanOrEqual(74);
     expect(thumbnail!.height).toBeLessThanOrEqual(74);
     await layout(page);
+    if (width === 390 || width === 393) await screenshot(page, `${width}-business-wallet-receipt`);
     await page.getByRole("button", { name: "Submit for Review" }).click();
     await expect(page.getByText("Your payment is waiting for approval.")).toBeVisible();
     await expect(page.getByText("Under review").first()).toBeVisible();
@@ -75,3 +77,30 @@ for (const width of [320, 360, 375, 390, 430]) {
     await layout(page);
   });
 }
+
+test("frozen receipt submission shows the typed pause without claiming a deposit", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/session", async route => {
+    const response = await route.fetch();
+    const session = await response.json();
+    await route.fulfill({ response, json: { ...session, developmentMode: false } });
+  });
+  await page.route("**/api/account/security", route => route.fulfill({ json: { passwordEnrolled: true, phoneEnrolled: true } }));
+  await page.route("**/api/business/deposit-method", route => route.fulfill({ json: { mode: "ManualApproval" } }));
+  let posts = 0;
+  await page.route("**/api/business/deposit-requests", route => {
+    if (route.request().method() === "POST") {
+      posts++;
+      return route.fulfill({ status: 503, json: { code: "FinancialWritesPaused" } });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await login(context, "business");
+  await open(page, "/business/wallet");
+  await page.getByLabel("Amount", { exact: true }).fill("100");
+  await page.getByLabel("Payment receipt").setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
+  await page.getByRole("button", { name: "Submit for Review" }).click();
+  await expect(page.getByText("Adding funds is temporarily paused. Your receipt was not submitted.")).toBeVisible();
+  await expect(page.getByText("Your payment is waiting for approval.")).toHaveCount(0);
+  expect(posts).toBe(1);
+});

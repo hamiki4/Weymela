@@ -24,6 +24,119 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     private static readonly DateTime Now = new(2026, 9, 17, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public async Task Platform_requests_require_owned_verified_profiles_and_parallel_approvals_never_overfill()
+    {
+        var state = await Setup();
+        var second = new Actor(Guid.NewGuid(), ActorRole.Creator, CreatorId: Guid.NewGuid());
+        Guid firstProfile;
+        Guid secondProfile;
+        Guid opportunityId;
+        Guid firstRequest;
+        Guid secondRequest;
+        await using (var db = state.Database.Open())
+        {
+            firstProfile = await db.CreatorSocialProfiles.Where(x => x.CreatorId == state.Creator.CreatorId).Select(x => x.Id).SingleAsync();
+            var profile = new CreatorSocialProfileRecord
+            {
+                CreatorId = second.CreatorId!.Value, Platform = CreatorPlatform.TikTok,
+                ProfileUrl = "https://www.tiktok.com/@second", SelfReportedAudience = 20_000,
+                VerificationStatus = "Verified", VerifiedAudience = 20_000,
+                CreatedAtUtc = Now, UpdatedAtUtc = Now
+            };
+            secondProfile = profile.Id;
+            db.CreatorSocialProfiles.Add(profile);
+            db.CommercePermissions.Add(new CommercePermission(second.UserId, ActorRole.Creator, second.CreatorId.Value, null, true, false));
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = second.CreatorId.Value, Role = ActorRole.Creator, DisplayName = "Second Creator", PublicId = "CR-SECOND" });
+            await db.SaveChangesAsync();
+            var service = new UgcService(db, new FixedTime(Now));
+            opportunityId = await service.CreateAsync(state.Business, Input(1) with
+            {
+                PlatformCapacities = [new("TikTok", 1)]
+            }, "platform-create", default);
+            await service.PublishAsync(state.Business, opportunityId, 0, "platform-publish", default);
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.RequestAsync(second, opportunityId,
+                "wrong-profile", default, "TikTok", firstProfile));
+            firstRequest = await service.RequestAsync(state.Creator, opportunityId, "first-request", default, "TikTok", firstProfile);
+            secondRequest = await service.RequestAsync(second, opportunityId, "second-request", default, "TikTok", secondProfile);
+            db.ChangeTracker.Clear();
+            Assert.Equal(0, (await db.UgcPlatformCapacities.SingleAsync(x => x.UgcOpportunityId == opportunityId)).ApprovedCount);
+        }
+
+        async Task<bool> Approve(Guid requestId, string key)
+        {
+            await using var db = state.Database.Open();
+            try
+            {
+                await new UgcService(db, new FixedTime(Now)).ReviewRequestAsync(state.Business, requestId, true, null, key, default);
+                return true;
+            }
+            catch (ApplicationFailure) { return false; }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.SerializationFailure) { return false; }
+        }
+        var results = await Task.WhenAll(Approve(firstRequest, "approve-one"), Approve(secondRequest, "approve-two"));
+        Assert.Single(results, x => x);
+        await using var verify = state.Database.Open();
+        Assert.Equal(1, (await verify.UgcPlatformCapacities.SingleAsync(x => x.UgcOpportunityId == opportunityId)).ApprovedCount);
+        Assert.Equal(1, (await verify.UgcOpportunities.SingleAsync(x => x.Id == opportunityId)).ApprovedCreatorCount);
+        Assert.Equal(1, await verify.UgcAssignments.CountAsync(x => x.UgcOpportunityId == opportunityId));
+        Assert.Equal(1, await verify.UgcCreatorRequests.CountAsync(x => x.UgcOpportunityId == opportunityId && x.Status == UgcRequestStatus.Approved));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new UgcService(verify, new FixedTime(Now))
+            .RequestAsync(second, opportunityId, "full-request", default, "TikTok", secondProfile));
+    }
+
+    [Fact]
+    public async Task Delivery_only_draft_uses_general_capacity_without_a_fake_social_platform()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, Input(2) with
+        {
+            PlatformRequirements = [], PlatformCapacities = []
+        }, "delivery-only-create", default);
+        await service.PublishAsync(state.Business, id, 0, "delivery-only-publish", default);
+        var card = (await service.DetailAsync(state.Business, id, default)).Opportunity;
+        Assert.Empty(card.PlatformRequirements);
+        Assert.Empty(card.PlatformCapacities!);
+        var requestId = await service.RequestAsync(state.Creator, id, "delivery-only-request", default);
+        await service.ReviewRequestAsync(state.Business, requestId, true, null, "delivery-only-approve", default);
+        db.ChangeTracker.Clear();
+        var request = await db.UgcCreatorRequests.SingleAsync(x => x.Id == requestId);
+        Assert.Null(request.SelectedPlatform);
+        Assert.Null(request.VerifiedSocialProfileId);
+        Assert.Equal(1, (await db.UgcOpportunities.SingleAsync(x => x.Id == id)).ApprovedCreatorCount);
+    }
+
+    [Fact]
+    public async Task Capacity_migration_preserves_legacy_binding_and_database_constraints()
+    {
+        var state = await Setup();
+        await using var db = state.Database.Open();
+        var service = new UgcService(db, new FixedTime(Now));
+        var legacyId = await service.CreateAsync(state.Business, Input(1), "legacy-create", default);
+        await service.PublishAsync(state.Business, legacyId, 0, "legacy-publish", default);
+        var legacyRequest = await service.RequestAsync(state.Creator, legacyId, "legacy-request", default);
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20260929022846_BindUgcSaleAssignments");
+        await migrator.MigrateAsync();
+        db.ChangeTracker.Clear();
+        var preserved = await db.UgcCreatorRequests.SingleAsync(x => x.Id == legacyRequest);
+        Assert.Null(preserved.SelectedPlatform);
+        Assert.Null(preserved.VerifiedSocialProfileId);
+        Assert.Empty(await db.UgcPlatformCapacities.Where(x => x.UgcOpportunityId == legacyId).ToListAsync());
+
+        var capacityId = Guid.NewGuid();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""INSERT INTO v3."UgcPlatformCapacities" ("Id", "UgcOpportunityId", "Platform", "Capacity", "ApprovedCount") VALUES ({capacityId}, {legacyId}, 'TikTok', {1}, {0})""");
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""INSERT INTO v3."UgcPlatformCapacities" ("Id", "UgcOpportunityId", "Platform", "Capacity", "ApprovedCount") VALUES ({Guid.NewGuid()}, {legacyId}, 'TikTok', {1}, {0})"""));
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, duplicate.SqlState);
+        var overCapacity = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""UPDATE v3."UgcPlatformCapacities" SET "ApprovedCount" = {2} WHERE "Id" = {capacityId}"""));
+        Assert.Equal("CK_UgcPlatformCapacity_Counts", overCapacity.ConstraintName);
+        var parentDelete = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""DELETE FROM v3."UgcOpportunities" WHERE "Id" = {legacyId}"""));
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, parentDelete.SqlState);
+        await Assert.ThrowsAnyAsync<Exception>(() => migrator.MigrateAsync("20260929022846_BindUgcSaleAssignments"));
+    }
+
+    [Fact]
     public async Task Assignment_migration_preserves_unattributed_history_and_rejects_new_unbound_ugc_qr()
     {
         var state = await Setup();
@@ -699,12 +812,14 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var id = await service.CreateAsync(state.Business, Input(), "ugc-edit-create", default);
         await service.UpdateAsync(state.Business, id, new("New headline", "Create three vertical clips.", ["https://example.com/new-reference"],
             "Adama", "180-day digital use", false, "Updated transformation", "Photos", Now.AddDays(21), false, true,
-            600, 2, [new("Instagram", "Instagram/Reels", 5_000)]), 0, "ugc-edit-draft", default);
+            600, 2, [new("Instagram", "Instagram/Reels", 5_000)],
+            PlatformCapacities: [new("Instagram", 2)]), 0, "ugc-edit-draft", default);
         db.ChangeTracker.Clear();
         var opportunity = await db.UgcOpportunities.Include(x => x.PlatformRequirements).SingleAsync(x => x.Id == id);
         Assert.Equal("Updated transformation", opportunity.Title); Assert.Equal(UgcContentType.Photos, opportunity.ContentType);
         Assert.Equal(540m, opportunity.CreatorPayment.Amount); Assert.Equal(2, opportunity.CreatorCapacity);
-        Assert.Equal(1200m, opportunity.RequiredFunding.Amount); Assert.Equal("Instagram", opportunity.PlatformRequirements.Single().Platform.ToString());
+        Assert.Equal(1200m, opportunity.RequiredFunding.Amount);
+        Assert.Equal("Instagram", (await service.DetailAsync(state.Business, id, default)).Opportunity.PlatformRequirements.Single().Platform);
         Assert.Equal(2, await db.UgcRevisions.CountAsync(x => x.UgcOpportunityId == id));
         await service.PublishAsync(state.Business, id, opportunity.Version, "ugc-edit-publish", default);
         db.ChangeTracker.Clear();

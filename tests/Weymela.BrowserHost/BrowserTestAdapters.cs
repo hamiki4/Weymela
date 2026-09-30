@@ -10,6 +10,7 @@ using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Application.Web;
+using Weymela.Domain;
 
 namespace Weymela.BrowserHost;
 
@@ -135,6 +136,40 @@ public static class BrowserFixtureSeed
         EnsurePublicProfile(db, DevelopmentDirectory.Id(400), ActorRole.Creator,
             "Elias", "CR-200", "Addis Ababa", "Food", verifiedFollowers: 29000,
             verifiedViews: 121000, socialVerified: true);
+
+        // Browser promotions with platform slots require an authoritative
+        // verified profile; the public fixture flag alone grants no eligibility.
+        foreach (var (creatorId, handle, audience) in new[]
+        {
+            (DevelopmentDirectory.Id(300), "bella", 42000L),
+            (DevelopmentDirectory.Id(400), "elias", 29000L)
+        })
+        {
+            if (!await db.CreatorSocialProfiles.AnyAsync(x => x.CreatorId == creatorId && x.Platform == CreatorPlatform.TikTok))
+                db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord
+                {
+                    CreatorId = creatorId, Platform = CreatorPlatform.TikTok,
+                    ProfileUrl = $"https://www.tiktok.com/@{handle}", SelfReportedAudience = audience,
+                    VerificationStatus = "Verified", VerifiedAudience = audience,
+                    CreatedAtUtc = now, UpdatedAtUtc = now
+                });
+        }
+        foreach (var (creatorId, handle, audience) in new[]
+        {
+            (DevelopmentDirectory.Id(300), "bella", 42000L),
+            (DevelopmentDirectory.Id(400), "elias", 29000L),
+            (DevelopmentDirectory.Id(500), "mika", 800L)
+        })
+        {
+            if (!await db.CreatorSocialProfiles.AnyAsync(x => x.CreatorId == creatorId && x.Platform == CreatorPlatform.Instagram))
+                db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord
+                {
+                    CreatorId = creatorId, Platform = CreatorPlatform.Instagram,
+                    ProfileUrl = $"https://www.instagram.com/{handle}", SelfReportedAudience = audience,
+                    VerificationStatus = "Verified", VerifiedAudience = audience,
+                    CreatedAtUtc = now, UpdatedAtUtc = now
+                });
+        }
 
         if (!await db.CashierPreauthorizations.AnyAsync(x => x.UserId == DevelopmentDirectory.Id(9)))
         {

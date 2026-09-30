@@ -1,4 +1,25 @@
+import { safeExternal } from "../../ui/format";
+
 export type CreatorPlatform = "TikTok" | "YouTube" | "Instagram" | "Facebook";
+
+const platforms = new Set<string>(["TikTok", "YouTube", "Instagram", "Facebook"]);
+export function isCreatorPlatform(platform: string): platform is CreatorPlatform {
+  return platforms.has(platform);
+}
+
+export function creatorPublicHandle(platform: CreatorPlatform, url: string | undefined) {
+  const safe = safeExternal(url);
+  if (!safe) return null;
+  const parsed = new URL(safe);
+  const domains: Record<CreatorPlatform, string> = {
+    TikTok: "tiktok.com", YouTube: "youtube.com", Instagram: "instagram.com", Facebook: "facebook.com",
+  };
+  if (parsed.hostname !== domains[platform] && parsed.hostname !== `www.${domains[platform]}` && parsed.hostname !== `m.${domains[platform]}`) return null;
+  const segment = parsed.pathname.split("/").filter(Boolean)[0] ?? "";
+  if (platform === "TikTok" || platform === "YouTube") return /^@[a-zA-Z0-9._-]+$/.test(segment) ? segment : null;
+  if (!/^[a-zA-Z][a-zA-Z0-9._-]*$/.test(segment) || ["profile.php", "pages", "reel", "reels", "stories", "watch"].includes(segment.toLowerCase())) return null;
+  return `@${segment}`;
+}
 
 export function CreatorPlatformIcon({ platform }: { platform: CreatorPlatform }) {
   return <span className={`creator-platform-icon creator-platform-${platform.toLowerCase()}`} aria-hidden="true">
@@ -7,4 +28,19 @@ export function CreatorPlatformIcon({ platform }: { platform: CreatorPlatform })
     {platform === "Instagram" && <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r=".8" fill="currentColor" stroke="none" /></svg>}
     {platform === "Facebook" && <span>f</span>}
   </span>;
+}
+
+export function PlatformOccupancy({ slots, label = "Creator platform capacity" }: {
+  slots: { platform: string; approved: number; capacity: number; available?: number }[];
+  label?: string;
+}) {
+  const configured = slots.filter(slot => slot.capacity > 0);
+  return configured.length ? <div className="creator-platform-counts" aria-label={label}>
+    {configured.map(slot => <span key={slot.platform} className={slot.available === 0 ? "platform-full" : ""}
+      aria-label={`${slot.platform} — ${slot.approved} of ${slot.capacity} Creator slots filled`}
+      title={`${slot.platform}: ${slot.approved}/${slot.capacity}`}>
+      {isCreatorPlatform(slot.platform) ? <CreatorPlatformIcon platform={slot.platform} /> : <span>{slot.platform}</span>}
+      <span>{slot.approved}/{slot.capacity}</span>
+    </span>)}
+  </div> : null;
 }

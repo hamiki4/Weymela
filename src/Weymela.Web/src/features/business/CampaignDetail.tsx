@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
+import { PlatformOccupancy } from "../creator/CreatorPlatformIcon";
 import type {
   Applicant,
   BusinessCampaign,
@@ -180,7 +181,7 @@ export function BusinessCampaignDetail() {
                       <dd>{daysLeft(c.endUtc)}</dd>
                     </div>
                   </dl>
-                  {!!c.platforms?.length && <div className="business-platform-summary"><strong>Social platforms</strong><div className="creator-platform-counts">{c.platforms.map((slot) => <span key={slot.platform}><strong>{slot.platform}</strong> {slot.approved}/{slot.capacity} approved</span>)}</div><small>Creators {c.platforms.reduce((total, slot) => total + slot.approved, 0)}/{c.platforms.reduce((total, slot) => total + slot.capacity, 0)} · {data.applicants.filter((applicant) => applicant.status === "Pending").length} pending requests</small></div>}
+                  {!!c.platforms?.length && <div className="business-platform-summary"><strong>Social platforms</strong><PlatformOccupancy slots={c.platforms} /><small>Creators {c.platforms.reduce((total, slot) => total + slot.approved, 0)}/{c.platforms.reduce((total, slot) => total + slot.capacity, 0)} · {data.applicants.filter((applicant) => applicant.status === "Pending").length} pending requests</small></div>}
                 </Section>
                 <Section title="Promotion funds" action={<Currency />}>
                   <FundsGrid values={funds} />

@@ -48,8 +48,8 @@ internal static class CreatorEndpoints
         g.MapGet("/ugc/requests",(HttpContext c,UgcService service,CancellationToken ct)=>service.CreatorRequestsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc/assignments",(HttpContext c,UgcService service,CancellationToken ct)=>service.CreatorAssignmentsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc/{id:guid}",(Guid id,HttpContext c,UgcService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct));
-        g.MapPost("/ugc/{id:guid}/request",async(Guid id,HttpContext c,UgcService service,CancellationToken ct)=>
-            EndpointSupport.Id(await service.RequestAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct)));
+        g.MapPost("/ugc/{id:guid}/request",async(Guid id,string? selectedPlatform,Guid? verifiedSocialProfileId,HttpContext c,UgcService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.RequestAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct,selectedPlatform,verifiedSocialProfileId)));
         g.MapPost("/ugc/assignments/{id:guid}/submit",async(Guid id,UgcSubmissionInput input,HttpContext c,UgcService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.SubmitAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/assignments/{id:guid}/accept-revision",async(Guid id,VersionInput input,HttpContext c,UgcService service,CancellationToken ct)=>

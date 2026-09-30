@@ -65,7 +65,7 @@ test("Business keeps funding, Checkout and Cashier Management within reach", asy
   await page.getByRole("button", { name: "Open Settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings.getByRole("link", { name: "Cashier Management" })).toHaveAttribute("href", "/business/cashiers");
-  await expect(settings.getByRole("link", { name: "Create Cashier" })).toHaveAttribute("href", "/business/cashiers#create-cashier");
+  await expect(settings.getByRole("link", { name: "Create Cashier" })).toHaveCount(0);
   await settings.getByRole("button", { name: "Close Settings" }).click();
   await nav.getByRole("link", { name: "Profile" }).click();
   await expect(page).toHaveURL(/\/profile$/);

@@ -10,7 +10,7 @@ const opportunity = {
   productProvided: false, creatorMustPurchase: true,
 };
 
-for (const width of [320, 360, 375, 390, 430]) {
+for (const width of [320, 360, 375, 390, 393, 430]) {
   test(`UGC arrangement and shared icon readability at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.route("**/api/business/ugc", route => route.fulfill({ json: [opportunity] }));
@@ -23,7 +23,7 @@ for (const width of [320, 360, 375, 390, 430]) {
     await expect(page.getByRole("radio", { name: /Creator purchases product/ })).not.toBeChecked();
     await expect(page.getByRole("button", { name: "Save UGC Draft" })).toBeDisabled();
     await page.getByRole("radio", { name: /Creator purchases product/ }).check();
-    await expect(page.getByText("Creator purchases the product before creating content.")).toBeVisible();
+    await expect(page.getByText("Creator buys before creating content")).toBeVisible();
     await layout(page);
     if (width === 390) await screenshot(page, "390-business-ugc-arrangement");
     await open(page, "/business/ugc");

@@ -33,7 +33,7 @@ describe("Profile and Settings shell", () => {
   it.each([
     ["Customer", "/customer/offers", ["Add Profile"]],
     ["Creator", "/creator", ["Add Profile", "Social Profiles"]],
-    ["Business", "/business", ["Add Profile", "Cashier Management", "Create Cashier"]],
+    ["Business", "/business", ["Add Profile", "Cashier Management"]],
   ] as const)("separates %s Profile navigation from Settings", async (role, path, extra) => {
     setup(role, path, true);
     const mobile = within(screen.getByRole("navigation", { name: "Mobile navigation" }));
@@ -56,7 +56,7 @@ describe("Profile and Settings shell", () => {
     if (role === "Creator") expect(sheet.getByRole("link", { name: "Social Profiles" })).toHaveAttribute("href", "/profile#social-profiles");
     if (role === "Business") {
       expect(sheet.getByRole("link", { name: "Cashier Management" })).toHaveAttribute("href", "/business/cashiers");
-      expect(sheet.getByRole("link", { name: "Create Cashier" })).toHaveAttribute("href", "/business/cashiers#create-cashier");
+      expect(sheet.queryByRole("link", { name: "Create Cashier" })).not.toBeInTheDocument();
       expect(sheet.getByRole("link", { name: "Add Profile" })).toHaveAttribute("href", "/onboarding");
     }
     expect(sheet.queryByText("INTERNAL-ID")).not.toBeInTheDocument();

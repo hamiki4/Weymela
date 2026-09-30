@@ -28,7 +28,9 @@ Normal Pilot defaults to `V3_PILOT_FINANCIAL_WRITES_ENABLED=false` and `V3_PILOT
 
 Later activation sequence, after explicit operational approval: complete the paired backup/isolated restore above; apply the three reviewed migrations; verify receipt mount, `v3-verify.sql`, reconciliation and healthy API/Worker. Set `true` and a bounded `YYYY-MM-DDTHH:MM:SSZ` end in the protected Pilot Compose interpolation and assembled API environment, rerun preflight, restart only Pilot API/Worker, verify effective state and execute the named manual test. Reconcile after test actions. Deactivate by setting `false`/`disabled`, reassembling the protected API environment, rerunning preflight, restarting only Pilot services, proving financial mutations blocked again and reconciling. The expiry is a fail-safe, not a substitute for deactivation. Never edit wallets directly or bypass triggers.
 
-## Three-migration Pilot precheck
+## Historical three-migration Pilot precheck (completed)
+
+Pilot is now at 24 migrations. The following 21-to-24 procedure is retained as historical evidence and must not be repeated on Pilot.
 
 The reviewed order is `20260928213157_AlignDepositReviewAuthority`, `20260928230108_AddCreatorNumbers`, `20260929022846_BindUgcSaleAssignments`. Do **not** apply them in this source-preparation task. The immutable release package now carries checksummed `migrations/grants/baseline-21/v3-verify.sql` from installed commit `7d537bb8a83ed2757a2149261b8dd7a449f51629` and the exact target grant scripts plus verifier under `migrations/grants/current/`. `migration-manifest.json` binds both grant stages to their source commits and migration counts; `verify-release.py` rejects missing, altered or mismatched grant SQL. Never substitute SQL from a mutable server checkout.
 
@@ -40,6 +42,12 @@ For a later separately authorized Pilot deployment, use this order:
 4. Only after the rehearsal and a separate live authorization, repeat the migration and grant steps against Pilot from the same verified artifact. Run the target verifier after grants, before starting new images. Deploy only the manifest's immutable API/Web/Worker digests. Recheck readiness, grants, reconciliation, financial freeze and safe smoke.
 
 If any gate fails, stop; do not run a newer verifier on the old state, grant around it manually, or run routine `Down` migrations. Rolling back `AddCreatorNumbers` loses numeric IDs assigned later; prefer a controlled full paired restore when rollback is necessary, with an explicit loss-window decision.
+
+## UGC capacity release precheck (24 to 25)
+
+The next reviewed schema change is only `20260929203557_AddUgcPlatformCapacities`. The release package must contain the baseline-24 verifier from deployed source `47e63df0b71be941922ff9b316e3a0a0466ab187`, with SHA-256 `ef06c1b2690ba02db3329027c49b4286684ff9e6e898225cba9d0c82e9c287b0`, and the checksummed target grants and verifier. Require exactly 24 installed migrations and run that baseline verifier before changes. Create a fresh paired backup, rehearse the single migration and grants on an isolated restored copy, and verify the 25 exact IDs, nullable legacy request bindings, capacity constraints, and target grants. Only a later separately authorized deployment may apply the packaged migration and grants to Pilot. The `Down` migration refuses when platform capacity or attributed request data exists; use the reviewed paired restore procedure if reversal becomes necessary. Keep financial writes off.
+
+Existing published UGC opportunities keep their original global Creator capacity and posting requirements; the migration does not infer platform slots or assign platforms to historical requests. New and revised Business drafts use explicit per-platform slots when Creator posting is required. Delivery-only drafts retain a separate general Creator count and require no social-platform assignment. Pending requests consume no slots; approvals consume one available slot within the original request and assignment transaction.
 
 ## Other readiness work
 

@@ -42,19 +42,19 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
   return (
     <div className="metric-grid fund-metrics">
       <Metric
-        label="Total Balance"
-        value={amount(wallet.totalBalance)}
+        label="Total"
+        value={`${amount(wallet.totalBalance)} ETB`}
         icon="wallet"
         emphasis
       />
       <Metric
-        label="Available Balance"
-        value={amount(wallet.available)}
+        label="Available"
+        value={`${amount(wallet.available)} ETB`}
         icon="plus"
       />
       <Metric
-        label="Reserved Balance"
-        value={amount(wallet.reserved)}
+        label="Reserved"
+        value={`${amount(wallet.reserved)} ETB`}
         icon="lock"
       />
     </div>
@@ -68,14 +68,7 @@ export function BusinessDashboard() {
       {(data) => (
         <>
           <PageHeader
-            eyebrow={data.business.displayName}
             title="Home"
-            description="Manage your promotions and activity."
-            action={
-              <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
-                Create Promotion
-              </ActionLink></span>
-            }
           />
           <Link className="business-balance-summary" to="/business/wallet" aria-label="Available funds, view wallet">
             <div><span>Available</span><strong>{amount(data.wallet.available)}</strong></div>
@@ -93,6 +86,7 @@ export function BusinessDashboard() {
           </div>
           <Section title="Quick actions" className="quick-actions-section">
             <div className="actions quick-actions">
+              <ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink>
               <ActionLink to="/business/ugc/new" secondary icon="sparkle">Create UGC</ActionLink>
               <ActionLink to="/checkout" secondary icon="qr">Checkout / Scan QR</ActionLink>
               <ActionLink to="/business/cashiers" secondary icon="people">Cashier Management</ActionLink>
@@ -139,18 +133,15 @@ export function BusinessWallet() {
   return (
     <>
       <PageHeader
-        eyebrow="Advertising Funds"
         title="Wallet"
-        description="Manage your advertising funds."
       />
       <Resource resource={resource}>
         {(wallet) => (
           <>
             <WalletMetrics wallet={wallet} />
-            <div className="two-column">
+            <div className="wallet-content">
               <Section
                 title="Add Funds"
-                description="Any positive amount. Choose what works for your Business."
               >
                 {!user?.developmentMode ? <DepositSubmission /> : <form
                   onSubmit={(event) => {
@@ -210,26 +201,6 @@ export function BusinessWallet() {
                   </fieldset>
                 </form>}
               </Section>
-              <Section title="How your funds work">
-                <div className="pricing-note">
-                  <strong>Available</strong>
-                  <small>Funds you can reserve for a new Campaign.</small>
-                </div>
-                <div className="pricing-note">
-                  <strong>Reserved</strong>
-                  <small>
-                    Committed Campaign funds. Each Creator uses only their own
-                    Creator Budget.
-                  </small>
-                </div>
-                <div className="pricing-note">
-                  <strong>Campaign activity</strong>
-                  <small>
-                    Verified views and sales use reserved funds. Unused Creator
-                    Budget stays within its Campaign.
-                  </small>
-                </div>
-              </Section>
             </div>
             <Section title="Wallet history" action={<Currency />}>
               <DataTable
@@ -269,8 +240,7 @@ export function BusinessWallet() {
                 )}
                 empty={
                   <Empty
-                    title="No fund activity yet"
-                    message="Your deposits and Campaign spending will appear here."
+                    title="No activity yet."
                     icon="wallet"
                   />
                 }
@@ -515,7 +485,6 @@ export function BusinessCampaigns() {
     <>
       <PageHeader
         title="Promotions"
-        description="Create and manage your promotions."
         action={
           <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
             Create Promotion

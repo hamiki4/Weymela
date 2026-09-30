@@ -14,6 +14,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<PromotionPlatform> PromotionPlatforms => Set<PromotionPlatform>();
     public DbSet<UgcOpportunity> UgcOpportunities => Set<UgcOpportunity>();
     public DbSet<UgcPlatformRequirement> UgcPlatformRequirements => Set<UgcPlatformRequirement>();
+    public DbSet<UgcPlatformCapacity> UgcPlatformCapacities => Set<UgcPlatformCapacity>();
     public DbSet<UgcRevision> UgcRevisions => Set<UgcRevision>();
     public DbSet<UgcCreatorRequest> UgcCreatorRequests => Set<UgcCreatorRequest>();
     public DbSet<UgcAssignment> UgcAssignments => Set<UgcAssignment>();

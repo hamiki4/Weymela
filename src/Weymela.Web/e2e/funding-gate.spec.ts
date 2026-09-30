@@ -8,10 +8,9 @@ test("Business sees the Promotion shortfall before saving an unfunded draft", as
   const title = `Funding gate ${Date.now()}`;
   await open(page, "/business/campaigns/new");
   await page.getByLabel("Promotion title").fill(title);
-  await page.getByLabel("Description").fill("An original local story.");
-  await page.getByLabel("Start date").fill(new Date(Date.now() - 3600000).toISOString().slice(0, 16));
-  await page.getByLabel("End date").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+  await page.getByLabel("Promotion ends").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Promotion budget").fill(String(before.available + 1000));
   await expect(page.getByText("Need", { exact: true })).toBeVisible();

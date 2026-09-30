@@ -18,6 +18,7 @@ public sealed class UgcOpportunity
 {
     private UgcOpportunity() { Title = null!; Instructions = null!; PricingSnapshot = null!; }
     private readonly List<UgcPlatformRequirement> platformRequirements = [];
+    private readonly List<UgcPlatformCapacity> platformCapacities = [];
     public Guid Id { get; } = Guid.NewGuid();
     public Guid BusinessId { get; }
     public string Title { get; private set; }
@@ -52,12 +53,14 @@ public sealed class UgcOpportunity
     public Money PlatformFee => new(PerAssignmentFee.Amount * CreatorCapacity, CreatorPayment.Currency);
     public Money RemainingFunding => RequiredFunding.Subtract(UsedFunding);
     public IReadOnlyList<UgcPlatformRequirement> PlatformRequirements => platformRequirements;
+    public IReadOnlyList<UgcPlatformCapacity> PlatformCapacities => platformCapacities;
 
     public UgcOpportunity(Guid businessId, string title, string? slogan, UgcContentType contentType,
         string instructions, string resourcesJson, string? location, DateTime dueDateUtc,
         bool productProvided, bool creatorMustPurchase, string? usageRights, Money creatorPayment,
         int creatorCapacity, UgcPricingSnapshot pricing, DateTime now,
-        IReadOnlyCollection<(CreatorPlatform Platform, string Format, long? MinimumAudience)> requirements)
+        IReadOnlyCollection<(CreatorPlatform Platform, string Format, long? MinimumAudience)> requirements,
+        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null)
     {
         if (businessId == Guid.Empty || string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120)
             throw new ArgumentException("UGC title is required.");
@@ -86,6 +89,7 @@ public sealed class UgcOpportunity
                 throw new ArgumentException("UGC platform requirements are invalid.");
             platformRequirements.Add(new(Id, item.Platform, item.Format.Trim(), item.MinimumAudience));
         }
+        SetCapacities(capacities, creatorCapacity);
     }
 
     public void Publish(BusinessWallet wallet, DateTime now, Guid correlation)
@@ -96,10 +100,16 @@ public sealed class UgcOpportunity
         wallet.Reserve(RequiredFunding, now, correlation);
         ReservedFunding = RequiredFunding; Status = UgcOpportunityStatus.Open; PublishedAtUtc = now; Version++;
     }
-    public void ApproveCreator()
+    public void ApproveCreator(CreatorPlatform? selectedPlatform = null)
     {
         Ensure(UgcOpportunityStatus.Open, UgcOpportunityStatus.InProgress);
         if (ApprovedCreatorCount >= CreatorCapacity) throw new InvalidOperationException("UGC Creator capacity is full.");
+        if (platformCapacities.Any(x => x.Capacity > 0))
+        {
+            var slot = platformCapacities.SingleOrDefault(x => x.Platform == selectedPlatform)
+                ?? throw new InvalidOperationException("Choose an available UGC platform.");
+            slot.Approve();
+        }
         ApprovedCreatorCount++; Status = UgcOpportunityStatus.InProgress; Version++;
     }
     public void RecognizeApprovedDeliverable(BusinessWallet wallet, DateTime now, Guid correlation)
@@ -124,7 +134,7 @@ public sealed class UgcOpportunity
         string resourcesJson, string? location, DateTime dueDateUtc, bool productProvided,
         bool creatorMustPurchase, string? usageRights, Money creatorPayment, int creatorCapacity,
         IReadOnlyCollection<(CreatorPlatform Platform, string Format, long? MinimumAudience)> requirements,
-        DateTime now)
+        DateTime now, IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null)
     {
         Ensure(UgcOpportunityStatus.Draft);
         if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120) throw new ArgumentException("UGC title is required.");
@@ -143,8 +153,38 @@ public sealed class UgcOpportunity
         RequiredFunding = new Money(creatorPayment.Amount * creatorCapacity, creatorPayment.Currency);
         if (PricingSnapshot.MinimumUgcBudget is { } minimum && RequiredFunding.Amount < minimum.Amount)
             throw new InvalidOperationException("UGC funding is below the current minimum.");
-        platformRequirements.Clear();
-        foreach (var item in requirements) platformRequirements.Add(new(Id, item.Platform, item.Format.Trim(), item.MinimumAudience));
+        // Draft terms are revised in place because the runtime API has no
+        // DELETE privilege on either child table. Inactive rows retain zero
+        // capacity and cannot consume or advertise a Creator slot.
+        foreach (var item in requirements)
+        {
+            var existing = platformRequirements.SingleOrDefault(x => x.Platform == item.Platform);
+            if (existing is null) platformRequirements.Add(new(Id, item.Platform, item.Format.Trim(), item.MinimumAudience));
+            else if (existing.Format != item.Format.Trim() || existing.MinimumAudience != item.MinimumAudience)
+                throw new InvalidOperationException("Existing UGC posting terms cannot be rewritten in this draft.");
+        }
+        ReviseCapacities(capacities, creatorCapacity);
+    }
+    private void SetCapacities(IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities, int total)
+    {
+        if (capacities is not { Count: > 0 }) return;
+        if (capacities.GroupBy(x => x.Platform).Any(x => x.Count() > 1)
+            || capacities.Any(x => !Enum.IsDefined(x.Platform) || x.Capacity is < 1 or > 100)
+            || capacities.Sum(x => x.Capacity) != total)
+            throw new ArgumentException("UGC platform capacity must equal total Creator capacity.");
+        foreach (var item in capacities) platformCapacities.Add(new(Id, item.Platform, item.Capacity));
+    }
+    private void ReviseCapacities(IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities, int total)
+    {
+        if (capacities is null) return;
+        if (capacities.GroupBy(x => x.Platform).Any(x => x.Count() > 1)
+            || capacities.Any(x => !Enum.IsDefined(x.Platform) || x.Capacity is < 1 or > 100)
+            || (capacities.Count > 0 && capacities.Sum(x => x.Capacity) != total))
+            throw new ArgumentException("UGC platform capacity must equal total Creator capacity.");
+        foreach (var existing in platformCapacities)
+            existing.Revise(capacities.FirstOrDefault(x => x.Platform == existing.Platform).Capacity);
+        foreach (var item in capacities.Where(x => platformCapacities.All(existing => existing.Platform != x.Platform)))
+            platformCapacities.Add(new(Id, item.Platform, item.Capacity));
     }
     public void StartRevision() { Ensure(UgcOpportunityStatus.Draft, UgcOpportunityStatus.Open, UgcOpportunityStatus.InProgress); CurrentRevision++; Version++; }
     public void StartMaterialRevision() => StartRevision();
@@ -178,6 +218,34 @@ public sealed class UgcPlatformRequirement
     { UgcOpportunityId = ugcOpportunityId; Platform = platform; Format = format; MinimumAudience = minimumAudience; }
 }
 
+public sealed class UgcPlatformCapacity
+{
+    private UgcPlatformCapacity() { }
+    public Guid Id { get; } = Guid.NewGuid();
+    public Guid UgcOpportunityId { get; }
+    public CreatorPlatform Platform { get; }
+    public int Capacity { get; private set; }
+    public int ApprovedCount { get; private set; }
+    public int Available => Capacity - ApprovedCount;
+    public UgcPlatformCapacity(Guid opportunityId, CreatorPlatform platform, int capacity)
+    {
+        if (opportunityId == Guid.Empty || !Enum.IsDefined(platform) || capacity < 1)
+            throw new ArgumentException("UGC platform capacity is invalid.");
+        UgcOpportunityId = opportunityId; Platform = platform; Capacity = capacity;
+    }
+    public void Approve()
+    {
+        if (ApprovedCount >= Capacity) throw new InvalidOperationException("This UGC platform is full.");
+        ApprovedCount++;
+    }
+    public void Revise(int capacity)
+    {
+        if (capacity is < 0 or > 100 || capacity < ApprovedCount)
+            throw new ArgumentOutOfRangeException(nameof(capacity));
+        Capacity = capacity;
+    }
+}
+
 public sealed class UgcRevision
 {
     private UgcRevision() { SnapshotJson = null!; }
@@ -193,10 +261,14 @@ public sealed class UgcCreatorRequest
     private UgcCreatorRequest() { }
     public Guid Id { get; } = Guid.NewGuid(); public Guid UgcOpportunityId { get; }
     public Guid CreatorId { get; } public UgcRequestStatus Status { get; private set; } = UgcRequestStatus.Pending;
+    public CreatorPlatform? SelectedPlatform { get; }
+    public Guid? VerifiedSocialProfileId { get; }
     public DateTime RequestedAtUtc { get; } public DateTime? ReviewedAtUtc { get; private set; }
     public Guid? ReviewedByUserId { get; private set; } public string? RejectionReason { get; private set; }
-    public UgcCreatorRequest(Guid opportunityId, Guid creatorId, DateTime now)
-    { UgcOpportunityId = opportunityId; CreatorId = creatorId; RequestedAtUtc = now; }
+    public UgcCreatorRequest(Guid opportunityId, Guid creatorId, DateTime now,
+        CreatorPlatform? selectedPlatform = null, Guid? verifiedSocialProfileId = null)
+    { UgcOpportunityId = opportunityId; CreatorId = creatorId; RequestedAtUtc = now;
+      SelectedPlatform = selectedPlatform; VerifiedSocialProfileId = verifiedSocialProfileId; }
     public void Approve(Guid actor, DateTime now) { if (Status != UgcRequestStatus.Pending) throw new InvalidOperationException("UGC request is already decided."); Status = UgcRequestStatus.Approved; ReviewedByUserId = actor; ReviewedAtUtc = now; }
     public void Reject(Guid actor, string? reason, DateTime now) { if (Status != UgcRequestStatus.Pending) throw new InvalidOperationException("UGC request is already decided."); Status = UgcRequestStatus.Rejected; ReviewedByUserId = actor; ReviewedAtUtc = now; RejectionReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(); }
     public void Withdraw(DateTime now) { if (Status != UgcRequestStatus.Pending) throw new InvalidOperationException("Only pending UGC requests can be withdrawn."); Status = UgcRequestStatus.Withdrawn; ReviewedAtUtc = now; }

@@ -3,24 +3,11 @@ import { post, request, useAction, useResource } from "../../api/client";
 import { useSession } from "../../app/Session";
 import { Button, Dialog, Field, Notice, PageHeader, Resource, Section } from "../../ui/components";
 import { safeExternal } from "../../ui/format";
-import { CreatorPlatformIcon } from "./CreatorPlatformIcon";
+import { CreatorPlatformIcon, creatorPublicHandle } from "./CreatorPlatformIcon";
 
 interface SocialProfile { id: string; platform: string; profileUrl: string }
 const platforms = ["TikTok", "YouTube", "Instagram", "Facebook"] as const;
 type Platform = typeof platforms[number];
-
-function publicHandle(platform: Platform, url: string | undefined) {
-  if (!url) return null;
-  const parsed = new URL(url);
-  const domains: Record<Platform, string> = {
-    TikTok: "tiktok.com", YouTube: "youtube.com", Instagram: "instagram.com", Facebook: "facebook.com",
-  };
-  if (parsed.hostname !== domains[platform] && parsed.hostname !== `www.${domains[platform]}` && parsed.hostname !== `m.${domains[platform]}`) return null;
-  const segment = parsed.pathname.split("/").filter(Boolean)[0] ?? "";
-  if (platform === "TikTok" || platform === "YouTube") return /^@[a-zA-Z0-9._-]+$/.test(segment) ? segment : null;
-  if (!/^[a-zA-Z][a-zA-Z0-9._-]*$/.test(segment) || ["profile.php", "pages", "reel", "reels", "stories", "watch"].includes(segment.toLowerCase())) return null;
-  return `@${segment}`;
-}
 
 export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean }) {
   const { user } = useSession();
@@ -40,7 +27,7 @@ export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean 
         {platforms.map(platform => {
           const profile = profiles.find(row => row.platform === platform);
           const view = safeExternal(profile?.profileUrl);
-          const handle = publicHandle(platform, view);
+          const handle = creatorPublicHandle(platform, view);
           return <div className="creator-social-row" key={platform}>
             <CreatorPlatformIcon platform={platform} />
             <div><strong>{platform}</strong><small className={handle ? "creator-social-handle" : ""}>{profile ? handle ?? "Profile added" : "Not added"}</small></div>

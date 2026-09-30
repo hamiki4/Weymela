@@ -29,13 +29,20 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 throw new ApplicationFailure(FailureKind.Validation, "Choose Video or Photos.");
             var resources = Resources(input.Resources);
             var requirements = Requirements(input.PlatformRequirements);
+            var capacities = Capacities(input.PlatformCapacities);
+            if (input.PlatformCapacities is not null && requirements.Count > 0 && capacities.Count == 0)
+                throw new ApplicationFailure(FailureKind.Validation, "Choose Creator slots for each posting platform.");
+            if (capacities.Count > 0 && (capacities.Sum(x => x.Capacity) != input.CreatorsNeeded
+                || requirements.Select(x => x.Platform).Except(capacities.Select(x => x.Platform)).Any()
+                || capacities.Select(x => x.Platform).Except(requirements.Select(x => x.Platform)).Any()))
+                throw new ApplicationFailure(FailureKind.Validation, "Posting platforms must match Creator slots.");
             var config = await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token);
             var pricing = config.Ugc
                 ?? throw new InvalidOperationException("The effective financial configuration does not include UGC settings.");
             var opportunity = new UgcOpportunity(actor.BusinessId!.Value, input.Title, input.Slogan, contentType,
                 input.Instructions, JsonSerializer.Serialize(resources), input.Location, input.DueDateUtc,
                 input.ProductProvided, input.CreatorMustPurchase, input.UsageRights, Amount(input.CreatorPayment),
-                input.CreatorsNeeded, pricing, Now, requirements);
+                input.CreatorsNeeded, pricing, Now, requirements, capacities);
             db.UgcOpportunities.Add(opportunity);
             if (input.CustomerOfferEnabled)
             {
@@ -98,15 +105,20 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             return opportunity.Id;
         }, ct);
 
-    public Task<Guid> RequestAsync(Actor actor, Guid id, string key, CancellationToken ct) =>
+    public Task<Guid> RequestAsync(Actor actor, Guid id, string key, CancellationToken ct,
+        string? selectedPlatform = null, Guid? verifiedSocialProfileId = null) =>
         Transaction.ExecuteAsync(async token =>
         {
             await DemandCreator(actor, token);
-            var fingerprint = RequestFingerprint.Create(id.ToString(), actor.CreatorId!.Value.ToString());
+            var fingerprint = selectedPlatform is null && verifiedSocialProfileId is null
+                ? RequestFingerprint.Create(id.ToString(), actor.CreatorId!.Value.ToString())
+                : RequestFingerprint.Create(id.ToString(), actor.CreatorId!.Value.ToString(),
+                    selectedPlatform ?? "", verifiedSocialProfileId?.ToString() ?? "");
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "RequestUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
             var opportunity = await Opportunity(id, token);
-            if (opportunity.Status != UgcOpportunityStatus.Open || opportunity.ReservedFunding.Amount < opportunity.RequiredFunding.Amount
+            if (opportunity.Status is not (UgcOpportunityStatus.Open or UgcOpportunityStatus.InProgress)
+                || opportunity.ReservedFunding.Amount + opportunity.UsedFunding.Amount < opportunity.RequiredFunding.Amount
                 || opportunity.DueDateUtc <= Now || opportunity.ApprovedCreatorCount >= opportunity.CreatorCapacity
                 || opportunity.ProductProvided == opportunity.CreatorMustPurchase)
                 throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity is not accepting requests.");
@@ -114,10 +126,22 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     && x.SubjectId == opportunity.BusinessId && x.IsActive, token))
                 throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity is not accepting requests.");
             await EnsureCreatorEligibility(actor.CreatorId.Value, opportunity, token);
+            CreatorPlatform? platform = null;
+            if (HasPlatformSlots(opportunity))
+            {
+                if (!Enum.TryParse<CreatorPlatform>(selectedPlatform, true, out var chosen) || !Enum.IsDefined(chosen)
+                    || verifiedSocialProfileId is null
+                    || !opportunity.PlatformCapacities.Any(x => x.Platform == chosen && x.Available > 0))
+                    throw new ApplicationFailure(FailureKind.Validation, "Choose an available verified Creator platform.");
+                await EnsureVerifiedProfile(actor.CreatorId.Value, chosen, verifiedSocialProfileId.Value, opportunity, token);
+                platform = chosen;
+            }
+            else if (selectedPlatform is not null || verifiedSocialProfileId is not null)
+                throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity uses general Creator capacity.");
             if (await db.UgcCreatorRequests.AnyAsync(x => x.UgcOpportunityId == id && x.CreatorId == actor.CreatorId
                     && (x.Status == UgcRequestStatus.Pending || x.Status == UgcRequestStatus.Approved), token))
                 throw new ApplicationFailure(FailureKind.Validation, "You already requested this UGC opportunity.");
-            var request = new UgcCreatorRequest(id, actor.CreatorId.Value, Now);
+            var request = new UgcCreatorRequest(id, actor.CreatorId.Value, Now, platform, verifiedSocialProfileId);
             db.UgcCreatorRequests.Add(request);
             operation.Remember(actor, "RequestUgc", key, fingerprint, request.Id.ToString(), Now);
             Record(actor, "UgcRequestReceived", id, actor.CreatorId, Guid.NewGuid(),
@@ -138,7 +162,15 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             Guid result;
             if (approve)
             {
-                opportunity.ApproveCreator(); request.Approve(actor.UserId, Now);
+                if (HasPlatformSlots(opportunity))
+                {
+                    if (request.SelectedPlatform is not { } chosen || request.VerifiedSocialProfileId is not { } profile)
+                        throw new ApplicationFailure(FailureKind.Validation, "This UGC request has no verified platform selection.");
+                    await EnsureVerifiedProfile(request.CreatorId, chosen, profile, opportunity, token);
+                    if (!opportunity.PlatformCapacities.Any(x => x.Platform == chosen && x.Available > 0))
+                        throw new ApplicationFailure(FailureKind.Validation, "This UGC platform is full.");
+                }
+                opportunity.ApproveCreator(request.SelectedPlatform); request.Approve(actor.UserId, Now);
                 var assignment = new UgcAssignment(opportunity.Id, request.Id, request.CreatorId,
                     opportunity.CreatorPayment, opportunity.PerAssignmentFee, opportunity.CurrentRevision, Now);
                 db.UgcAssignments.Add(assignment); result = assignment.Id;
@@ -167,11 +199,16 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC assignment not found.");
             if (assignment.CreatorId != actor.CreatorId) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC assignment belongs to another Creator.");
             var opportunity = await Opportunity(assignment.UgcOpportunityId, token);
-            if (opportunity.PlatformRequirements.Count > 0)
+            var requirements = PostingRequirements(opportunity);
+            if (requirements.Count > 0)
             {
                 if (Now > opportunity.DueDateUtc)
                     throw new ApplicationFailure(FailureKind.Validation, "Social UGC content must be posted by the due date.");
-                if (!MatchesRequiredSocialPlatform(url, opportunity.PlatformRequirements))
+                var request = await db.UgcCreatorRequests.AsNoTracking().SingleAsync(x => x.Id == assignment.UgcCreatorRequestId, token);
+                var postingPlatforms = request.SelectedPlatform is { } selected
+                    ? requirements.Where(x => x.Platform == selected).ToArray()
+                    : requirements.ToArray();
+                if (!MatchesRequiredSocialPlatform(url, postingPlatforms))
                     throw new ApplicationFailure(FailureKind.Validation, "Submit a secure social post link from one of the required platforms.");
             }
             assignment.Submitted();
@@ -267,23 +304,36 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 if (input.ContentType is { } requested && (!Enum.TryParse<UgcContentType>(requested, true, out contentType) || !Enum.IsDefined(contentType)))
                     throw new ApplicationFailure(FailureKind.Validation, "Choose Video or Photos.");
                 var requirements = input.PlatformRequirements is null
-                    ? opportunity.PlatformRequirements.Select(x => (x.Platform, x.Format, x.MinimumAudience)).ToArray()
+                    ? PostingRequirements(opportunity).Select(x => (x.Platform, x.Format, x.MinimumAudience)).ToArray()
                     : Requirements(input.PlatformRequirements);
-                // Platform requirements are an owned draft detail but deliberately
-                // use a restrictive FK. Remove the prior rows explicitly inside the
-                // serializable transaction and detach the old instances before the
-                // aggregate swaps the collection, avoiding required-FK orphans while
-                // retaining restrictive deletion for the parent opportunity.
-                await db.UgcPlatformRequirements.Where(x => x.UgcOpportunityId == opportunity.Id).ExecuteDeleteAsync(token);
-                db.ChangeTracker.Clear();
-                opportunity = await Opportunity(id, token); Own(actor, opportunity);
-                if (opportunity.Version != expectedVersion) throw Conflict();
+                var capacities = input.PlatformCapacities is null
+                    ? opportunity.PlatformCapacities.Where(x => x.Capacity > 0).Select(x => (x.Platform, x.Capacity)).ToArray()
+                    : Capacities(input.PlatformCapacities);
+                if (input.PlatformRequirements is not null && input.PlatformCapacities is null
+                    && opportunity.PlatformCapacities.Count == 0
+                    && (requirements.Count != opportunity.PlatformRequirements.Count
+                        || requirements.Any(row => !opportunity.PlatformRequirements.Any(existing =>
+                            existing.Platform == row.Platform && existing.Format == row.Format
+                            && existing.MinimumAudience == row.MinimumAudience))))
+                    throw new ApplicationFailure(FailureKind.Validation,
+                        "Choose Creator slots when changing legacy UGC posting platforms.");
+                if (input.PlatformCapacities is not null && requirements.Count > 0 && capacities.Count == 0)
+                    throw new ApplicationFailure(FailureKind.Validation, "Choose Creator slots for each posting platform.");
+                if (capacities.Count > 0 && (capacities.Sum(x => x.Capacity) != (input.CreatorsNeeded ?? opportunity.CreatorCapacity)
+                    || requirements.Select(x => x.Platform).Except(capacities.Select(x => x.Platform)).Any()
+                    || capacities.Select(x => x.Platform).Except(requirements.Select(x => x.Platform)).Any()))
+                    throw new ApplicationFailure(FailureKind.Validation, "Posting platforms must match Creator slots.");
+                var existingRequirementIds = opportunity.PlatformRequirements.Select(row => row.Id).ToHashSet();
+                var existingCapacityIds = opportunity.PlatformCapacities.Select(row => row.Id).ToHashSet();
                 opportunity.UpdateDraft(input.Title ?? opportunity.Title, input.Slogan, contentType, input.Instructions,
                     JsonSerializer.Serialize(resources), input.Location, input.DueDateUtc ?? opportunity.DueDateUtc,
                     input.ProductProvided ?? opportunity.ProductProvided, input.CreatorMustPurchase ?? opportunity.CreatorMustPurchase,
                     input.UsageRights, input.CreatorPayment is { } payment ? Amount(payment) : opportunity.CreatorPayment,
-                    input.CreatorsNeeded ?? opportunity.CreatorCapacity, requirements, Now);
-                db.UgcPlatformRequirements.AddRange(opportunity.PlatformRequirements);
+                    input.CreatorsNeeded ?? opportunity.CreatorCapacity, requirements, Now, capacities);
+                foreach (var row in opportunity.PlatformRequirements.Where(row => !existingRequirementIds.Contains(row.Id)))
+                    db.UgcPlatformRequirements.Add(row);
+                foreach (var row in opportunity.PlatformCapacities.Where(row => !existingCapacityIds.Contains(row.Id)))
+                    db.UgcPlatformCapacities.Add(row);
                 var offer = await db.UgcCustomerOffers.SingleOrDefaultAsync(x => x.UgcOpportunityId == opportunity.Id, token);
                 var offerEnabled = input.CustomerOfferEnabled ?? offer is not null;
                 if (!offerEnabled && offer is not null) db.UgcCustomerOffers.Remove(offer);
@@ -318,6 +368,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 if (input.Title is not null || input.ContentType is not null || input.DueDateUtc is not null
                     || input.ProductProvided is not null || input.CreatorMustPurchase is not null
                     || input.CreatorPayment is not null || input.CreatorsNeeded is not null || input.PlatformRequirements is not null
+                    || input.PlatformCapacities is not null
                     || input.CustomerOfferEnabled is not null || input.CustomerDiscountPercent is not null
                     || input.CustomerOfferFundedAllocation is not null || input.CustomerFacingSlogan is not null
                     || input.CustomerOfferStartsAtUtc is not null || input.CustomerOfferEndsAtUtc is not null)
@@ -391,7 +442,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     public async Task<IReadOnlyList<UgcCard>> BusinessAsync(Actor actor, CancellationToken ct)
     {
         await DemandBusiness(actor, ct);
-        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements)
+        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities)
             .Where(x => x.BusinessId == actor.BusinessId).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
         var offers = await db.UgcCustomerOffers.AsNoTracking().Where(x => x.BusinessId == actor.BusinessId)
             .ToDictionaryAsync(x => x.UgcOpportunityId, ct);
@@ -405,8 +456,9 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var socials = await db.CreatorSocialProfiles.AsNoTracking().Where(x => x.CreatorId == actor.CreatorId && x.IsActive).ToListAsync(ct);
         var requests = await db.UgcCreatorRequests.AsNoTracking().Where(x => x.CreatorId == actor.CreatorId)
             .OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
-        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements)
-            .Where(x => x.Status == UgcOpportunityStatus.Open && x.DueDateUtc > Now)
+        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities)
+            .Where(x => (x.Status == UgcOpportunityStatus.Open || x.Status == UgcOpportunityStatus.InProgress)
+                && x.DueDateUtc > Now)
             .OrderByDescending(x => x.PublishedAtUtc).ToListAsync(ct);
         var businessIds = rows.Select(x => x.BusinessId).Distinct().ToArray();
         var activeBusinesses = await db.CommercePermissions.AsNoTracking()
@@ -417,10 +469,13 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var offers = await db.UgcCustomerOffers.AsNoTracking()
             .Where(x => businessIds.Contains(x.BusinessId))
             .ToDictionaryAsync(x => x.UgcOpportunityId, ct);
-        return rows.Where(x => activeBusinesses.Contains(x.BusinessId) && x.ReservedFunding.Amount >= x.RequiredFunding.Amount
+        return rows.Where(x => activeBusinesses.Contains(x.BusinessId)
+                && x.ReservedFunding.Amount + x.UsedFunding.Amount >= x.RequiredFunding.Amount
                 && x.ProductProvided != x.CreatorMustPurchase
-                && Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity)
-            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), offers.GetValueOrDefault(x.Id), false)).ToArray();
+                && (HasPlatformSlots(x)
+                    ? x.PlatformCapacities.Any(slot => socials.Any(profile => profile.Platform == slot.Platform && MatchesProfile(profile, x)))
+                    : Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity))
+            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), offers.GetValueOrDefault(x.Id), false, socials)).ToArray();
     }
 
     public async Task<IReadOnlyList<UgcRequestView>> CreatorRequestsAsync(Actor actor, CancellationToken ct)
@@ -440,7 +495,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
 
     public async Task<UgcDetail> DetailAsync(Actor actor, Guid id, CancellationToken ct)
     {
-        var opportunity = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).SingleOrDefaultAsync(x => x.Id == id, ct)
+        var opportunity = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities).SingleOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC opportunity not found.");
         var isBusiness = actor.Role == ActorRole.Business && actor.BusinessId == opportunity.BusinessId;
         var isCreator = actor.Role == ActorRole.Creator && actor.CreatorId is not null;
@@ -450,7 +505,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         else if (isCreator)
         {
             await DemandCreator(actor, ct);
-            var creatorHasContext = opportunity.Status == UgcOpportunityStatus.Open && opportunity.DueDateUtc > Now
+            var creatorHasContext = (opportunity.Status is UgcOpportunityStatus.Open or UgcOpportunityStatus.InProgress)
+                && opportunity.DueDateUtc > Now
                 || await db.UgcCreatorRequests.AsNoTracking().AnyAsync(x => x.UgcOpportunityId == id && x.CreatorId == actor.CreatorId, ct)
                 || await db.UgcAssignments.AsNoTracking().AnyAsync(x => x.UgcOpportunityId == id && x.CreatorId == actor.CreatorId, ct);
             if (!creatorHasContext) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC opportunity is not available to the active Creator.");
@@ -470,14 +526,16 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var status = isCreator ? requestRows.OrderByDescending(x => x.RequestedAtUtc).FirstOrDefault()?.Status.ToString() : null;
         var customerOffer = isBusiness || isAdmin
             ? await db.UgcCustomerOffers.AsNoTracking().SingleOrDefaultAsync(x => x.UgcOpportunityId == id, ct) : null;
-        return new UgcDetail(Card(opportunity, business, status, customerOffer, isBusiness || isAdmin), opportunity.Instructions, ParseResources(opportunity.ResourcesJson),
+        var socialProfiles = isCreator ? await db.CreatorSocialProfiles.AsNoTracking()
+            .Where(x => x.CreatorId == actor.CreatorId && x.IsActive).ToListAsync(ct) : null;
+        return new UgcDetail(Card(opportunity, business, status, customerOffer, isBusiness || isAdmin, socialProfiles), opportunity.Instructions, ParseResources(opportunity.ResourcesJson),
             opportunity.ProductProvided, opportunity.CreatorMustPurchase, opportunity.UsageRights, opportunity.CurrentRevision, requests, assignments, revisions);
     }
 
     public async Task<IReadOnlyList<UgcCard>> AdminAsync(Actor actor, CancellationToken ct)
     {
         DemandPlatformAdmin(actor);
-        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
         var ids = rows.Select(x => x.BusinessId).Distinct().ToArray();
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && ids.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         var offers = await db.UgcCustomerOffers.AsNoTracking().ToDictionaryAsync(x => x.UgcOpportunityId, ct);
@@ -502,7 +560,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     private async Task<IReadOnlyList<UgcAssignmentView>> AssignmentViews(IReadOnlyCollection<UgcAssignment> rows, CancellationToken ct)
     {
         var opportunityIds = rows.Select(x => x.UgcOpportunityId).Distinct().ToArray();
-        var opportunities = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements)
+        var opportunities = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities)
             .Where(x => opportunityIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
         var businessIds = opportunities.Values.Select(x => x.BusinessId).Distinct().ToArray();
         var creatorIds = rows.Select(x => x.CreatorId).Distinct().ToArray();
@@ -516,13 +574,13 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 x.CreatorId, profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.DisplayName ?? "Creator",
                 x.CreatorPayment.Amount, x.Status.ToString(), x.AcceptedRevisionNumber, x.RevisionAcceptanceRequired,
                 opportunity.DueDateUtc, opportunity.Instructions, ParseResources(opportunity.ResourcesJson), opportunity.Location,
-                opportunity.PlatformRequirements.Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(),
+                PostingRequirements(opportunity).Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(),
                 submission?.Feedback, submission?.SubmissionUrl, opportunity.ProductProvided, opportunity.CreatorMustPurchase);
         }).ToArray();
     }
 
     private async Task<UgcOpportunity> Opportunity(Guid id, CancellationToken ct) =>
-        await db.UgcOpportunities.Include(x => x.PlatformRequirements).SingleOrDefaultAsync(x => x.Id == id, ct)
+        await db.UgcOpportunities.Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities).SingleOrDefaultAsync(x => x.Id == id, ct)
         ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC opportunity not found.");
     private async Task DemandBusiness(Actor actor, CancellationToken ct)
     {
@@ -546,10 +604,34 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var socials = await db.CreatorSocialProfiles.AsNoTracking().Where(x => x.CreatorId == creatorId && x.IsActive).ToListAsync(ct);
         if (!Eligible(socials, opportunity)) throw new ApplicationFailure(FailureKind.Validation, "Your Creator social profiles do not meet this UGC opportunity's optional platform requirement.");
     }
+    private async Task EnsureVerifiedProfile(Guid creatorId, CreatorPlatform platform, Guid profileId,
+        UgcOpportunity opportunity, CancellationToken ct)
+    {
+        var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.Id == profileId, ct);
+        if (profile is null || profile.CreatorId != creatorId || profile.Platform != platform || !profile.IsActive
+            || !MatchesProfile(profile, opportunity))
+            throw new ApplicationFailure(FailureKind.Validation, "Choose your verified social profile for this UGC platform.");
+    }
+    private static bool HasPlatformSlots(UgcOpportunity opportunity) =>
+        opportunity.PlatformCapacities.Any(slot => slot.Capacity > 0);
+    private static IReadOnlyList<UgcPlatformRequirement> PostingRequirements(UgcOpportunity opportunity) =>
+        opportunity.PlatformCapacities.Count == 0
+            ? opportunity.PlatformRequirements
+            : opportunity.PlatformRequirements.Where(requirement => opportunity.PlatformCapacities.Any(
+                slot => slot.Platform == requirement.Platform && slot.Capacity > 0)).ToArray();
+    private static bool MatchesProfile(CreatorSocialProfileRecord profile, UgcOpportunity opportunity)
+    {
+        if (profile.VerificationStatus != "Verified") return false;
+        var requirement = PostingRequirements(opportunity).SingleOrDefault(x => x.Platform == profile.Platform);
+        return requirement?.MinimumAudience is not { } minimum || profile.VerifiedAudience >= minimum;
+    }
     private static bool Eligible(IReadOnlyCollection<CreatorSocialProfileRecord> socials, UgcOpportunity opportunity) =>
-        opportunity.PlatformRequirements.Where(x => x.MinimumAudience is not null).All(requirement =>
-            socials.Any(s => s.Platform == requirement.Platform && s.VerificationStatus == "Verified"
-                && s.VerifiedAudience >= requirement.MinimumAudience));
+        HasPlatformSlots(opportunity)
+            ? opportunity.PlatformCapacities.Any(slot => slot.Available > 0 && socials.Any(profile =>
+                profile.Platform == slot.Platform && MatchesProfile(profile, opportunity)))
+            : PostingRequirements(opportunity).Where(x => x.MinimumAudience is not null).All(requirement =>
+                socials.Any(s => s.Platform == requirement.Platform && s.VerificationStatus == "Verified"
+                    && s.VerifiedAudience >= requirement.MinimumAudience));
 
     private FinancialJournal Journal(Actor actor, JournalSourceType source, Money amount, string debit, string credit,
         string key, Guid correlation, Guid opportunityId, Guid? assignmentId, Guid? customerOfferId = null)
@@ -608,12 +690,27 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         }
         return result;
     }
-    private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer, bool includeBusinessFinancials) => new(x.Id, x.BusinessId, business,
+    private static IReadOnlyList<(CreatorPlatform Platform, int Capacity)> Capacities(IReadOnlyList<UgcPlatformCapacityInput>? input)
+    {
+        var result = new List<(CreatorPlatform, int)>();
+        foreach (var row in input ?? [])
+        {
+            if (!Enum.TryParse<CreatorPlatform>(row.Platform, true, out var platform) || !Enum.IsDefined(platform)
+                || row.Capacity is < 1 or > 100)
+                throw new ApplicationFailure(FailureKind.Validation, "Choose supported UGC platforms and valid Creator capacity.");
+            result.Add((platform, row.Capacity));
+        }
+        if (result.GroupBy(x => x.Item1).Any(x => x.Count() > 1))
+            throw new ApplicationFailure(FailureKind.Validation, "Add each UGC platform once.");
+        return result;
+    }
+    private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer,
+        bool includeBusinessFinancials, IReadOnlyCollection<CreatorSocialProfileRecord>? socials = null) => new(x.Id, x.BusinessId, business,
         x.Title, x.Slogan, x.ContentType.ToString(), x.Status.ToString(),
         includeBusinessFinancials ? x.RequiredFunding.Amount / x.CreatorCapacity : x.CreatorPayment.Amount, x.CreatorCapacity,
         x.ApprovedCreatorCount, includeBusinessFinancials ? x.RequiredFunding.Amount : null,
         includeBusinessFinancials ? x.ReservedFunding.Amount : null, includeBusinessFinancials ? x.UsedFunding.Amount : null, x.DueDateUtc,
-        x.Location, x.PlatformRequirements.Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(), requestStatus, x.Version,
+        x.Location, PostingRequirements(x).Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(), requestStatus, x.Version,
         offer is not null,
         offer?.CustomerDiscountPercent,
         includeBusinessFinancials ? offer?.FundedLimit.Amount : null,
@@ -621,7 +718,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         includeBusinessFinancials ? offer?.Status.ToString() : null,
         includeBusinessFinancials ? offer?.CustomerFacingSlogan : null,
         includeBusinessFinancials ? x.PricingSnapshot.PlatformFeePercent : null,
-        includeBusinessFinancials ? x.PlatformFee.Amount : null, x.ProductProvided, x.CreatorMustPurchase);
+        includeBusinessFinancials ? x.PlatformFee.Amount : null, x.ProductProvided, x.CreatorMustPurchase,
+        x.PlatformCapacities.Where(slot => slot.Capacity > 0).Select(slot => new UgcPlatformCapacityView(slot.Platform.ToString(), slot.Capacity, slot.ApprovedCount, slot.Available)).ToArray(),
+        socials?.Where(profile => profile.IsActive && x.PlatformCapacities.Any(slot => slot.Platform == profile.Platform && slot.Capacity > 0)
+            && MatchesProfile(profile, x)).Select(profile => new UgcEligibleSocialProfile(profile.Id, profile.Platform.ToString(), profile.ProfileUrl)).ToArray());
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,
         decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)
@@ -645,7 +745,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     private static string[] ParseResources(string json)
     { try { return JsonSerializer.Deserialize<string[]>(json) ?? []; } catch (JsonException) { return []; } }
     private static string Snapshot(UgcOpportunity x) => JsonSerializer.Serialize(new
-    { x.Title, x.Slogan, x.ContentType, x.Instructions, x.ResourcesJson, x.Location, x.DueDateUtc, x.ProductProvided, x.CreatorMustPurchase, x.UsageRights, x.CreatorPayment, x.CreatorCapacity, x.CurrentRevision });
+    { x.Title, x.Slogan, x.ContentType, x.Instructions, x.ResourcesJson, x.Location, x.DueDateUtc, x.ProductProvided, x.CreatorMustPurchase, x.UsageRights, x.CreatorPayment, x.CreatorCapacity,
+        PlatformCapacities = x.PlatformCapacities.Where(slot => slot.Capacity > 0).Select(slot => new { slot.Platform, slot.Capacity, slot.ApprovedCount }).ToArray(), x.CurrentRevision });
     private static string? Clean(string? value, int max)
     { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > max) throw new ApplicationFailure(FailureKind.Validation, "The supplied information is too long."); return result; }
     private static ApplicationFailure Conflict() => new(FailureKind.ConcurrencyConflict, "UGC changed. Reload before trying again.");

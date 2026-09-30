@@ -90,10 +90,10 @@ class RepositoryGateTests(unittest.TestCase):
                                 'FinancialConfigurationVersions'):
             self.assertNotIn(f'v3."{forbidden_table}"', sql)
 
-    def test_source_migration_order_is_exactly_approved_through_phase_i1(self):
+    def test_source_migration_order_is_exactly_approved_through_ugc_capacity(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -117,7 +117,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('Main branch protection is not a prerequisite', policy)
         self.assertIn('Production retains its separate stricter authorization policy', policy)
         self.assertIn('fresh protected paired PostgreSQL/receipt backup', policy)
-        self.assertIn('packaged baseline-21 verifier against the old installed grants', policy)
+        self.assertIn('packaged baseline-24 verifier against the installed grants', policy)
         self.assertIn('packaged target verifier after those grants are installed', policy)
         self.assertIn('financial test window stays off by default', policy)
 
@@ -481,7 +481,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             (self.root/f"images/{image['component']}-image.json").write_text(json.dumps(image))
         (self.root/'migrations/efbundle').write_text('inert test artifact, not executable')
         (self.root/'migrations/v3-forward.sql').write_text('-- inert fixture')
-        baseline = 'grants/baseline-21/v3-verify.sql'
+        baseline = 'grants/baseline-24/v3-verify.sql'
         current = [f'grants/current/v3-{name}.sql' for name in
                    ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
         verifier = 'grants/current/v3-verify.sql'
@@ -489,19 +489,21 @@ class ReleaseIntegrityTests(unittest.TestCase):
             path = self.root/'migrations'/name
             path.parent.mkdir(parents=True, exist_ok=True)
             if name == baseline:
-                path.write_bytes((ROOT/'database/grants/baseline-21/v3-verify.sql').read_bytes())
+                path.write_bytes(subprocess.check_output(['git', 'show',
+                    '47e63df0b71be941922ff9b316e3a0a0466ab187:database/grants/v3-verify.sql'], cwd=ROOT))
             else:
                 path.write_text('-- inert grant fixture')
         order = [f'migration-{i}' for i in range(20)] + [
             '20260925212120_RetireSupportSessions',
             '20260928213157_AlignDepositReviewAuthority',
             '20260928230108_AddCreatorNumbers',
-            '20260929022846_BindUgcSaleAssignments']
+            '20260929022846_BindUgcSaleAssignments',
+            '20260929203557_AddUgcPlatformCapacities']
         migration = {'commit':commit, 'migrationOrder':order,
                      'grantContracts':{
-                         'from':{'sourceCommit':'7d537bb8a83ed2757a2149261b8dd7a449f51629',
-                                 'migrationCount':21,'verifier':baseline},
-                         'to':{'sourceCommit':commit,'migrationCount':24,
+                         'from':{'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',
+                                 'migrationCount':24,'verifier':baseline},
+                         'to':{'sourceCommit':commit,'migrationCount':25,
                                'scripts':current,'verifier':verifier}},
                      'files':{p.relative_to(self.root/'migrations').as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in (self.root/'migrations').rglob('*') if p.is_file()}}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
+import { PlatformOccupancy } from "./CreatorPlatformIcon";
 import type {
   CreatorHome,
   CreatorPricing,
@@ -234,7 +235,7 @@ export function CreatorOpportunity() {
                     </div>
                   )}
                 </dl>
-                {!!p.platforms?.length && <div className="creator-platform-counts" aria-label="Social platform availability">{p.platforms.map((slot) => <span key={slot.platform} className={slot.available <= 0 ? "platform-full" : ""}><strong>{slot.platform}</strong> {slot.approved}/{slot.capacity}{slot.available <= 0 ? " · Full" : ""}</span>)}</div>}
+                {!!p.platforms?.length && <PlatformOccupancy slots={p.platforms} />}
               </Section>
               <Section title="How You Earn" action={<Currency />}>
                 <div className="price-feature">

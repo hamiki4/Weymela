@@ -32,6 +32,7 @@ for (const viewport of viewports)
           "/business/ugc",
           "/business/ugc/new",
           "/business/pricing",
+          "/business/cashiers",
           "/profile",
         ],
       ],
@@ -134,10 +135,11 @@ for (const viewport of viewports)
         if (viewport.width <= 430 && role === "business" && path === "/business/campaigns/new") {
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await page.getByLabel("Promotion title").fill(`Responsive funding ${viewport.width}`);
-          await page.getByLabel("Description").fill("Mobile funding layout check.");
-          await page.getByLabel("Start date").fill(new Date(Date.now() - 3600000).toISOString().slice(0, 16));
-          await page.getByLabel("End date").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+          await page.getByLabel("Promotion ends").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
           await page.getByRole("button", { name: "Continue" }).click();
+          if (viewport.width === 390 || viewport.width === 393)
+            await screenshot(page, `${viewport.width}-business-promotion-creators`);
+          await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
           await page.getByRole("button", { name: "Continue" }).click();
           await page.getByLabel("Promotion budget").fill(String(available + 1000));
           await expect(page.getByText("1,000 ETB more", { exact: true })).toBeVisible();
@@ -154,7 +156,7 @@ for (const viewport of viewports)
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await expect(page.getByRole("heading", { name: "Create UGC", exact: true })).toBeVisible();
           const summary = page.locator("section.panel").filter({ has: page.getByRole("heading", { name: "Funding Summary" }) });
-          await page.getByLabel("UGC content commitment per Creator").fill(String(available + 1000));
+          await page.getByLabel("Creator payment").fill(String(available + 1000));
           await expect(summary.getByText("Need", { exact: true })).toBeVisible();
           await expect(summary.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);

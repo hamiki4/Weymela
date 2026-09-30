@@ -47,6 +47,28 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
         return (await db.BusinessWallets.AsNoTracking().SingleAsync(x => x.BusinessId == Weymela.Infrastructure.Development.DevelopmentDirectory.Id(100))).AvailableBalance.Amount;
     }
 
+    [Fact] public async Task Frozen_financial_writes_reject_receipt_before_storage_with_typed_response()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "weymela-frozen-receipt-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await using var host = await ApiFixture.CreateAsync(fixture, b => b.Configuration.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["V3:Deposits:Mode"] = "ManualApproval",
+                    ["V3:Deposits:ReceiptDirectory"] = directory, ["V3:FinancialWritesEnabled"] = "false" }));
+            using var business = await host.Login("business");
+            var response = await Submit(business);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+            var error = await response.Content.ReadFromJsonAsync<JsonNode>();
+            Assert.Equal("FinancialWritesPaused", error?["code"]?.GetValue<string>());
+            Assert.Empty(Directory.GetFiles(directory));
+            await using var db = host.Database.Open();
+            Assert.False(await db.DepositRequests.AnyAsync());
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     [Fact] public async Task Receipt_submission_is_pending_private_idempotent_and_approval_credits_once()
     {
         var (host, directory) = await Host(fixture);

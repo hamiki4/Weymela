@@ -25,9 +25,8 @@ import {
 import { amount, campaignType, count, date, isViewOnly } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { useCreatorLegalAction } from "./CreatorLegalPage";
-import { CreatorPlatformIcon, type CreatorPlatform } from "./CreatorPlatformIcon";
-
-const socialPlatforms = new Set<string>(["TikTok", "Instagram", "YouTube", "Facebook"]);
+import { PlatformOccupancy } from "./CreatorPlatformIcon";
+import { UgcJoinControls } from "./UgcJoinControls";
 
 export function CreatorDashboard() {
   const home = useResource<CreatorHome>("/creator/home");
@@ -70,7 +69,7 @@ function PromotionOpportunityCard({ row }: { row: Opportunity }) {
     <span className="creator-opportunity-type">{campaignType(row.type)}</span>
     <p className="creator-opportunity-earn"><strong>Earn {amount(row.earnings.youEarn)} ETB</strong><span>per {count(row.earnings.views)} verified views</span></p>
     {!isViewOnly(row.type) && <p className="creator-opportunity-meta">+ {amount(row.earnings.saleCommissionPercent)}% from eligible purchases</p>}
-    {row.platforms?.length ? <div className="creator-platform-counts" aria-label="Social platform availability">{row.platforms.map((slot) => <span key={slot.platform} className={slot.available <= 0 ? "platform-full" : ""} aria-label={`${slot.platform} ${slot.approved} of ${slot.capacity} approved${slot.available <= 0 ? ", full" : ""}`} title={`${slot.platform} ${slot.approved}/${slot.capacity}${slot.available <= 0 ? " · Full" : ""}`}>{socialPlatforms.has(slot.platform) ? <CreatorPlatformIcon platform={slot.platform as CreatorPlatform} /> : <span className="creator-platform-fallback">{slot.platform}</span>}<span>{slot.approved}/{slot.capacity}</span></span>)}</div> : null}
+    {row.platforms?.length ? <PlatformOccupancy slots={row.platforms} /> : null}
     {row.creatorCapacity ? <p className="creator-opportunity-meta">Creators {row.approvedCreators ?? 0}/{row.creatorCapacity}</p> : null}
     {(row.location || row.business.region) && <p className="creator-opportunity-location"><Icon name="location" size={16} />{row.location || row.business.region}</p>}
     {full && !row.requestStatus ? <span className="creator-opportunity-unavailable">No spots available</span> : <ActionLink to={`/creator/discover/${row.id}`}>{row.requestStatus ? "View Promotion" : "Request to Join"}</ActionLink>}
@@ -78,8 +77,6 @@ function PromotionOpportunityCard({ row }: { row: Opportunity }) {
 }
 
 function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () => void }) {
-  const action = useAction();
-  const arrangementReady = row.productProvided !== row.creatorMustPurchase;
   return <article className="creator-opportunity-card">
     <div className="creator-opportunity-heading"><div><p className="card-eyebrow">{row.business}</p><h3>{row.title}</h3></div><Badge status={row.requestStatus ?? row.status} /></div>
     {row.slogan?.trim() && <p className="creator-opportunity-slogan">{row.slogan}</p>}
@@ -89,8 +86,7 @@ function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () =>
     <p className="ugc-arrangement">{row.productProvided && !row.creatorMustPurchase ? "Product provided by Business" : row.creatorMustPurchase && !row.productProvided ? "Creator purchases product" : "Product arrangement unavailable"}</p>
     <p className="creator-opportunity-meta">{row.contentType} · Due {date(row.dueDateUtc)}</p>
     {row.location && <p className="creator-opportunity-location"><Icon name="location" size={16} />{row.location}</p>}
-    {!row.requestStatus && <Button disabled={action.busy || !arrangementReady} onClick={() => void action.run(async (key) => { await post(`/creator/ugc/${row.id}/request`, undefined, key); onChanged(); })}>{action.busy ? "Requesting…" : "Request to Join"}</Button>}
-    {action.error && <Notice error>{action.error}</Notice>}
+    <UgcJoinControls item={row} onChanged={onChanged} />
   </article>;
 }
 

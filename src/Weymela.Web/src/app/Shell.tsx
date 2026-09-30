@@ -296,7 +296,6 @@ export function Shell({ children }: { children?: ReactNode }) {
         {user.role === "Creator" && <Link className="settings-row" to="/profile#social-profiles" onClick={closeSettings}><Icon name="globe" />Social Profiles</Link>}
         {user.role === "Business" && <>
           <Link className="settings-row" to="/business/cashiers" onClick={closeSettings}><Icon name="people" />Cashier Management</Link>
-          <Link className="settings-row" to="/business/cashiers#create-cashier" onClick={closeSettings}><Icon name="plus" />Create Cashier</Link>
         </>}
         {deviceMessage && <p className="settings-device-message" role="status">{deviceMessage}</p>}
         <button type="button" className="settings-row settings-signout" onClick={signOutAndClose}><Icon name="logout" />Sign Out</button>
@@ -309,7 +308,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             </Link>
           )}
           <span className="workspace-label">
-            {roles[user.role]} <span className="muted">/ Weymela</span>
+            {roles[user.role]} {user.role !== "Business" && <span className="muted">/ Weymela</span>}
           </span>
           {user.role === "PlatformAdmin" && <strong className="topbar-identity">{user.displayName}</strong>}
           <div className="topbar-right">

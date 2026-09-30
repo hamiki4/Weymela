@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
 import type { BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
+import { PlatformCapacityPicker } from "./PlatformCapacityPicker";
 import {
   Button,
   Field,
@@ -20,8 +21,6 @@ import {
   promotionTypeCode,
 } from "../../ui/format";
 
-const SOCIAL_PLATFORMS = ["TikTok", "Instagram", "YouTube", "Facebook"] as const;
-
 export function CreateCampaign() {
   return <BusinessCreationGate>{wallet => <CreateCampaignForm wallet={wallet} />}</BusinessCreationGate>;
 }
@@ -34,14 +33,11 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
   const [type, setType] = useState<CampaignTypeCode>("ViewOnly");
   const [form, setForm] = useState({
     title: "",
-    slogan: "",
-    description: "",
     campaignBudget: "",
     requirements: "",
     category: "",
     region: "",
     minimumVerifiedFollowers: "",
-    startUtc: "",
     endUtc: "",
   });
   const [platforms, setPlatforms] = useState<{ platform: string; capacity: number }[]>([]);
@@ -55,15 +51,12 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
     catch (error) { setBalanceError(error instanceof Error ? error.message : "Available funds could not be checked."); return false; }
     finally { setBalanceBusy(false); }
   };
-  const togglePlatform = (platform: string, selected: boolean) => setPlatforms((current) =>
-    selected ? [...current, { platform, capacity: 1 }] : current.filter((row) => row.platform !== platform));
   const set = (name: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [name]: value }));
   return (
     <>
       <PageHeader
         title="Create Promotion"
-        description="Set the details and budget for a draft."
       />
       <Resource resource={pricing}>
         {(data) => {
@@ -105,6 +98,7 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                   onSubmit={(event) => {
                     event.preventDefault();
                     if (step === 1) {
+                      if (platforms.length === 0) return;
                       void refreshBalance().then(ok => { if (ok) setStep(2); });
                       return;
                     }
@@ -117,7 +111,8 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                         "/business/campaigns",
                         {
                           ...form,
-                          slogan: form.slogan.trim() || null,
+                          slogan: null,
+                          description: "",
                           platforms,
                           type,
                           campaignBudget: Number(form.campaignBudget),
@@ -125,8 +120,7 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                             form.minimumVerifiedFollowers
                               ? Number(form.minimumVerifiedFollowers)
                               : null,
-                          startUtc: new Date(form.startUtc).toISOString(),
-                          endUtc: new Date(form.endUtc).toISOString(),
+                          endUtc: new Date(`${form.endUtc}T23:59:59`).toISOString(),
                         },
                         key,
                       );
@@ -145,21 +139,6 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                             required
                           />
                         </Field>
-                        <Field label="Promotion slogan (optional)" wide>
-                          <input value={form.slogan} onChange={(e) => set("slogan", e.target.value)} maxLength={160} />
-                        </Field>
-                        <Field
-                          label="Description"
-                          wide
-                        >
-                          <textarea
-                            value={form.description}
-                            onChange={(e) => set("description", e.target.value)}
-                            maxLength={3000}
-                            required
-                            rows={4}
-                          />
-                        </Field>
                         <Field label="Promotion type" wide>
                           <select
                             value={type}
@@ -173,19 +152,10 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                             </option>
                           </select>
                         </Field>
-                        <Field label="Start date">
+                        <Field label="Promotion ends">
                           <input
-                            type="datetime-local"
-                            value={form.startUtc}
-                            onChange={(e) => set("startUtc", e.target.value)}
-                            required
-                          />
-                        </Field>
-                        <Field label="End date">
-                          <input
-                            type="datetime-local"
+                            type="date"
                             value={form.endUtc}
-                            min={form.startUtc}
                             onChange={(e) => set("endUtc", e.target.value)}
                             required
                           />
@@ -240,17 +210,8 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                             }
                           />
                         </Field>
-                        <div className="promotion-platform-field" role="group" aria-label="Social platforms">
-                          <strong>Social platforms</strong>
-                          <small>Optional. Approved Creators fill these slots.</small>
-                          {SOCIAL_PLATFORMS.map((platform) => {
-                            const selected = platforms.find((row) => row.platform === platform);
-                            return <div className="promotion-platform-choice" key={platform}>
-                              <label><input type="checkbox" checked={!!selected} onChange={(e) => togglePlatform(platform, e.target.checked)} />{platform}</label>
-                              {selected && <label>Creator slots <input aria-label={`${platform} Creator slots`} type="number" min="1" max="100" required value={selected.capacity} onChange={(e) => setPlatforms((current) => current.map((row) => row.platform === platform ? { ...row, capacity: Number(e.target.value) } : row))} /></label>}
-                            </div>;
-                          })}
-                        </div>
+                        <PlatformCapacityPicker value={platforms} onChange={setPlatforms} />
+                        {platforms.length === 0 && <Notice error>Choose at least one Creator slot.</Notice>}
                       </div>
                     )}
                     {step === 2 && (
@@ -290,7 +251,7 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                           Back
                         </Button>
                       )}
-                      <Button type="submit" icon="arrow" disabled={action.busy || balanceBusy}>
+                      <Button type="submit" icon="arrow" disabled={action.busy || balanceBusy || (step === 1 && platforms.length === 0)}>
                         {action.busy
                           ? "Creating…"
                           : step === 2
@@ -306,7 +267,7 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                   title="Activity rates"
                 >
                   <p className="eyebrow">{campaignType(type)}</p>
-                  <div className="price-feature">
+                  <div className="price-feature business-activity-rate">
                     <strong>
                       {amount(price.businessPays)}
                     </strong>
@@ -323,9 +284,6 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
                       {amount(price.minimumCampaignBudget)}
                     </p>
                   )}
-                  <p className="fine-print">
-                    Promotion duration: {data.promotionLiveDurationDays} days · Set by Weymela.
-                  </p>
                 </Section>
               </aside>
             </div>

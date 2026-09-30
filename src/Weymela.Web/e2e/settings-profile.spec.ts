@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 
-for (const width of [320, 360, 375, 390, 430]) {
+for (const width of [320, 360, 375, 390, 393, 430]) {
   test(`Settings and full Profile at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     for (const [role, home] of [["customer", "/customer/offers"], ["creator", "/creator"], ["business", "/business"]] as const) {
@@ -20,7 +20,7 @@ for (const width of [320, 360, 375, 390, 430]) {
       if (role === "creator") await expect(settings.getByRole("link", { name: "Social Profiles" })).toHaveAttribute("href", "/profile#social-profiles");
       if (role === "business") {
         await expect(settings.getByRole("link", { name: "Cashier Management" })).toBeVisible();
-        await expect(settings.getByRole("link", { name: "Create Cashier" })).toBeVisible();
+        await expect(settings.getByRole("link", { name: "Create Cashier" })).toHaveCount(0);
       }
       const sheetBox = await settings.boundingBox();
       expect(sheetBox).not.toBeNull();
@@ -65,13 +65,14 @@ test("Creator Settings opens Social Profiles on the Profile page", async ({ page
   await screenshot(page, "creator-social-profiles-390");
 });
 
-test("Business Settings opens the existing Create Cashier form", async ({ page, context }) => {
+test("Business Settings opens Cashier Management with its Create Cashier form", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "business");
   await open(page, "/business");
   await page.getByRole("button", { name: "Open Settings" }).click();
-  await page.getByRole("dialog", { name: "Settings" }).getByRole("link", { name: "Create Cashier" }).click();
-  await expect(page).toHaveURL(/\/business\/cashiers#create-cashier$/);
+  await page.getByRole("dialog", { name: "Settings" }).getByRole("link", { name: "Cashier Management" }).click();
+  await expect(page).toHaveURL(/\/business\/cashiers$/);
   await expect(page.getByRole("heading", { name: "Add Cashier" })).toBeVisible();
   await layout(page);
+  await screenshot(page, "390-business-cashier-management");
 });

@@ -14,7 +14,7 @@ internal sealed class UgcOpportunityConfiguration : IEntityTypeConfiguration<Ugc
             t.HasCheckConstraint("CK_UgcOpportunity_Capacity", "\"CreatorCapacity\" > 0 AND \"ApprovedCreatorCount\" >= 0 AND \"ApprovedCreatorCount\" <= \"CreatorCapacity\"");
             t.HasCheckConstraint("CK_UgcOpportunity_Funding", "\"RequiredFunding\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"RequiredFunding\"");
         });
-        Mapping.Scalars(b, "PlatformFee", "PerAssignmentFee", "RemainingFunding", "PlatformRequirements");
+        Mapping.Scalars(b, "PlatformFee", "PerAssignmentFee", "RemainingFunding", "PlatformRequirements", "PlatformCapacities");
         b.HasKey(x => x.Id); b.HasIndex(x => new { x.BusinessId, x.Status });
         b.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
         b.OwnsOne(x => x.PricingSnapshot, p =>
@@ -27,7 +27,20 @@ internal sealed class UgcOpportunityConfiguration : IEntityTypeConfiguration<Ugc
         });
         b.HasMany(x => x.PlatformRequirements).WithOne().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
         b.Navigation(x => x.PlatformRequirements).HasField("platformRequirements").UsePropertyAccessMode(PropertyAccessMode.Field);
+        b.HasMany(x => x.PlatformCapacities).WithOne().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        b.Navigation(x => x.PlatformCapacities).HasField("platformCapacities").UsePropertyAccessMode(PropertyAccessMode.Field);
         Mapping.Version(b);
+    }
+}
+
+internal sealed class UgcPlatformCapacityConfiguration : IEntityTypeConfiguration<UgcPlatformCapacity>
+{
+    public void Configure(EntityTypeBuilder<UgcPlatformCapacity> b)
+    {
+        b.ToTable("UgcPlatformCapacities", t => t.HasCheckConstraint("CK_UgcPlatformCapacity_Counts",
+            "\"Capacity\" >= 0 AND \"ApprovedCount\" >= 0 AND \"ApprovedCount\" <= \"Capacity\""));
+        Mapping.Scalars(b, "Available"); b.HasKey(x => x.Id);
+        b.HasIndex(x => new { x.UgcOpportunityId, x.Platform }).IsUnique();
     }
 }
 
@@ -93,8 +106,11 @@ internal sealed class UgcCreatorRequestConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<UgcCreatorRequest> b)
     {
-        b.ToTable("UgcCreatorRequests"); Mapping.Scalars(b); b.HasKey(x => x.Id);
+        b.ToTable("UgcCreatorRequests", t => t.HasCheckConstraint("CK_UgcCreatorRequest_PlatformBinding",
+            "(\"SelectedPlatform\" IS NULL) = (\"VerifiedSocialProfileId\" IS NULL)"));
+        Mapping.Scalars(b); b.HasKey(x => x.Id);
         b.HasOne<UgcOpportunity>().WithMany().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<CreatorSocialProfileRecord>().WithMany().HasForeignKey(x => x.VerifiedSocialProfileId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => new { x.UgcOpportunityId, x.CreatorId }).IsUnique().HasFilter("\"Status\" IN ('Pending','Approved')");
         b.HasIndex(x => new { x.UgcOpportunityId, x.Status });
     }

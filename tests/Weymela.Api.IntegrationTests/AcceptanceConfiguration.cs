@@ -8,9 +8,16 @@ namespace Weymela.Api.IntegrationTests;
 internal sealed class AcceptanceConfiguration : IDisposable
 {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "v3-acceptance-" + Guid.NewGuid().ToString("N"));
+    private string CreatorPhotoDirectory => Path.Combine(directory, "creator-photos");
     public AcceptanceConfiguration()
     {
-        Directory.CreateDirectory(directory); using var rsa = RSA.Create(2048);
+        Directory.CreateDirectory(directory);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Directory.CreateDirectory(CreatorPhotoDirectory);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(CreatorPhotoDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=isolated-v3-test", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using var cert = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
         File.WriteAllBytes(Path.Combine(directory, "test.pfx"), cert.Export(X509ContentType.Pfx));
@@ -20,7 +27,8 @@ internal sealed class AcceptanceConfiguration : IDisposable
         ["V3:Auth:Provider"]="Firebase",["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:AllowedOrigins:0"]="https://localhost",
         ["V3:PublicWebUrl"]="https://localhost",["V3:PublicApiUrl"]="https://localhost",
         ["V3:Security:CameraPolicy"]=Weymela.Infrastructure.Operations.RuntimeOptions.CameraPolicy,["V3:Security:TlsEdgeConfirmed"]="true",
-        ["V3:Auth:CookieKeyDirectory"]=Path.Combine(directory,"keys"),["V3:Auth:CookieCertificatePath"]=Path.Combine(directory,"test.pfx")
+        ["V3:Auth:CookieKeyDirectory"]=Path.Combine(directory,"keys"),["V3:Auth:CookieCertificatePath"]=Path.Combine(directory,"test.pfx"),
+        ["V3:CreatorPhotos:Directory"]=CreatorPhotoDirectory
     });
     public void Dispose() { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }

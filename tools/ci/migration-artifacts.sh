@@ -14,13 +14,20 @@ git show "$baseline_commit:database/grants/v3-verify.sql" > .artifacts/migration
 printf '%s  %s\n' ef06c1b2690ba02db3329027c49b4286684ff9e6e898225cba9d0c82e9c287b0 .artifacts/migrations/grants/baseline-24/v3-verify.sql | sha256sum --check --status
 cp database/grants/v3-{api,worker,migrator,migrator-defaults,backup,verify}.sql .artifacts/migrations/grants/current/
 python3 - <<'PY'
-import hashlib,json,pathlib,subprocess
+import hashlib,json,pathlib,re,subprocess
 root=pathlib.Path('.artifacts/migrations')
 files=sorted(pathlib.Path('src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs'))
 ids=[x.stem for x in files if not x.name.endswith('.Designer.cs')]
-assert ids==['20260911225904_InitialV3Schema','20260911233032_AddViewRewardsQrAndPayouts','20260912011149_AddOperationalSecurityAndNotifications','20260913045523_AddAuthenticationRecovery','20260913054814_AddRoleEnrollments','20260913062900_AddPhoneLoginAliases','20260914022116_AddDevicePinSessionFoundation','20260916042557_AddPasswordCredentials','20260916202055_AddCustomerProfiles','20260917020034_AddProductHandoffTransactions','20260917233008_AddBusinessLedPromotionAndUgc','20260918144832_AddUgcCustomerOffers','20260919120000_AddUgcCustomerDiscountLimit','20260922004528_AddBusinessProfileCoordinates','20260922161742_AddCreatorPromotionContentSubmissions','20260922184111_AddPromotionLiveDurationSnapshots','20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout','20260924034537_AddAdminAccountAuthorityFoundation','20260925010921_AddViewAsSupportSessions','20260925203153_AddPlatformPromotionalFunding','20260925212120_RetireSupportSessions','20260928213157_AlignDepositReviewAuthority','20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments','20260929203557_AddUgcPlatformCapacities'], 'Migration set changed: review required'
 commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
 baseline='47e63df0b71be941922ff9b316e3a0a0466ab187'
+baseline_paths=subprocess.check_output(['git','ls-tree','-r','--name-only',baseline,'--',
+    'src/Weymela.Infrastructure/Persistence/Migrations'],text=True).splitlines()
+baseline_ids=[pathlib.PurePosixPath(p).stem for p in baseline_paths
+              if re.fullmatch(r'[0-9]{14}_.+\.cs',pathlib.PurePosixPath(p).name)
+              and not p.endswith('.Designer.cs')]
+approved_upgrade=['20260929203557_AddUgcPlatformCapacities',
+                  '20260930031549_AddCreatorProfilePhotos']
+assert len(baseline_ids)==24 and ids==baseline_ids+approved_upgrade, 'Migration set changed: review required'
 expected_baseline=subprocess.check_output(['git','show',f'{baseline}:database/grants/v3-verify.sql'])
 assert (root/'grants/baseline-24/v3-verify.sql').read_bytes()==expected_baseline, 'Baseline grant verifier changed'
 artifact_paths=[root/'efbundle',root/'v3-forward.sql',root/'grants/baseline-24/v3-verify.sql']
@@ -29,7 +36,7 @@ artifact_paths += [root/f'grants/current/v3-{name}.sql'
 metadata={'commit':commit,'database':'weymela_v3_pilot','migrationOrder':ids,
  'grantContracts':{
   'from':{'sourceCommit':baseline,'migrationCount':24,'verifier':'grants/baseline-24/v3-verify.sql'},
-  'to':{'sourceCommit':commit,'migrationCount':25,'scripts':[f'grants/current/v3-{name}.sql' for name in ('api','worker','migrator','backup','migrator-defaults')], 'verifier':'grants/current/v3-verify.sql'}},
+  'to':{'sourceCommit':commit,'migrationCount':len(ids),'scripts':[f'grants/current/v3-{name}.sql' for name in ('api','worker','migrator','backup','migrator-defaults')], 'verifier':'grants/current/v3-verify.sql'}},
  'files':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
           for p in artifact_paths}}
 (root/'migration-manifest.json').write_text(json.dumps(metadata,indent=2)+'\n')

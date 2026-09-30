@@ -33,14 +33,20 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   expect(creatorCampaign).not.toBeNull();
   await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`);
   await expect(page.getByRole("heading", { name: "Creator Applicants" })).toBeVisible();
+  const applicants = page.locator("section.panel")
+    .filter({ has: page.getByRole("heading", { name: "Creator Applicants", exact: true }) });
   for (const width of [320, 360, 375, 390, 393, 430]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(page.locator(".person").filter({ hasText: "Bella" }).locator(".creator-photo-avatar img").first()).toBeVisible();
+    await expect(applicants.locator(".person").filter({ hasText: "Bella" })
+      .locator(".creator-photo-avatar img:visible")).toHaveCount(1);
     await layout(page);
     if (width === 390 || width === 393) await screenshot(page, `business-creator-photo-review-${width}`);
   }
   await page.getByRole("tab", { name: "Approved Creators" }).click();
-  await expect(page.locator(".person").filter({ hasText: "Bella" }).locator(".creator-photo-avatar img").first()).toBeVisible();
+  const approvedCreators = page.locator("section.panel")
+    .filter({ has: page.getByRole("heading", { name: "Approved Creators", exact: true }) });
+  await expect(approvedCreators.locator(".person:visible").filter({ hasText: "Bella" })
+    .locator(".creator-photo-avatar img:visible")).toHaveCount(1);
   const title = `Creator photo UGC ${Date.now()}`;
   const headers = { "X-Weymela-Request": "1", "Idempotency-Key": crypto.randomUUID() };
   const created = await context.request.post("/api/business/ugc", { headers, data: {

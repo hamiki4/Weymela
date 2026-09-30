@@ -31,17 +31,19 @@ def verify(root):
                ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
     verifier = 'grants/current/v3-verify.sql'
     contracts = migrations.get('grantContracts', {})
+    approved_upgrade = ['20260929203557_AddUgcPlatformCapacities',
+                        '20260930031549_AddCreatorProfilePhotos']
+    expected_order_tail = ['20260928213157_AlignDepositReviewAuthority',
+                           '20260928230108_AddCreatorNumbers',
+                           '20260929022846_BindUgcSaleAssignments', *approved_upgrade]
+    expected_count = 24 + len(approved_upgrade)
     if (contracts.get('from') != {'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',
                                   'migrationCount':24, 'verifier':baseline}
             or contracts.get('to') != {'sourceCommit':manifest['commit'],
-                                       'migrationCount':25, 'scripts':current, 'verifier':verifier}
-            or len(migrations.get('migrationOrder', [])) != 25
+                                       'migrationCount':expected_count, 'scripts':current, 'verifier':verifier}
+            or len(migrations.get('migrationOrder', [])) != expected_count
             or migrations['migrationOrder'][20] != '20260925212120_RetireSupportSessions'
-            or migrations['migrationOrder'][21:] != [
-                '20260928213157_AlignDepositReviewAuthority',
-                '20260928230108_AddCreatorNumbers',
-                '20260929022846_BindUgcSaleAssignments',
-                '20260929203557_AddUgcPlatformCapacities']):
+            or migrations['migrationOrder'][21:] != expected_order_tail):
         raise ValueError('Grant contract stage/source mismatch')
     checksums = manifest.get('checksums', {})
     required = {'migrations/efbundle', 'migrations/v3-forward.sql', 'migrations/migration-manifest.json'}

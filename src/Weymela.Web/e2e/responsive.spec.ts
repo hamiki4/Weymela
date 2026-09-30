@@ -20,6 +20,31 @@ for (const viewport of viewports)
   }) => {
     test.setTimeout(240000);
     await page.setViewportSize(viewport);
+    // A fresh BrowserHost has no Creator-discoverable Promotion. Reuse this
+    // fixture across viewport cases that share one disposable database.
+    await login(context, "business");
+    const responsiveOpportunityTitle = "Responsive Creator detail fixture";
+    const businessPromotions = await (await context.request.get("/api/business/campaigns"))
+      .json() as { title: string; status: string }[];
+    if (!businessPromotions.some(item => item.title === responsiveOpportunityTitle && item.status === "Active")) {
+      await open(page, "/business/campaigns/new");
+      await page.getByLabel("Promotion title", { exact: true }).fill(responsiveOpportunityTitle);
+      await page.getByLabel("Promotion type", { exact: true }).selectOption("ViewPlusCommission");
+      await page.getByLabel("Promotion ends", { exact: true })
+        .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
+      await page.getByLabel("Creator category", { exact: true }).fill("Food");
+      await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
+      await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
+      await page.getByRole("button", { name: "Create Draft" }).click();
+      await page.getByRole("button", { name: "Review Funding" }).click();
+      await page.getByRole("button", { name: "Confirm & Reserve Funds" }).click();
+      await page.getByRole("button", { name: "Publish Promotion" }).click();
+      await expect(page.getByText("Promotion published. Eligible Creators can now find it.", { exact: true })).toBeVisible();
+    }
     const screens: [string, string[]][] = [
       [
         "business",
@@ -229,8 +254,10 @@ for (const viewport of viewports)
         await screenshot(page, `${viewport.width}-creator-active-detail`);
         const opportunities = await (
           await context.request.get("/api/creator/discover")
-        ).json();
-        await open(page, `/creator/discover/${opportunities[0].id}`);
+        ).json() as { id: string; title: string }[];
+        const opportunity = opportunities.find(item => item.title === responsiveOpportunityTitle);
+        expect(opportunity, "published Creator detail fixture must be discoverable").toBeDefined();
+        await open(page, `/creator/discover/${opportunity!.id}`);
         await layout(page);
         await screenshot(page, `${viewport.width}-creator-join-detail`);
       }

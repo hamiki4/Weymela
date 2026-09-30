@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { layout, login } from "./helpers";
+import { layout, login, open } from "./helpers";
 
 const anti = {
   id: "59b49723-1c3a-4b8f-a51d-d1f2f959d1de",
@@ -58,20 +58,35 @@ for (const width of [320, 360, 375, 390, 430]) {
 }
 
 test("Creator Promotion request returns to its original detail page after acceptance", async ({ page, context }) => {
+  // Own this eligible Promotion: other BrowserHost tests may fill every slot in
+  // their Promotions, and a focused run starts with no published Promotion.
+  await login(context, "business");
+  await open(page, "/business/campaigns/new");
+  const title = `Legal return Promotion ${Date.now()}`;
+  await page.getByLabel("Promotion title", { exact: true }).fill(title);
+  await page.getByLabel("Promotion type", { exact: true }).selectOption("ViewPlusCommission");
+  await page.getByLabel("Promotion ends", { exact: true })
+    .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
+  await page.getByLabel("Creator category", { exact: true }).fill("Food");
+  await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
+  await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
+  await page.getByRole("button", { name: "Create Draft" }).click();
+  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Review Funding" }).click();
+  await page.getByRole("button", { name: "Confirm & Reserve Funds" }).click();
+  await page.getByRole("button", { name: "Publish Promotion" }).click();
+  await expect(page.getByText("Promotion published. Eligible Creators can now find it.", { exact: true })).toBeVisible();
+
   await login(context, "creator");
   const state = await legalRoutes(page);
-  await page.route("**/api/creator/discover/*", async route => {
-    try {
-      const response = await route.fetch();
-      const detail = await response.json();
-      await route.fulfill({ response, json: { ...detail, requestStatus: null } });
-    } catch {
-      // Navigation can dispose a pending fixture response during test teardown.
-      if (!page.isClosed()) await route.abort().catch(() => {});
-    }
-  });
-  await page.goto("/creator/discover");
-  await page.getByRole("link", { name: /View Promotion|Request to Join/ }).first().click();
+  await open(page, "/creator/discover");
+  const opportunity = page.locator(".creator-opportunity-card")
+    .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+  await opportunity.getByRole("link", { name: "Request to Join" }).click();
   await expect(page.getByRole("heading", { name: "Before you continue" })).toBeVisible();
   const returnTo = new URL(page.url()).searchParams.get("returnTo");
   expect(returnTo).toMatch(/^\/creator\/discover\/[0-9a-f-]{36}$/i);

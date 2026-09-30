@@ -116,7 +116,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('authorized repository/server operator', policy)
         self.assertIn('Main branch protection is not a prerequisite', policy)
         self.assertIn('Production retains its separate stricter authorization policy', policy)
-        self.assertIn('fresh protected paired PostgreSQL/receipt backup', policy)
+        self.assertIn('fresh protected PostgreSQL/receipt/Creator-photo backup', policy)
         self.assertIn('packaged baseline-24 verifier against the installed grants', policy)
         self.assertIn('packaged target verifier after those grants are installed', policy)
         self.assertIn('financial test window stays off by default', policy)
@@ -527,12 +527,13 @@ class ReleaseIntegrityTests(unittest.TestCase):
             '20260928213157_AlignDepositReviewAuthority',
             '20260928230108_AddCreatorNumbers',
             '20260929022846_BindUgcSaleAssignments',
-            '20260929203557_AddUgcPlatformCapacities']
+            '20260929203557_AddUgcPlatformCapacities',
+            '20260930031549_AddCreatorProfilePhotos']
         migration = {'commit':commit, 'migrationOrder':order,
                      'grantContracts':{
                          'from':{'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',
                                  'migrationCount':24,'verifier':baseline},
-                         'to':{'sourceCommit':commit,'migrationCount':25,
+                         'to':{'sourceCommit':commit,'migrationCount':len(order),
                                'scripts':current,'verifier':verifier}},
                      'files':{p.relative_to(self.root/'migrations').as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in (self.root/'migrations').rglob('*') if p.is_file()}}
@@ -570,6 +571,13 @@ class ReleaseIntegrityTests(unittest.TestCase):
 
     def test_grant_stage_cannot_claim_wrong_source(self):
         self.manifest['migrations']['grantContracts']['from']['sourceCommit'] = 'b'*40
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, 'Grant contract stage'):
+            release.verify(self.root)
+
+    def test_release_requires_both_reviewed_upgrade_migrations(self):
+        self.manifest['migrations']['migrationOrder'].pop()
+        self.manifest['migrations']['grantContracts']['to']['migrationCount'] -= 1
         self.write_manifest()
         with self.assertRaisesRegex(ValueError, 'Grant contract stage'):
             release.verify(self.root)

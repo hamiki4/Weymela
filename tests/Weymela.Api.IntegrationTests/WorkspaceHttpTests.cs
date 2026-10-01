@@ -129,7 +129,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Current_Business_agreement_blocks_Promotion_creation_until_exact_version_is_accepted()
+    public async Task Current_Business_agreement_does_not_block_Promotion_creation_or_funding()
     {
         using var content = new TestBusinessLegalContent();
         await using var fixture = await ApiFixture.CreateAsync(postgres, builder =>
@@ -149,8 +149,8 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
             minimumVerifiedFollowers = (long?)null, startUtc = DateTime.UtcNow.AddMinutes(-1),
             endUtc = DateTime.UtcNow.AddDays(14), platforms = Array.Empty<object>()
         };
-        var denied = await business.Post("/api/business/campaigns", input, "agreement-not-current");
-        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var unblocked = await business.Post("/api/business/campaigns", input, "agreement-not-current");
+        Assert.True(unblocked.IsSuccessStatusCode);
         var documents = (await business.GetJson("/api/legal/current")).AsArray();
         Assert.False(documents.Single(x => x?["id"]?.GetValue<Guid>() == version)!["accepted"]!.GetValue<bool>());
         Assert.Equal(HttpStatusCode.BadRequest, (await business.Post($"/api/legal/{version}/accept", new { contentHash = hash, confirmed = false })).StatusCode);
@@ -172,16 +172,16 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         }
         var wallet = await business.GetJson("/api/business/wallet");
         var funding = new { campaignVersion = 0, walletVersion = wallet["version"]!.GetValue<long>() };
-        Assert.Equal(HttpStatusCode.Forbidden, (await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-outdated-agreement")).StatusCode);
+        var fundedBeforeAcceptance = await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-outdated-agreement");
+        Assert.True(fundedBeforeAcceptance.IsSuccessStatusCode);
         await business.PostJson($"/api/legal/{newer}/accept", new { contentHash = newerHash, confirmed = true });
-        var funded = await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-current-agreement");
-        Assert.True(funded.IsSuccessStatusCode);
+        Assert.True((await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-outdated-agreement")).IsSuccessStatusCode);
         await using (var db = fixture.Database.Open())
         {
             db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.BusinessAgreement, "latest-current", "fixture-latest-hash", DateTime.UtcNow));
             await db.SaveChangesAsync();
         }
-        Assert.True((await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-current-agreement")).IsSuccessStatusCode);
+        Assert.True((await business.Post($"/api/business/campaigns/{draftId}/fund", funding, "fund-outdated-agreement")).IsSuccessStatusCode);
         await using (var db = fixture.Database.Open())
         {
             Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == DevelopmentDirectory.Id(2)

@@ -263,32 +263,22 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Business_must_accept_current_agreements_before_creating_or_publishing_ugc()
+    public async Task Business_workflow_agreements_do_not_block_creating_or_publishing_ugc()
     {
         var state = await Setup();
         await using var db = state.Database.Open();
         var service = new UgcService(db, new FixedTime(Now));
         var draft = await service.CreateAsync(state.Business, Input(), "legal-draft", default);
-        var current = await db.LegalDocumentVersions.SingleAsync(x => x.Type == LegalDocumentType.BusinessAgreement);
         db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.BusinessAgreement, "2", "new-hash", Now));
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
 
-        Assert.Equal(draft, await service.CreateAsync(state.Business, Input(), "legal-draft", default));
-        var create = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, Input(), "legal-create-rejected", default));
-        Assert.Equal(FailureKind.Forbidden, create.Kind);
-        var publish = await Assert.ThrowsAsync<ApplicationFailure>(() => service.PublishAsync(state.Business, draft, 0, "legal-publish-rejected", default));
-        Assert.Equal(FailureKind.Forbidden, publish.Kind);
-        Assert.Equal(UgcOpportunityStatus.Draft, (await db.UgcOpportunities.SingleAsync(x => x.Id == draft)).Status);
-        Assert.Empty(await db.UgcReservations.Where(x => x.UgcOpportunityId == draft).ToListAsync());
-
-        var updated = await db.LegalDocumentVersions.SingleAsync(x => x.Type == LegalDocumentType.BusinessAgreement && x.Id != current.Id);
-        db.LegalAcceptances.Add(new(state.Business.UserId, LegalRole.Business, updated.Id, Now, null, null));
-        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        await service.PublishAsync(state.Business, draft, 0, "legal-publish-accepted", default);
+        var secondDraft = await service.CreateAsync(state.Business, Input(), "legal-create-unblocked", default);
+        Assert.NotEqual(draft, secondDraft);
+        await service.PublishAsync(state.Business, draft, 0, "legal-publish-unblocked", default);
         Assert.Equal(UgcOpportunityStatus.Open, (await db.UgcOpportunities.SingleAsync(x => x.Id == draft)).Status);
-        db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.BusinessAgreement, "3", "latest-hash", Now));
-        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        Assert.Equal(draft, await service.PublishAsync(state.Business, draft, 0, "legal-publish-accepted", default));
+
+        await service.PublishAsync(state.Business, secondDraft, 0, "legal-publish-unblocked-second", default);
+        Assert.Equal(UgcOpportunityStatus.Open, (await db.UgcOpportunities.SingleAsync(x => x.Id == secondDraft)).Status);
     }
 
     [Fact]

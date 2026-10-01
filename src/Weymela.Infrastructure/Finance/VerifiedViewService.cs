@@ -37,8 +37,6 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
         if ((expectedProvider is not null && expectedProvider != latest.Provider)
             || (expectedContentId is not null && expectedContentId != latest.ContentReference))
             throw new ApplicationFailure(FailureKind.Validation, "Go Live must use the latest Business-approved content revision.");
-        await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Creator,
-            [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], ct);
         var result = await provider.VerifyAsync(new(allocation.CreatorId, allocation.PromotionId, latest.Provider, latest.ContentReference), ct);
         ValidateProvider(result, latest.Provider, latest.ContentReference);
         return await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>

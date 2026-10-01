@@ -48,15 +48,22 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             throw new ApplicationFailure(FailureKind.Validation, "This profile request is already under review.");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
+        var hasActiveProfile = await db.CommercePermissions.AsNoTracking()
+            .AnyAsync(x => x.UserId == actor.UserId && x.IsActive, ct);
+        if (!hasActiveProfile)
+        {
+            var accountLegal = new AccountLegalOnboardingService(db, clock);
+            var status = await accountLegal.StatusAsync(actor.UserId, ct);
+            if (!status.Current)
+                await accountLegal.AcceptCurrentAsync(actor.UserId, request.AccountLegal,
+                    request.IpReference, request.UserAgentReference, ct);
+        }
         var now = clock.GetUtcNow().UtcDateTime;
         var publicId = request.Role == ActorRole.Customer
             ? await NewCustomerPublicIdAsync(ct)
             : string.IsNullOrWhiteSpace(request.PublicId)
                 ? $"{(request.Role == ActorRole.Creator ? "CR" : "BU")}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(16))}"
                 : request.PublicId.Trim();
-        if (request.Role == ActorRole.Customer)
-            await new AccountLegalOnboardingService(db, clock).AcceptCurrentAsync(actor.UserId,
-                request.AccountLegal, request.IpReference, request.UserAgentReference, ct);
         var submission = JsonSerializer.Serialize(new
             {
                 DisplayName = request.DisplayName.Trim(),

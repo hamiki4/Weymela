@@ -26,8 +26,6 @@ public sealed partial class FinancialCommands
         var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
         if (p.BusinessId != c.Actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Promotion belongs to another Business.");
         if (c.Now >= p.EndDateUtc) throw new ApplicationFailure(FailureKind.Validation, "This Promotion's end date has passed.");
-        await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Business,
-            [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
         if (!activateOnly) { await Promotions.PublishAsync(c, token); Audit(c.Actor, "PromotionPublished", c.Now, Guid.NewGuid(), p.Id); }
         if (activateOnly && c.Now < p.StartDateUtc) throw new ApplicationFailure(FailureKind.Validation, "This Promotion cannot start before its start date.");
         if (c.Now >= p.StartDateUtc)
@@ -47,8 +45,6 @@ public sealed partial class FinancialCommands
             var app = await db.CreatorApplications.SingleOrDefaultAsync(x => x.Id == applicationId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Creator request not found.");
             var p = await new PromotionRepository(db).GetAsync(app.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
             if (p.BusinessId != actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Promotion belongs to another Business.");
-            await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
-                [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             if (app.Platform is { } selectedPlatform && app.CreatorSocialProfileId is { } selectedProfile)
             {
                 var slot = p.Platforms.SingleOrDefault(x => x.Platform == selectedPlatform);
@@ -79,8 +75,6 @@ public sealed partial class FinancialCommands
             throw new ApplicationFailure(FailureKind.Validation, "This Promotion is not accepting requests.");
         if(c.Platform is {} platform && (c.CreatorSocialProfileId is not {} profileId || !await SelectedPromotionProfileAsync(p, profileId, platform, c.Actor.CreatorId!.Value, token)))
             throw new ApplicationFailure(FailureKind.Forbidden,"The selected Creator social profile is not available.");
-        await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Creator,
-            [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
         var app = await Participation.ApplyAsync(c, token);
         await Idempotency.SaveAsync(new(key, "JoinCampaign", c.Actor.UserId, fp, app.Id, c.Now), token);
         Audit(c.Actor, "CreatorApplied", c.Now, Guid.NewGuid(), p.Id, c.Actor.CreatorId); return app.Id;

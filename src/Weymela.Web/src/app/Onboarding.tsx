@@ -69,15 +69,16 @@ function LegacyOnboarding() {
   const submitCustomer = () => void action.run(async (key) => {
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
     const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
-    if (!legal.data?.available || !terms || !privacy)
+    if (!legal.data?.available || !terms || !privacy || (!legal.data.current && !legalAccepted))
       throw new Error("Customer setup isn't available yet.");
+    const accountLegal = !legal.data.current ? {
+      termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
+      privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },
+    } : undefined;
     await post("/onboarding/profile", {
       role: "Customer",
       displayName: preferredName,
-      accountLegal: {
-        termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: legalAccepted },
-        privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: legalAccepted },
-      },
+      ...(accountLegal ? { accountLegal } : {}),
     }, key);
     cancel();
     status.reload();
@@ -88,9 +89,19 @@ function LegacyOnboarding() {
     const socialProfiles = socialPlatforms.filter(platform => socialUrls[platform].profileUrl.trim())
       .map(platform => ({ platform, profileUrl: socialUrls[platform].profileUrl.trim(), audienceCount: Number(socialUrls[platform].audience) || 0 }));
     if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
+    const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
+    const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
+    const requiresAccountLegal = approved.size === 0 && !legal.data?.current;
+    if (requiresAccountLegal && (!legal.data?.available || !terms || !privacy || !legalAccepted))
+      throw new Error("Accept Weymela's Rules and Regulations before continuing.");
+    const accountLegal = requiresAccountLegal ? {
+      termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
+      privacyPolicy: { documentId: privacy!.documentId, contentHash: privacy!.contentHash, accepted: true },
+    } : undefined;
     await post("/onboarding/profile", { role: selected, displayName: displayName.trim(),
       region: region.trim() || null, category: null, submission: null,
-      socialProfiles: selected === "Creator" ? socialProfiles : [] }, key);
+      socialProfiles: selected === "Creator" ? socialProfiles : [],
+      ...(accountLegal ? { accountLegal } : {}) }, key);
     cancel();
     setSubmittedRole(selected);
     status.reload();
@@ -148,17 +159,17 @@ function LegacyOnboarding() {
               }}>
               <Field label="Preferred name" wide><input required autoComplete="name" maxLength={120}
                 value={preferredName} onChange={(event) => setPreferredName(event.target.value)} /></Field>
-              <div className="legal-consent form-wide"><div className="check-row">
+              {!documents.current && <div className="legal-consent form-wide"><div className="check-row">
                 <input id="customer-legal-accepted" type="checkbox" checked={legalAccepted}
                   onChange={(event) => setLegalAccepted(event.target.checked)}
-                  aria-label="I agree to the Terms of Service and acknowledge the Privacy Policy." required />
-                <span id="customer-legal-consent-text"><label htmlFor="customer-legal-accepted">I agree to the </label>
+                  aria-label="I agree to Weymela's Rules and Regulations" required />
+                <span id="customer-legal-consent-text"><label htmlFor="customer-legal-accepted">I agree to Weymela&apos;s <strong>Rules and Regulations</strong>.</label><br />
+                  <small>By continuing, you also accept the current </small>
                   <a href={documents.documents.find((document) => document.kind === "TermsOfService")!.viewPath}
-                    target="_blank" rel="noreferrer">Terms of Service</a>
-                  <label htmlFor="customer-legal-accepted"> and acknowledge the </label>
+                    target="_blank" rel="noreferrer">Terms of Service</a><small> and acknowledge the </small>
                   <a href={documents.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath}
-                    target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
-              </div></div>
+                    target="_blank" rel="noreferrer">Privacy Policy</a><small>.</small></span>
+              </div></div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
                 <Button type="submit" disabled={action.busy}>{action.busy ? "Saving…" : "Continue"}</Button></div>
@@ -181,9 +192,18 @@ function LegacyOnboarding() {
                   onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: { profileUrl: "", audience: "0" } }))}
                 />
               </div>}
+              {approved.size === 0 && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
+                <input id="profile-legal-accepted" type="checkbox" checked={legalAccepted}
+                  onChange={(event) => setLegalAccepted(event.target.checked)}
+                  aria-label="I agree to Weymela's Rules and Regulations" required />
+                <span><label htmlFor="profile-legal-accepted">I agree to Weymela&apos;s <strong>Rules and Regulations</strong>.</label><br />
+                  <small>By continuing, you also accept the current </small>
+                  <a href={legal.data.documents.find((document) => document.kind === "TermsOfService")!.viewPath} target="_blank" rel="noreferrer">Terms of Service</a><small> and acknowledge the </small>
+                  <a href={legal.data.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath} target="_blank" rel="noreferrer">Privacy Policy</a><small>.</small></span>
+              </div></div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
-                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
+                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (approved.size === 0 && !legal.data?.current && !legalAccepted) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
                   {action.busy ? "Submitting…" : "Submit for Review"}</Button></div>
             </div>
           </RoleOnboardingShell>}

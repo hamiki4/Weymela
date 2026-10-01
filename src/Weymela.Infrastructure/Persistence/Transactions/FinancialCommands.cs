@@ -14,7 +14,7 @@ public sealed partial class FinancialCommands(WeymelaDbContext db, TimeProvider?
     private EfUnitOfWork Uow => new(db);
     private IdempotencyStore Idempotency => new(db);
     private PromotionApplicationService Promotions => new(new PromotionRepository(db), new BusinessWalletRepository(db),
-        new FinancialConfigurationResolver(db), Idempotency, new OutboxEventPublisher(db), new LegalAcceptanceGate(db, clock ?? TimeProvider.System));
+        new FinancialConfigurationResolver(db), Idempotency, new OutboxEventPublisher(db));
     private ParticipationApplicationService Participation => new(new PromotionRepository(db), new CreatorApplicationRepository(db),
         new CreatorAllocationRepository(db), new OutboxEventPublisher(db));
 

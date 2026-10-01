@@ -284,7 +284,7 @@ export interface Opportunity {
   eligibility: string;
   slogan?: string | null;
   location?: string | null;
-  platforms?: { platform: string; approved: number; capacity: number; available: number }[] | null;
+  platforms?: { platform: string; approved: number; capacity: number; available: number; minimumAudience?: number | null }[] | null;
   eligibleSocialProfiles?: { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null }[] | null;
   approvedCreators?: number;
   creatorCapacity?: number;

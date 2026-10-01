@@ -170,12 +170,12 @@ public sealed class Phase4ProjectionAndIntegrityTests(PostgresFixture fixture)
         await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlRawAsync("UPDATE v3.\"PayoutRecords\" SET \"Reference\"='different'"));
         await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlRawAsync("DELETE FROM v3.\"PayoutRecords\""));
     }
-    [Fact] public async Task Go_live_requires_acceptance_of_current_creator_legal_versions()
+    [Fact] public async Task Go_live_does_not_require_current_creator_workflow_agreements()
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         db.LegalDocumentVersions.Add(new(Guid.NewGuid(),LegalDocumentType.CreatorAgreement,"2","new-hash",Scenario.Now));await db.SaveChangesAsync();
-        var e=await Assert.ThrowsAsync<ApplicationFailure>(()=>s.Views(db).GoLiveAsync(new(s.Creator,s.AllocationId,"TikTok","content-1","new-key")));
-        Assert.Equal(FailureKind.Forbidden,e.Kind);
+        var participation=await s.Views(db).GoLiveAsync(new(s.Creator,s.AllocationId,"TikTok","content-1","new-key"));
+        Assert.Equal(s.ParticipationId, participation);
     }
     [Fact] public async Task Additive_migration_matches_model_and_retains_existing_schema_history()
     {

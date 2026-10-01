@@ -44,7 +44,7 @@ function ActivationForm() {
   return <><p>Enter the one-time code from your email after verifying your account and setting your password and device PIN.</p>
     <form onSubmit={event => { event.preventDefault(); activate(); }}>
       <Field label="Activation code"><input required autoComplete="off" value={code} onChange={event => setCode(event.target.value)} /></Field>
-      <Resource resource={legal}>{status => !status.current && status.available ? <div className="legal-consent"><label><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} /> I agree to the <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a> if activating a Customer profile.</label></div> : null}</Resource>
+      <Resource resource={legal}>{status => !status.current && status.available ? <div className="legal-consent"><label><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} required /> I agree to Weymela&apos;s <strong>Rules and Regulations</strong>. By continuing, I also accept the <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</label></div> : null}</Resource>
       {action.error && <Notice error>{action.error}</Notice>}
       <Button type="submit" disabled={action.busy || legal.loading || Boolean(legal.error)}>{action.busy ? "Activating…" : "Activate account"}</Button>
     </form></>;

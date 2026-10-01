@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
-import { PlatformOccupancy } from "./CreatorPlatformIcon";
+import { PlatformOccupancy, PlatformRequirements } from "./CreatorPlatformIcon";
 import type {
   CreatorHome,
   CreatorPricing,
@@ -32,7 +32,6 @@ import {
   isViewOnly,
 } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
-import { CreatorLegalGate, useCreatorLegalAction } from "./CreatorLegalPage";
 
 export function CreatorDashboard() {
   const resource = useResource<CreatorHome>("/creator/home");
@@ -100,8 +99,7 @@ export function CreatorDashboard() {
                 for your kind of creativity.
               </h2>
               <p>
-                Discovery matches your category, region and verified profile to
-                funded Promotions.
+                Discovery matches your active social profiles to funded Promotions.
               </p>
               <ActionLink to="/creator/discover" secondary>
                 Find your next opportunity
@@ -129,7 +127,6 @@ function OpportunityCard({ row }: { row: Opportunity }) {
       </div>
       <div className="tag-row">
         <Badge status={row.type} />
-        {row.category && <span className="badge">{row.category}</span>}
       </div>
       <p>{row.requirements || row.description}</p>
       <div className="pricing-note">
@@ -174,7 +171,7 @@ export function CreatorDiscovery() {
             <Section title="Made for your profile">
               <Empty
                 title="No available Promotions right now"
-                message="New opportunities will appear when a funded Promotion matches your category, region and verified metrics."
+                message="New opportunities will appear when a funded Promotion matches your active social profiles and current requirements."
               />
             </Section>
           )
@@ -185,8 +182,6 @@ export function CreatorDiscovery() {
 }
 export function CreatorOpportunity() {
   const { id } = useParams();
-  const location = useLocation();
-  const ensureLegal = useCreatorLegalAction();
   const resource = useResource<Opportunity>(`/creator/discover/${id}`);
   const action = useAction();
   const [message, setMessage] = useState("");
@@ -225,18 +220,9 @@ export function CreatorOpportunity() {
                     <dt>Region</dt>
                     <dd>{p.region}</dd>
                   </div>}
-                  {p.category && <div>
-                    <dt>Category</dt>
-                    <dd>{p.category}</dd>
-                  </div>}
-                  {!!p.minimumVerifiedFollowers && (
-                    <div>
-                      <dt>Verified followers</dt>
-                      <dd>{count(p.minimumVerifiedFollowers)} minimum</dd>
-                    </div>
-                  )}
                 </dl>
                 {!!p.platforms?.length && <PlatformOccupancy slots={p.platforms} />}
+                {!!p.platforms?.length && <PlatformRequirements slots={p.platforms} />}
               </Section>
               <Section title="How You Earn" action={<Currency />}>
                 <div className="price-feature">
@@ -257,7 +243,6 @@ export function CreatorOpportunity() {
               {p.requestStatus ? (
                 <Notice>Request {p.requestStatus.toLowerCase()}. {p.requestStatus === "Pending" && "Waiting for approval."} <Link to="/creator/promotions">My Promotions</Link></Notice>
               ) : (
-                <CreatorLegalGate>
                 <form
                   className="contained-form"
                   onSubmit={(e) => {
@@ -265,7 +250,6 @@ export function CreatorOpportunity() {
                     const selectedProfile = p.eligibleSocialProfiles?.find((profile) => profile.id === socialProfileId);
                     if (p.platforms?.length && !selectedProfile) return;
                     void action.run(async (key) => {
-                      if (!await ensureLegal(location.pathname)) return;
                       await post(
                         `/creator/promotions/${id}/request`,
                         { message, contentConcept: concept || null, ...(selectedProfile ? { platform: selectedProfile.platform, creatorSocialProfileId: selectedProfile.id } : {}) },
@@ -309,7 +293,6 @@ export function CreatorOpportunity() {
                     </Button>
                   </fieldset>
                 </form>
-                </CreatorLegalGate>
               )}
             </Section>
           </>

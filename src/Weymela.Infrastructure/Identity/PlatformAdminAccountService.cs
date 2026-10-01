@@ -316,19 +316,18 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             throw new ApplicationFailure(FailureKind.Forbidden, "This account is not eligible for activation.");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == target.UserId && x.Role == row.TargetRole, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This account already has a profile for that role.");
+        if (row.TargetRole is ActorRole.Customer or ActorRole.Creator or ActorRole.Business)
+        {
+            var legalService = new AccountLegalOnboardingService(db, clock);
+            var status = await legalService.StatusAsync(target.UserId, ct);
+            if (!status.Current)
+                await legalService.AcceptCurrentAsync(target.UserId, accountLegal, ipReference, userAgentReference, ct);
+        }
         now = Now; var correlation = Guid.NewGuid();
         Guid subject; Guid? businessId = null;
         switch (row.TargetRole)
         {
             case ActorRole.Customer:
-                var legalService = new AccountLegalOnboardingService(db, clock);
-                var legal = await legalService.StatusAsync(target.UserId, ct);
-                if (!legal.Current && accountLegal is not null)
-                {
-                    await legalService.AcceptCurrentAsync(target.UserId, accountLegal, ipReference, userAgentReference, ct);
-                    legal = legal with { Current = true };
-                }
-                if (!legal.Current) throw new ApplicationFailure(FailureKind.Validation, "Accept the current Terms of Service and Privacy Policy before activating the Customer profile.");
                 subject = await NewCustomerIdAsync(ct);
                 db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = subject, Role = row.TargetRole, DisplayName = row.DisplayName, PublicId = $"CU-{Guid.NewGuid():N}"[..15] });
                 db.CustomerProfiles.Add(new CustomerProfileRecord { CustomerId = subject, UserId = target.UserId, PreferredName = row.DisplayName, CreatedAtUtc = now, UpdatedAtUtc = now });

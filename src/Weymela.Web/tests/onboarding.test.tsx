@@ -180,10 +180,12 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByLabelText(/Creator category|About your work/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Not added")).toHaveLength(4);
     expect(screen.getAllByRole("button", { name: "Add profile" })).toHaveLength(4);
+    expect(screen.getByLabelText("I agree to Weymela's Rules and Regulations")).not.toBeChecked();
     await userEvent.type(screen.getByLabelText("Creator name"), "Bella Creates");
     await userEvent.click(screen.getAllByRole("button", { name: "Add profile" })[0]);
     await userEvent.type(screen.getByLabelText("TikTok profile URL"), "https://www.tiktok.com/@bella");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
       role: "Creator", displayName: "Bella Creates", region: null,
@@ -203,6 +205,7 @@ describe("shared role-themed onboarding", () => {
     expect(screen.getByLabelText("Region (optional)")).toBeVisible();
     expect(screen.queryByLabelText(/Business type|About your Business/)).not.toBeInTheDocument();
     expect(screen.queryByText(/receipt|payment reference|funding/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
       role: "Business", displayName: "Bella Restaurant", category: null, submission: null,

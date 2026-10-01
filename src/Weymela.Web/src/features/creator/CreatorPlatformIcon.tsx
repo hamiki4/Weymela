@@ -1,4 +1,4 @@
-import { safeExternal } from "../../ui/format";
+import { count, safeExternal } from "../../ui/format";
 
 export type CreatorPlatform = "TikTok" | "YouTube" | "Instagram" | "Facebook";
 
@@ -42,5 +42,25 @@ export function PlatformOccupancy({ slots, label = "Creator platform capacity" }
       {isCreatorPlatform(slot.platform) ? <CreatorPlatformIcon platform={slot.platform} /> : <span>{slot.platform}</span>}
       <span>{slot.approved}/{slot.capacity}</span>
     </span>)}
+  </div> : null;
+}
+
+export function PlatformRequirements({ slots, label = "Platform requirements", showIcons = true }: {
+  slots: { platform: string; capacity?: number; minimumAudience?: number | null }[];
+  label?: string;
+  showIcons?: boolean;
+}) {
+  const configured = slots.filter(slot => (slot.capacity ?? 0) > 0);
+  return configured.length ? <div className="creator-platform-requirements" aria-label={label}>
+    {configured.map(slot => {
+      const audienceLabel = slot.platform === "YouTube" ? "subscribers" : "followers";
+      const minimum = slot.minimumAudience && slot.minimumAudience > 0
+        ? `${count(slot.minimumAudience)} ${audienceLabel} minimum`
+        : "No minimum";
+      return <span key={slot.platform}>
+        {showIcons && (isCreatorPlatform(slot.platform) ? <CreatorPlatformIcon platform={slot.platform} /> : <strong>{slot.platform}</strong>)}
+        <span><strong>{slot.capacity} {slot.capacity === 1 ? "Creator" : "Creators"}</strong><small>{minimum}</small></span>
+      </span>;
+    })}
   </div> : null;
 }

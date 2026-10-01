@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useMemo, useState, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type {
   CreatorCampaign,
@@ -24,13 +24,24 @@ import {
 } from "../../ui/components";
 import { amount, campaignType, count, date, isViewOnly } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
-import { useCreatorLegalAction } from "./CreatorLegalPage";
-import { PlatformOccupancy } from "./CreatorPlatformIcon";
+import { PlatformOccupancy, PlatformRequirements } from "./CreatorPlatformIcon";
 import { UgcJoinControls } from "./UgcJoinControls";
+
+function HomePreviewResource<T>({ resource, children }: {
+  resource: { data: T | null; loading: boolean; error: Error | null };
+  children: (data: T) => ReactNode;
+}) {
+  if (resource.data === null) return resource.error
+    ? <Empty title="Opportunities are temporarily unavailable." />
+    : <p className="fine-print" aria-live="polite">Loading opportunities…</p>;
+  return <>{children(resource.data)}</>;
+}
 
 export function CreatorDashboard() {
   const home = useResource<CreatorHome>("/creator/home");
   const promotions = useResource<CreatorCampaign[]>("/creator/campaigns");
+  const opportunities = useResource<Opportunity[]>("/creator/discover");
+  const ugc = useResource<UgcCard[]>("/creator/ugc");
   return <>
     <Resource resource={home}>{(data) => <>
       <PageHeader title="Home" compact />
@@ -39,9 +50,18 @@ export function CreatorDashboard() {
         <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Active"><Metric label="Active Promotions" value={count(data.activeCampaigns)} icon="campaign" /></Link>
         <Link className="creator-dashboard-metric" to="/creator/earnings"><Metric label="Available Earnings" value={amount(data.earnings.availableEarnings)} icon="wallet" emphasis /></Link>
       </div>
-      <section className="creator-discover-cta">
-        <ActionLink to="/creator/discover">Discover Promotions</ActionLink>
-      </section>
+      <Section title="Opportunities for you" description="Open opportunities matching your social profiles.">
+        <Section title="Open Promotions" action={<ActionLink to="/creator/discover" secondary>See all</ActionLink>}>
+          <HomePreviewResource resource={opportunities}>{(rows) => rows.length
+            ? <div className="creator-opportunity-grid">{rows.slice(0, 3).map((row) => <PromotionOpportunityCard key={row.id} row={row} />)}</div>
+            : <Empty title="No open Promotions for you right now." />}</HomePreviewResource>
+        </Section>
+        <Section title="Open UGC" action={<ActionLink to="/creator/discover?tab=UGC" secondary>See all</ActionLink>}>
+          <HomePreviewResource resource={ugc}>{(rows) => rows.length
+            ? <div className="creator-opportunity-grid">{rows.slice(0, 3).map((row) => <UGCOpportunityCard key={row.id} row={row} onChanged={ugc.reload} />)}</div>
+            : <Empty title="No open UGC opportunities for you right now." />}</HomePreviewResource>
+        </Section>
+      </Section>
       <Section title="Recent earnings">
         {data.earnings.history.length || data.earnings.payoutHistory.length ? <div className="creator-activity-list">
           {data.earnings.history.slice(0, 3).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="spark" /></span><div><strong>{item.business || item.campaign}</strong><p>{item.sourceType === "UGC" ? "UGC content" : item.source === "Sale Earnings" ? "View + Sale" : item.source === "View Earnings" ? "Verified views" : item.source} · {item.campaign}</p></div><span className="creator-activity-meta"><strong>+{amount(item.amount)} ETB</strong><small>{date(item.atUtc)}</small></span></article>)}
@@ -49,13 +69,13 @@ export function CreatorDashboard() {
         </div> : <Empty title="No recent earnings." />}
       </Section>
     </>}</Resource>
-    <Section title="Live Promotions" action={<ActionLink to="/creator/promotions" secondary>Promotions</ActionLink>}>
+    <Section title="Your active promotions" action={<ActionLink to="/creator/promotions" secondary>See all</ActionLink>}>
       <Resource resource={promotions}>{(rows) => {
         const live = rows.filter((row) => row.remainingDays != null && row.remainingDays > 0).slice(0, 3);
         return live.length ? <div className="creator-promotion-list">{live.map((row) => <Link className="creator-promotion-list-card" to={`/creator/promotions/${row.budgetId}`} key={row.budgetId}>
           <div><small>{row.business.displayName}</small><h3>{row.title}</h3><p>{campaignType(row.type)} · {row.remainingDays} days left</p></div>
           <div className="creator-progress"><span>{count(row.verifiedViews)} verified views</span><span>{amount(row.viewEarnings + row.saleCommissionEarnings)} earned</span></div>
-        </Link>)}</div> : <Empty title="No live promotions." />;
+        </Link>)}</div> : <Empty title="No active promotions." />;
       }}</Resource>
     </Section>
   </>;
@@ -70,6 +90,7 @@ function PromotionOpportunityCard({ row }: { row: Opportunity }) {
     <p className="creator-opportunity-earn"><strong>Earn {amount(row.earnings.youEarn)} ETB</strong><span>per {count(row.earnings.views)} verified views</span></p>
     {!isViewOnly(row.type) && <p className="creator-opportunity-meta">+ {amount(row.earnings.saleCommissionPercent)}% from eligible purchases</p>}
     {row.platforms?.length ? <PlatformOccupancy slots={row.platforms} /> : null}
+    {row.platforms?.length ? <PlatformRequirements slots={row.platforms} showIcons={false} /> : null}
     {row.creatorCapacity ? <p className="creator-opportunity-meta">Creators {row.approvedCreators ?? 0}/{row.creatorCapacity}</p> : null}
     {(row.location || row.business.region) && <p className="creator-opportunity-location"><Icon name="location" size={16} />{row.location || row.business.region}</p>}
     {full && !row.requestStatus ? <span className="creator-opportunity-unavailable">No spots available</span> : <ActionLink to={`/creator/discover/${row.id}`}>{row.requestStatus ? "View Promotion" : "Request to Join"}</ActionLink>}
@@ -85,7 +106,13 @@ function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () =>
     {row.customerOfferEnabled && row.customerDiscountPercent != null && <p className="creator-opportunity-meta">Customer offer: {amount(row.customerDiscountPercent)}% discount</p>}
     <p className="ugc-arrangement">{row.productProvided && !row.creatorMustPurchase ? "Product provided by Business" : row.creatorMustPurchase && !row.productProvided ? "Creator purchases product" : "Product arrangement unavailable"}</p>
     <p className="creator-opportunity-meta">{row.contentType} · Due {date(row.dueDateUtc)}</p>
+    {(row.platformRequirements ?? []).length ? <PlatformRequirements slots={(row.platformRequirements ?? []).map((requirement) => ({
+      platform: requirement.platform,
+      minimumAudience: requirement.minimumAudience,
+      capacity: row.platformCapacities?.find((slot) => slot.platform === requirement.platform)?.capacity ?? 1,
+    }))} showIcons={false} /> : null}
     {row.location && <p className="creator-opportunity-location"><Icon name="location" size={16} />{row.location}</p>}
+    <ActionLink to={`/creator/ugc/${row.id}`} secondary>View</ActionLink>
     <UgcJoinControls item={row} onChanged={onChanged} />
   </article>;
 }
@@ -103,6 +130,50 @@ export function CreatorDiscover() {
     <div className="creator-discover-controls"><div className="creator-tabs" role="tablist" aria-label="Opportunity type">{(["Promotions", "UGC"] as const).map((item) => <button key={item} role="tab" aria-selected={tab === item} className={tab === item ? "selected" : ""} onClick={() => setTab(item)}>{item}</button>)}</div><label className="creator-search"><Icon name="search" /><span className="sr-only">Search opportunities</span><input aria-label="Search opportunities" placeholder="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} /></label></div>
     {tab === "Promotions" ? <Resource resource={promotions}>{() => filteredPromotions.length ? <div className="creator-opportunity-grid">{filteredPromotions.map((row) => <PromotionOpportunityCard key={row.id} row={row} />)}</div> : <Empty title="No available Promotions" />}</Resource>
       : <Resource resource={ugc}>{() => filteredUgc.length ? <div className="creator-opportunity-grid">{filteredUgc.map((row) => <UGCOpportunityCard key={row.id} row={row} onChanged={ugc.reload} />)}</div> : <Empty title="No available UGC opportunities" />}</Resource>}
+  </>;
+}
+
+export function CreatorUgcOpportunity() {
+  const { id } = useParams();
+  const resource = useResource<UgcDetail>(`/creator/ugc/${id}`);
+  return <>
+    <Link className="back-link" to="/creator/discover?tab=UGC">← UGC opportunities</Link>
+    <Resource resource={resource}>{(detail) => {
+      const opportunity = detail.opportunity;
+      const arrangement = opportunity.productProvided && !opportunity.creatorMustPurchase
+        ? "Product provided by Business"
+        : opportunity.creatorMustPurchase && !opportunity.productProvided
+          ? "Creator purchases product"
+          : "Product arrangement unavailable";
+      const requirements = opportunity.platformRequirements ?? [];
+      return <>
+        <PageHeader eyebrow={opportunity.business} title={opportunity.title} description={opportunity.contentType}
+          action={opportunity.requestStatus && <Badge status={opportunity.requestStatus} />} />
+        <div className="content-grid">
+          <Section title="UGC details">
+            {opportunity.slogan?.trim() && <p className="creator-opportunity-slogan">{opportunity.slogan}</p>}
+            <dl className="detail-list">
+              <div><dt>Creator payment</dt><dd>{amount(opportunity.creatorPayment)} ETB</dd></div>
+              <div><dt>Content due</dt><dd>{date(opportunity.dueDateUtc)}</dd></div>
+              {opportunity.applicationClosesAtUtc && <div><dt>Application closes</dt><dd>{date(opportunity.applicationClosesAtUtc)}</dd></div>}
+              {opportunity.location && <div><dt>Location</dt><dd>{opportunity.location}</dd></div>}
+              <div><dt>Product arrangement</dt><dd>{arrangement}</dd></div>
+            </dl>
+            {detail.instructions?.trim() && <div className="pricing-note"><strong>Instructions</strong><p className="preserve-lines">{detail.instructions}</p></div>}
+            {requirements.length ? <PlatformRequirements slots={requirements.map((requirement) => ({
+              platform: requirement.platform,
+              minimumAudience: requirement.minimumAudience,
+              capacity: opportunity.platformCapacities?.find((slot) => slot.platform === requirement.platform)?.capacity ?? 1,
+            }))} /> : null}
+          </Section>
+          <Section title={opportunity.requestStatus ? "Your request" : "Request to Join"}>
+            {opportunity.requestStatus
+              ? <Notice>Request {opportunity.requestStatus.toLowerCase()}. {opportunity.requestStatus === "Pending" && "Waiting for approval."} <Link to="/creator/promotions">My Promotions</Link></Notice>
+              : <UgcJoinControls item={opportunity} onChanged={resource.reload} />}
+          </Section>
+        </div>
+      </>;
+    }}</Resource>
   </>;
 }
 
@@ -232,8 +303,6 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
 
 function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; onChanged: () => void }) {
   const action = useAction();
-  const location = useLocation();
-  const ensureLegal = useCreatorLegalAction();
   const state = row.status;
   const canGoLive = state === "ReadyToGoLive" && row.contentReviewStatus === "Approved" && !row.participationId;
   return <article className="creator-promotion-row creator-work-row">
@@ -250,7 +319,6 @@ function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; 
       {state === "FundingRequired" && <span>Waiting for Business funding</span>}
       {state === "Approved" || state === "ChangesRequested" ? <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>{state === "Approved" ? "Add Content" : "Update Content"}</ActionLink> : null}
       {canGoLive && <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
-        if (!await ensureLegal(location.pathname + location.search)) return;
         await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key); onChanged();
       })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
       {row.participationId && <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>View progress</ActionLink>}

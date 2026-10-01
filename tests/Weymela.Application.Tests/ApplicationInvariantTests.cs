@@ -32,14 +32,14 @@ public sealed class ApplicationInvariantTests
     [Fact] public async Task Business_cannot_fund_another_business_campaign()
     {
         var owner = Guid.NewGuid(); var other = Guid.NewGuid(); var p = TestPromotion(other); var w = new BusinessWallet(owner); w.CreditDeposit(new Money(1000), Now, Guid.NewGuid());
-        var service = new PromotionApplicationService(new PromotionRepo(p), new WalletRepo(w), new Pricing(), new IdemStore(), new Events(), new Legal());
+        var service = new PromotionApplicationService(new PromotionRepo(p), new WalletRepo(w), new Pricing(), new IdemStore(), new Events());
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.FundAsync(new(new Actor(Guid.NewGuid(), ActorRole.Business, owner), p.Id, 0, 0, "k", Now), CancellationToken.None));
     }
 
     [Fact] public async Task Funding_idempotency_replay_does_not_reserve_twice()
     {
         var business = Guid.NewGuid(); var actor = new Actor(Guid.NewGuid(), ActorRole.Business, business); var p = TestPromotion(business); var wallet = new BusinessWallet(business); wallet.CreditDeposit(new Money(1500), Now, Guid.NewGuid()); var idem = new IdemStore();
-        var service = new PromotionApplicationService(new PromotionRepo(p), new WalletRepo(wallet), new Pricing(), idem, new Events(), new Legal()); var command = new FundPromotionCommand(actor, p.Id, 0, 0, "fund-1", Now);
+        var service = new PromotionApplicationService(new PromotionRepo(p), new WalletRepo(wallet), new Pricing(), idem, new Events()); var command = new FundPromotionCommand(actor, p.Id, 0, 0, "fund-1", Now);
         await service.FundAsync(command, CancellationToken.None); await service.FundAsync(command, CancellationToken.None);
         Assert.Equal(1000, wallet.ReservedBalance.Amount); Assert.Single(idem.Records);
     }

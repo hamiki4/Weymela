@@ -286,8 +286,9 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid();
         var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var legal = await SeedAccountLegalAsync(db);
         var request = new RoleEnrollmentRequest(ActorRole.Business, "Bella Cafe", null, "Addis", "Restaurant", "Cafe");
-        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request, "business-application", default);
+        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request with { AccountLegal = legal }, "business-application", default);
         Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
         Assert.StartsWith("BU-", pending.PublicId, StringComparison.Ordinal);
         Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
@@ -337,7 +338,8 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid();
         var service = new RoleEnrollmentService(db, TimeProvider.System);
-        var first = new RoleEnrollmentRequest(ActorRole.Creator, "Bella", "CR-3", null, null, null);
+        var legal = await SeedAccountLegalAsync(db);
+        var first = new RoleEnrollmentRequest(ActorRole.Creator, "Bella", "CR-3", null, null, null, AccountLegal: legal);
         await service.SubmitAsync(new Actor(user, ActorRole.Customer, CustomerId: Guid.NewGuid()), first, "same-key", default);
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer), first, "another-key", default));
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer), first with { DisplayName = "Other" }, "same-key", default));

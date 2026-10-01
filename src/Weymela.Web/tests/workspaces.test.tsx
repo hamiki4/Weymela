@@ -23,6 +23,7 @@ import {
   CreatorDashboard,
   CreatorDiscover,
   CreatorPromotions,
+  CreatorUgcOpportunity,
 } from "../src/features/creator/CreatorExperience";
 import { CreatorProfile } from "../src/features/creator/CreatorProfile";
 import {
@@ -192,23 +193,23 @@ describe("Business workspace", () => {
     await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ campaignBudget: 1000, platforms: [{ platform: "TikTok", capacity: 1 }] }));
     expect(api.writes.find(write => write.path === "/business/promotions")?.body).not.toHaveProperty("creatorCommissionPercent");
   });
-  it("checks current Business agreements before opening Promotion creation", async () => {
+  it("does not block Promotion creation on legacy Business agreements", async () => {
     mockApi({ "/legal/current": [
       { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
       { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
     ] });
     mount(<CreateCampaign />, "/business/campaigns/new");
-    expect(await screen.findByRole("heading", { name: "Before you continue" })).toBeVisible();
-    expect(screen.queryByLabelText("Promotion title")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Promotion title")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Before you continue" })).not.toBeInTheDocument();
   });
-  it("checks current Business agreements before opening UGC creation", async () => {
+  it("does not block UGC creation on legacy Business agreements", async () => {
     mockApi({ "/legal/current": [
       { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
       { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
     ] });
     mount(<CreateBusinessUgcPage />, "/business/ugc/new");
-    expect(await screen.findByRole("heading", { name: "Before you continue" })).toBeVisible();
-    expect(screen.queryByLabelText("UGC title")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("UGC title")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Before you continue" })).not.toBeInTheDocument();
   });
   it("separates UGC commitment from optional Customer discount funding", async () => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: 1000, available: 1000, reserved: 0 } });
@@ -446,6 +447,44 @@ describe("Creator workspace", () => {
     expect(screen.getByRole("link", { name: /Active Promotions/ })).toHaveAttribute("href", "/creator/promotions?filter=Active");
     expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
   });
+  it("previews Discover opportunities before earnings and caps each list", async () => {
+    const ugcCard = { id: "ugc-home", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
+      contentType: "Video", status: "Open", creatorPayment: 4750, creatorsNeeded: 1, approvedCreators: 0,
+      dueDateUtc: "2027-12-01T10:00:00Z", location: "Addis Ababa", platformRequirements: [{ platform: "TikTok", format: "Video", minimumAudience: 0 }],
+      platformCapacities: [{ platform: "TikTok", capacity: 1, approved: 0, available: 1 }], requestStatus: null, version: 1,
+      productProvided: true, creatorMustPurchase: false };
+    mockCreatorApi({
+      "/creator/discover": [1, 2, 3, 4].map((id) => ({ ...opportunity, id: `campaign-${id}`, title: `Coffee stories ${id}`, platforms: [{ platform: "TikTok", approved: 0, capacity: 1, available: 1, minimumAudience: 30000 }] })),
+      "/creator/ugc": [ugcCard, { ...ugcCard, id: "ugc-home-2", title: "Coffee reels" }],
+    });
+    mount(<CreatorDashboard />);
+    expect(await screen.findByRole("heading", { name: "Opportunities for you" })).toBeVisible();
+    const promotions = screen.getByRole("heading", { name: "Open Promotions" }).closest("section")!;
+    expect(within(promotions).getAllByRole("heading", { level: 3 })).toHaveLength(3);
+    expect(within(promotions).getAllByText("30,000 followers minimum")).toHaveLength(3);
+    expect(within(promotions).getByRole("link", { name: "See all" })).toHaveAttribute("href", "/creator/discover");
+    const ugc = screen.getByRole("heading", { name: "Open UGC" }).closest("section")!;
+    expect(within(ugc).getAllByText("No minimum")).toHaveLength(2);
+    expect(within(ugc).getAllByRole("link", { name: "View" })).toHaveLength(2);
+    expect(within(ugc).getAllByRole("link", { name: "View" })[0]).toHaveAttribute("href", "/creator/ugc/ugc-home");
+    expect(within(ugc).getAllByRole("button", { name: "Request to Join" })).toHaveLength(2);
+    expect(within(ugc).getByRole("link", { name: "See all" })).toHaveAttribute("href", "/creator/discover?tab=UGC");
+    expect(screen.queryByText("Category")).not.toBeInTheDocument();
+    expect(screen.queryByText("Verified followers")).not.toBeInTheDocument();
+  });
+  it("opens UGC detail through the existing Creator detail projection", async () => {
+    const card = { id: "ugc-detail", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
+      contentType: "Video", status: "Open", creatorPayment: 4750, creatorsNeeded: 1, approvedCreators: 0,
+      dueDateUtc: "2027-12-01T10:00:00Z", location: "Addis Ababa", platformRequirements: [{ platform: "TikTok", format: "Video", minimumAudience: 0 }],
+      platformCapacities: [{ platform: "TikTok", capacity: 1, approved: 0, available: 1 }], requestStatus: null, version: 1,
+      productProvided: true, creatorMustPurchase: false };
+    mockCreatorApi({ "/creator/ugc/ugc-detail": { opportunity: card, instructions: "Make a short video", resources: [], productProvided: true,
+      creatorMustPurchase: false, usageRights: null, currentRevision: 1, requests: [], assignments: [], revisions: [] } });
+    mount(<CreatorUgcOpportunity />, "/creator/ugc/ugc-detail", "/creator/ugc/:id");
+    expect(await screen.findByRole("heading", { name: "Coffee video" })).toBeVisible();
+    expect(screen.getByText("Make a short video")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Request to Join" })).toBeVisible();
+  });
   it("discovers specific Business Promotions with a compact UGC switch", async () => {
     mockCreatorApi({ "/creator/ugc": [] });
     mount(<CreatorDiscover />);
@@ -538,6 +577,8 @@ describe("Creator workspace", () => {
     expect(await screen.findByText("Full")).toBeVisible();
     expect(screen.getByRole("button", { name: "Submit Request" })).toBeDisabled();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText("Category")).not.toBeInTheDocument();
+    expect(screen.queryByText("Verified followers")).not.toBeInTheDocument();
   });
   it("requests the specific Promotion and selected available social profile", async () => {
     const api = mockCreatorApi({ "/creator/discover/campaign": { ...opportunity,

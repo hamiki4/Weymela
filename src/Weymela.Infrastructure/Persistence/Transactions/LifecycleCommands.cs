@@ -37,8 +37,6 @@ public sealed partial class FinancialCommands
         {
             if (c.Actor.Role != ActorRole.Creator || c.Actor.CreatorId is null)
                 throw new ApplicationFailure(FailureKind.Forbidden, "Only a Creator may apply as self.");
-            await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Creator,
-                [LegalDocumentType.CreatorAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             var a = await Participation.ApplyAsync(c, token);
             Audit(c.Actor, "CreatorApplied", c.Now, Guid.NewGuid(), c.PromotionId, c.Actor.CreatorId);
             return a.Id;
@@ -55,8 +53,6 @@ public sealed partial class FinancialCommands
     public Task<Guid> PublishPromotionAsync(PublishPromotionCommand c, CancellationToken ct = default) =>
         Uow.ExecuteAsync(async token =>
         {
-            await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(c.Actor.UserId, LegalRole.Business,
-                [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             await Promotions.PublishAsync(c, token);
             Audit(c.Actor, "PromotionPublished", c.Now, Guid.NewGuid(), c.PromotionId);
             return c.PromotionId;
@@ -86,8 +82,6 @@ public sealed partial class FinancialCommands
             if (p.BusinessId != actor.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "Promotion belongs to another Business.");
             if (approve)
             {
-                await new LegalAcceptanceGate(db, clock ?? TimeProvider.System).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
-                    [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
                 application.Approve(actor.UserId, at);
             }
             else application.Reject(actor.UserId, at);

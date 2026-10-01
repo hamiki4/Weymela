@@ -24,8 +24,6 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var fingerprint = RequestFingerprint.Create(JsonSerializer.Serialize(input));
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "CreateUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
-            await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
-                [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             if (!Enum.TryParse<UgcContentType>(input.ContentType, true, out var contentType) || !Enum.IsDefined(contentType))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose Video or Photos.");
             var resources = Resources(input.Resources);
@@ -68,8 +66,6 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             var fingerprint = RequestFingerprint.Create(id.ToString(), expectedVersion.ToString());
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "PublishUgc", key, fingerprint, token) is { } replay) return Guid.Parse(replay);
-            await new LegalAcceptanceGate(db, clock).EnsureCurrentAcceptedAsync(actor.UserId, LegalRole.Business,
-                [LegalDocumentType.BusinessAgreement, LegalDocumentType.AntiCircumventionAgreement], token);
             var opportunity = await Opportunity(id, token);
             Own(actor, opportunity);
             if (opportunity.Version != expectedVersion) throw Conflict();

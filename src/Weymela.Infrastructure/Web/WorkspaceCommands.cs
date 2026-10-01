@@ -54,9 +54,6 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
     public async Task<Guid> FundAsync(Actor actor,Guid id,FundingInput input,string key,CancellationToken ct)
     {
         await Business(actor,ct);
-        if (!await db.IdempotencyRecords.AsNoTracking().AnyAsync(x=>x.ActorId==actor.UserId&&x.OperationType=="FundPromotion"&&x.Key==key,ct))
-            await new LegalAcceptanceGate(db,clock).EnsureCurrentAcceptedAsync(actor.UserId,LegalRole.Business,
-                [LegalDocumentType.BusinessAgreement,LegalDocumentType.AntiCircumventionAgreement],ct);
         return await Commands.FundPromotionAsync(new(actor,id,input.CampaignVersion,input.WalletVersion,key,Now),ct);
     }
     public async Task<Guid> PublishAsync(Actor actor,Guid id,VersionInput input,string key,bool startOnly,CancellationToken ct)

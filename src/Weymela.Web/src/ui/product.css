@@ -234,6 +234,12 @@
 .creator-platform-counts > span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px 3px 3px; border: 1px solid var(--product-line); border-radius: 8px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .creator-platform-counts .creator-platform-icon { width: 25px; height: 25px; border-radius: 6px; }
 .creator-platform-counts .creator-platform-icon svg { width: 18px; height: 18px; }
+.creator-platform-requirements { display: grid; gap: 6px; width: 100%; margin: 6px 0; }
+.creator-platform-requirements > span { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.creator-platform-requirements .creator-platform-icon { flex: 0 0 auto; width: 25px; height: 25px; border-radius: 6px; }
+.creator-platform-requirements > span > span { display: grid; min-width: 0; gap: 1px; }
+.creator-platform-requirements strong { font-size: .82rem; }
+.creator-platform-requirements small { color: var(--product-secondary); font-size: .78rem; }
 .role-creator .creator-opportunity-type { color: var(--role-accent); font-size: .78rem; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
 .role-creator .creator-opportunity-earn { display: flex; flex-direction: column; gap: 1px; }
 .role-creator .creator-opportunity-earn strong { color: var(--product-ink); font-size: 1rem; }

@@ -29,7 +29,7 @@ RUN test -n "$VITE_FIREBASE_API_KEY" \
     && printf '{"firebaseProjectId":"%s"}\n' "$VITE_FIREBASE_PROJECT_ID" > dist/firebase-build.json
 
 FROM ${WEB_IMAGE} AS runtime
-# Alpine 3.24 / linux-amd64: targeted libuuid and libexpat security fixes, not
+# Alpine 3.24 / linux-amd64: targeted libuuid, libexpat and pcre2 security fixes, not
 # a general upgrade. Verify fixed package bytes, then require Alpine's normal
 # signature/dependency checks offline. No repository refresh can introduce
 # unrelated package upgrades.
@@ -44,7 +44,13 @@ RUN wget -O /tmp/weymela-libuuid-2.42.3-r1.apk \
     && printf '%s  %s\n' 2e56946bc495cbed9eb1ad70859a79cba9db6420016453e065a0628848b32c7e /tmp/weymela-libexpat-2.8.5-r0.apk | sha256sum -c - \
     && apk add --no-cache --no-network /tmp/weymela-libexpat-2.8.5-r0.apk \
     && apk info --installed 'libexpat=2.8.5-r0' \
-    && rm /tmp/weymela-libexpat-2.8.5-r0.apk
+    && rm /tmp/weymela-libexpat-2.8.5-r0.apk \
+    && wget -O /tmp/weymela-pcre2-10.49-r0.apk \
+      https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/pcre2-10.49-r0.apk \
+    && printf '%s  %s\n' 2919897914820f42a17a8d7d37df310d2dfad1c82ebe5f539cc5c765f916752a /tmp/weymela-pcre2-10.49-r0.apk | sha256sum -c - \
+    && apk add --no-cache --no-network /tmp/weymela-pcre2-10.49-r0.apk \
+    && apk info --installed 'pcre2=10.49-r0' \
+    && rm /tmp/weymela-pcre2-10.49-r0.apk
 COPY docker/web/nginx.conf /etc/nginx/nginx.conf
 COPY docker/web/api-proxy.conf /etc/nginx/weymela-api-proxy.conf
 COPY docker/web/security-headers.conf /etc/nginx/weymela-security-headers.conf

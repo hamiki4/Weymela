@@ -30,7 +30,6 @@ import {
   campaignType,
   count,
   date,
-  daysLeft,
   isViewOnly,
 } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
@@ -311,7 +310,7 @@ export function BusinessPricingPage() {
                     </div>
                     <dl className="pricing-card-details">
                       <div>
-                        <dt>Content commitment</dt>
+                        <dt>Creator payment</dt>
                         <dd>You choose the UGC budget.</dd>
                       </div>
                       <div>
@@ -325,12 +324,12 @@ export function BusinessPricingPage() {
                         </div>
                       )}
                     </dl>
-                    <p className="pricing-card-note">The service fee is included in your content commitment.</p>
+                    <p className="pricing-card-note">The service fee is included in the Creator payment.</p>
                   </article>
                   <article className="pricing-card pricing-card-business-ugc">
                     <div className="pricing-card-heading"><span className="pricing-card-kicker">UGC customer offer</span><h3>UGC + Sale</h3></div>
                     <dl className="pricing-card-details">
-                      <div><dt>Content commitment</dt><dd>You choose the UGC budget.</dd></div>
+                      <div><dt>Creator payment</dt><dd>You choose the UGC budget.</dd></div>
                       <div><dt>Customer offer</dt><dd>You choose the discount % and discount budget.</dd></div>
                       <div><dt>Weymela transaction fee</dt><dd>{ugcPricing.customerOfferPlatformSalePercent === null ? "Not available" : `${amount(ugcPricing.customerOfferPlatformSalePercent)}% per eligible purchase`}</dd></div>
                     </dl>
@@ -370,7 +369,7 @@ export function CampaignTable({
           <Link to={`${base}/campaigns/${r.id}`}>
             <strong>{r.title}</strong>
           </Link>
-          <small>{campaignType(r.type)}{!admin && ` · ${daysLeft(r.endUtc)} days left`}</small>
+          <small>{campaignType(r.type)}</small>
           {!admin && <small>Assigned {amount(r.assignedToCreators)} · Available {amount(r.availableCampaignBudget)}</small>}
           {!admin && (
             <div className="row-links">
@@ -437,11 +436,7 @@ export function CampaignTable({
           />
           <div className="meta-row">
             <span>{r.creatorCount} {r.creatorCount === 1 ? "Creator" : "Creators"} · {amount(r.assignedToCreators)} assigned</span>
-            <span>
-              {admin
-                ? `Ends ${date(r.endUtc)}`
-                : `${daysLeft(r.endUtc)} days left`}
-            </span>
+            {admin && <span>{`Ends ${date(r.endUtc)}`}</span>}
           </div>
           <div className="actions">
             <ActionLink to={`${base}/campaigns/${r.id}`} secondary>
@@ -490,8 +485,8 @@ export function BusinessCampaigns() {
       />
       <Resource resource={resource}>
         {(rows) => (
-          <Section title={activeOnly ? "Active Promotions" : "Active Promotions and drafts"} action={activeOnly ? <Link className="text-link" to="/business/campaigns">Show all</Link> : <Currency />}>
-            <CampaignTable campaigns={activeOnly ? rows.filter((row) => ["Active", "Published"].includes(row.status)) : rows} />
+          <Section title={activeOnly ? "Active Promotions" : "Promotions"} action={activeOnly ? <Link className="text-link" to="/business/campaigns">Show all</Link> : <Currency />}>
+            <CampaignTable campaigns={rows.filter((row) => row.status !== "Draft" && (!activeOnly || ["Active", "Published"].includes(row.status)))} />
           </Section>
         )}
       </Resource>

@@ -40,7 +40,8 @@ public sealed record CreatorSocialProfileView(Guid Id, string Platform, string P
 public sealed record CampaignRow(Guid Id, string PublicId, Guid BusinessId, string Business, string Title, string Type,
     decimal CampaignBudget, decimal AssignedToCreators, decimal AvailableCampaignBudget, decimal Used, decimal Remaining,
     int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version, int PromotionLiveDurationDays, string? Slogan = null,
-    string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null);
+    string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null,
+    DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
 public sealed record ApplicantCard(Guid Id, CreatorCard Creator, string Message, string? ContentConcept, string Status, DateTime AppliedAtUtc,
     string? Platform = null);
 public sealed record CreatorBudgetCard(Guid Id, CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining,
@@ -52,7 +53,7 @@ public sealed record CampaignOpportunity(Guid Id, string PublicId, BusinessCard 
     string? Requirements, string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime StartUtc, DateTime EndUtc,
     int PromotionLiveDurationDays, CreatorPrice Earnings, string? RequestStatus, string Eligibility, string? Slogan = null, string? Location = null,
     IReadOnlyList<PromotionPlatformView>? Platforms = null, IReadOnlyList<CreatorSocialProfileView>? EligibleSocialProfiles = null,
-    int ApprovedCreators = 0, int CreatorCapacity = 0);
+    int ApprovedCreators = 0, int CreatorCapacity = 0, DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
 public sealed record CreatorCampaignCard(Guid Id, Guid BudgetId, Guid? ParticipationId, string Title, BusinessCard Business, string Type,
     decimal YourBudget, decimal BudgetRemaining, long VerifiedViews, long RewardedViews, decimal ViewEarnings, decimal SaleCommissionEarnings,
     string Status, string ContentStatus, string? Provider, string? ExternalContentId, DateTime StartUtc, DateTime EndUtc, int PromotionLiveDurationDays,
@@ -158,7 +159,8 @@ public sealed record PromotionPlatformInput(string Platform, int Capacity);
 public sealed record CreateCampaignInput(string Title, string Description, string Type, decimal CampaignBudget, string? Requirements,
     string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime? StartUtc, DateTime EndUtc,
     string? Slogan = null, string? Location = null, IReadOnlyList<string>? Resources = null,
-    IReadOnlyList<PromotionPlatformInput>? Platforms = null);
+    IReadOnlyList<PromotionPlatformInput>? Platforms = null, DateTime? ApplicationClosesAtUtc = null,
+    DateTime? ContentDueAtUtc = null);
 public sealed record DepositInput(decimal Amount, long ExpectedVersion);
 public sealed record FundingInput(long CampaignVersion, long WalletVersion);
 public sealed record VersionInput(long Version);
@@ -184,7 +186,8 @@ public sealed record CreateUgcInput(string Title, string? Slogan, string Content
     bool CustomerOfferEnabled = false, decimal? CustomerDiscountPercent = null,
     decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
     DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null,
-    IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null);
+    IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null,
+    DateTime? ApplicationClosesAtUtc = null);
 public sealed record UgcReviewInput(string? Reason);
 public sealed record UgcSubmissionInput(string SubmissionUrl);
 public sealed record UgcRevisionInput(string? Slogan, string Instructions, IReadOnlyList<string>? Resources,
@@ -195,7 +198,8 @@ public sealed record UgcRevisionInput(string? Slogan, string Instructions, IRead
     bool? CustomerOfferEnabled = null, decimal? CustomerDiscountPercent = null,
     decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
     DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null,
-    IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null);
+    IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null,
+    DateTime? ApplicationClosesAtUtc = null);
 public sealed record UgcPlatformRequirementView(string Platform, string Format, long? MinimumAudience);
 public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string Title, string? Slogan,
     string ContentType, string Status, decimal CreatorPayment, int CreatorsNeeded, int ApprovedCreators,
@@ -213,7 +217,8 @@ public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string T
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? PlatformFee = null,
     bool ProductProvided = false, bool CreatorMustPurchase = false,
     IReadOnlyList<UgcPlatformCapacityView>? PlatformCapacities = null,
-    IReadOnlyList<UgcEligibleSocialProfile>? EligibleSocialProfiles = null);
+    IReadOnlyList<UgcEligibleSocialProfile>? EligibleSocialProfiles = null,
+    DateTime? ApplicationClosesAtUtc = null);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason, long? CreatorNumber = null);
 public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Opportunity, Guid BusinessId,

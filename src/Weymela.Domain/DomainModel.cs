@@ -84,14 +84,18 @@ public sealed class Promotion
     // Active/exhausted allocations remain committed; completed allocations retain only consumed funds.
     public Money AllocatedBudget => allocations.Where(x => x.Status is not CreatorAllocationStatus.Cancelled).Aggregate(Money.Zero(TotalBudget.Currency), (a, x) => a.Add(x.Status == CreatorAllocationStatus.Completed ? x.UsedAmount : x.OriginalAllocation));
     public Money RemainingBudget => TotalBudget.Subtract(UsedBudget); public Money UnallocatedBudget => TotalBudget.Subtract(AllocatedBudget);
-    public CreatorEligibilityCriteria Eligibility { get; } public DateTime StartDateUtc { get; private set; } public DateTime EndDateUtc { get; } public PricingSnapshot PricingSnapshot { get; } public int PromotionLiveDurationDays { get; } public PromotionStatus Status { get; private set; } = PromotionStatus.Draft; public DateTime CreatedAtUtc { get; } public DateTime? PublishedAtUtc { get; private set; } public DateTime? ActivatedAtUtc { get; private set; } public DateTime? CompletedAtUtc { get; private set; } public long Version { get; private set; }
+    public CreatorEligibilityCriteria Eligibility { get; } public DateTime StartDateUtc { get; private set; } public DateTime EndDateUtc { get; }
+    public DateTime? ApplicationClosesAtUtc { get; private set; } public DateTime? ContentDueAtUtc { get; private set; }
+    public PricingSnapshot PricingSnapshot { get; } public int PromotionLiveDurationDays { get; } public PromotionStatus Status { get; private set; } = PromotionStatus.Draft; public DateTime CreatedAtUtc { get; } public DateTime? PublishedAtUtc { get; private set; } public DateTime? ActivatedAtUtc { get; private set; } public DateTime? CompletedAtUtc { get; private set; } public long Version { get; private set; }
     public IReadOnlyList<CreatorAllocation> Allocations => allocations; public IReadOnlyList<PromotionPlatform> Platforms => platforms; public IReadOnlyList<DomainEvent> DomainEvents => events;
-    public Promotion(Guid businessId, string title, string description, PromotionType type, Money totalBudget, CreatorEligibilityCriteria eligibility, DateTime start, DateTime end, PricingSnapshot pricing, DateTime createdAt, int promotionLiveDurationDays) { if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("Title is required."); if (end <= start) throw new ArgumentException("End must follow start."); if (totalBudget.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(totalBudget)); if (pricing.PromotionType != type) throw new ArgumentException("Pricing snapshot type mismatch."); PromotionLiveDurationPolicy.Validate(promotionLiveDurationDays); if (pricing.MinimumPromotionBudget is { } minimum && totalBudget.Amount < minimum.Amount) throw new InvalidOperationException("Promotion budget is below the effective minimum for this Promotion type."); BusinessId = businessId; Title = title.Trim(); Description = description?.Trim() ?? ""; PromotionType = type; TotalBudget = totalBudget; ReservedBudget = Money.Zero(totalBudget.Currency); UsedBudget = Money.Zero(totalBudget.Currency); Eligibility = eligibility; StartDateUtc = start; EndDateUtc = end; PricingSnapshot = pricing; PromotionLiveDurationDays = promotionLiveDurationDays; CreatedAtUtc = createdAt; }
+    public Promotion(Guid businessId, string title, string description, PromotionType type, Money totalBudget, CreatorEligibilityCriteria eligibility, DateTime start, DateTime end, PricingSnapshot pricing, DateTime createdAt, int promotionLiveDurationDays,
+        DateTime? applicationClosesAtUtc = null, DateTime? contentDueAtUtc = null) { if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("Title is required."); if (end <= start) throw new ArgumentException("End must follow start."); if (totalBudget.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(totalBudget)); if (pricing.PromotionType != type) throw new ArgumentException("Pricing snapshot type mismatch."); PromotionLiveDurationPolicy.Validate(promotionLiveDurationDays); ValidateDeadlines(applicationClosesAtUtc, contentDueAtUtc); if (pricing.MinimumPromotionBudget is { } minimum && totalBudget.Amount < minimum.Amount) throw new InvalidOperationException("Promotion budget is below the effective minimum for this Promotion type."); BusinessId = businessId; Title = title.Trim(); Description = description?.Trim() ?? ""; PromotionType = type; TotalBudget = totalBudget; ReservedBudget = Money.Zero(totalBudget.Currency); UsedBudget = Money.Zero(totalBudget.Currency); Eligibility = eligibility; StartDateUtc = start; EndDateUtc = end; ApplicationClosesAtUtc = applicationClosesAtUtc; ContentDueAtUtc = contentDueAtUtc; PricingSnapshot = pricing; PromotionLiveDurationDays = promotionLiveDurationDays; CreatedAtUtc = createdAt; }
     public Promotion(Guid businessId, string title, string description, PromotionType type, Money totalBudget,
         CreatorEligibilityCriteria eligibility, DateTime start, DateTime end, PricingSnapshot pricing, DateTime createdAt,
         string? slogan, string? location, string? resourcesJson,
-        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)> selectedPlatforms, int promotionLiveDurationDays)
-        : this(businessId, title, description, type, totalBudget, eligibility, start, end, pricing, createdAt, promotionLiveDurationDays)
+        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)> selectedPlatforms, int promotionLiveDurationDays,
+        DateTime? applicationClosesAtUtc = null, DateTime? contentDueAtUtc = null)
+        : this(businessId, title, description, type, totalBudget, eligibility, start, end, pricing, createdAt, promotionLiveDurationDays, applicationClosesAtUtc, contentDueAtUtc)
     {
         Slogan = Clean(slogan, 160); Location = Clean(location, 160); ResourcesJson = Clean(resourcesJson, 4000);
         if (selectedPlatforms.Count == 0 || selectedPlatforms.GroupBy(x => x.Platform).Any(x => x.Count() > 1))
@@ -103,7 +107,7 @@ public sealed class Promotion
         }
     }
     public void Fund(BusinessWallet wallet, DateTime at, Guid correlation) { Ensure(PromotionStatus.Draft); wallet.ReserveForPromotion(TotalBudget, at, correlation); ReservedBudget = TotalBudget; Status = PromotionStatus.Funded; Version++; events.Add(new PromotionFunded(Id, TotalBudget, at, correlation)); }
-    public void Publish(DateTime at, Guid correlation) { Ensure(PromotionStatus.Funded); if (EndDateUtc <= at) throw new InvalidOperationException("Promotion end date has passed."); if (StartDateUtc < at) StartDateUtc = at; Status = PromotionStatus.Published; PublishedAtUtc = at; Version++; events.Add(new PromotionPublished(Id, at, correlation)); }
+    public void Publish(DateTime at, Guid correlation) { Ensure(PromotionStatus.Funded); if (EndDateUtc <= at) throw new InvalidOperationException("Promotion end date has passed."); if (ApplicationClosesAtUtc is { } closes && closes <= at) throw new InvalidOperationException("Application closes must be in the future."); if (ContentDueAtUtc is { } due && due <= at) throw new InvalidOperationException("Content due must be in the future."); if (StartDateUtc < at) StartDateUtc = at; Status = PromotionStatus.Published; PublishedAtUtc = at; Version++; events.Add(new PromotionPublished(Id, at, correlation)); }
     public void Activate(DateTime at, Guid correlation) { Ensure(PromotionStatus.Published); Status = PromotionStatus.Active; ActivatedAtUtc = at; Version++; events.Add(new PromotionActivated(Id, at, correlation)); }
     public CreatorAllocation Allocate(Guid creatorId, Money amount, DateTime at, Guid correlation,
         CreatorPlatform? platform = null, Guid? creatorSocialProfileId = null)
@@ -118,7 +122,7 @@ public sealed class Promotion
             if (creatorSocialProfileId is null) throw new InvalidOperationException("A Creator social profile is required.");
             slot.Approve();
         }
-        var allocation = new CreatorAllocation(Id, creatorId, amount, at, platform, creatorSocialProfileId);
+        var allocation = new CreatorAllocation(Id, creatorId, amount, at, platform, creatorSocialProfileId, ContentDueAtUtc);
         allocations.Add(allocation); Version++; events.Add(new CreatorAllocationCreated(allocation.Id, amount, at, correlation)); return allocation;
     }
     public void IncreaseAllocation(Guid allocationId, Money amount, DateTime at, Guid correlation) { Ensure(PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active); var allocation = allocations.SingleOrDefault(x => x.Id == allocationId) ?? throw new KeyNotFoundException(); if (amount.Amount > UnallocatedBudget.Amount) throw new InvalidOperationException("Allocation exceeds unallocated Promotion budget."); allocation.Increase(amount, at); Version++; }
@@ -132,6 +136,13 @@ public sealed class Promotion
         if (description.Length > 3000) throw new ArgumentException("Keep Promotion instructions concise.");
         Description = description.Trim(); Slogan = Clean(slogan, 160); Location = Clean(location, 160);
         ResourcesJson = Clean(resourcesJson, 4000); Version++;
+    }
+    private static void ValidateDeadlines(DateTime? applicationClosesAtUtc, DateTime? contentDueAtUtc)
+    {
+        if (applicationClosesAtUtc.HasValue != contentDueAtUtc.HasValue)
+            throw new ArgumentException("Application closes and content due must be supplied together.");
+        if (applicationClosesAtUtc is { } closes && contentDueAtUtc is { } due && closes >= due)
+            throw new ArgumentException("Application closes must be before content due.");
     }
     private static string? Clean(string? value, int maximum)
     { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > maximum) throw new ArgumentException("Promotion information is too long."); return result; }
@@ -160,9 +171,9 @@ public sealed class CreatorAllocation
     public long Version { get; private set; }
     public Guid Id { get; } = Guid.NewGuid(); public Guid PromotionId { get; } public Guid CreatorId { get; }
     public CreatorPlatform? Platform { get; } public Guid? CreatorSocialProfileId { get; }
-    public Money OriginalAllocation { get; private set; } public Money UsedAmount { get; private set; } public Money RemainingAmount => OriginalAllocation.Subtract(UsedAmount); public CreatorAllocationStatus Status { get; private set; } = CreatorAllocationStatus.Active; public DateTime ApprovedAtUtc { get; } public DateTime? ActivatedAtUtc { get; private set; } public DateTime? CompletedAtUtc { get; private set; }
+    public Money OriginalAllocation { get; private set; } public Money UsedAmount { get; private set; } public Money RemainingAmount => OriginalAllocation.Subtract(UsedAmount); public CreatorAllocationStatus Status { get; private set; } = CreatorAllocationStatus.Active; public DateTime ApprovedAtUtc { get; } public DateTime? ContentDueAtUtc { get; } public DateTime? ActivatedAtUtc { get; private set; } public DateTime? CompletedAtUtc { get; private set; }
     public CreatorAllocation(Guid promotionId, Guid creatorId, Money amount, DateTime at,
-        CreatorPlatform? platform = null, Guid? creatorSocialProfileId = null) { if (amount.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount)); PromotionId = promotionId; CreatorId = creatorId; OriginalAllocation = amount; UsedAmount = Money.Zero(amount.Currency); ApprovedAtUtc = at; Platform = platform; CreatorSocialProfileId = creatorSocialProfileId; }
+        CreatorPlatform? platform = null, Guid? creatorSocialProfileId = null, DateTime? contentDueAtUtc = null) { if (amount.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount)); PromotionId = promotionId; CreatorId = creatorId; OriginalAllocation = amount; UsedAmount = Money.Zero(amount.Currency); ApprovedAtUtc = at; ContentDueAtUtc = contentDueAtUtc; Platform = platform; CreatorSocialProfileId = creatorSocialProfileId; }
     public void Activate(DateTime at) { if (Status != CreatorAllocationStatus.Active) throw new InvalidOperationException(); ActivatedAtUtc = at; }
     public void Consume(Money amount, DateTime at) { if (Status != CreatorAllocationStatus.Active || amount.Amount <= 0 || amount.Currency != OriginalAllocation.Currency || amount.Amount > RemainingAmount.Amount) throw new InvalidOperationException("Creator allocation is insufficient or closed."); UsedAmount = UsedAmount.Add(amount); if (RemainingAmount.Amount == 0) Status = CreatorAllocationStatus.Exhausted; }
     public void Increase(Money amount, DateTime at) { if (Status is not (CreatorAllocationStatus.Active or CreatorAllocationStatus.Exhausted) || amount.Amount <= 0 || amount.Currency != OriginalAllocation.Currency) throw new InvalidOperationException("Only an active allocation can be increased."); OriginalAllocation = OriginalAllocation.Add(amount); Status = CreatorAllocationStatus.Active; }

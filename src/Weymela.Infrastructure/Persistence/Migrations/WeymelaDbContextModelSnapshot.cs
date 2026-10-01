@@ -77,6 +77,10 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("ApprovedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ContentDueAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -948,6 +952,10 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("BusinessId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ApplicationClosesAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -959,6 +967,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<DateTime>("EndDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ContentDueAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Location")
@@ -1043,6 +1054,8 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Promotion_Budgets", "\"TotalBudget\" > 0 AND \"ReservedBudget\" >= 0 AND \"UsedBudget\" >= 0 AND \"ReservedBudget\" + \"UsedBudget\" <= \"TotalBudget\" AND \"AllocatedBudget\" >= \"UsedBudget\" AND \"AllocatedBudget\" <= \"TotalBudget\"");
 
                             t.HasCheckConstraint("CK_Promotion_Dates", "\"EndDateUtc\" > \"StartDateUtc\"");
+
+                            t.HasCheckConstraint("CK_Promotion_Application_Content_Deadlines", "\"ApplicationClosesAtUtc\" IS NULL AND \"ContentDueAtUtc\" IS NULL OR (\"ApplicationClosesAtUtc\" IS NOT NULL AND \"ContentDueAtUtc\" IS NOT NULL AND \"ApplicationClosesAtUtc\" < \"ContentDueAtUtc\")");
 
                             t.HasCheckConstraint("CK_Promotion_LiveDuration", "\"PromotionLiveDurationDays\" BETWEEN 1 AND 365");
                         });
@@ -1172,6 +1185,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ContentDueAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("CreatorId")
@@ -1436,6 +1452,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("BusinessId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ApplicationClosesAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1526,6 +1545,8 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_UgcOpportunity_Capacity", "\"CreatorCapacity\" > 0 AND \"ApprovedCreatorCount\" >= 0 AND \"ApprovedCreatorCount\" <= \"CreatorCapacity\"");
 
                             t.HasCheckConstraint("CK_UgcOpportunity_Funding", "\"RequiredFunding\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"RequiredFunding\"");
+
+                            t.HasCheckConstraint("CK_UgcOpportunity_Application_Content_Deadlines", "\"ApplicationClosesAtUtc\" IS NULL OR \"ApplicationClosesAtUtc\" < \"DueDateUtc\"");
                         });
                 });
 

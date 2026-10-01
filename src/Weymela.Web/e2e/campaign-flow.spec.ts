@@ -8,18 +8,18 @@ for (const width of [375, 1366])
   }) => {
     await page.setViewportSize({ width, height: width < 600 ? 812 : 768 });
     await login(context, "business");
-    await open(page, "/business/campaigns/new");
+    await page.goto("/business/campaigns/new");
+    await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
     const title = `Local stories ${width}-${Date.now()}`;
     await page.getByLabel("Promotion title", { exact: true }).fill(title);
     await page
       .getByLabel("Promotion type", { exact: true })
       .selectOption("ViewPlusCommission");
-    const end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    await page.getByLabel("Promotion ends", { exact: true }).fill(end);
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page
-      .getByLabel("Requirements", { exact: true })
-      .fill("One original video.");
+    const closes = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16);
+    const due = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16);
+    await page.getByLabel("Application closes", { exact: true }).fill(closes);
+    await page.getByLabel("Content due", { exact: true }).fill(due);
+    await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
     await page.getByLabel("Creator category", { exact: true }).fill("Food");
     await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
     await page
@@ -28,32 +28,13 @@ for (const width of [375, 1366])
     await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
     await layout(page);
     await screenshot(page, `${width}-flow-creator-requirements`);
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page
-      .getByLabel("Promotion budget", { exact: true })
-      .fill("1000");
+    await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
     await screenshot(page, `${width}-flow-campaign-budget`);
-    await page.getByRole("button", { name: "Create Draft" }).click();
+    await page.getByRole("button", { name: "Publish Promotion" }).click();
     await expect(
       page.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
     const campaignId = page.url().split("/").pop()!;
-    await page.getByRole("button", { name: "Review Funding" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Confirm Promotion Funding" }),
-    ).toBeVisible();
-    await layout(page);
-    await screenshot(page, `${width}-flow-funding-confirmation`);
-    await page.getByRole("button", { name: "Confirm & Reserve Funds" }).click();
-    await expect(
-      page.getByRole("button", { name: "Publish Promotion" }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Publish Promotion" }).click();
-    await expect(
-      page.getByText("Promotion published. Eligible Creators can now find it.", {
-        exact: true,
-      }),
-    ).toBeVisible();
     await login(context, "other-creator");
     await open(page, "/creator/discover");
     const card = page

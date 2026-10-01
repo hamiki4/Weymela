@@ -10,7 +10,7 @@ public sealed partial class FinancialCommands
     public Task<Guid> CreateCampaignOnceAsync(CreatePromotionCommand c, string key, CancellationToken ct = default) => Uow.ExecuteAsync(async token =>
     {
         DemandBusiness(c.Actor); var fp = RequestFingerprint.Create(c.Actor.BusinessId.ToString()!, c.Title, c.Description, c.Type.ToString(), RequestFingerprint.Amount(c.TotalBudget),
-            c.Eligibility.Category ?? "", c.Eligibility.Market ?? "", c.Eligibility.MinimumVerifiedFollowers?.ToString() ?? "", c.Eligibility.Requirements ?? "", c.StartDateUtc.ToString("O"), c.EndDateUtc.ToString("O"),
+            c.Eligibility.Category ?? "", c.Eligibility.Market ?? "", c.Eligibility.MinimumVerifiedFollowers?.ToString() ?? "", c.Eligibility.Requirements ?? "", c.StartDateUtc.ToString("O"), c.EndDateUtc.ToString("O"), c.ApplicationClosesAtUtc?.ToString("O") ?? "", c.ContentDueAtUtc?.ToString("O") ?? "",
             c.Slogan??"",c.Location??"",c.ResourcesJson??"",string.Join(',',c.Platforms?.OrderBy(x=>x.Platform).Select(x=>$"{x.Platform}:{x.Capacity}")??[]));
         var prior = await Replay(c.Actor, "CreateCampaign", key, fp, token); if (prior is not null) return prior.Value;
         var p = await Promotions.CreateAsync(c, token);
@@ -64,7 +64,7 @@ public sealed partial class FinancialCommands
         var fp = RequestFingerprint.Create(c.PromotionId.ToString(), c.Message ?? "", c.ContentConcept ?? "",c.Platform?.ToString()??"",c.CreatorSocialProfileId?.ToString()??"");
         var prior = await Replay(c.Actor, "JoinCampaign", key, fp, token); if (prior is not null) return prior.Value;
         var p = await new PromotionRepository(db).GetAsync(c.PromotionId, token) ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
-        if (p.ReservedBudget.Amount <= 0 || p.UnallocatedBudget.Amount <= 0 || p.EndDateUtc <= c.Now || !new CreatorEligibility().IsEligible(c.Actor.CreatorId.Value, p.Eligibility, c.Profile))
+        if (p.ReservedBudget.Amount <= 0 || p.UnallocatedBudget.Amount <= 0 || p.EndDateUtc <= c.Now || p.ApplicationClosesAtUtc is { } closes && c.Now >= closes || !new CreatorEligibility().IsEligible(c.Actor.CreatorId.Value, p.Eligibility, c.Profile))
             throw new ApplicationFailure(FailureKind.Validation, "This Promotion does not match your current profile or has no available Creator capacity.");
         if (!await db.CommercePermissions.AnyAsync(x => x.SubjectId == p.BusinessId && x.Role == ActorRole.Business && x.IsActive, token))
             throw new ApplicationFailure(FailureKind.Validation, "This Promotion is not accepting requests.");

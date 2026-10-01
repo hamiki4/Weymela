@@ -13,6 +13,10 @@ export class ApiError extends Error {
 }
 
 const resourceContextChangedEvent = "weymela-resource-context-changed";
+export const notificationsChangedEvent = "weymela-notifications-changed";
+export function notifyNotificationsChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(notificationsChangedEvent));
+}
 const resourceCache = new Map<string, unknown>();
 const pendingResources = new Map<string, Promise<void>>();
 let resourceContextGeneration = 0;

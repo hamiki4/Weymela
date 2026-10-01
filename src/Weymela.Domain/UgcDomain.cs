@@ -28,6 +28,7 @@ public sealed class UgcOpportunity
     public string ResourcesJson { get; private set; } = "[]";
     public string? Location { get; private set; }
     public DateTime DueDateUtc { get; private set; }
+    public DateTime? ApplicationClosesAtUtc { get; private set; }
     public bool ProductProvided { get; private set; }
     public bool CreatorMustPurchase { get; private set; }
     public string? UsageRights { get; private set; }
@@ -60,7 +61,8 @@ public sealed class UgcOpportunity
         bool productProvided, bool creatorMustPurchase, string? usageRights, Money creatorPayment,
         int creatorCapacity, UgcPricingSnapshot pricing, DateTime now,
         IReadOnlyCollection<(CreatorPlatform Platform, string Format, long? MinimumAudience)> requirements,
-        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null)
+        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null,
+        DateTime? applicationClosesAtUtc = null)
     {
         if (businessId == Guid.Empty || string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120)
             throw new ArgumentException("UGC title is required.");
@@ -68,12 +70,13 @@ public sealed class UgcOpportunity
             throw new ArgumentException("UGC instructions are required.");
         if (dueDateUtc.Kind != DateTimeKind.Utc || dueDateUtc <= now)
             throw new ArgumentException("UGC due date must be in the future.");
+        ValidateDeadlines(applicationClosesAtUtc, dueDateUtc);
         if (creatorCapacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(creatorCapacity));
         if (!pricing.IsValid) throw new InvalidOperationException("UGC pricing is unavailable.");
         var netPayment = NetCreatorPayment(creatorPayment, pricing);
         BusinessId = businessId; Title = title.Trim(); Slogan = Clean(slogan, 160);
         ContentType = contentType; Instructions = instructions.Trim(); ResourcesJson = resourcesJson;
-        Location = Clean(location, 160); DueDateUtc = dueDateUtc; ProductProvided = productProvided;
+        Location = Clean(location, 160); DueDateUtc = dueDateUtc; ApplicationClosesAtUtc = applicationClosesAtUtc; ProductProvided = productProvided;
         CreatorMustPurchase = creatorMustPurchase; UsageRights = Clean(usageRights, 2000);
         CreatorPayment = netPayment; CreatorCapacity = creatorCapacity; PricingSnapshot = pricing;
         RequiredFunding = new Money(creatorPayment.Amount * creatorCapacity, creatorPayment.Currency);
@@ -95,6 +98,8 @@ public sealed class UgcOpportunity
     public void Publish(BusinessWallet wallet, DateTime now, Guid correlation)
     {
         Ensure(UgcOpportunityStatus.Draft);
+        if (ApplicationClosesAtUtc is { } closes && closes >= DueDateUtc) throw new InvalidOperationException("Application closes must be before content due.");
+        if (ApplicationClosesAtUtc is { } closesAt && closesAt <= now) throw new InvalidOperationException("Application closes must be in the future.");
         if (ProductProvided == CreatorMustPurchase)
             throw new InvalidOperationException("Choose one Product arrangement before publishing UGC.");
         wallet.Reserve(RequiredFunding, now, correlation);
@@ -134,12 +139,14 @@ public sealed class UgcOpportunity
         string resourcesJson, string? location, DateTime dueDateUtc, bool productProvided,
         bool creatorMustPurchase, string? usageRights, Money creatorPayment, int creatorCapacity,
         IReadOnlyCollection<(CreatorPlatform Platform, string Format, long? MinimumAudience)> requirements,
-        DateTime now, IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null)
+        DateTime now, IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null,
+        DateTime? applicationClosesAtUtc = null)
     {
         Ensure(UgcOpportunityStatus.Draft);
         if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120) throw new ArgumentException("UGC title is required.");
         if (string.IsNullOrWhiteSpace(instructions) || instructions.Trim().Length > 4000) throw new ArgumentException("UGC instructions are required.");
         if (dueDateUtc.Kind != DateTimeKind.Utc || dueDateUtc <= now) throw new ArgumentException("UGC due date must be in the future.");
+        ValidateDeadlines(applicationClosesAtUtc, dueDateUtc);
         if (creatorCapacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(creatorCapacity));
         var netPayment = NetCreatorPayment(creatorPayment, PricingSnapshot);
         if (requirements.GroupBy(x => x.Platform).Any(x => x.Count() > 1)) throw new ArgumentException("Each UGC platform requirement may be added once.");
@@ -147,7 +154,7 @@ public sealed class UgcOpportunity
             if (item.MinimumAudience < 0 || string.IsNullOrWhiteSpace(item.Format) || item.Format.Trim().Length > 80)
                 throw new ArgumentException("UGC platform requirements are invalid.");
         Title = title.Trim(); Slogan = Clean(slogan, 160); ContentType = contentType; Instructions = instructions.Trim();
-        ResourcesJson = resourcesJson; Location = Clean(location, 160); DueDateUtc = dueDateUtc;
+        ResourcesJson = resourcesJson; Location = Clean(location, 160); DueDateUtc = dueDateUtc; ApplicationClosesAtUtc = applicationClosesAtUtc;
         ProductProvided = productProvided; CreatorMustPurchase = creatorMustPurchase; UsageRights = Clean(usageRights, 2000);
         CreatorPayment = netPayment; CreatorCapacity = creatorCapacity;
         RequiredFunding = new Money(creatorPayment.Amount * creatorCapacity, creatorPayment.Currency);
@@ -207,6 +214,8 @@ public sealed class UgcOpportunity
     }
     private static string? Clean(string? value, int maximum)
     { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > maximum) throw new ArgumentException("UGC information is too long."); return result; }
+    private static void ValidateDeadlines(DateTime? applicationClosesAtUtc, DateTime contentDueAtUtc)
+    { if (applicationClosesAtUtc is { } closes && closes >= contentDueAtUtc) throw new ArgumentException("Application closes must be before content due."); }
 }
 
 public sealed class UgcPlatformRequirement
@@ -282,11 +291,11 @@ public sealed class UgcAssignment
     public Money CreatorPayment { get; } public Money PlatformFee { get; }
     public int AcceptedRevisionNumber { get; private set; } public bool RevisionAcceptanceRequired { get; private set; }
     public UgcAssignmentStatus Status { get; private set; } = UgcAssignmentStatus.InProgress;
-    public DateTime ApprovedAtUtc { get; } public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime ApprovedAtUtc { get; } public DateTime? ContentDueAtUtc { get; } public DateTime? CompletedAtUtc { get; private set; }
     public long Version { get; private set; }
     public UgcAssignment(Guid opportunityId, Guid requestId, Guid creatorId, Money creatorPayment,
-        Money platformFee, int revision, DateTime now)
-    { UgcOpportunityId = opportunityId; UgcCreatorRequestId = requestId; CreatorId = creatorId; CreatorPayment = creatorPayment; PlatformFee = platformFee; AcceptedRevisionNumber = revision; ApprovedAtUtc = now; }
+        Money platformFee, int revision, DateTime now, DateTime? contentDueAtUtc = null)
+    { UgcOpportunityId = opportunityId; UgcCreatorRequestId = requestId; CreatorId = creatorId; CreatorPayment = creatorPayment; PlatformFee = platformFee; AcceptedRevisionNumber = revision; ApprovedAtUtc = now; ContentDueAtUtc = contentDueAtUtc; }
     public void RequireRevisionAcceptance() { if (Status is UgcAssignmentStatus.Approved or UgcAssignmentStatus.Rejected) return; RevisionAcceptanceRequired = true; Version++; }
     public void AcceptRevision(int revision) { if (!RevisionAcceptanceRequired || revision <= AcceptedRevisionNumber) throw new InvalidOperationException("No newer UGC revision requires acceptance."); AcceptedRevisionNumber = revision; RevisionAcceptanceRequired = false; Version++; }
     public void Submitted() { if (RevisionAcceptanceRequired || Status is not (UgcAssignmentStatus.InProgress or UgcAssignmentStatus.ChangesRequested)) throw new InvalidOperationException("UGC assignment cannot be submitted."); Status = UgcAssignmentStatus.Submitted; Version++; }

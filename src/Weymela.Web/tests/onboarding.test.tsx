@@ -159,17 +159,31 @@ describe("shared role-themed onboarding", () => {
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
   });
 
+  it("uses the same simplified Creator setup when adding a profile to an existing account", async () => {
+    mocks.activeProfiles = [{ role: "Customer" }];
+    renderOnboarding();
+    await userEvent.click(screen.getByRole("button", { name: /Become a Creator/ }));
+    expect(screen.getByRole("heading", { name: "Creator setup" })).toBeVisible();
+    expect(screen.getByLabelText("Creator name")).toBeVisible();
+    expect(screen.getByLabelText("Region (optional)")).toBeVisible();
+    expect(screen.queryByLabelText(/Creator category|About your work/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Add profile" })).toHaveLength(4);
+  });
+
   it("opens Creator setup, requires one social link, and submits SelfReported profile data", async () => {
     renderOnboarding();
     await userEvent.click(screen.getByRole("button", { name: /Become a Creator/ }));
     expect(screen.getByRole("heading", { name: "Creator setup" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
+    expect(screen.getByLabelText("Creator name")).toBeVisible();
+    expect(screen.getByLabelText("Region (optional)")).toBeVisible();
+    expect(screen.queryByLabelText(/Creator category|About your work/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Not added")).toHaveLength(4);
-    for (const platform of ["TikTok", "YouTube", "Instagram", "Facebook"])
-      expect(screen.getByRole("button", { name: `Add ${platform}` })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Add profile" })).toHaveLength(4);
     await userEvent.type(screen.getByLabelText("Creator name"), "Bella Creates");
-    await userEvent.click(screen.getByRole("button", { name: "Add TikTok" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Add profile" })[0]);
     await userEvent.type(screen.getByLabelText("TikTok profile URL"), "https://www.tiktok.com/@bella");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
       role: "Creator", displayName: "Bella Creates", socialProfiles: [{ platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella" }],
@@ -184,13 +198,24 @@ describe("shared role-themed onboarding", () => {
     await userEvent.click(screen.getByRole("button", { name: /Add a Business/ }));
     expect(screen.getByRole("heading", { name: "Business setup" })).toBeVisible();
     await userEvent.type(screen.getByLabelText("Business name"), "Bella Restaurant");
-    await userEvent.type(screen.getByLabelText("Business type (optional)"), "Restaurant");
+    expect(screen.getByLabelText("Region (optional)")).toBeVisible();
+    expect(screen.queryByLabelText(/Business type|About your Business/)).not.toBeInTheDocument();
     expect(screen.queryByText(/receipt|payment reference|funding/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
-      role: "Business", displayName: "Bella Restaurant", category: "Restaurant",
+      role: "Business", displayName: "Bella Restaurant", category: null, submission: null,
     }), "enroll-key"));
     expect(screen.getByText("Your Business profile is waiting for approval.")).toBeVisible();
+  });
+
+  it("uses the same simplified Business setup when adding a profile to an existing account", async () => {
+    mocks.activeProfiles = [{ role: "Creator" }];
+    renderOnboarding();
+    await userEvent.click(screen.getByRole("button", { name: /Add a Business/ }));
+    expect(screen.getByRole("heading", { name: "Business setup" })).toBeVisible();
+    expect(screen.getByLabelText("Business name")).toBeVisible();
+    expect(screen.getByLabelText("Region (optional)")).toBeVisible();
+    expect(screen.queryByLabelText(/Business type|About your Business/)).not.toBeInTheDocument();
   });
 
   it("fails closed with a clear Customer state when legal documents are unavailable", async () => {

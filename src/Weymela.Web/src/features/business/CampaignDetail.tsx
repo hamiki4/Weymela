@@ -7,7 +7,6 @@ import type {
   BusinessCampaign,
   CreatorBudget,
   CreatorCard,
-  Wallet,
 } from "../../api/types";
 import {
   ActivityList,
@@ -33,7 +32,6 @@ import {
   campaignType,
   count,
   date,
-  daysLeft,
   isViewAndSale,
 } from "../../ui/format";
 
@@ -47,24 +45,20 @@ export function BusinessCampaignDetail() {
   const [applicant, setApplicant] = useState<Applicant | null>(null);
   const [budget, setBudget] = useState<CreatorBudget | null>(null);
   const [value, setValue] = useState("");
-  const [fund, setFund] = useState(false);
-  const [fundingWallet, setFundingWallet] = useState<Wallet | null>(null);
-  const [fundCheckBusy, setFundCheckBusy] = useState(false);
-  const [fundCheckError, setFundCheckError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDescription, setEditDescription] = useState("");
+  const [editSlogan, setEditSlogan] = useState("");
+  const [editLocation, setEditLocation] = useState("");
   const [success, setSuccess] = useState("");
   const changed = (message: string) => {
     setSuccess(message);
     resource.reload();
   };
-  const openFunding = async () => {
-    setFundCheckBusy(true);
-    setFundCheckError(null);
-    try {
-      setFundingWallet(await request<Wallet>("/business/wallet"));
-      setFund(true);
-    } catch (error) {
-      setFundCheckError(error instanceof Error ? error.message : "Available funds could not be checked.");
-    } finally { setFundCheckBusy(false); }
+  const openEdit = (campaign: BusinessCampaign) => {
+    setEditDescription(campaign.description);
+    setEditSlogan(campaign.campaign.slogan ?? "");
+    setEditLocation(campaign.campaign.location ?? "");
+    setEditOpen(true);
   };
   const run = (path: string, body: unknown, message: string) =>
     action.run(async (key) => {
@@ -90,56 +84,50 @@ export function BusinessCampaignDetail() {
             <PageHeader
               eyebrow={campaignType(c.type)}
               title={c.title}
-              description={`${c.publicId} · ${date(c.startUtc)} – ${date(c.endUtc)}`}
-              action={<Badge status={c.status} />}
+              description={`${c.applicationClosesAtUtc ? `Applications close ${date(c.applicationClosesAtUtc)} · ` : ""}${c.contentDueAtUtc ? `Content due ${date(c.contentDueAtUtc)}` : ""}`}
+              action={c.status === "Draft" ? undefined : <div className="actions"><Badge status={c.status} /><Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button></div>}
             />
             {success && <Notice>{success}</Notice>}
-            {action.error && !applicant && !budget && !fund && (
+            {action.error && !applicant && !budget && (
               <Notice error>{action.error}</Notice>
             )}
-            {fundCheckError && <Notice error>{fundCheckError}</Notice>}
-            {["Draft", "Funded", "Published"].includes(c.status) && (
+            {c.status === "Draft" && (
+              <Notice error>
+                This Promotion is not available in the current publishing workflow. Create a new Promotion to publish it directly.
+              </Notice>
+            )}
+            {["Funded", "Published"].includes(c.status) && (
               <div className="callout">
                 <div>
                   <h2>
-                    {c.status === "Draft"
-                      ? "Ready to fund your Promotion?"
-                      : c.status === "Funded"
+                    {c.status === "Funded"
                         ? "Your Promotion is funded"
                         : "Your Promotion is published"}
                   </h2>
                   <p>
-                    {c.status === "Draft"
-                      ? "Review the amount to reserve before committing your funds."
-                      : c.status === "Funded"
+                    {c.status === "Funded"
                         ? "Publish it so eligible Creators can request to join."
-                        : "Eligible Creators can request to join. Start the Promotion when its start date arrives."}
+                        : "Eligible Creators can request to join."}
                   </p>
                 </div>
-                {c.status === "Draft" ? (
-                  <Button onClick={() => void openFunding()} disabled={fundCheckBusy}>{fundCheckBusy ? "Checking funds…" : "Review Funding"}</Button>
-                ) : (
-                  <Button
-                    disabled={
-                      action.busy ||
-                      (c.status === "Published" &&
-                        new Date(c.startUtc).getTime() > Date.now())
-                    }
-                    onClick={() =>
-                      void run(
-                        `/business/campaigns/${id}/${c.status === "Funded" ? "publish" : "start"}`,
-                        { version: c.version },
-                        c.status === "Funded"
-                          ? "Promotion published. Eligible Creators can now find it."
-                          : "Promotion started.",
-                      )
-                    }
-                  >
-                    {c.status === "Funded"
-                      ? "Publish Promotion"
-                      : "Start Promotion"}
-                  </Button>
-                )}
+                <Button
+                  disabled={
+                    action.busy ||
+                    (c.status === "Published" &&
+                      new Date(c.startUtc).getTime() > Date.now())
+                  }
+                  onClick={() =>
+                    void run(
+                      `/business/campaigns/${id}/${c.status === "Funded" ? "publish" : "start"}`,
+                      { version: c.version },
+                      c.status === "Funded"
+                        ? "Promotion published. Eligible Creators can now find it."
+                        : "Promotion started.",
+                    )
+                  }
+                >
+                  {c.status === "Funded" ? "Publish Promotion" : "Open Promotion"}
+                </Button>
               </div>
             )}
             <Tabs
@@ -176,10 +164,6 @@ export function BusinessCampaignDetail() {
                       <dt>Verified followers</dt>
                       <dd>{count(data.minimumVerifiedFollowers)} minimum</dd>
                     </div>}
-                    <div>
-                      <dt>Days Left</dt>
-                      <dd>{daysLeft(c.endUtc)}</dd>
-                    </div>
                   </dl>
                   {!!c.platforms?.length && <div className="business-platform-summary"><strong>Social platforms</strong><PlatformOccupancy slots={c.platforms} /><small>Creators {c.platforms.reduce((total, slot) => total + slot.approved, 0)}/{c.platforms.reduce((total, slot) => total + slot.capacity, 0)} · {data.applicants.filter((applicant) => applicant.status === "Pending").length} pending requests</small></div>}
                 </Section>
@@ -395,6 +379,19 @@ export function BusinessCampaignDetail() {
                 </Section>
               </div>
             )}
+            <Dialog title="Edit Promotion details" open={editOpen} onClose={() => { if (!action.busy) setEditOpen(false); }}>
+              <p className="muted">Descriptive changes create an audit revision. Type, dates, pricing, funding, and Creator agreements remain protected.</p>
+              <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void action.run(async key => {
+                await post(`/business/promotions/${id}/update`, { description: editDescription, slogan: editSlogan || null, location: editLocation || null, resources: null, version: c.version }, key);
+                setEditOpen(false); changed("Promotion details updated.");
+              }); }}>
+                <Field label="Description" wide><textarea value={editDescription} onChange={event => setEditDescription(event.target.value)} maxLength={3000} rows={5} required /></Field>
+                <Field label="Slogan"><input value={editSlogan} onChange={event => setEditSlogan(event.target.value)} maxLength={160} /></Field>
+                <Field label="Location"><input value={editLocation} onChange={event => setEditLocation(event.target.value)} maxLength={160} /></Field>
+                {action.error && <Notice error>{action.error}</Notice>}
+                <div className="form-actions wide"><Button type="submit" disabled={action.busy || !editDescription.trim()}>{action.busy ? "Saving…" : "Save changes"}</Button></div>
+              </form>
+            </Dialog>
             <Dialog
               title={
                 applicant
@@ -508,65 +505,6 @@ export function BusinessCampaignDetail() {
                   </Button>
                 </fieldset>
               </form>
-            </Dialog>
-            <Dialog
-              title="Confirm Promotion Funding"
-              open={fund}
-              onClose={() => {
-                if (!action.busy) { setFund(false); setFundingWallet(null); }
-              }}
-            >
-              {fundingWallet && (() => {
-                const w = fundingWallet;
-                const shortfall = Math.max(0, Math.round((c.campaignBudget - w.available) * 100) / 100);
-                const remaining = Math.max(0, Math.round((w.available - c.campaignBudget) * 100) / 100);
-                return (
-                  <>
-                    <dl className="funds-grid">
-                      <div><dt>Available funds</dt><dd>{amount(w.available)} ETB</dd></div>
-                      <div><dt>Promotion budget</dt><dd>{amount(c.campaignBudget)} ETB</dd></div>
-                      <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : remaining)} ETB{shortfall > 0 ? " more" : ""}</dd></div>
-                    </dl>
-                    <p className="fine-print">
-                      Promotion funding is committed and generally
-                      non-refundable. This does not pay Creators before verified
-                      activity.
-                    </p>
-                    {shortfall > 0 && (
-                      <Notice error>
-                        Need {amount(shortfall)} more before funding this Promotion. <Link to="/business/wallet">Add Funds</Link>.
-                      </Notice>
-                    )}
-                    {action.error && <Notice error>{action.error}</Notice>}
-                    <Button
-                      disabled={action.busy || shortfall > 0}
-                      onClick={() =>
-                        void action.run(async (key) => {
-                          const latest = await request<Wallet>("/business/wallet");
-                          setFundingWallet(latest);
-                          if (latest.available < c.campaignBudget)
-                            throw new Error(`Need ${amount(c.campaignBudget - latest.available)} more before funding this Promotion.`);
-                          await post(
-                            `/business/campaigns/${id}/fund`,
-                            {
-                              campaignVersion: c.version,
-                              walletVersion: latest.version,
-                            },
-                            key,
-                          );
-                          setFund(false);
-                          setFundingWallet(null);
-                          changed("Promotion funded. You can now publish it.");
-                        })
-                      }
-                    >
-                      {action.busy
-                        ? "Reserving funds…"
-                        : "Confirm & Reserve Funds"}
-                    </Button>
-                  </>
-                );
-              })()}
             </Dialog>
             <Dialog
               title="Creator Profile"

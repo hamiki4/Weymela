@@ -5,13 +5,15 @@ import { Button, Dialog, Field, Notice, PageHeader, Resource, Section } from "..
 import { safeExternal } from "../../ui/format";
 import { CreatorPlatformIcon, creatorPublicHandle } from "./CreatorPlatformIcon";
 
-interface SocialProfile { id: string; platform: string; profileUrl: string }
+export interface SocialProfile { id?: string; platform: string; profileUrl: string }
 const platforms = ["TikTok", "YouTube", "Instagram", "Facebook"] as const;
 type Platform = typeof platforms[number];
 
-export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean }) {
-  const { user } = useSession();
-  const resource = useResource<SocialProfile[]>("/creator/social-accounts");
+export function CreatorSocialProfilesEditor({ profiles, onSave, onRemove }: {
+  profiles: SocialProfile[];
+  onSave: (platform: Platform, profileUrl: string) => void | Promise<void>;
+  onRemove: (platform: Platform) => void | Promise<void>;
+}) {
   const action = useAction();
   const [editing, setEditing] = useState<Platform | null>(null);
   const [url, setUrl] = useState("");
@@ -19,12 +21,10 @@ export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean 
     setUrl(existing?.profileUrl ?? "");
     setEditing(platform);
   };
-  const done = () => { setEditing(null); resource.reload(); };
+  const done = () => setEditing(null);
   return <>
-    {!sectionOnly && <PageHeader title="Creator Profile" eyebrow={user?.displayName} />}
-    <Section title="Social Profiles">
-      <Resource resource={resource}>{profiles => <div className="creator-social-list">
-        {platforms.map(platform => {
+    <div className="creator-social-list">
+      {platforms.map(platform => {
           const profile = profiles.find(row => row.platform === platform);
           const view = safeExternal(profile?.profileUrl);
           const handle = creatorPublicHandle(platform, view);
@@ -36,25 +36,39 @@ export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean 
               <button type="button" onClick={() => edit(platform, profile)}>{profile ? "Edit" : "Add profile"}</button>
             </span>
           </div>;
-        })}
-      </div>}</Resource>
-    </Section>
+      })}
+    </div>
     <Dialog title={editing ? `${editing} profile` : "Social profile"} open={editing !== null} onClose={() => setEditing(null)} className="creator-social-dialog">
       {editing && <form onSubmit={event => { event.preventDefault(); void action.run(async key => {
-        await post(`/creator/social-profiles/${editing}`, { profileUrl: url }, key);
-        done();
+                await onSave(editing, url);
+                done();
       }); }}>
         <Field label={`${editing} profile URL`}><input type="url" value={url} onChange={event => setUrl(event.target.value)} placeholder={editing === "TikTok" ? "https://www.tiktok.com/@username" : `https://www.${editing.toLowerCase()}.com/username`} maxLength={500} required autoComplete="url" /></Field>
         {action.error && <Notice error>{action.error}</Notice>}
         <div className="actions">
           <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
-          {resource.data?.some(row => row.platform === editing) && <Button type="button" variant="quiet" disabled={action.busy} onClick={() => void action.run(async () => {
-            await request(`/creator/social-profiles/${editing}`, { method: "DELETE", headers: { "X-Weymela-Activity": "1" } });
+          {profiles.some(row => row.platform === editing) && <Button type="button" variant="quiet" disabled={action.busy} onClick={() => void action.run(async () => {
+            await onRemove(editing);
             done();
           })}>Remove</Button>}
           <Button type="submit" disabled={action.busy || !url.trim()}>{action.busy ? "Saving…" : "Save"}</Button>
         </div>
       </form>}
     </Dialog>
+  </>;
+}
+
+export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean }) {
+  const { user } = useSession();
+  const resource = useResource<SocialProfile[]>("/creator/social-accounts");
+  return <>
+    {!sectionOnly && <PageHeader title="Creator Profile" eyebrow={user?.displayName} />}
+    <Section title="Social Profiles">
+      <Resource resource={resource}>{profiles => <CreatorSocialProfilesEditor
+        profiles={profiles}
+        onSave={async (platform, profileUrl) => { await post(`/creator/social-profiles/${platform}`, { profileUrl }); resource.reload(); }}
+        onRemove={async platform => { await request(`/creator/social-profiles/${platform}`, { method: "DELETE", headers: { "X-Weymela-Activity": "1" } }); resource.reload(); }}
+      />}</Resource>
+    </Section>
   </>;
 }

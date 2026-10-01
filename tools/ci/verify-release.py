@@ -32,7 +32,8 @@ def verify(root):
     verifier = 'grants/current/v3-verify.sql'
     contracts = migrations.get('grantContracts', {})
     approved_upgrade = ['20260929203557_AddUgcPlatformCapacities',
-                        '20260930031549_AddCreatorProfilePhotos']
+                        '20260930031549_AddCreatorProfilePhotos',
+                        '20260930210000_AddAgreementDeadlines']
     expected_order_tail = ['20260928213157_AlignDepositReviewAuthority',
                            '20260928230108_AddCreatorNumbers',
                            '20260929022846_BindUgcSaleAssignments', *approved_upgrade]

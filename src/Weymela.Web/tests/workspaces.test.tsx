@@ -181,21 +181,17 @@ describe("Business workspace", () => {
     );
     expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Promotion ends"), "2027-09-20");
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
     await userEvent.type(screen.getByLabelText("Creator category"), "Food");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     await userEvent.type(
       screen.getByLabelText("Promotion budget"),
       "1000",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create Draft" }));
-    await screen.findByRole("heading", { name: "Saved Campaign" });
-    expect(api.writes[0].body.campaignBudget).toBe(1000);
-    expect(api.writes[0].body.slogan).toBeNull();
-    expect(api.writes[0].body.platforms).toEqual([{ platform: "TikTok", capacity: 1 }]);
-    expect(api.writes[0].body).not.toHaveProperty("creatorCommissionPercent");
+    await userEvent.click(screen.getByRole("button", { name: "Publish Promotion" }));
+    await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ campaignBudget: 1000, platforms: [{ platform: "TikTok", capacity: 1 }] }));
+    expect(api.writes.find(write => write.path === "/business/promotions")?.body).not.toHaveProperty("creatorCommissionPercent");
   });
   it("checks current Business agreements before opening Promotion creation", async () => {
     mockApi({ "/legal/current": [
@@ -219,9 +215,9 @@ describe("Business workspace", () => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: 1000, available: 1000, reserved: 0 } });
     mount(<CreateBusinessUgcPage />);
     await userEvent.type(await screen.findByLabelText("Creator payment"), "500");
-    await userEvent.clear(screen.getByLabelText("Creator capacity"));
-    await userEvent.type(screen.getByLabelText("Creator capacity"), "3");
-    expect(screen.getByText("UGC commitment").nextElementSibling).toHaveTextContent("1,500");
+    await userEvent.clear(screen.getByLabelText("Creators needed"));
+    await userEvent.type(screen.getByLabelText("Creators needed"), "3");
+    expect(screen.getByText("Creator payment", { selector: "dt" }).nextElementSibling).toHaveTextContent("1,500");
     expect(screen.getByText("Need").nextElementSibling).toHaveTextContent("500 ETB more");
     await userEvent.click(screen.getByRole("checkbox", { name: "Add Customer discount sale" }));
     await userEvent.type(screen.getByLabelText("Customer Discount %"), "5");
@@ -236,14 +232,15 @@ describe("Business workspace", () => {
     const { writes } = mockApi();
     mount(<CreateBusinessUgcPage />);
     expect(await screen.findByText("Product arrangement")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save UGC Draft" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Publish UGC" })).toBeDisabled();
     await userEvent.type(screen.getByLabelText("UGC title"), "Product story");
     await userEvent.type(screen.getByLabelText("Instructions"), "Make a short video");
-    await userEvent.type(screen.getByLabelText("Due date"), "2027-12-01T10:00");
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-11-30T10:00");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-12-01T10:00");
     await userEvent.type(screen.getByLabelText("Creator payment"), "500");
     await userEvent.click(screen.getByRole("radio", { name: new RegExp(label) }));
-    expect(screen.getByRole("button", { name: "Save UGC Draft" })).toBeEnabled();
-    await userEvent.click(screen.getByRole("button", { name: "Save UGC Draft" }));
+    expect(screen.getByRole("button", { name: "Publish UGC" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Publish UGC" }));
     await waitFor(() => expect(writes.find((write) => write.path === "/business/ugc")?.body).toMatchObject({ productProvided, creatorMustPurchase, creatorPayment: 500, customerOfferEnabled: false }));
   });
   it("shows the arrangement in Business management and before a Creator joins", async () => {
@@ -268,28 +265,27 @@ describe("Business workspace", () => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: available, available, reserved: 0 } });
     mount(<CreateCampaign />);
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Local stories");
-    await userEvent.type(screen.getByLabelText("Promotion ends"), "2027-09-20");
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     await userEvent.type(await screen.findByLabelText("Promotion budget"), String(budget));
-    expect(screen.getByText(label)).toBeVisible();
-    expect(screen.getByText(expected + " ETB" + (label === "Need" ? " more" : ""))).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create Draft" })).toBeEnabled();
+    expect(screen.getByText(label, { selector: "dt" })).toBeVisible();
+    expect(screen.getByText(expected + " ETB" + (label === "Need" ? " more" : ""), { selector: "dd" })).toBeVisible();
+    if (available < budget) expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
+    else expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeEnabled();
   });
   it("omits the slogan and sends social capacities with the Promotion", async () => {
     const api = mockApi();
     mount(<CreateCampaign />);
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Weekend Special");
     expect(screen.queryByLabelText("Promotion slogan (optional)")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Promotion ends"), "2027-09-20");
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     await userEvent.type(screen.getByLabelText("Promotion budget"), "1000");
-    await userEvent.click(screen.getByRole("button", { name: "Create Draft" }));
-    await waitFor(() => expect(api.writes[0]?.body).toMatchObject({ slogan: null, description: "", platforms: [{ platform: "TikTok", capacity: 2 }] }));
+    await userEvent.click(screen.getByRole("button", { name: "Publish Promotion" }));
+    await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ slogan: null, platforms: [{ platform: "TikTok", capacity: 2 }] }));
   });
   it("shows optional slogan and approved platform occupancy in Business management", async () => {
     mockApi({ "/business/campaigns/campaign": { ...detail, campaign: { ...campaign, slogan: "Weekend Special", platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }] } } });
@@ -299,7 +295,7 @@ describe("Business workspace", () => {
     expect(screen.getByLabelText("TikTok — 1 of 2 Creator slots filled").querySelector(".creator-platform-tiktok")).not.toBeNull();
     expect(container.querySelector(".business-platform-summary")).toHaveTextContent(/Creators 1\/2.*1 pending requests/);
   });
-  it("shows funding confirmation before reserving any money", async () => {
+  it("does not expose the legacy funding workflow for an unpublished Promotion", async () => {
     const api = mockApi({
       "/business/campaigns/campaign": {
         ...detail,
@@ -311,43 +307,10 @@ describe("Business workspace", () => {
       "/business/campaigns/campaign",
       "/business/campaigns/:id",
     );
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Review Funding" }),
-    );
-    const dialog = await screen.findByRole("dialog", {
-      name: "Confirm Promotion Funding",
-    });
-    expect(within(dialog).getByText("4,000 ETB")).toBeVisible();
-    expect(within(dialog).getByText("1,000 ETB")).toBeVisible();
-    expect(within(dialog).getByText("3,000 ETB")).toBeVisible();
+    expect(await screen.findByText(/not available in the current publishing workflow/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Review Funding" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(api.writes).toHaveLength(0);
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Confirm & Reserve Funds" }),
-    );
-    await waitFor(() =>
-      expect(api.writes[0].body).toEqual({
-        campaignVersion: 5,
-        walletVersion: 2,
-      }),
-    );
-  });
-  it("prevents funding when the wallet cannot cover the Campaign Budget", async () => {
-    mockApi({
-      "/business/campaigns/campaign": {
-        ...detail,
-        campaign: { ...campaign, status: "Draft" },
-      },
-      "/business/wallet": { ...wallet, totalBalance: 6100, available: 100 },
-    });
-    mount(
-      <BusinessCampaignDetail />,
-      "/business/campaigns/campaign",
-      "/business/campaigns/:id",
-    );
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Review Funding" }),
-    );
-    expect(await screen.findByRole("button", { name: "Confirm & Reserve Funds" })).toBeDisabled();
   });
   it("approves an applicant and sets Creator Budget in one request", async () => {
     const api = mockApi();
@@ -413,7 +376,7 @@ describe("Business workspace", () => {
   });
   it("has no destructive End Campaign action", async () => {
     mount(<BusinessCampaigns />);
-    await screen.findByText("Active Promotions and drafts");
+    await screen.findByRole("heading", { name: "Promotions", level: 2 });
     expect(screen.getByRole("heading", { name: "Promotions", level: 1 })).toBeVisible();
     const table = screen.getByRole("table", { name: "Business Promotions" });
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([

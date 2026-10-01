@@ -66,6 +66,23 @@ public sealed class UgcDomainTests
     }
 
     [Fact]
+    public void Ugc_application_close_is_before_content_due_and_assignment_snapshots_due()
+    {
+        var closes = Now.AddDays(5); var due = Now.AddDays(10);
+        var opportunity = new UgcOpportunity(Guid.NewGuid(), "Dated UGC", null, UgcContentType.Video,
+            "Create content.", "[]", null, due, true, false, null, new Money(500), 1, Pricing, Now,
+            [(CreatorPlatform.TikTok, "Social post", null)], null, closes);
+        var wallet = new BusinessWallet(opportunity.BusinessId); wallet.CreditDeposit(opportunity.RequiredFunding, Now, Guid.NewGuid());
+        opportunity.Publish(wallet, Now, Guid.NewGuid());
+        var creator = Guid.NewGuid(); var request = new UgcCreatorRequest(opportunity.Id, creator, Now, CreatorPlatform.TikTok, Guid.NewGuid());
+        var assignment = new UgcAssignment(opportunity.Id, request.Id, creator, opportunity.CreatorPayment, opportunity.PerAssignmentFee, opportunity.CurrentRevision, Now, opportunity.DueDateUtc);
+        Assert.Equal(due, assignment.ContentDueAtUtc);
+        Assert.Throws<ArgumentException>(() => new UgcOpportunity(Guid.NewGuid(), "Invalid UGC", null, UgcContentType.Video,
+            "Create content.", "[]", null, closes, true, false, null, new Money(500), 1, Pricing, Now,
+            [(CreatorPlatform.TikTok, "Social post", null)], null, due));
+    }
+
+    [Fact]
     public void Approval_consumes_capacity_but_pending_request_does_not()
     {
         var opportunity = New(creators: 1); var wallet = new BusinessWallet(opportunity.BusinessId);

@@ -23,27 +23,33 @@ for (const viewport of viewports)
     // A fresh BrowserHost has no Creator-discoverable Promotion. Reuse this
     // fixture across viewport cases that share one disposable database.
     await login(context, "business");
+    const walletState = await (await context.request.get("/api/business/wallet")).json() as { available: number; version: number };
+    if (walletState.available < 1000) {
+      const funded = await context.request.post("/api/business/wallet/deposits", {
+        headers: { "X-Weymela-Request": "1", "Idempotency-Key": `responsive-funding-${viewport.width}` },
+        data: { amount: 2000, expectedVersion: walletState.version },
+      });
+      expect(funded.status()).toBe(204);
+    }
     const responsiveOpportunityTitle = "Responsive Creator detail fixture";
     const businessPromotions = await (await context.request.get("/api/business/campaigns"))
       .json() as { title: string; status: string }[];
     if (!businessPromotions.some(item => item.title === responsiveOpportunityTitle && item.status === "Active")) {
-      await open(page, "/business/campaigns/new");
+      await page.goto("/business/campaigns/new");
+      await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
       await page.getByLabel("Promotion title", { exact: true }).fill(responsiveOpportunityTitle);
       await page.getByLabel("Promotion type", { exact: true }).selectOption("ViewPlusCommission");
-      await page.getByLabel("Promotion ends", { exact: true })
-        .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page.getByLabel("Application closes", { exact: true })
+        .fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
+      await page.getByLabel("Content due", { exact: true })
+        .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
       await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
       await page.getByLabel("Creator category", { exact: true }).fill("Food");
       await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
       await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
       await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
-      await page.getByRole("button", { name: "Create Draft" }).click();
-      await page.getByRole("button", { name: "Review Funding" }).click();
-      await page.getByRole("button", { name: "Confirm & Reserve Funds" }).click();
       await page.getByRole("button", { name: "Publish Promotion" }).click();
-      await expect(page.getByText("Promotion published. Eligible Creators can now find it.", { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(/\/business\/campaigns\/[0-9a-f-]{36}$/i);
     }
     const screens: [string, string[]][] = [
       [
@@ -99,7 +105,10 @@ for (const viewport of viewports)
     for (const [role, paths] of screens) {
       await login(context, role);
       for (const path of paths) {
-        if (role === "creator" && path === "/creator/earnings") {
+        if (role === "business" && path === "/business/campaigns/new") {
+          await page.goto(path);
+          await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
+        } else if (role === "creator" && path === "/creator/earnings") {
           await page.goto(path);
           await expect(
             page.getByRole("heading", { name: "Earnings", exact: true }),
@@ -161,12 +170,11 @@ for (const viewport of viewports)
         if (viewport.width <= 430 && role === "business" && path === "/business/campaigns/new") {
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await page.getByLabel("Promotion title").fill(`Responsive funding ${viewport.width}`);
-          await page.getByLabel("Promotion ends").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
-          await page.getByRole("button", { name: "Continue" }).click();
+          await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
+          await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
           if (viewport.width === 390 || viewport.width === 393)
             await screenshot(page, `${viewport.width}-business-promotion-creators`);
           await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
-          await page.getByRole("button", { name: "Continue" }).click();
           await page.getByLabel("Promotion budget").fill(String(available + 1000));
           await expect(page.getByText("1,000 ETB more", { exact: true })).toBeVisible();
           await expect(page.getByRole("link", { name: "Add Funds" })).toBeVisible();

@@ -504,7 +504,9 @@ test("password recovery uses a server-bound browser transaction", async ({ conte
     }));
     await recoveryPage.goto("/sign-in?intent=sign-in");
     await recoveryPage.getByRole("button", { name: "Forgot password?" }).click();
-    await recoveryPage.getByLabel("Email address").fill(account.email);
+    const recoveryEmail = recoveryPage.getByLabel("Email address");
+    await expect(recoveryEmail).toBeEnabled({ timeout: 20_000 });
+    await recoveryEmail.fill(account.email);
     const recoveryStarted = recoveryPage.waitForResponse(
       response => response.request().method() === "POST"
         && new URL(response.url()).pathname === "/api/auth/email/start",
@@ -737,7 +739,7 @@ test("customer-to-creator choice uses a phase-safe purple shell", async ({ page,
   await expect(page.locator('[data-role-theme="creator"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Add TikTok" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add profile" }).first()).toBeVisible();
   for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
     await page.setViewportSize(viewport);
     await layout(page);

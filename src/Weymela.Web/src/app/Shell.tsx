@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -9,7 +9,7 @@ import {
 import type { Role, SessionProfile } from "../api/types";
 import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
-import { primeResources } from "../api/client";
+import { notificationsChangedEvent, primeResources, useResource } from "../api/client";
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { routeResources } from "./routeResources";
@@ -103,6 +103,16 @@ export function Shell({ children }: { children?: ReactNode }) {
   const accountMenu = useRef<HTMLDialogElement>(null);
   const settingsMenu = useRef<HTMLDialogElement>(null);
   const [deviceMessage, setDeviceMessage] = useState("");
+  const notifications = useResource<{ unreadCount: number }>("/notifications");
+  useEffect(() => {
+    const refresh = () => notifications.reload();
+    window.addEventListener(notificationsChangedEvent, refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener(notificationsChangedEvent, refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [notifications.reload]);
   const navigationSequence = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -318,6 +328,7 @@ export function Shell({ children }: { children?: ReactNode }) {
               aria-label="Your notifications"
             >
               <Icon name="bell" />
+              {notifications.data && notifications.data.unreadCount > 0 && <span className="notification-count" aria-label={`${notifications.data.unreadCount} unread notifications`}>{notifications.data.unreadCount > 99 ? "99+" : notifications.data.unreadCount}</span>}
             </Link>
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>

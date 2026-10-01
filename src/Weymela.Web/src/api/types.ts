@@ -227,6 +227,8 @@ export interface CampaignRow {
   slogan?: string | null;
   location?: string | null;
   platforms?: { platform: string; approved: number; capacity: number; available: number }[] | null;
+  applicationClosesAtUtc?: string | null;
+  contentDueAtUtc?: string | null;
 }
 export interface Applicant {
   id: string;
@@ -547,6 +549,7 @@ export interface UgcCard {
   reservedFunding?: number;
   usedFunding?: number;
   dueDateUtc: string;
+  applicationClosesAtUtc?: string | null;
   location: string | null;
   platformRequirements: UgcPlatformRequirement[];
   platformCapacities?: UgcPlatformCapacity[];

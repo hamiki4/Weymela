@@ -13,6 +13,7 @@ internal sealed class UgcOpportunityConfiguration : IEntityTypeConfiguration<Ugc
         {
             t.HasCheckConstraint("CK_UgcOpportunity_Capacity", "\"CreatorCapacity\" > 0 AND \"ApprovedCreatorCount\" >= 0 AND \"ApprovedCreatorCount\" <= \"CreatorCapacity\"");
             t.HasCheckConstraint("CK_UgcOpportunity_Funding", "\"RequiredFunding\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"RequiredFunding\"");
+            t.HasCheckConstraint("CK_UgcOpportunity_Application_Content_Deadlines", "\"ApplicationClosesAtUtc\" IS NULL OR \"ApplicationClosesAtUtc\" < \"DueDateUtc\"");
         });
         Mapping.Scalars(b, "PlatformFee", "PerAssignmentFee", "RemainingFunding", "PlatformRequirements", "PlatformCapacities");
         b.HasKey(x => x.Id); b.HasIndex(x => new { x.BusinessId, x.Status });

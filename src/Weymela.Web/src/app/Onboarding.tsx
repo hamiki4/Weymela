@@ -6,6 +6,7 @@ import type { AccountLegalStatus, SessionProfile } from "../api/types";
 import { Button, Empty, Field, Notice, PageHeader, Resource, Section } from "../ui/components";
 import { RoleOnboardingShell, type OnboardingRole } from "./RoleOnboardingShell";
 import { useSession } from "./Session";
+import { CreatorSocialProfilesEditor } from "../features/creator/CreatorProfile";
 
 type Enrollment = {
   id: string;
@@ -49,11 +50,8 @@ function LegacyOnboarding() {
   const [preferredName, setPreferredName] = useState("");
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [category, setCategory] = useState("");
   const [region, setRegion] = useState("");
-  const [submission, setSubmission] = useState("");
   const [socialUrls, setSocialUrls] = useState(emptySocial);
-  const [openSocial, setOpenSocial] = useState<SocialPlatform | null>(null);
   const [submittedRole, setSubmittedRole] = useState<"Creator" | "Business" | null>(null);
   useEffect(() => { status.reload(); void refresh(); }, []);
   if (loading) return <div className="loading" role="status">Opening your account setup…</div>;
@@ -64,8 +62,8 @@ function LegacyOnboarding() {
     setRole(null);
     setPreferredName("");
     setLegalAccepted(false);
-    setDisplayName(""); setCategory(""); setRegion(""); setSubmission("");
-    setSocialUrls(emptySocial()); setOpenSocial(null);
+    setDisplayName(""); setRegion("");
+    setSocialUrls(emptySocial());
   };
   const submitCustomer = () => void action.run(async (key) => {
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
@@ -90,7 +88,7 @@ function LegacyOnboarding() {
       .map(platform => ({ platform, profileUrl: socialUrls[platform].trim() }));
     if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
     await post("/onboarding/profile", { role: selected, displayName: displayName.trim(),
-      region: region.trim() || null, category: category.trim() || null, submission: submission.trim() || null,
+      region: region.trim() || null, category: null, submission: null,
       socialProfiles: selected === "Creator" ? socialProfiles : [] }, key);
     cancel();
     setSubmittedRole(selected);
@@ -129,8 +127,8 @@ function LegacyOnboarding() {
                   setRole(choice);
                   setPreferredName("");
                   setLegalAccepted(false);
-                  setDisplayName(""); setCategory(""); setRegion(""); setSubmission("");
-                  setSocialUrls(emptySocial()); setOpenSocial(null); setSubmittedRole(null);
+                  setDisplayName(""); setRegion("");
+                  setSocialUrls(emptySocial()); setSubmittedRole(null);
                 }}>
                 <strong>{choice}</strong><span>{description}</span><span className="profile-choice-action">{state}</span>
               </button>;
@@ -170,32 +168,23 @@ function LegacyOnboarding() {
           {(role === "Creator" || role === "Business") && !pending.has(role) && <RoleOnboardingShell role={role}
             title={role === "Creator" ? "Creator setup" : "Business setup"}
             description={role === "Creator" ? "Tell us about your Creator profile." : "Tell us about your Business."}>
-            <form className="form-grid onboarding-form role-application-form" onSubmit={event => { event.preventDefault(); submitAdditional(role); }}>
+            <div className="form-grid onboarding-form role-application-form">
               <Field label={role === "Creator" ? "Creator name" : "Business name"} wide>
                 <input required maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} /></Field>
-              <Field label={role === "Creator" ? "Creator category (optional)" : "Business type (optional)"}>
-                <input maxLength={80} value={category} onChange={event => setCategory(event.target.value)} /></Field>
               <Field label="Region (optional)"><input maxLength={80} value={region} onChange={event => setRegion(event.target.value)} /></Field>
-              <Field label={role === "Creator" ? "About your work (optional)" : "About your Business (optional)"} wide>
-                <textarea maxLength={3000} rows={2} value={submission} onChange={event => setSubmission(event.target.value)} /></Field>
               {role === "Creator" && <div className="form-wide onboarding-social-profiles">
                 <h4>Social Profiles</h4><p>Add at least one public profile link.</p>
-                {socialPlatforms.map(platform => <div className="onboarding-social-row" key={platform}>
-                  <strong>{platform}</strong>
-                  {openSocial === platform ? <div className="onboarding-social-edit">
-                    <input type="url" aria-label={`${platform} profile URL`} placeholder={`https://www.${platform.toLowerCase()}.com/…`}
-                      maxLength={500} value={socialUrls[platform]}
-                      onChange={event => setSocialUrls(current => ({ ...current, [platform]: event.target.value }))} />
-                    <Button type="button" variant="quiet" onClick={() => { setSocialUrls(current => ({ ...current, [platform]: "" })); setOpenSocial(null); }}>Remove</Button>
-                  </div> : <><small>{socialUrls[platform] ? "Added" : "Not added"}</small>
-                    <Button type="button" variant="quiet" onClick={() => setOpenSocial(platform)}>{socialUrls[platform] ? "Edit" : `Add ${platform}`}</Button></>}
-                </div>)}
+                <CreatorSocialProfilesEditor
+                  profiles={socialPlatforms.filter(platform => socialUrls[platform].trim()).map(platform => ({ platform, profileUrl: socialUrls[platform] }))}
+                  onSave={(platform, profileUrl) => setSocialUrls(current => ({ ...current, [platform]: profileUrl }))}
+                  onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: "" }))}
+                />
               </div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
-                <Button type="submit" disabled={action.busy || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].trim()))}>
+                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].trim()))}>
                   {action.busy ? "Submitting…" : "Submit for Review"}</Button></div>
-            </form>
+            </div>
           </RoleOnboardingShell>}
         </Section>
       </>;

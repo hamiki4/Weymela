@@ -39,8 +39,9 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     await page.getByRole("button", { name: /^Become a Creator/ }).click();
     await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
-    await page.getByRole("button", { name: "Add TikTok" }).click();
+    await page.locator(".creator-social-row").filter({ hasText: "TikTok" }).getByRole("button", { name: "Add profile" }).click();
     await page.getByLabel("TikTok profile URL").fill("https://www.tiktok.com/@hana");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await layout(page);
     await page.getByRole("button", { name: /^Add a Business/ }).click();
     await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
@@ -49,7 +50,6 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
   }
 
   await page.getByLabel("Business name").fill("Hana Cafe");
-  await page.getByLabel("Business type (optional)").fill("Restaurant");
   await page.getByRole("button", { name: "Submit for Review" }).click();
   await expect(page.getByText("Your Business profile is waiting for approval.")).toBeVisible();
   for (const width of [320, 360, 375, 390, 430]) {
@@ -58,8 +58,9 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
   }
   await page.getByRole("button", { name: /^Become a Creator/ }).click();
   await page.getByLabel("Creator name").fill("Hana");
-  await page.getByRole("button", { name: "Add Instagram" }).click();
+  await page.locator(".creator-social-row").filter({ hasText: "Instagram" }).getByRole("button", { name: "Add profile" }).click();
   await page.getByLabel("Instagram profile URL").fill("https://www.instagram.com/hana/");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Submit for Review" }).click();
   await expect(page.getByText("Your Creator profile is waiting for approval.")).toBeVisible();
   for (const width of [320, 360, 375, 390, 430]) {

@@ -108,6 +108,12 @@ public sealed class CreatorSocialProfileLinkHttpTests(PostgresFixture postgres)
             CreatorSocialProfileLinks.Normalize(Weymela.Domain.CreatorPlatform.YouTube, "https://www.youtube.com/channel/UC1234567890123456/"));
     }
 
+    [Theory]
+    [InlineData(CreatorPlatform.TikTok, "https://www.tiktok.com/@bella?_r=1&_t=abc", "https://www.tiktok.com/@bella")]
+    [InlineData(CreatorPlatform.YouTube, "https://youtube.com/@bella?feature=shared", "https://youtube.com/@bella")]
+    public void Validator_accepts_profile_share_tracking_queries_without_changing_verification(CreatorPlatform platform, string input, string expected)
+        => Assert.Equal(expected, CreatorSocialProfileLinks.Normalize(platform, input));
+
     [Fact]
     public async Task Manual_link_cannot_make_a_platform_promotion_eligible_or_joinable()
     {

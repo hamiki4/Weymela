@@ -72,7 +72,7 @@ public sealed partial class WorkspaceQueries
                 p.Eligibility.Requirements,p.Eligibility.Category,p.Eligibility.Market,p.Eligibility.MinimumVerifiedFollowers,p.StartDateUtc,p.EndDateUtc,
                 p.PromotionLiveDurationDays,CreatorPrice(p.PricingSnapshot),request?.Status.ToString(),"Your Creator profile meets this Promotion's requirements.",p.Slogan,p.Location,
                 p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available)).ToArray(),eligibleSocials,
-                p.Platforms.Sum(x=>x.ApprovedCount),p.Platforms.Sum(x=>x.Capacity)));
+                p.Platforms.Sum(x=>x.ApprovedCount),p.Platforms.Sum(x=>x.Capacity),p.ApplicationClosesAtUtc,p.ContentDueAtUtc));
         }
         return result;
     }

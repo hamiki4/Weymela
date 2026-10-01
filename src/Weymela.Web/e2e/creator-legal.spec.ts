@@ -61,25 +61,22 @@ test("Creator Promotion request returns to its original detail page after accept
   // Own this eligible Promotion: other BrowserHost tests may fill every slot in
   // their Promotions, and a focused run starts with no published Promotion.
   await login(context, "business");
-  await open(page, "/business/campaigns/new");
+  await page.goto("/business/campaigns/new");
+  await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
   const title = `Legal return Promotion ${Date.now()}`;
   await page.getByLabel("Promotion title", { exact: true }).fill(title);
   await page.getByLabel("Promotion type", { exact: true }).selectOption("ViewPlusCommission");
-  await page.getByLabel("Promotion ends", { exact: true })
-    .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Application closes", { exact: true })
+    .fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
+  await page.getByLabel("Content due", { exact: true })
+    .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
   await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
   await page.getByLabel("Creator category", { exact: true }).fill("Food");
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
-  await page.getByRole("button", { name: "Create Draft" }).click();
-  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Review Funding" }).click();
-  await page.getByRole("button", { name: "Confirm & Reserve Funds" }).click();
   await page.getByRole("button", { name: "Publish Promotion" }).click();
-  await expect(page.getByText("Promotion published. Eligible Creators can now find it.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
 
   await login(context, "creator");
   const state = await legalRoutes(page);

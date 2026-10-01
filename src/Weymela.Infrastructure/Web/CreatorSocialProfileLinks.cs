@@ -73,14 +73,17 @@ public sealed class CreatorSocialProfileLinks(WeymelaDbContext db, TimeProvider 
         var host = uri.IdnHost.ToLowerInvariant();
         var path = uri.AbsolutePath.TrimEnd('/');
         var query = uri.Query;
+        var trackingQuery = platform is CreatorPlatform.TikTok or CreatorPlatform.YouTube
+            ? NormalizeTrackingQuery(query)
+            : query;
         var valid = platform switch
         {
             CreatorPlatform.TikTok => Host(host, "tiktok.com", "www.tiktok.com", "m.tiktok.com")
-                && Regex.IsMatch(path, "^/@[A-Za-z0-9._]{1,24}$") && query.Length == 0,
+                && Regex.IsMatch(path, "^/@[A-Za-z0-9._]{1,24}$") && trackingQuery is not null,
             CreatorPlatform.YouTube => Host(host, "youtube.com", "www.youtube.com", "m.youtube.com")
                 && (Regex.IsMatch(path, "^/@[A-Za-z0-9._-]{1,100}$")
                     || Regex.IsMatch(path, "^/(channel/UC[A-Za-z0-9_-]{10,}|c/[A-Za-z0-9._-]+|user/[A-Za-z0-9._-]+)$"))
-                && query.Length == 0,
+                && trackingQuery is not null,
             CreatorPlatform.Instagram => Host(host, "instagram.com", "www.instagram.com")
                 && Regex.IsMatch(path, "^/[A-Za-z0-9._]{1,30}$")
                 && !new[] { "p", "reel", "reels", "stories", "explore", "accounts", "direct" }.Contains(path[1..].ToLowerInvariant())
@@ -95,7 +98,20 @@ public sealed class CreatorSocialProfileLinks(WeymelaDbContext db, TimeProvider 
             _ => false
         };
         if (!valid) throw Invalid();
-        return $"https://{host}{path}{query}";
+        return $"https://{host}{path}{(platform is CreatorPlatform.TikTok or CreatorPlatform.YouTube ? trackingQuery : query)}";
+    }
+
+    private static string? NormalizeTrackingQuery(string query)
+    {
+        if (string.IsNullOrEmpty(query)) return "";
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "_r", "_t", "feature", "si", "app", "src", "share_app_id", "share_link_id", "is_from_webapp", "lang" };
+        foreach (var part in query[1..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var key = part.Split('=', 2)[0];
+            if (string.IsNullOrEmpty(key) || !allowed.Contains(Uri.UnescapeDataString(key))) return null;
+        }
+        return "";
     }
 
     private static bool Host(string value, params string[] allowed) => allowed.Contains(value, StringComparer.Ordinal);

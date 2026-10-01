@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { notifyNotificationsChanged, post, useAction, useResource } from "../../api/client";
 import { Button, Empty, Notice, PageHeader, Resource, Section } from "../../ui/components";
 import { date } from "../../ui/format";
 
@@ -7,7 +7,7 @@ interface Notification { id: string; title: string; message: string; route: stri
 interface InboxPage { items: Notification[]; unreadCount: number }
 export function Inbox() {
   const resource = useResource<InboxPage>("/notifications"); const action = useAction();
-  const read = (path: string) => void action.run(async key => { await post(path, undefined, key); resource.reload(); });
+  const read = (path: string) => void action.run(async key => { await post(path, undefined, key); notifyNotificationsChanged(); resource.reload(); });
   return <><PageHeader title="Notifications" />
     {action.error && <Notice error>{action.error}</Notice>}
     <Resource resource={resource}>{page => <Section title={`${page.unreadCount} unread`} action={<Button variant="secondary" disabled={!page.unreadCount || action.busy} onClick={() => read("/notifications/read-all")}>Mark all read</Button>}>

@@ -1,34 +1,26 @@
 import { expect, test } from "@playwright/test";
 import { layout, login, open } from "./helpers";
 
-test("Business sees the Promotion shortfall before saving an unfunded draft", async ({ page, context }) => {
+test("Business sees the Promotion shortfall before publishing an unfunded Promotion", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "business");
   const before = await (await context.request.get("/api/business/wallet")).json() as { available: number; reserved: number };
   const title = `Funding gate ${Date.now()}`;
-  await open(page, "/business/campaigns/new");
+  await page.goto("/business/campaigns/new");
+  await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
   await page.getByLabel("Promotion title").fill(title);
-  await page.getByLabel("Promotion ends").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
+  await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+  await page.getByLabel("Requirements").fill("One original video.");
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Promotion budget").fill(String(before.available + 1000));
   await expect(page.getByText("Need", { exact: true })).toBeVisible();
   await expect(page.getByText("1,000 ETB more", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add Funds" })).toHaveAttribute("href", "/business/wallet");
   await layout(page);
-  await page.getByRole("button", { name: "Create Draft" }).click();
-  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-  const id = page.url().split("/").pop();
+  await expect(page.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
   const after = await (await context.request.get("/api/business/wallet")).json() as { available: number; reserved: number };
   expect(after.available).toBe(before.available);
   expect(after.reserved).toBe(before.reserved);
-  await page.getByRole("button", { name: "Review Funding" }).click();
-  const dialog = page.getByRole("dialog", { name: "Confirm Promotion Funding" });
-  await expect(dialog.getByRole("button", { name: "Confirm & Reserve Funds" })).toBeDisabled();
-  await expect(dialog.getByText("1,000 ETB more", { exact: true })).toBeVisible();
   await layout(page);
-  await login(context, "other-creator");
-  const discovered = await (await context.request.get("/api/creator/discover")).json() as { id: string }[];
-  expect(discovered.some(row => row.id === id)).toBe(false);
 });

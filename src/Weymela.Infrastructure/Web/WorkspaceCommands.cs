@@ -29,7 +29,10 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             Enum.TryParse<PromotionType>(input.Type,true,out var parsed)&&Enum.IsDefined(parsed)?parsed:throw new ApplicationFailure(FailureKind.Validation,"Choose View Only or View & Sale.");
         if(string.IsNullOrWhiteSpace(input.Title)||input.Title.Length>120||input.Description.Length>3000||input.Requirements?.Length>2000||input.Category?.Length>80||input.Region?.Length>80)
             throw new ApplicationFailure(FailureKind.Validation,"Use a title up to 120 characters and a concise Promotion brief.");
-        if(input.MinimumVerifiedFollowers<0||(input.StartUtc is { } start && start.Kind!=DateTimeKind.Utc)||input.EndUtc.Kind!=DateTimeKind.Utc||input.EndUtc<=Now)
+        if(input.MinimumVerifiedFollowers<0||(input.StartUtc is { } start && start.Kind!=DateTimeKind.Utc)||input.EndUtc.Kind!=DateTimeKind.Utc||input.EndUtc<=Now
+            || (input.ApplicationClosesAtUtc is { } closes && closes.Kind != DateTimeKind.Utc)
+            || (input.ContentDueAtUtc is { } due && due.Kind != DateTimeKind.Utc)
+            || (input.ApplicationClosesAtUtc is { } close && input.ContentDueAtUtc is { } content && close >= content))
             throw new ApplicationFailure(FailureKind.Validation,"Check the follower requirement and Promotion dates.");
         var platforms=new List<(CreatorPlatform Platform,int Capacity)>();
         foreach(var row in input.Platforms??[])
@@ -43,7 +46,8 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
         return await Commands.CreateCampaignOnceAsync(new(actor,input.Title,input.Description,type,Amount(input.CampaignBudget),
             new(Clean(input.Category),input.MinimumVerifiedFollowers,Clean(input.Region),Clean(input.Requirements)),
             input.StartUtc ?? Now,input.EndUtc,Now,
-            Clean(input.Slogan),Clean(input.Location),JsonSerializer.Serialize(resources),platforms),key,ct);
+            Clean(input.Slogan),Clean(input.Location),JsonSerializer.Serialize(resources),platforms,
+            input.ApplicationClosesAtUtc,input.ContentDueAtUtc),key,ct);
     }
     public async Task<Guid> DepositAsync(Actor actor,DepositInput input,string key,CancellationToken ct)
     { await Business(actor,ct);return await Commands.CreditDepositAsync(new(actor,Amount(input.Amount),key,Now),input.ExpectedVersion,ct); }
@@ -60,13 +64,14 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
     public Task<Guid> UpdatePromotionAsync(Actor actor,Guid id,PromotionPresentationInput input,string key,CancellationToken ct)=>
         new EfUnitOfWork(db,System.Data.IsolationLevel.Serializable).ExecuteAsync(async token=>
         {
-            await Business(actor,token);var resources=(input.Resources??[]).Where(x=>!string.IsNullOrWhiteSpace(x)).Select(SafeExternalUrl).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            var fingerprint=RequestFingerprint.Create(id.ToString(),input.Description,input.Slogan??"",input.Location??"",JsonSerializer.Serialize(resources),input.Version.ToString());
+            await Business(actor,token);
+            var fingerprint=RequestFingerprint.Create(id.ToString(),input.Description,input.Slogan??"",input.Location??"",JsonSerializer.Serialize(input.Resources),input.Version.ToString());
             var op=new FinancialOperation(db);var replay=await op.Replay(actor,"UpdatePromotion",key,fingerprint,token);if(replay is not null)return Guid.Parse(replay);
             var promotion=await new PromotionRepository(db).GetAsync(id,token)??throw new ApplicationFailure(FailureKind.NotFound,"Promotion not found.");
             if(promotion.BusinessId!=actor.BusinessId)throw new ApplicationFailure(FailureKind.Forbidden,"This Promotion belongs to another Business.");
             if(promotion.Version!=input.Version)throw new ApplicationFailure(FailureKind.ConcurrencyConflict,"Promotion changed. Reload before trying again.");
-            promotion.UpdatePresentation(input.Description,Clean(input.Slogan),Clean(input.Location),JsonSerializer.Serialize(resources));
+            var resources=input.Resources is null ? promotion.ResourcesJson : JsonSerializer.Serialize(input.Resources.Where(x=>!string.IsNullOrWhiteSpace(x)).Select(SafeExternalUrl).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+            promotion.UpdatePresentation(input.Description,Clean(input.Slogan),Clean(input.Location),resources);
             var correlation=Guid.NewGuid();op.Remember(actor,"UpdatePromotion",key,fingerprint,id.ToString(),Now);op.Audit(actor,"PromotionUpdated",correlation,Now,id);op.Event("PromotionUpdated",new{PromotionId=id,promotion.BusinessId},Now);return id;
         },ct);
     public Task<Guid> CancelPromotionAsync(Actor actor,Guid id,VersionInput input,string key,CancellationToken ct)=>

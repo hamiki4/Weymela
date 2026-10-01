@@ -27,7 +27,8 @@ baseline_ids=[pathlib.PurePosixPath(p).stem for p in baseline_paths
               and not p.endswith('.Designer.cs')]
 approved_upgrade=['20260929203557_AddUgcPlatformCapacities',
                   '20260930031549_AddCreatorProfilePhotos',
-                  '20260930210000_AddAgreementDeadlines']
+                  '20260930210000_AddAgreementDeadlines',
+                  '20261001043831_AddAdminVerifiedAudienceAndEnforcement']
 assert len(baseline_ids)==24 and ids==baseline_ids+approved_upgrade, 'Migration set changed: review required'
 expected_baseline=subprocess.check_output(['git','show',f'{baseline}:database/grants/v3-verify.sql'])
 assert (root/'grants/baseline-24/v3-verify.sql').read_bytes()==expected_baseline, 'Baseline grant verifier changed'

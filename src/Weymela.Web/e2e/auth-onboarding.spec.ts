@@ -395,7 +395,7 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   expect((await deviceEnrollment).status()).toBe(200);
   await expect(page).toHaveURL(/\/onboarding/);
   await page.getByRole("button", { name: /^Use as Customer/ }).click();
-  const consent = page.getByRole("checkbox", { name: /I agree to the Terms of Service and acknowledge the Privacy Policy/ });
+  const consent = page.getByRole("checkbox", { name: "I agree to Weymela's Rules and Regulations" });
   await expect(consent).not.toBeChecked();
   for (const [name, heading, marker] of [
     ["Terms of Service", "Terms of Service", "Weymela Pilot Terms of Service"],
@@ -919,7 +919,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     await captureCustomerFormFailure(page, context, signals, marker, steps, error);
     throw error;
   }
-  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: /I agree to the Terms of Service and acknowledge the Privacy Policy/ }).check({ timeout: 7000 }), 8000);
+  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: "I agree to Weymela's Rules and Regulations" }).check({ timeout: 7000 }), 8000);
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
       const url = new URL(response.url());

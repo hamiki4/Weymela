@@ -182,9 +182,10 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         identity.IsVerified = true;
         db.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = preauth.UserId, PasswordHash = "private-hash", WorkFactor = 100000, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
         db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = preauth.UserId, CredentialKind = "Passkey", CredentialIdHash = "private-device", PinVerifier = "private-pin-verifier", EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        var accountLegal = await SeedAccountLegalAsync(db);
         await db.SaveChangesAsync();
 
-        await service.ActivateAsync(new Actor(preauth.UserId, ActorRole.Business), preauth.PreauthorizationId, delivery.Code!, default);
+        await service.ActivateAsync(new Actor(preauth.UserId, ActorRole.Business), preauth.PreauthorizationId, delivery.Code!, default, accountLegal);
         var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == preauth.UserId && x.Role == ActorRole.Business);
         Assert.True(permission.IsActive);
         Assert.True(permission.CanCheckout);
@@ -290,12 +291,13 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
         db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = user, CredentialKind = "Passkey",
             CredentialIdHash = "private-device", PinVerifier = "private-pin-verifier",
             EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        var accountLegal = await SeedAccountLegalAsync(db);
         await db.SaveChangesAsync();
         var delivery = new CapturingDelivery();
         var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery);
         var preauth = await service.PreauthorizeAsync(admin, new AccountPreauthorizationInput(
             "Creator", "newcreator@example.test", null, "New Creator", "CR-ADMIN-EXISTING"), "preauth-creator", default);
-        await service.ActivateAsync(new Actor(user, ActorRole.Creator), preauth.PreauthorizationId, delivery.Code!, default);
+        await service.ActivateAsync(new Actor(user, ActorRole.Creator), preauth.PreauthorizationId, delivery.Code!, default, accountLegal);
         var profile = await db.PublicWorkspaceProfiles.SingleAsync(x => x.Role == ActorRole.Creator);
         Assert.True(profile.CreatorNumber >= 1000);
         Assert.Equal("CR-ADMIN-EXISTING", profile.PublicId);
@@ -539,6 +541,15 @@ public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
             new CommerceAccessPolicy(db).EnsureScannerAsync(scanner, business, default))).Kind);
         Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == cashier && x.IsActive));
         Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == owner && !x.IsActive));
+    }
+
+    private static async Task<AccountLegalConfirmation> SeedAccountLegalAsync(Weymela.Infrastructure.Persistence.WeymelaDbContext db)
+    {
+        var terms = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.TermsOfService, "fixture-1", "fixture-terms-hash", Now.AddMinutes(-1));
+        var privacy = new LegalDocumentVersion(Guid.NewGuid(), LegalDocumentType.PrivacyPolicy, "fixture-1", "fixture-privacy-hash", Now.AddMinutes(-1));
+        db.LegalDocumentVersions.AddRange(terms, privacy);
+        await db.SaveChangesAsync();
+        return new(new(terms.Id, terms.ContentHash, true), new(privacy.Id, privacy.ContentHash, true));
     }
 
     private sealed class CapturingDelivery : IEmailCodeDelivery

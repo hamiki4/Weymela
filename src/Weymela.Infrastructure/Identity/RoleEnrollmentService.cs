@@ -15,7 +15,7 @@ public sealed record RoleEnrollmentRequest(ActorRole Role, string DisplayName, s
     string? Category, string? Submission, Guid? ProposedBusinessId = null,
     AccountLegalConfirmation? AccountLegal = null, string? IpReference = null, string? UserAgentReference = null,
     IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null);
-public sealed record CreatorApplicationSocialProfile(string Platform, string ProfileUrl);
+public sealed record CreatorApplicationSocialProfile(string Platform, string ProfileUrl, long AudienceCount = 0);
 public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollmentStatus Status, string DisplayName,
     string PublicId, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc, string? DecisionReason, long Version,
     string? Region = null, string? Category = null, string? Submission = null,
@@ -157,7 +157,8 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
                         throw new ApplicationFailure(FailureKind.Validation, "The Creator application contains an invalid social profile.");
                     db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord { CreatorId = subject, Platform = platform,
                         ProfileUrl = CreatorSocialProfileLinks.Normalize(platform, social.ProfileUrl),
-                        VerificationStatus = "SelfReported", CreatedAtUtc = now, UpdatedAtUtc = now });
+                        SelfReportedAudience = social.AudienceCount,
+                        VerificationStatus = "SelfReported", AudienceVerificationSource = "SelfReported", CreatedAtUtc = now, UpdatedAtUtc = now });
                 }
         }
         db.OutboxMessages.Add(new OutboxMessage { EventType = approve ? "RoleEnrollmentApproved" : "RoleEnrollmentRejected", Payload = JsonSerializer.Serialize(new { row.Id, row.UserId, row.RequestedRole }), OccurredAtUtc = now });
@@ -198,7 +199,9 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             if (!Enum.TryParse<CreatorPlatform>(social.Platform, true, out var platform) || !Enum.IsDefined(platform)
                 || result.Any(x => x.Platform == platform.ToString()))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose each supported social platform once.");
-            result.Add(new(platform.ToString(), CreatorSocialProfileLinks.Normalize(platform, social.ProfileUrl)));
+            if (social.AudienceCount is < 0 or > 9_000_000_000_000_000)
+                throw new ApplicationFailure(FailureKind.Validation, "Audience count must be a whole number between 0 and 9,000,000,000,000,000.");
+            result.Add(new(platform.ToString(), CreatorSocialProfileLinks.Normalize(platform, social.ProfileUrl), social.AudienceCount));
         }
         return result;
     }

@@ -88,7 +88,8 @@ public sealed record AdminCreatorSocialProfile(
     string ProfileUrl,
     long SelfReportedAudience,
     string VerificationStatus,
-    long? VerifiedAudience);
+    long? VerifiedAudience,
+    string AudienceVerificationSource = "LegacyUnknown");
 
 public sealed record AdminCreatorData(
     int PromotionRequests,

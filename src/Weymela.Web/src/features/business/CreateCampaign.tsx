@@ -12,7 +12,7 @@ export function CreateCampaign() { return <BusinessCreationGate>{wallet => <Crea
 function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
   const pricing = useResource<BusinessPricing>("/business/pricing"); const action = useAction(); const navigate = useNavigate();
   const [type, setType] = useState<CampaignTypeCode>("ViewOnly");
-  const [form, setForm] = useState({ title: "", campaignBudget: "", requirements: "", category: "", region: "", minimumVerifiedFollowers: "", applicationCloses: "", contentDue: "" });
+  const [form, setForm] = useState({ title: "", campaignBudget: "", requirements: "", region: "", applicationCloses: "", contentDue: "" });
   const [platforms, setPlatforms] = useState<{ platform: string; capacity: number }[]>([]);
   const set = (name: keyof typeof form, value: string) => setForm(current => ({ ...current, [name]: value }));
   return <><PageHeader title="Create Promotion" compact /><Resource resource={pricing}>{data => {
@@ -24,8 +24,8 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
       <form className="form-grid" onSubmit={event => { event.preventDefault(); if (!validDates || platforms.length === 0) return; void action.run(async key => {
         const due = new Date(form.contentDue); const result = await post<{ id: string }>("/business/promotions", {
           title: form.title, description: form.requirements, slogan: null, location: null, resources: [], type, campaignBudget: budget,
-          requirements: form.requirements, category: form.category || null, region: form.region || null,
-          minimumVerifiedFollowers: form.minimumVerifiedFollowers ? Number(form.minimumVerifiedFollowers) : null,
+          requirements: form.requirements, category: null, region: form.region || null,
+          minimumVerifiedFollowers: null,
           startUtc: new Date().toISOString(), endUtc: new Date(due.getTime() + 30 * 86400000).toISOString(),
           applicationClosesAtUtc: new Date(form.applicationCloses).toISOString(), contentDueAtUtc: due.toISOString(), platforms,
         }, key); const latest = await request<Wallet>("/business/wallet");
@@ -38,8 +38,7 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
         <Field label="Content due"><input type="datetime-local" value={form.contentDue} onChange={e => set("contentDue", e.target.value)} required /></Field>
         {!validDates && (form.applicationCloses || form.contentDue) && <Notice error>Application closes must be before content due.</Notice>}
         <Field label="Requirements" wide><textarea value={form.requirements} onChange={e => set("requirements", e.target.value)} maxLength={2000} rows={3} /></Field>
-        <Field label="Creator category"><input value={form.category} onChange={e => set("category", e.target.value)} maxLength={80} /></Field><Field label="Region"><input value={form.region} onChange={e => set("region", e.target.value)} maxLength={80} /></Field>
-        <Field label="Minimum verified followers"><input type="number" min="0" step="1" value={form.minimumVerifiedFollowers} onChange={e => set("minimumVerifiedFollowers", e.target.value)} /></Field>
+        <Field label="Region"><input value={form.region} onChange={e => set("region", e.target.value)} maxLength={80} /></Field>
         <div className="field wide"><span className="field-label">Creators needed</span><PlatformCapacityPicker value={platforms} onChange={setPlatforms} />{platforms.length === 0 && <Notice error>Choose at least one Creator slot.</Notice>}</div>
         <Field label="Promotion budget"><MoneyInput value={form.campaignBudget} min={Math.max(0.01, price.minimumCampaignBudget ?? 0.01)} onChange={e => set("campaignBudget", e.target.value)} /></Field>
         <dl className="funds-grid wide"><div><dt>Available funds</dt><dd>{amount(wallet.available)} ETB</dd></div><div><dt>Promotion budget</dt><dd>{amount(budget)} ETB</dd></div>{budget > 0 && <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : wallet.available - budget)} ETB{shortfall > 0 ? " more" : ""}</dd></div>}</dl>

@@ -186,8 +186,10 @@ describe("shared role-themed onboarding", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
-      role: "Creator", displayName: "Bella Creates", socialProfiles: [{ platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella" }],
+      role: "Creator", displayName: "Bella Creates", region: null,
+      socialProfiles: [{ platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella", audienceCount: 0 }],
     }), "enroll-key"));
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ category: null });
     expect(mocks.post.mock.calls[0][1]).not.toHaveProperty("publicId");
     expect(screen.getByText("Your Creator profile is waiting for approval.")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Creator setup" })).not.toBeInTheDocument();

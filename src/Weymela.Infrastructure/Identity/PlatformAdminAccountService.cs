@@ -561,7 +561,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var socialProfiles = (await db.CreatorSocialProfiles.AsNoTracking().Where(x => x.CreatorId == creator && x.IsActive)
             .OrderBy(x => x.Platform).ThenBy(x => x.ProfileUrl).ToListAsync(ct))
             .Select(x => new AdminCreatorSocialProfile(x.Id, x.Platform.ToString(), x.ProfileUrl, x.SelfReportedAudience,
-                x.VerificationStatus, x.VerifiedAudience)).ToArray();
+                x.VerificationStatus, x.VerifiedAudience, x.AudienceVerificationSource)).ToArray();
         return new(await db.CreatorApplications.CountAsync(x => x.CreatorId == creator, ct), allocationIds.Length,
             await db.CreatorPromotionContentSubmissions.CountAsync(x => allocationIds.Contains(x.CreatorAllocationId), ct),
             await db.CreatorPromotionParticipations.CountAsync(x => x.CreatorId == creator, ct), earnings?.AvailableEarnings.Amount,

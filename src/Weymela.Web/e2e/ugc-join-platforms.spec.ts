@@ -102,10 +102,10 @@ test("posted UGC binds verified profile, counts approvals, and disables full pla
 
   await login(context, "ineligible-creator");
   await page.setViewportSize({ width: 393, height: 852 });
+  const unavailable = await apiJson<{ id: string }[]>(context, "/creator/ugc");
+  expect(unavailable.some(item => item.id === id)).toBe(false);
   await open(page, "/creator/discover?tab=UGC");
-  const full = page.locator(".creator-opportunity-card").filter({ hasText: title });
-  await expect(full.getByText("All Creator spots filled")).toBeVisible();
-  await expect(full.getByRole("button", { name: "Request to Join" })).toBeDisabled();
+  await expect(page.locator(".creator-opportunity-card").filter({ hasText: title })).toHaveCount(0);
   await layout(page);
   await screenshot(page, "393-creator-ugc-all-full");
 });
@@ -134,16 +134,16 @@ test("delivery-only UGC joins without a social-platform binding", async ({ page,
   expect((await apiJson<Detail>(context, `/business/ugc/${id}`)).opportunity.approvedCreators).toBe(1);
 });
 
-test("self-reported Facebook link never qualifies for posted UGC", async ({ context }) => {
-  const title = `Verified Facebook only ${Date.now()}`;
+test("self-reported Facebook link qualifies when audience enforcement is off", async ({ context }) => {
+  const title = `Self-reported Facebook ${Date.now()}`;
   const id = await createPublished(context, title, [{ platform: "Facebook", capacity: 1 }], 1);
   await login(context, "creator");
   const linked = await apiPost(context, "/creator/social-profiles/Facebook", { profileUrl: "https://www.facebook.com/bella" });
   const { id: profileId } = await linked.json() as { id: string };
   const discover = await apiJson<{ id: string }[]>(context, "/creator/ugc");
-  expect(discover.some(item => item.id === id)).toBe(false);
-  const rejected = await context.request.post(`/api/creator/ugc/${id}/request?selectedPlatform=Facebook&verifiedSocialProfileId=${profileId}`, {
+  expect(discover.some(item => item.id === id)).toBe(true);
+  const joined = await context.request.post(`/api/creator/ugc/${id}/request?selectedPlatform=Facebook&verifiedSocialProfileId=${profileId}`, {
     headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
   });
-  expect(rejected.ok()).toBe(false);
+  expect(joined.ok()).toBe(true);
 });

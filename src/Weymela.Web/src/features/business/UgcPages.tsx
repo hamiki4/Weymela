@@ -84,6 +84,18 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
   const [editInstructions, setEditInstructions] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editSlogan, setEditSlogan] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editContentType, setEditContentType] = useState<"Video" | "Photos">("Video");
+  const [editDue, setEditDue] = useState("");
+  const [editCloses, setEditCloses] = useState("");
+  const [editPayment, setEditPayment] = useState("");
+  const [editCreators, setEditCreators] = useState("");
+  const [editArrangement, setEditArrangement] = useState<BusinessUgcForm["productArrangement"]>("");
+  const [editMustPost, setEditMustPost] = useState(false);
+  const [editPlatforms, setEditPlatforms] = useState<PlatformCapacity[]>([]);
+  const [editOffer, setEditOffer] = useState(false);
+  const [editDiscount, setEditDiscount] = useState("");
+  const [editOfferBudget, setEditOfferBudget] = useState("");
   const [creatorError, setCreatorError] = useState("");
   return (
     <article className="data-card">
@@ -102,7 +114,15 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
       {item.status !== "Draft" && <>
         <Button variant="secondary" onClick={() => void editAction.run(async () => {
           const detail = await request<UgcDetail>(`/business/ugc/${item.id}`);
+          const local = (value?: string | null) => value ? new Date(value).toISOString().slice(0, 16) : "";
           setEditDetail(detail); setEditInstructions(detail.instructions); setEditLocation(detail.opportunity.location ?? ""); setEditSlogan(detail.opportunity.slogan ?? "");
+          setEditTitle(detail.opportunity.title); setEditContentType(detail.opportunity.contentType as "Video" | "Photos");
+          setEditDue(local(detail.opportunity.dueDateUtc)); setEditCloses(local(detail.opportunity.applicationClosesAtUtc));
+          setEditPayment(String(detail.opportunity.creatorPayment)); setEditCreators(String(detail.opportunity.creatorsNeeded));
+          setEditArrangement(detail.productProvided ? "Provided" : detail.creatorMustPurchase ? "Purchase" : "");
+          setEditMustPost(!!detail.opportunity.platformCapacities?.length);
+          setEditPlatforms((detail.opportunity.platformCapacities ?? []).map(slot => ({ platform: slot.platform, capacity: slot.capacity, minimumAudience: detail.opportunity.platformRequirements.find(row => row.platform === slot.platform)?.minimumAudience ?? null })));
+          setEditOffer(!!detail.opportunity.customerOfferEnabled); setEditDiscount(String(detail.opportunity.customerDiscountPercent ?? "")); setEditOfferBudget(String(detail.opportunity.customerOfferFundedAllocation ?? ""));
         })}>Edit</Button>
         <Button variant="secondary" onClick={() => {
           if (creatorDetail) { setCreatorDetail(null); return; }
@@ -131,11 +151,34 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
           </div>)}</>}
         </div>}
         <Dialog title="Edit UGC details" open={!!editDetail} onClose={() => { if (!editAction.busy) setEditDetail(null); }}>
-          <p className="muted">Descriptive changes create a revision. Creator payment, dates, capacity, product arrangement, discounts, and funding remain protected after publication.</p>
+          <p className="muted">{editDetail && editDetail.opportunity.approvedCreators > 0 ? "Some terms are locked because a Creator has been approved." : "You can update the full UGC opportunity while no Creator is approved. Pending applications do not lock editing."}</p>
           <form className="form-grid" onSubmit={(event) => { event.preventDefault(); if (!editDetail) return; void editAction.run(async key => {
-            await post(`/business/ugc/${item.id}/update?expectedVersion=${editDetail.opportunity.version}`, { slogan: editSlogan || null, instructions: editInstructions, resources: editDetail.resources, location: editLocation || null, usageRights: editDetail.usageRights, isMaterial: false }, key);
+            const full = editDetail.opportunity.approvedCreators === 0;
+            const iso = (value: string) => value ? new Date(value).toISOString() : null;
+            await post(`/business/ugc/${item.id}/update?expectedVersion=${editDetail.opportunity.version}`, full ? {
+              title: editTitle, contentType: editContentType, slogan: editSlogan || null, instructions: editInstructions, resources: editDetail.resources,
+              location: editLocation || null, usageRights: editDetail.usageRights, isMaterial: true, dueDateUtc: iso(editDue), applicationClosesAtUtc: iso(editCloses),
+              productProvided: editArrangement === "Provided", creatorMustPurchase: editArrangement === "Purchase", creatorPayment: Number(editPayment), creatorsNeeded: editMustPost ? editPlatforms.reduce((sum, row) => sum + row.capacity, 0) : Number(editCreators),
+              platformRequirements: editMustPost ? editPlatforms.map(row => ({ platform: row.platform, format: "Social post", minimumAudience: row.minimumAudience ?? null })) : [],
+              platformCapacities: editMustPost ? editPlatforms : [], customerOfferEnabled: editOffer,
+              customerDiscountPercent: editOffer ? Number(editDiscount) : null, customerOfferFundedAllocation: editOffer ? Number(editOfferBudget) : null,
+              customerFacingSlogan: null, customerOfferStartsAtUtc: editOffer ? new Date().toISOString() : null, customerOfferEndsAtUtc: editOffer ? iso(editDue) : null,
+            } : { slogan: editSlogan || null, instructions: editInstructions, resources: editDetail.resources, location: editLocation || null, usageRights: editDetail.usageRights, isMaterial: false }, key);
             setEditDetail(null); onChanged();
           }); }}>
+            {editDetail && editDetail.opportunity.approvedCreators === 0 && <>
+              <Field label="UGC title" wide><input value={editTitle} onChange={event => setEditTitle(event.target.value)} maxLength={120} required /></Field>
+              <Field label="Content type"><select value={editContentType} onChange={event => setEditContentType(event.target.value as "Video" | "Photos")}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
+              <Field label="Creator payment"><input type="number" min="0.01" step="0.01" value={editPayment} onChange={event => setEditPayment(event.target.value)} required /></Field>
+              <Field label="Creators needed"><input type="number" min="1" max="100" step="1" value={editCreators} onChange={event => setEditCreators(event.target.value)} required /></Field>
+              <Field label="Application closes"><input type="datetime-local" value={editCloses} onChange={event => setEditCloses(event.target.value)} required /></Field>
+              <Field label="Content due"><input type="datetime-local" value={editDue} onChange={event => setEditDue(event.target.value)} required /></Field>
+              <ProductArrangementChoice value={editArrangement} onChange={setEditArrangement} name="edit-product-arrangement" />
+              <fieldset className="field wide ugc-posting-choice"><legend>Posting</legend><label><input type="radio" name="edit-ugc-posting" checked={!editMustPost} onChange={() => setEditMustPost(false)} /> Deliver content only</label><label><input type="radio" name="edit-ugc-posting" checked={editMustPost} onChange={() => setEditMustPost(true)} /> Creator must post</label></fieldset>
+              {editMustPost && <PlatformCapacityPicker value={editPlatforms} onChange={setEditPlatforms} />}
+              <label className="field wide"><span><input type="checkbox" checked={editOffer} onChange={event => setEditOffer(event.target.checked)} /> Customer discount sale</span></label>
+              {editOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max="100" step="0.0001" value={editDiscount} onChange={event => setEditDiscount(event.target.value)} required /></Field><Field label="Discount funding"><input type="number" min="0.01" step="0.01" value={editOfferBudget} onChange={event => setEditOfferBudget(event.target.value)} required /></Field></>}
+            </>}
             <Field label="Slogan"><input value={editSlogan} onChange={event => setEditSlogan(event.target.value)} maxLength={160} /></Field>
             <Field label="Location"><input value={editLocation} onChange={event => setEditLocation(event.target.value)} maxLength={160} /></Field>
             <Field label="Instructions" wide><textarea value={editInstructions} onChange={event => setEditInstructions(event.target.value)} maxLength={4000} rows={5} required /></Field>
@@ -197,7 +240,7 @@ export function CreateBusinessUgcPage() {
                       title: form.title, slogan: null, contentType: form.contentType, instructions: form.instructions,
                       resources: [], location: form.location || null, dueDateUtc: new Date(form.dueDate).toISOString(),
                       productProvided: form.productArrangement === "Provided", creatorMustPurchase: form.productArrangement === "Purchase", usageRights: null, creatorPayment: payment, creatorsNeeded: creators,
-                      platformRequirements: form.mustPost ? form.platforms.map(({ platform }) => ({ platform, format: "Social post", minimumAudience: null })) : [],
+                      platformRequirements: form.mustPost ? form.platforms.map(({ platform, minimumAudience }) => ({ platform, format: "Social post", minimumAudience: minimumAudience ?? null })) : [],
                       platformCapacities: form.mustPost ? form.platforms : [],
                       customerOfferEnabled: form.customerOffer, customerDiscountPercent: form.customerOffer ? discount : null,
                       customerOfferFundedAllocation: form.customerOffer ? Number(form.customerRewardBudget) : null,

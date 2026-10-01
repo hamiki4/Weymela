@@ -13,6 +13,71 @@ namespace Weymela.Api.IntegrationTests;
 public sealed class UgcArrangementHttpTests(PostgresFixture postgres)
 {
     [Fact]
+    public async Task Ugc_platform_capacity_audience_metadata_is_mapped_and_strictly_validated()
+    {
+        await using var host = await ApiFixture.CreateAsync(postgres);
+        using var business = await host.Login("business");
+        var input = new
+        {
+            title = "Audience contract HTTP", slogan = (string?)null, contentType = "Video",
+            instructions = "Make a short product video.", resources = Array.Empty<string>(), location = (string?)null,
+            dueDateUtc = DateTime.UtcNow.AddDays(30), productProvided = true, creatorMustPurchase = false,
+            usageRights = (string?)null, creatorPayment = 500m, creatorsNeeded = 2,
+            platformRequirements = new[] {
+                new { platform = "TikTok", format = "Social post", minimumAudience = (long?)50_000 },
+                new { platform = "YouTube", format = "Social post", minimumAudience = (long?)0 },
+            },
+            platformCapacities = new[] {
+                new { platform = "TikTok", capacity = 1, minimumAudience = (long?)50_000 },
+                new { platform = "YouTube", capacity = 1, minimumAudience = (long?)0 },
+            },
+            customerOfferEnabled = false,
+        };
+
+        var id = (await business.PostJson("/api/business/ugc", input))!["id"]!.GetValue<Guid>();
+        await using (var db = host.Database.Open())
+        {
+            var requirements = await db.UgcPlatformRequirements.Where(x => x.UgcOpportunityId == id).ToListAsync();
+            Assert.Equal(50_000, requirements.Single(x => x.Platform == CreatorPlatform.TikTok).MinimumAudience);
+            Assert.Null(requirements.Single(x => x.Platform == CreatorPlatform.YouTube).MinimumAudience);
+            Assert.Equal(2, await db.UgcPlatformCapacities.CountAsync(x => x.UgcOpportunityId == id));
+        }
+
+        var nullAudience = await business.PostJson("/api/business/ugc", new
+        {
+            input.title, input.slogan, input.contentType, input.instructions, input.resources, input.location,
+            input.dueDateUtc, input.productProvided, input.creatorMustPurchase, input.usageRights,
+            input.creatorPayment, creatorsNeeded = 1,
+            platformRequirements = new[] { new { platform = "TikTok", format = "Social post", minimumAudience = (long?)null } },
+            platformCapacities = new[] { new { platform = "TikTok", capacity = 1, minimumAudience = (long?)null } },
+            input.customerOfferEnabled,
+        });
+        Assert.NotEqual(Guid.Empty, nullAudience["id"]!.GetValue<Guid>());
+
+        var negative = await business.Post("/api/business/ugc", new
+        {
+            input.title, input.slogan, input.contentType, input.instructions, input.resources, input.location,
+            input.dueDateUtc, input.productProvided, input.creatorMustPurchase, input.usageRights,
+            input.creatorPayment, creatorsNeeded = 1,
+            platformRequirements = new[] { new { platform = "TikTok", format = "Social post", minimumAudience = (long?)-1 } },
+            platformCapacities = new[] { new { platform = "TikTok", capacity = 1, minimumAudience = (long?)-1 } },
+            input.customerOfferEnabled,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, negative.StatusCode);
+
+        var unknown = await business.Post("/api/business/ugc", new
+        {
+            input.title, input.slogan, input.contentType, input.instructions, input.resources, input.location,
+            input.dueDateUtc, input.productProvided, input.creatorMustPurchase, input.usageRights,
+            input.creatorPayment, creatorsNeeded = 1,
+            platformRequirements = new[] { new { platform = "TikTok", format = "Social post", minimumAudience = (long?)null } },
+            platformCapacities = new[] { new { platform = "TikTok", capacity = 1, minimumAudience = (long?)null } },
+            input.customerOfferEnabled, unrelatedField = "must remain rejected",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+    }
+
+    [Fact]
     public async Task Ugc_publication_requires_arrangement_and_creator_discovers_selected_term()
     {
         await using var host = await ApiFixture.CreateAsync(postgres);

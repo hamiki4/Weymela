@@ -11,6 +11,9 @@ public sealed class CreatorSocialProfileRecord
     public string ProfileUrl { get; set; } = "";
     public long SelfReportedAudience { get; set; }
     public string VerificationStatus { get; set; } = "Unverified";
+    // Deliberately separate provenance from the legacy status string. Existing
+    // "Verified" rows are ambiguous and are never inferred to be AdminVerified.
+    public string AudienceVerificationSource { get; set; } = "LegacyUnknown";
     public long? VerifiedAudience { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; init; }

@@ -115,7 +115,7 @@ public sealed class CreatorSocialProfileLinkHttpTests(PostgresFixture postgres)
         => Assert.Equal(expected, CreatorSocialProfileLinks.Normalize(platform, input));
 
     [Fact]
-    public async Task Manual_link_cannot_make_a_platform_promotion_eligible_or_joinable()
+    public async Task Self_reported_link_can_make_a_platform_promotion_eligible_when_enforcement_is_off()
     {
         await using var host = await ApiFixture.CreateAsync(postgres);
         using var business = await host.Login("business");
@@ -147,10 +147,10 @@ public sealed class CreatorSocialProfileLinkHttpTests(PostgresFixture postgres)
         Assert.Contains((await creator.GetJson("/api/creator/discover")).AsArray(), x => x!["id"]!.GetValue<Guid>() == campaignId);
         var manual = await creator.PostJson("/api/creator/social-profiles/TikTok", new
         { profileUrl = "https://www.tiktok.com/@bella_new" });
-        Assert.DoesNotContain((await creator.GetJson("/api/creator/discover")).AsArray(), x => x!["id"]!.GetValue<Guid>() == campaignId);
-        Assert.False((await creator.Post($"/api/creator/campaigns/{campaignId}/join", new
+        Assert.Contains((await creator.GetJson("/api/creator/discover")).AsArray(), x => x!["id"]!.GetValue<Guid>() == campaignId);
+        Assert.True((await creator.Post($"/api/creator/campaigns/{campaignId}/join", new
         { platform = "TikTok", creatorSocialProfileId = manual["id"]!.GetValue<Guid>(), message = "Interested", contentConcept = "A visit" })).IsSuccessStatusCode);
         await using var verify = host.Database.Open();
-        Assert.False(await verify.CreatorApplications.AnyAsync(x => x.PromotionId == campaignId));
+        Assert.True(await verify.CreatorApplications.AnyAsync(x => x.PromotionId == campaignId));
     }
 }

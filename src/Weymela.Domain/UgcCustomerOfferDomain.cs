@@ -80,6 +80,31 @@ public sealed class UgcCustomerOffer
         ReservedFunding = Money.Zero(fundedLimit.Currency); UsedFunding = Money.Zero(fundedLimit.Currency); Version++;
     }
 
+    public void ReviseBeforeApproval(string? customerFacingSlogan, decimal customerDiscountPercent,
+        DateTime startsAtUtc, DateTime endsAtUtc, Money fundedLimit)
+    {
+        Ensure(UgcCustomerOfferStatus.Draft, UgcCustomerOfferStatus.Active, UgcCustomerOfferStatus.Cancelled);
+        if (UsedFunding.Amount > 0) throw new InvalidOperationException("Customer Offer terms are locked after use.");
+        if (customerDiscountPercent is <= 0 or > 100 || decimal.Round(customerDiscountPercent, 4) != customerDiscountPercent)
+            throw new ArgumentException("Customer discount must be between zero and 100 with no more than four decimal places.");
+        if (startsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc <= startsAtUtc)
+            throw new ArgumentException("Customer Offer dates must be valid UTC dates.");
+        if (fundedLimit.Amount <= 0) throw new ArgumentException("Customer Offer funding is required.");
+        CustomerFacingSlogan = Clean(customerFacingSlogan, 160); CustomerDiscountPercent = customerDiscountPercent;
+        StartsAtUtc = startsAtUtc; EndsAtUtc = endsAtUtc; FundedLimit = fundedLimit; Version++;
+    }
+    public void SetReservedFunding(Money amount)
+    {
+        if (amount.Currency != FundedLimit.Currency || amount.Amount < UsedFunding.Amount)
+            throw new InvalidOperationException("Customer Offer reservation is invalid.");
+        ReservedFunding = amount;
+    }
+    public void Reactivate(BusinessWallet wallet, DateTime now, Guid correlation)
+    {
+        Ensure(UgcCustomerOfferStatus.Cancelled);
+        wallet.Reserve(FundedLimit, now, correlation); ReservedFunding = FundedLimit; Status = UgcCustomerOfferStatus.Active; Version++;
+    }
+
     public UgcCustomerOfferQuote Quote(Money purchase, DateTime now)
     {
         EnsureAvailable(now);

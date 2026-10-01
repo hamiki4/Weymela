@@ -71,7 +71,6 @@ test("Creator Promotion request returns to its original detail page after accept
   await page.getByLabel("Content due", { exact: true })
     .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
   await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
-  await page.getByLabel("Creator category", { exact: true }).fill("Food");
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget", { exact: true }).fill("1000");

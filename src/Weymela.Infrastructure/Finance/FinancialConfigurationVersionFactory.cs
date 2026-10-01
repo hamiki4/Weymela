@@ -29,7 +29,8 @@ public static class FinancialConfigurationVersionFactory
         return new FinancialConfigurationVersion(id, configurationId, version, changedBy,
             effectiveFromUtc, Price(PromotionType.ViewOnly, input.ViewOnly),
             Price(PromotionType.ViewPlusCommission, input.ViewPlusCommission),
-            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold), ugc, input.PromotionLiveDurationDays);
+            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold), ugc, input.PromotionLiveDurationDays,
+            input.EnforceAudienceRequirements);
     }
 
     private static Money Amount(decimal value)

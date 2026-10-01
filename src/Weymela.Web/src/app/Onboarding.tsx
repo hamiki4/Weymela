@@ -24,7 +24,8 @@ const choices = [
 ] as const;
 const socialPlatforms = ["TikTok", "YouTube", "Instagram", "Facebook"] as const;
 type SocialPlatform = typeof socialPlatforms[number];
-const emptySocial = (): Record<SocialPlatform, string> => ({ TikTok: "", YouTube: "", Instagram: "", Facebook: "" });
+type OnboardingSocial = { profileUrl: string; audience: string };
+const emptySocial = (): Record<SocialPlatform, OnboardingSocial> => ({ TikTok: { profileUrl: "", audience: "0" }, YouTube: { profileUrl: "", audience: "0" }, Instagram: { profileUrl: "", audience: "0" }, Facebook: { profileUrl: "", audience: "0" } });
 function publicRole(role: Enrollment["role"]): OnboardingRole | null {
   const name = actorRoleNameFromWire(role);
   return name === "Customer" || name === "Creator" || name === "Business" ? name : null;
@@ -84,8 +85,8 @@ function LegacyOnboarding() {
     navigate("/customer/offers", { replace: true });
   });
   const submitAdditional = (selected: "Creator" | "Business") => void action.run(async key => {
-    const socialProfiles = socialPlatforms.filter(platform => socialUrls[platform].trim())
-      .map(platform => ({ platform, profileUrl: socialUrls[platform].trim() }));
+    const socialProfiles = socialPlatforms.filter(platform => socialUrls[platform].profileUrl.trim())
+      .map(platform => ({ platform, profileUrl: socialUrls[platform].profileUrl.trim(), audienceCount: Number(socialUrls[platform].audience) || 0 }));
     if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
     await post("/onboarding/profile", { role: selected, displayName: displayName.trim(),
       region: region.trim() || null, category: null, submission: null,
@@ -175,14 +176,14 @@ function LegacyOnboarding() {
               {role === "Creator" && <div className="form-wide onboarding-social-profiles">
                 <h4>Social Profiles</h4><p>Add at least one public profile link.</p>
                 <CreatorSocialProfilesEditor
-                  profiles={socialPlatforms.filter(platform => socialUrls[platform].trim()).map(platform => ({ platform, profileUrl: socialUrls[platform] }))}
-                  onSave={(platform, profileUrl) => setSocialUrls(current => ({ ...current, [platform]: profileUrl }))}
-                  onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: "" }))}
+                  profiles={socialPlatforms.filter(platform => socialUrls[platform].profileUrl.trim()).map(platform => ({ platform, profileUrl: socialUrls[platform].profileUrl, selfReportedAudience: Number(socialUrls[platform].audience) || 0 }))}
+                  onSave={(platform, profileUrl, audience) => setSocialUrls(current => ({ ...current, [platform]: { profileUrl, audience: String(audience) } }))}
+                  onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: { profileUrl: "", audience: "0" } }))}
                 />
               </div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
-                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].trim()))}>
+                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
                   {action.busy ? "Submitting…" : "Submit for Review"}</Button></div>
             </div>
           </RoleOnboardingShell>}

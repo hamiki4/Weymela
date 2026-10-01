@@ -64,6 +64,9 @@ internal static class AdminEndpoints
             EndpointSupport.Id(await service.SettlePlatformAsync(EndpointSupport.Actor(c),new Money(input.Amount),input.Reference,EndpointSupport.Key(c),ct))).RequireAuthorization("PlatformAdmin");
         g.MapGet("/platform",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.PlatformAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         g.MapGet("/notifications",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.NotificationsAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/social-profiles/review",(HttpContext c,AdminSocialProfileReviewService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),ct));
+        g.MapPost("/social-profiles/{id:guid}/review",async(Guid id,AdminSocialProfileReviewInput input,HttpContext c,AdminSocialProfileReviewService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.ReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapGet("/ugc",async(HttpContext c,UgcService service,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);

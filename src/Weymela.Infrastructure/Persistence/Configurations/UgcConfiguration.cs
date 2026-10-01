@@ -144,6 +144,7 @@ internal sealed class CreatorSocialProfileRecordConfiguration : IEntityTypeConfi
     {
         b.ToTable("CreatorSocialProfiles", t => t.HasCheckConstraint("CK_CreatorSocialProfile_Audience", "\"SelfReportedAudience\" >= 0 AND (\"VerifiedAudience\" IS NULL OR \"VerifiedAudience\" >= 0)"));
         Mapping.Scalars(b); b.HasKey(x => x.Id);
+        b.Property(x => x.AudienceVerificationSource).HasMaxLength(64).IsRequired();
         b.HasIndex(x => new { x.CreatorId, x.Platform }).IsUnique().HasFilter("\"IsActive\""); Mapping.Version(b);
     }
 }

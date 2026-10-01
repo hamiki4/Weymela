@@ -34,16 +34,20 @@ public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformF
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent,
     int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
 public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal MinimumToCashOut, DateTime EffectiveFromUtc);
-public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available);
+public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available, long? MinimumAudience = null);
 public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
-    string VerificationStatus, long? VerifiedAudience);
+    string VerificationStatus, long? VerifiedAudience, string AudienceVerificationSource = "LegacyUnknown");
+public sealed record AdminSocialProfileReviewView(Guid Id, Guid CreatorId, string CreatorName, long? CreatorNumber,
+    string? CreatorPhotoKey, string Platform, string ProfileUrl, long SelfReportedAudience, long? VerifiedAudience,
+    string VerificationStatus, string AudienceVerificationSource);
+public sealed record AdminSocialProfileReviewInput(string Action, long? VerifiedAudience);
 public sealed record CampaignRow(Guid Id, string PublicId, Guid BusinessId, string Business, string Title, string Type,
     decimal CampaignBudget, decimal AssignedToCreators, decimal AvailableCampaignBudget, decimal Used, decimal Remaining,
     int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version, int PromotionLiveDurationDays, string? Slogan = null,
     string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null,
     DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
 public sealed record ApplicantCard(Guid Id, CreatorCard Creator, string Message, string? ContentConcept, string Status, DateTime AppliedAtUtc,
-    string? Platform = null);
+    string? Platform = null, CreatorSocialProfileView? SocialProfile = null);
 public sealed record CreatorBudgetCard(Guid Id, CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining,
     long Views, int Sales, string Status, long Version, bool CanIncrease);
 public sealed record BusinessCampaign(CampaignRow Campaign, string Description, string? Requirements, string? Category, string? Region,
@@ -118,7 +122,8 @@ public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal Pla
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null);
 public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceInput ViewPlusCommission, decimal CreatorCommissionPercent,
     decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold,
-    DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null, int PromotionLiveDurationDays = 30);
+    DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null, int PromotionLiveDurationDays = 30,
+    bool EnforceAudienceRequirements = false);
 public sealed record FinancialVersionInfo(Guid Id, int Version, DateTime EffectiveFromUtc, Guid ChangedBy, FinancialSettingsInput Settings);
 public sealed record FinancialSettingsWorkspace(FinancialSettingsInput Current, int Version, IReadOnlyList<FinancialVersionInfo> Versions);
 public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name, decimal Available, decimal Threshold, decimal PayAmount,
@@ -155,7 +160,7 @@ public sealed record ManualCheckoutChoice(Guid Id, string Source, string Label, 
 public sealed record ManualCheckoutResolution(IReadOnlyList<ManualCheckoutChoice> Offers);
 public sealed record ManualCheckoutConfirmInput(string CreatorId, string CustomerPhone, Guid OfferId, decimal PurchaseAmount);
 
-public sealed record PromotionPlatformInput(string Platform, int Capacity);
+public sealed record PromotionPlatformInput(string Platform, int Capacity, long? MinimumAudience = null);
 public sealed record CreateCampaignInput(string Title, string Description, string Type, decimal CampaignBudget, string? Requirements,
     string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime? StartUtc, DateTime EndUtc,
     string? Slogan = null, string? Location = null, IReadOnlyList<string>? Resources = null,
@@ -165,7 +170,10 @@ public sealed record DepositInput(decimal Amount, long ExpectedVersion);
 public sealed record FundingInput(long CampaignVersion, long WalletVersion);
 public sealed record VersionInput(long Version);
 public sealed record PromotionPresentationInput(string Description, string? Slogan, string? Location,
-    IReadOnlyList<string>? Resources, long Version);
+    IReadOnlyList<string>? Resources, long Version, string? Title = null, string? Type = null,
+    DateTime? StartUtc = null, DateTime? EndUtc = null, DateTime? ApplicationClosesAtUtc = null,
+    DateTime? ContentDueAtUtc = null, string? Requirements = null, string? Region = null,
+    IReadOnlyList<PromotionPlatformInput>? Platforms = null, decimal? CampaignBudget = null);
 public sealed record BudgetInput(decimal Amount, long Version);
 public sealed record JoinInput(string? Message, string? ContentConcept, string? Platform = null, Guid? CreatorSocialProfileId = null);
 public sealed record ContentInput(string Provider, string ExternalContentId);
@@ -176,7 +184,7 @@ public sealed record ConfirmPaymentInput(string Reference);
 public sealed record SettlementInput(decimal Amount, string Reference);
 
 public sealed record UgcPlatformRequirementInput(string Platform, string Format, long? MinimumAudience);
-public sealed record UgcPlatformCapacityInput(string Platform, int Capacity);
+public sealed record UgcPlatformCapacityInput(string Platform, int Capacity, long? MinimumAudience = null);
 public sealed record UgcPlatformCapacityView(string Platform, int Capacity, int Approved, int Available);
 public sealed record UgcEligibleSocialProfile(Guid Id, string Platform, string ProfileUrl);
 public sealed record CreateUgcInput(string Title, string? Slogan, string ContentType, string Instructions,

@@ -19,11 +19,12 @@ public sealed class FinancialConfigurationVersion
     public Money CreatorPayoutThreshold { get; private set; }
     public Money CustomerPayoutThreshold { get; private set; }
     public int PromotionLiveDurationDays { get; private set; }
+    public bool EnforceAudienceRequirements { get; private set; }
 
     public FinancialConfigurationVersion(Guid id, Guid configurationId, int version, Guid changedBy,
         DateTime effectiveFromUtc, PricingSnapshot viewOnly, PricingSnapshot hybrid,
         Money creatorThreshold, Money customerThreshold, UgcPricingSnapshot? ugc = null,
-        int promotionLiveDurationDays = 30)
+        int promotionLiveDurationDays = 30, bool enforceAudienceRequirements = false)
     {
         if (version <= 0 || creatorThreshold.Amount <= 0 || customerThreshold.Amount <= 0)
             throw new ArgumentException("Version and payout thresholds must be positive.");
@@ -39,6 +40,7 @@ public sealed class FinancialConfigurationVersion
         if (!Ugc.IsValid) throw new ArgumentException("Invalid UGC financial configuration.");
         CreatorPayoutThreshold = creatorThreshold; CustomerPayoutThreshold = customerThreshold;
         PromotionLiveDurationDays = promotionLiveDurationDays;
+        EnforceAudienceRequirements = enforceAudienceRequirements;
     }
 
     private static void Validate(PricingSnapshot p, PromotionType type)

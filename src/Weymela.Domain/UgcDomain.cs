@@ -142,7 +142,8 @@ public sealed class UgcOpportunity
         DateTime now, IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities = null,
         DateTime? applicationClosesAtUtc = null)
     {
-        Ensure(UgcOpportunityStatus.Draft);
+        Ensure(UgcOpportunityStatus.Draft, UgcOpportunityStatus.Open, UgcOpportunityStatus.InProgress);
+        if (ApprovedCreatorCount > 0) throw new InvalidOperationException("UGC terms are locked because a Creator has been approved.");
         if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120) throw new ArgumentException("UGC title is required.");
         if (string.IsNullOrWhiteSpace(instructions) || instructions.Trim().Length > 4000) throw new ArgumentException("UGC instructions are required.");
         if (dueDateUtc.Kind != DateTimeKind.Utc || dueDateUtc <= now) throw new ArgumentException("UGC due date must be in the future.");
@@ -160,17 +161,23 @@ public sealed class UgcOpportunity
         RequiredFunding = new Money(creatorPayment.Amount * creatorCapacity, creatorPayment.Currency);
         if (PricingSnapshot.MinimumUgcBudget is { } minimum && RequiredFunding.Amount < minimum.Amount)
             throw new InvalidOperationException("UGC funding is below the current minimum.");
-        // Draft terms are revised in place because the runtime API has no
-        // DELETE privilege on either child table. Inactive rows retain zero
-        // capacity and cannot consume or advertise a Creator slot.
+        // Child rows are revised in place. Removed platforms retain an inactive
+        // zero-capacity row so pending requests cannot become approvable.
         foreach (var item in requirements)
         {
             var existing = platformRequirements.SingleOrDefault(x => x.Platform == item.Platform);
             if (existing is null) platformRequirements.Add(new(Id, item.Platform, item.Format.Trim(), item.MinimumAudience));
-            else if (existing.Format != item.Format.Trim() || existing.MinimumAudience != item.MinimumAudience)
-                throw new InvalidOperationException("Existing UGC posting terms cannot be rewritten in this draft.");
+            else existing.Revise(item.Format.Trim(), item.MinimumAudience);
         }
+        foreach (var existing in platformRequirements.Where(x => requirements.All(item => item.Platform != x.Platform)).ToArray())
+            existing.Revise("Inactive", 0);
         ReviseCapacities(capacities, creatorCapacity);
+    }
+    public void SetReservedFunding(Money amount)
+    {
+        if (amount.Currency != CreatorPayment.Currency || amount.Amount < UsedFunding.Amount)
+            throw new InvalidOperationException("UGC reservation is invalid.");
+        ReservedFunding = amount;
     }
     private void SetCapacities(IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? capacities, int total)
     {
@@ -222,9 +229,11 @@ public sealed class UgcPlatformRequirement
 {
     private UgcPlatformRequirement() { Format = null!; }
     public Guid Id { get; } = Guid.NewGuid(); public Guid UgcOpportunityId { get; }
-    public CreatorPlatform Platform { get; } public string Format { get; } public long? MinimumAudience { get; }
+    public CreatorPlatform Platform { get; } public string Format { get; private set; } public long? MinimumAudience { get; private set; }
     public UgcPlatformRequirement(Guid ugcOpportunityId, CreatorPlatform platform, string format, long? minimumAudience)
     { UgcOpportunityId = ugcOpportunityId; Platform = platform; Format = format; MinimumAudience = minimumAudience; }
+    public void Revise(string format, long? minimumAudience)
+    { if (string.IsNullOrWhiteSpace(format) || format.Trim().Length > 80 || minimumAudience is < 0) throw new ArgumentException("UGC platform requirement is invalid."); Format = format.Trim(); MinimumAudience = minimumAudience is 0 ? null : minimumAudience; }
 }
 
 public sealed class UgcPlatformCapacity

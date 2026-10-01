@@ -93,6 +93,11 @@ function SettingsForm({
       }}
     >
       <fieldset disabled={action.busy}>
+        <Section title="Audience enforcement" description="Off allows Creators to apply regardless of audience size. On enforces Admin-verified audience requirements.">
+          <label className="check-row"><input type="checkbox" checked={settings.enforceAudienceRequirements}
+            onChange={e => set({ ...settings, enforceAudienceRequirements: e.target.checked })} />
+            <span>Enforce audience requirements</span></label>
+        </Section>
         <Section
           title="View Pricing"
           description="Business Pays must equal Creator Earns plus Platform Keeps."

@@ -38,6 +38,7 @@ import {
 import { AdminAccountCreate, AdminAccountDetail, AdminAccounts } from "../features/admin/AdminAccounts";
 import { AdminMore } from "../features/admin/AdminMore";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
+import { AdminSocialProfileReview } from "../features/admin/SocialProfileReview";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
 import { AdminReportsPage, AdminUgcPage, AdminWalletsPage, OperationsWalletsPage } from "../features/admin/AdminFinancePages";
 import {
@@ -179,6 +180,7 @@ export function App() {
           <Route path="/admin/settings" element={<AdminFinancialSettings />} />
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
+          <Route path="/admin/social-profiles" element={<AdminSocialProfileReview />} />
         </Route>
         <Route element={<RoleGate roles={["OperationsAdmin"]} />}>
           <Route path="/admin/operations" element={<OperationsDashboard />} />
@@ -195,6 +197,7 @@ export function App() {
           <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
           <Route path="/admin/payouts" element={<AdminPayouts />} />
           <Route path="/admin/notifications" element={<Navigate to="/notifications" replace />} />
+          <Route path="/admin/social-profiles" element={<AdminSocialProfileReview />} />
         </Route>
         <Route element={<RoleGate roles={["Customer"]} />}>
           <Route path="/customer/offers" element={<CustomerOffers />} />

@@ -39,6 +39,7 @@ internal sealed class PromotionPlatformConfiguration : IEntityTypeConfiguration<
         b.ToTable("PromotionPlatforms", t =>
         {
             t.HasCheckConstraint("CK_PromotionPlatform_Capacity", "\"Capacity\" > 0 AND \"ApprovedCount\" >= 0 AND \"ApprovedCount\" <= \"Capacity\"");
+            t.HasCheckConstraint("CK_PromotionPlatform_Audience", "\"MinimumAudience\" IS NULL OR \"MinimumAudience\" >= 0");
         });
         Mapping.Scalars(b, "Available"); b.HasKey(x => x.Id);
         b.HasIndex(x => new { x.PromotionId, x.Platform }).IsUnique();

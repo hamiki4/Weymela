@@ -35,7 +35,7 @@ public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDire
     private async Task<CampaignRow> Row(Promotion p,CancellationToken ct) => new(p.Id,p.PublicPromotionId,p.BusinessId,
         (await directory.BusinessCardAsync(p.BusinessId,ct)).DisplayName,p.Title,PromotionTypeLabel(p.PromotionType),p.TotalBudget.Amount,p.AllocatedBudget.Amount,
         p.UnallocatedBudget.Amount,p.UsedBudget.Amount,p.RemainingBudget.Amount,p.Allocations.Count,p.StartDateUtc,p.EndDateUtc,PromotionStatusLabel(p.Status),p.Version,p.PromotionLiveDurationDays,
-        p.Slogan,p.Location,p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available)).ToArray(),
+        p.Slogan,p.Location,p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available,x.MinimumAudience)).ToArray(),
         p.ApplicationClosesAtUtc,p.ContentDueAtUtc);
     private async Task<IReadOnlyList<ActivityItem>> History(Guid? campaign,CancellationToken ct)
     {

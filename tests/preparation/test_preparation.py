@@ -93,7 +93,7 @@ class RepositoryGateTests(unittest.TestCase):
     def test_source_migration_order_includes_approved_creator_photo_reference(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos', '20260930210000_AddAgreementDeadlines'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos', '20260930210000_AddAgreementDeadlines', '20261001043831_AddAdminVerifiedAudienceAndEnforcement'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -529,7 +529,8 @@ class ReleaseIntegrityTests(unittest.TestCase):
             '20260929022846_BindUgcSaleAssignments',
             '20260929203557_AddUgcPlatformCapacities',
             '20260930031549_AddCreatorProfilePhotos',
-            '20260930210000_AddAgreementDeadlines']
+            '20260930210000_AddAgreementDeadlines',
+            '20261001043831_AddAdminVerifiedAudienceAndEnforcement']
         migration = {'commit':commit, 'migrationOrder':order,
                      'grantContracts':{
                          'from':{'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',

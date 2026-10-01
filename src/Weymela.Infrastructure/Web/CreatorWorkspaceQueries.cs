@@ -16,7 +16,7 @@ public sealed partial class WorkspaceQueries
             .Where(x=>x.CreatorId==actor.CreatorId&&x.IsActive)
             .OrderBy(x=>x.Platform)
             .Select(x=>new CreatorSocialProfileView(x.Id,x.Platform.ToString(),x.ProfileUrl,
-                x.SelfReportedAudience,x.VerificationStatus,x.VerifiedAudience))
+                x.SelfReportedAudience,x.VerificationStatus,x.VerifiedAudience,x.AudienceVerificationSource))
             .ToListAsync(ct);
     }
     public async Task<IReadOnlyList<CreatorRequestCard>> CreatorRequestsAsync(Actor actor,CancellationToken ct)
@@ -51,6 +51,7 @@ public sealed partial class WorkspaceQueries
     public async Task<IReadOnlyList<CampaignOpportunity>> DiscoverAsync(Actor actor,CancellationToken ct)
     {
         await DemandCreator(actor,ct);var creator=await directory.CreatorCardAsync(actor.CreatorId!.Value,ct);
+        var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct)).EnforceAudienceRequirements;
         var profile=new CreatorVerifiedProfile(creator.Category,creator.Region,creator.VerifiedFollowers,creator.SocialVerified);
         var campaigns=await db.Promotions.AsNoTracking().Include(x=>x.Allocations).Include(x=>x.Platforms).Where(x=>(x.Status==PromotionStatus.Published||x.Status==PromotionStatus.Active)&&x.EndDateUtc>Now).ToListAsync(ct);
         var socials=await db.CreatorSocialProfiles.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId&&x.IsActive).ToListAsync(ct);
@@ -66,12 +67,12 @@ public sealed partial class WorkspaceQueries
             var request=requests.FirstOrDefault(x=>x.PromotionId==p.Id);
             var allPlatformsFull=p.Platforms.Count>0&&p.Platforms.All(slot=>slot.Available<=0);
             if(p.UnallocatedBudget.Amount<=0&&request is null&&!allPlatformsFull)continue;
-            var eligibleSocials=socials.Where(s=>s.VerificationStatus=="Verified"&&p.Platforms.Any(slot=>slot.Platform==s.Platform&&slot.Available>0)).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience)).ToArray();
+            var eligibleSocials=socials.Where(s=>p.Platforms.Any(slot=>slot.Available>0 && SocialAudienceEligibility.Matches(s,slot.Platform,slot.MinimumAudience,enforceAudience))).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience,s.AudienceVerificationSource)).ToArray();
             if(p.Platforms.Count>0&&eligibleSocials.Length==0&&request is null&&!allPlatformsFull)continue;
             result.Add(new(p.Id,p.PublicPromotionId,businessCards[p.BusinessId],p.Title,p.Description,PromotionTypeLabel(p.PromotionType),
                 p.Eligibility.Requirements,p.Eligibility.Category,p.Eligibility.Market,p.Eligibility.MinimumVerifiedFollowers,p.StartDateUtc,p.EndDateUtc,
                 p.PromotionLiveDurationDays,CreatorPrice(p.PricingSnapshot),request?.Status.ToString(),"Your Creator profile meets this Promotion's requirements.",p.Slogan,p.Location,
-                p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available)).ToArray(),eligibleSocials,
+                p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available,x.MinimumAudience)).ToArray(),eligibleSocials,
                 p.Platforms.Sum(x=>x.ApprovedCount),p.Platforms.Sum(x=>x.Capacity),p.ApplicationClosesAtUtc,p.ContentDueAtUtc));
         }
         return result;

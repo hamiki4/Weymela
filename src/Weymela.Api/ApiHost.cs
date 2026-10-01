@@ -45,7 +45,7 @@ public static class ApiHost
         builder.Services.AddScoped<AccountDeletionService>();
         builder.Services.AddScoped<AccountIdentityDeletionProcessor>();
         builder.Services.AddHostedService<AccountDeletionBackgroundService>();
-        builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();builder.Services.AddScoped<CreatorSocialProfileLinks>();
+        builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();builder.Services.AddScoped<CreatorSocialProfileLinks>();builder.Services.AddScoped<AdminSocialProfileReviewService>();
         builder.Services.AddScoped<UgcService>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddSingleton<PrivateReceiptStore>();

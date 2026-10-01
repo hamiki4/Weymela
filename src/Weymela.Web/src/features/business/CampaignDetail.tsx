@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
 import { PlatformOccupancy } from "../creator/CreatorPlatformIcon";
+import { PlatformCapacityPicker, type PlatformCapacity } from "./PlatformCapacityPicker";
 import type {
   Applicant,
   BusinessCampaign,
@@ -49,6 +50,16 @@ export function BusinessCampaignDetail() {
   const [editDescription, setEditDescription] = useState("");
   const [editSlogan, setEditSlogan] = useState("");
   const [editLocation, setEditLocation] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editType, setEditType] = useState("ViewOnly");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editCloses, setEditCloses] = useState("");
+  const [editDue, setEditDue] = useState("");
+  const [editRequirements, setEditRequirements] = useState("");
+  const [editRegion, setEditRegion] = useState("");
+  const [editBudget, setEditBudget] = useState("");
+  const [editPlatforms, setEditPlatforms] = useState<PlatformCapacity[]>([]);
   const [success, setSuccess] = useState("");
   const changed = (message: string) => {
     setSuccess(message);
@@ -58,6 +69,14 @@ export function BusinessCampaignDetail() {
     setEditDescription(campaign.description);
     setEditSlogan(campaign.campaign.slogan ?? "");
     setEditLocation(campaign.campaign.location ?? "");
+    setEditTitle(campaign.campaign.title);
+    setEditType(campaign.campaign.type);
+    const local = (value?: string | null) => value ? new Date(value).toISOString().slice(0, 16) : "";
+    setEditStart(local(campaign.campaign.startUtc)); setEditEnd(local(campaign.campaign.endUtc));
+    setEditCloses(local(campaign.campaign.applicationClosesAtUtc)); setEditDue(local(campaign.campaign.contentDueAtUtc));
+    setEditRequirements(campaign.requirements ?? ""); setEditRegion(campaign.region ?? "");
+    setEditBudget(String(campaign.campaign.campaignBudget));
+    setEditPlatforms((campaign.campaign.platforms ?? []).map(row => ({ platform: row.platform, capacity: row.capacity, minimumAudience: row.minimumAudience ?? null })));
     setEditOpen(true);
   };
   const run = (path: string, body: unknown, message: string) =>
@@ -69,6 +88,8 @@ export function BusinessCampaignDetail() {
     <Resource resource={resource}>
       {(data) => {
         const c = data.campaign;
+        const approvedCount = Math.max(c.creatorCount, data.creators.length, c.platforms?.reduce((total, slot) => total + slot.approved, 0) ?? 0);
+        const hasApproved = approvedCount > 0;
         const funds: [string, number][] = [
           ["Promotion budget", c.campaignBudget],
           ["Assigned to Creators", c.assignedToCreators],
@@ -197,6 +218,8 @@ export function BusinessCampaignDetail() {
                         {a.creator.region} ·{" "}
                         {count(a.creator.verifiedFollowers)} verified followers
                       </p>
+                      {a.socialProfile && <p className="fine-print"><strong>{a.platform}</strong> · <a href={a.socialProfile.profileUrl} target="_blank" rel="noreferrer">{a.socialProfile.profileUrl}</a><br />
+                        Self-reported: {count(a.socialProfile.selfReportedAudience)} · Admin-verified: {a.socialProfile.verifiedAudience == null ? "Not verified" : count(a.socialProfile.verifiedAudience)}{a.socialProfile.audienceVerificationSource === "AdminVerified" ? " · Admin Verified" : ""}</p>}
                       {a.message?.trim() && <p className="preserve-lines">{a.message}</p>}
                       {a.contentConcept && (
                         <div className="pricing-note">
@@ -380,11 +403,25 @@ export function BusinessCampaignDetail() {
               </div>
             )}
             <Dialog title="Edit Promotion details" open={editOpen} onClose={() => { if (!action.busy) setEditOpen(false); }}>
-              <p className="muted">Descriptive changes create an audit revision. Type, dates, pricing, funding, and Creator agreements remain protected.</p>
+              <p className="muted">{hasApproved ? "Some terms are locked because a Creator has been approved." : "You can update the full Promotion while no Creator is approved. Pending applications do not lock editing."}</p>
               <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void action.run(async key => {
-                await post(`/business/promotions/${id}/update`, { description: editDescription, slogan: editSlogan || null, location: editLocation || null, resources: null, version: c.version }, key);
+                const iso = (value: string) => value ? new Date(value).toISOString() : null;
+                await post(`/business/promotions/${id}/update`, { description: editDescription, slogan: editSlogan || null, location: editLocation || null, resources: null, version: c.version,
+                  ...(hasApproved ? {} : { title: editTitle, type: editType, startUtc: iso(editStart), endUtc: iso(editEnd), applicationClosesAtUtc: iso(editCloses), contentDueAtUtc: iso(editDue), requirements: editRequirements || null, region: editRegion || null, platforms: editPlatforms, campaignBudget: Number(editBudget) }) }, key);
                 setEditOpen(false); changed("Promotion details updated.");
               }); }}>
+                {!hasApproved && <>
+                  <Field label="Promotion title" wide><input value={editTitle} onChange={event => setEditTitle(event.target.value)} maxLength={120} required /></Field>
+                  <Field label="Promotion type"><select value={editType} onChange={event => setEditType(event.target.value)}><option value="ViewOnly">View Only</option><option value="ViewPlusCommission">View + Sale</option></select></Field>
+                  <Field label="Promotion budget"><MoneyInput value={editBudget} onChange={event => setEditBudget(event.target.value)} /></Field>
+                  <Field label="Starts"><input type="datetime-local" value={editStart} onChange={event => setEditStart(event.target.value)} required /></Field>
+                  <Field label="Ends"><input type="datetime-local" value={editEnd} onChange={event => setEditEnd(event.target.value)} required /></Field>
+                  <Field label="Application closes"><input type="datetime-local" value={editCloses} onChange={event => setEditCloses(event.target.value)} /></Field>
+                  <Field label="Content due"><input type="datetime-local" value={editDue} onChange={event => setEditDue(event.target.value)} /></Field>
+                  <Field label="Region"><input value={editRegion} onChange={event => setEditRegion(event.target.value)} maxLength={80} /></Field>
+                  <Field label="Requirements" wide><textarea value={editRequirements} onChange={event => setEditRequirements(event.target.value)} maxLength={2000} rows={3} /></Field>
+                  <PlatformCapacityPicker value={editPlatforms} onChange={setEditPlatforms} title="Creators / platforms" />
+                </>}
                 <Field label="Description" wide><textarea value={editDescription} onChange={event => setEditDescription(event.target.value)} maxLength={3000} rows={5} required /></Field>
                 <Field label="Slogan"><input value={editSlogan} onChange={event => setEditSlogan(event.target.value)} maxLength={160} /></Field>
                 <Field label="Location"><input value={editLocation} onChange={event => setEditLocation(event.target.value)} maxLength={160} /></Field>

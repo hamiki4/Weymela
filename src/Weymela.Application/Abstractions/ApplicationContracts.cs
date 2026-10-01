@@ -28,6 +28,7 @@ public enum AdministrativeCapability
     PlatformReconciliation,
     PlatformAccountManagement,
     PlatformPromotionalFunding,
+    CreatorSocialProfileReview,
     PlatformRoleGrant,
     ProtectedPlatformVariables
 }
@@ -50,7 +51,8 @@ public sealed record AdministrativeAuthority(ActorRole Role)
             AdministrativeCapability.CampaignOperationalVisibility or
             AdministrativeCapability.UgcOperationalVisibility or
             AdministrativeCapability.CreatorPayoutProcessing or
-            AdministrativeCapability.CustomerPayoutProcessing;
+            AdministrativeCapability.CustomerPayoutProcessing or
+            AdministrativeCapability.CreatorSocialProfileReview;
 
     public static AdministrativeAuthority For(RealActor actor) => new(actor.Role);
 

@@ -20,12 +20,9 @@ for (const width of [375, 1366])
     await page.getByLabel("Application closes", { exact: true }).fill(closes);
     await page.getByLabel("Content due", { exact: true }).fill(due);
     await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
-    await page.getByLabel("Creator category", { exact: true }).fill("Food");
     await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
-    await page
-      .getByLabel("Minimum verified followers", { exact: true })
-      .fill("1000");
     await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
+    await page.getByLabel("Minimum followers", { exact: true }).first().fill("1000");
     await layout(page);
     await screenshot(page, `${width}-flow-creator-requirements`);
     await page.getByLabel("Promotion budget", { exact: true }).fill("1000");

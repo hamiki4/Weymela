@@ -3,7 +3,7 @@ namespace Weymela.Application;
 public sealed record CreatePromotionCommand(Actor Actor, string Title, string Description, PromotionType Type, Money TotalBudget,
     CreatorEligibilityCriteria Eligibility, DateTime StartDateUtc, DateTime EndDateUtc, DateTime Now,
     string? Slogan = null, string? Location = null, string? ResourcesJson = null,
-    IReadOnlyCollection<(CreatorPlatform Platform, int Capacity)>? Platforms = null,
+    IReadOnlyCollection<(CreatorPlatform Platform, int Capacity, long? MinimumAudience)>? Platforms = null,
     DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
 public sealed record FundPromotionCommand(Actor Actor, Guid PromotionId, long ExpectedPromotionVersion, long ExpectedWalletVersion, string IdempotencyKey, DateTime Now);
 public sealed record PublishPromotionCommand(Actor Actor, Guid PromotionId, long ExpectedVersion, DateTime Now);

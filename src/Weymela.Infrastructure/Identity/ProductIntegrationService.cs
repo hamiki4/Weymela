@@ -409,13 +409,16 @@ public sealed class ProductIntegrationService(WeymelaDbContext db, ProductIntegr
                 {
                     CreatorId = creatorId, Platform = social.Platform, ProfileUrl = social.Url,
                     SelfReportedAudience = social.Audience, VerificationStatus = social.Status,
-                    VerifiedAudience = social.Verified, IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now
+                    VerifiedAudience = null, AudienceVerificationSource = social.Status == "SelfReported" ? "SelfReported" : "LegacyUnknown",
+                    IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now
                 });
             }
             else
             {
                 row.ProfileUrl = social.Url; row.SelfReportedAudience = social.Audience;
-                row.VerificationStatus = social.Status; row.VerifiedAudience = social.Verified;
+                row.VerificationStatus = social.Status;
+                row.AudienceVerificationSource = social.Status == "SelfReported" ? "SelfReported" : "LegacyUnknown";
+                row.VerifiedAudience = row.AudienceVerificationSource == "AdminVerified" ? social.Verified : null;
                 row.IsActive = true; row.UpdatedAtUtc = now;
             }
         }

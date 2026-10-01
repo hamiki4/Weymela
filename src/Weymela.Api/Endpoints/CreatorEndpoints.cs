@@ -7,7 +7,7 @@ namespace Weymela.Api.Endpoints;
 
 internal static class CreatorEndpoints
 {
-    private sealed record SocialProfileLinkInput(string ProfileUrl);
+    private sealed record SocialProfileLinkInput(string ProfileUrl, long Audience = 0);
     private static CreatorPlatform Platform(string value)
         => Enum.TryParse<CreatorPlatform>(value, true, out var platform) && Enum.IsDefined(platform)
             ? platform : throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation, "Choose a supported social platform.");
@@ -17,7 +17,7 @@ internal static class CreatorEndpoints
         g.MapGet("/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorHomeAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/social-accounts",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorSocialAccountsAsync(EndpointSupport.Actor(c),ct));
         g.MapPost("/social-profiles/{platform}",async(string platform,SocialProfileLinkInput input,HttpContext c,CreatorSocialProfileLinks links,CancellationToken ct)=>
-            Results.Ok(new { id = await links.SaveAsync(EndpointSupport.Actor(c),Platform(platform),input.ProfileUrl,ct) }));
+            Results.Ok(new { id = await links.SaveAsync(EndpointSupport.Actor(c),Platform(platform),input.ProfileUrl,input.Audience,ct) }));
         g.MapDelete("/social-profiles/{platform}",async(string platform,HttpContext c,CreatorSocialProfileLinks links,CancellationToken ct)=>
         { await links.RemoveAsync(EndpointSupport.Actor(c),Platform(platform),ct);return Results.NoContent(); });
         g.MapGet("/requests",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorRequestsAsync(EndpointSupport.Actor(c),ct));

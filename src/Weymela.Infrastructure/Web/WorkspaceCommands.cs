@@ -34,12 +34,12 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             || (input.ContentDueAtUtc is { } due && due.Kind != DateTimeKind.Utc)
             || (input.ApplicationClosesAtUtc is { } close && input.ContentDueAtUtc is { } content && close >= content))
             throw new ApplicationFailure(FailureKind.Validation,"Check the follower requirement and Promotion dates.");
-        var platforms=new List<(CreatorPlatform Platform,int Capacity)>();
+        var platforms=new List<(CreatorPlatform Platform,int Capacity,long? MinimumAudience)>();
         foreach(var row in input.Platforms??[])
         {
-            if(!Enum.TryParse<CreatorPlatform>(row.Platform,true,out var platform)||!Enum.IsDefined(platform)||row.Capacity is <1 or >100)
+            if(!Enum.TryParse<CreatorPlatform>(row.Platform,true,out var platform)||!Enum.IsDefined(platform)||row.Capacity is <1 or >100||row.MinimumAudience is <0)
                 throw new ApplicationFailure(FailureKind.Validation,"Choose supported Promotion platforms and valid Creator capacity.");
-            platforms.Add((platform,row.Capacity));
+            platforms.Add((platform,row.Capacity,row.MinimumAudience is 0 ? null : row.MinimumAudience));
         }
         if(platforms.GroupBy(x=>x.Platform).Any(x=>x.Count()>1))throw new ApplicationFailure(FailureKind.Validation,"Add each Promotion platform once.");
         var resources=(input.Resources??[]).Where(x=>!string.IsNullOrWhiteSpace(x)).Select(SafeExternalUrl).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -65,15 +65,88 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
         new EfUnitOfWork(db,System.Data.IsolationLevel.Serializable).ExecuteAsync(async token=>
         {
             await Business(actor,token);
-            var fingerprint=RequestFingerprint.Create(id.ToString(),input.Description,input.Slogan??"",input.Location??"",JsonSerializer.Serialize(input.Resources),input.Version.ToString());
+            var fingerprint=RequestFingerprint.Create(id.ToString(),JsonSerializer.Serialize(input),input.Version.ToString());
             var op=new FinancialOperation(db);var replay=await op.Replay(actor,"UpdatePromotion",key,fingerprint,token);if(replay is not null)return Guid.Parse(replay);
             var promotion=await new PromotionRepository(db).GetAsync(id,token)??throw new ApplicationFailure(FailureKind.NotFound,"Promotion not found.");
             if(promotion.BusinessId!=actor.BusinessId)throw new ApplicationFailure(FailureKind.Forbidden,"This Promotion belongs to another Business.");
             if(promotion.Version!=input.Version)throw new ApplicationFailure(FailureKind.ConcurrencyConflict,"Promotion changed. Reload before trying again.");
             var resources=input.Resources is null ? promotion.ResourcesJson : JsonSerializer.Serialize(input.Resources.Where(x=>!string.IsNullOrWhiteSpace(x)).Select(SafeExternalUrl).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
-            promotion.UpdatePresentation(input.Description,Clean(input.Slogan),Clean(input.Location),resources);
+            var material = input.Title is not null || input.Type is not null || input.StartUtc is not null || input.EndUtc is not null
+                || input.ApplicationClosesAtUtc is not null || input.ContentDueAtUtc is not null || input.Requirements is not null
+                || input.Region is not null || input.Platforms is not null || input.CampaignBudget is not null;
+            if (!material)
+            {
+                promotion.UpdatePresentation(input.Description,Clean(input.Slogan),Clean(input.Location),resources);
+            }
+            else
+            {
+                if (promotion.Allocations.Count > 0)
+                    throw new ApplicationFailure(FailureKind.Validation,"Some terms are locked because a Creator has been approved.");
+                if (promotion.Status is not (PromotionStatus.Funded or PromotionStatus.Published or PromotionStatus.Active))
+                    throw new ApplicationFailure(FailureKind.Validation,"Only funded or published Promotions can be edited here.");
+                var type = promotion.PromotionType;
+                if (input.Type is { } requestedType)
+                {
+                    var normalized = requestedType.Replace("&","").Replace(" ","");
+                    type = normalized.Equals("ViewSale",StringComparison.OrdinalIgnoreCase) || normalized.Equals("ViewAndSale",StringComparison.OrdinalIgnoreCase)
+                        ? PromotionType.ViewPlusCommission
+                        : normalized.Equals("ViewOnly",StringComparison.OrdinalIgnoreCase) ? PromotionType.ViewOnly
+                        : Enum.TryParse<PromotionType>(requestedType,true,out var parsed) && Enum.IsDefined(parsed) ? parsed
+                        : throw new ApplicationFailure(FailureKind.Validation,"Choose View Only or View & Sale.");
+                }
+                var resolver = new FinancialConfigurationResolver(db);
+                var pricing = input.Type is null ? promotion.PricingSnapshot : await resolver.ResolveAsync(type,Now,token);
+                var platforms = input.Platforms is null
+                    ? promotion.Platforms.Select(x => (x.Platform,x.Capacity,x.MinimumAudience)).ToArray()
+                    : input.Platforms.Select(row =>
+                    {
+                        if (!Enum.TryParse<CreatorPlatform>(row.Platform,true,out var platform) || !Enum.IsDefined(platform) || row.Capacity is < 1 or > 100 || row.MinimumAudience is < 0)
+                            throw new ApplicationFailure(FailureKind.Validation,"Choose supported Promotion platforms and valid Creator capacity.");
+                        return (platform,row.Capacity,row.MinimumAudience is 0 ? null : row.MinimumAudience);
+                    }).ToArray();
+                if (platforms.Length == 0 || platforms.GroupBy(x=>x.Item1).Any(x=>x.Count()>1))
+                    throw new ApplicationFailure(FailureKind.Validation,"Add each Promotion platform once.");
+                var start = input.StartUtc ?? promotion.StartDateUtc;
+                var end = input.EndUtc ?? promotion.EndDateUtc;
+                if (start.Kind != DateTimeKind.Utc || end.Kind != DateTimeKind.Utc || end <= start)
+                    throw new ApplicationFailure(FailureKind.Validation,"Check the Promotion dates.");
+                var budget = input.CampaignBudget is { } requestedBudget ? Amount(requestedBudget) : promotion.TotalBudget;
+                if (budget.Amount <= 0) throw new ApplicationFailure(FailureKind.Validation,"Promotion budget must be positive.");
+                var previousPlatforms = promotion.Platforms.ToArray();
+                var previousReserved = promotion.ReservedBudget;
+                promotion.ReviseBeforeApproval(input.Title ?? promotion.Title, input.Description, type, budget,
+                    new CreatorEligibilityCriteria(null,null,Clean(input.Region) ?? promotion.Eligibility.Market,Clean(input.Requirements) ?? promotion.Eligibility.Requirements),
+                    start,end,pricing,Clean(input.Slogan) ?? promotion.Slogan,Clean(input.Location) ?? promotion.Location,resources,
+                    platforms,input.ApplicationClosesAtUtc ?? promotion.ApplicationClosesAtUtc,input.ContentDueAtUtc ?? promotion.ContentDueAtUtc);
+                foreach (var removed in previousPlatforms.Where(old => promotion.Platforms.All(current => current.Id != old.Id))) db.PromotionPlatforms.Remove(removed);
+                var wallet = await db.BusinessWallets.SingleAsync(x=>x.BusinessId==promotion.BusinessId,token);
+                var delta = budget.Amount - previousReserved.Amount;
+                var adjustmentCorrelation = Guid.NewGuid();
+                if (delta > 0)
+                {
+                    var adjustment = new Money(delta,budget.Currency); wallet.ReserveForPromotion(adjustment,Now,adjustmentCorrelation); promotion.SetReservedBudget(previousReserved.Add(adjustment));
+                    var journal=PromotionAdjustmentJournal(actor,adjustment,"BusinessAvailable","CampaignUnallocatedReserve",key,adjustmentCorrelation,promotion.Id);
+                    db.WalletEntries.Add(new(Guid.NewGuid(),promotion.BusinessId,promotion.Id,adjustment,"ReserveAdjustment",journal.Id,Now));
+                    db.PromotionBudgetEntries.Add(new(Guid.NewGuid(),promotion.Id,null,adjustment,"Increased",journal.Id,Now));
+                }
+                else if (delta < 0)
+                {
+                    var adjustment = new Money(-delta,budget.Currency); wallet.ReleasePromotionReserve(adjustment,Now,adjustmentCorrelation); promotion.SetReservedBudget(previousReserved.Subtract(adjustment));
+                    var journal=PromotionAdjustmentJournal(actor,adjustment,"CampaignUnallocatedReserve","BusinessAvailable",key,adjustmentCorrelation,promotion.Id);
+                    db.WalletEntries.Add(new(Guid.NewGuid(),promotion.BusinessId,promotion.Id,adjustment,"ReleaseAdjustment",journal.Id,Now));
+                    db.PromotionBudgetEntries.Add(new(Guid.NewGuid(),promotion.Id,null,adjustment,"Released",journal.Id,Now));
+                }
+            }
             var correlation=Guid.NewGuid();op.Remember(actor,"UpdatePromotion",key,fingerprint,id.ToString(),Now);op.Audit(actor,"PromotionUpdated",correlation,Now,id);op.Event("PromotionUpdated",new{PromotionId=id,promotion.BusinessId},Now);return id;
         },ct);
+
+    private FinancialJournal PromotionAdjustmentJournal(Actor actor, Money amount, string debit, string credit, string key, Guid correlation, Guid promotionId)
+    {
+        var journal = new FinancialJournal(Guid.NewGuid().ToString("N"),correlation,actor.UserId,JournalSourceType.PromotionReservation,Now,key);
+        journal.AddLine(JournalLineType.Debit,amount,debit); journal.AddLine(JournalLineType.Credit,amount,credit); journal.Post();
+        db.FinancialJournals.Add(journal); db.Entry(journal).Property("BusinessId").CurrentValue=actor.BusinessId; db.Entry(journal).Property("PromotionId").CurrentValue=promotionId;
+        return journal;
+    }
     public Task<Guid> CancelPromotionAsync(Actor actor,Guid id,VersionInput input,string key,CancellationToken ct)=>
         new EfUnitOfWork(db,System.Data.IsolationLevel.Serializable).ExecuteAsync(async token=>
         {
@@ -108,7 +181,7 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
         if(!string.IsNullOrWhiteSpace(input.Platform))
         {if(!Enum.TryParse<CreatorPlatform>(input.Platform,true,out var parsed)||!Enum.IsDefined(parsed))throw new ApplicationFailure(FailureKind.Validation,"Choose a supported Promotion platform.");platform=parsed;}
         if(platform is not null&&input.CreatorSocialProfileId is null)throw new ApplicationFailure(FailureKind.Validation,"Choose one of your Creator social profiles.");
-        if(input.CreatorSocialProfileId is {} profileId&&!await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==actor.CreatorId&&x.IsActive&&x.VerificationStatus=="Verified"&&x.Platform==platform,ct))
+        if(input.CreatorSocialProfileId is {} profileId&&!await db.CreatorSocialProfiles.AnyAsync(x=>x.Id==profileId&&x.CreatorId==actor.CreatorId&&x.IsActive&&x.Platform==platform,ct))
             throw new ApplicationFailure(FailureKind.Forbidden,"This social profile is not available to the active Creator.");
         return await Commands.JoinCampaignOnceAsync(new(actor,id,input.Message,input.ContentConcept,new(p.Category,p.Region,p.VerifiedFollowers,p.SocialVerified),Now,input.CreatorSocialProfileId,platform),key,ct);
     }

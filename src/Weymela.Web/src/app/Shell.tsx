@@ -44,6 +44,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/payouts", "Payouts", "money"],
     ["/admin/reports", "Reports", "chart"],
     ["/admin/settings", "Financial Settings", "settings"],
+    ["/admin/social-profiles", "Social Review", "people"],
     ["/notifications", "Notifications", "bell"],
   ],
   OperationsAdmin: [
@@ -57,6 +58,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/ugc", "UGC", "sparkle"],
     ["/admin/payouts", "Payouts", "money"],
     ["/admin/notifications", "Notifications", "bell"],
+    ["/admin/social-profiles", "Social Review", "people"],
   ],
   Customer: [
     ["/customer/offers", "Home", "home"],

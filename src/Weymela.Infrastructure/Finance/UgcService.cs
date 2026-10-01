@@ -8,6 +8,7 @@ using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Web;
 
 namespace Weymela.Infrastructure.Finance;
 
@@ -125,7 +126,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Business
                     && x.SubjectId == opportunity.BusinessId && x.IsActive, token))
                 throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity is not accepting requests.");
-            await EnsureCreatorEligibility(actor.CreatorId.Value, opportunity, token);
+            var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token)).EnforceAudienceRequirements;
+            await EnsureCreatorEligibility(actor.CreatorId.Value, opportunity, enforceAudience, token);
             CreatorPlatform? platform = null;
             if (HasPlatformSlots(opportunity))
             {
@@ -133,7 +135,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     || verifiedSocialProfileId is null
                     || !opportunity.PlatformCapacities.Any(x => x.Platform == chosen && x.Available > 0))
                     throw new ApplicationFailure(FailureKind.Validation, "Choose an available verified Creator platform.");
-                await EnsureVerifiedProfile(actor.CreatorId.Value, chosen, verifiedSocialProfileId.Value, opportunity, token);
+                await EnsureEligibleProfile(actor.CreatorId.Value, chosen, verifiedSocialProfileId.Value, opportunity, enforceAudience, token);
                 platform = chosen;
             }
             else if (selectedPlatform is not null || verifiedSocialProfileId is not null)
@@ -166,7 +168,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 {
                     if (request.SelectedPlatform is not { } chosen || request.VerifiedSocialProfileId is not { } profile)
                         throw new ApplicationFailure(FailureKind.Validation, "This UGC request has no verified platform selection.");
-                    await EnsureVerifiedProfile(request.CreatorId, chosen, profile, opportunity, token);
+                    var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token)).EnforceAudienceRequirements;
+                    await EnsureEligibleProfile(request.CreatorId, chosen, profile, opportunity, enforceAudience, token);
                     if (!opportunity.PlatformCapacities.Any(x => x.Platform == chosen && x.Available > 0))
                         throw new ApplicationFailure(FailureKind.Validation, "This UGC platform is full.");
                 }
@@ -294,11 +297,12 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             if (opportunity.Version != expectedVersion) throw Conflict();
             var resources = Resources(input.Resources);
             var isDraft = opportunity.Status == UgcOpportunityStatus.Draft;
-            var isMaterial = !isDraft && (input.IsMaterial
+            var isFullEdit = isDraft || (opportunity.Status is (UgcOpportunityStatus.Open or UgcOpportunityStatus.InProgress) && opportunity.ApprovedCreatorCount == 0);
+            var isMaterial = isFullEdit && !isDraft || (!isFullEdit && input.IsMaterial)
                 || !string.Equals(opportunity.Instructions.Trim(), input.Instructions.Trim(), StringComparison.Ordinal)
                 || !string.Equals(opportunity.Location?.Trim(), input.Location?.Trim(), StringComparison.Ordinal)
-                || !string.Equals(opportunity.UsageRights?.Trim(), input.UsageRights?.Trim(), StringComparison.Ordinal));
-            if (isDraft)
+                || !string.Equals(opportunity.UsageRights?.Trim(), input.UsageRights?.Trim(), StringComparison.Ordinal);
+            if (isFullEdit)
             {
                 var contentType = opportunity.ContentType;
                 if (input.ContentType is { } requested && (!Enum.TryParse<UgcContentType>(requested, true, out contentType) || !Enum.IsDefined(contentType)))
@@ -325,6 +329,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     throw new ApplicationFailure(FailureKind.Validation, "Posting platforms must match Creator slots.");
                 var existingRequirementIds = opportunity.PlatformRequirements.Select(row => row.Id).ToHashSet();
                 var existingCapacityIds = opportunity.PlatformCapacities.Select(row => row.Id).ToHashSet();
+                var previousRequired = opportunity.RequiredFunding;
+                var previousReserved = opportunity.ReservedFunding;
                 opportunity.UpdateDraft(input.Title ?? opportunity.Title, input.Slogan, contentType, input.Instructions,
                     JsonSerializer.Serialize(resources), input.Location, input.DueDateUtc ?? opportunity.DueDateUtc,
                     input.ProductProvided ?? opportunity.ProductProvided, input.CreatorMustPurchase ?? opportunity.CreatorMustPurchase,
@@ -334,9 +340,42 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     db.UgcPlatformRequirements.Add(row);
                 foreach (var row in opportunity.PlatformCapacities.Where(row => !existingCapacityIds.Contains(row.Id)))
                     db.UgcPlatformCapacities.Add(row);
+                var wallet = opportunity.Status == UgcOpportunityStatus.Draft ? null : await db.BusinessWallets.SingleAsync(x => x.BusinessId == opportunity.BusinessId, token);
+                if (wallet is not null)
+                {
+                    var target = opportunity.RequiredFunding;
+                    var delta = target.Amount - previousReserved.Amount;
+                    var correlation = Guid.NewGuid();
+                    if (delta > 0)
+                    {
+                        var adjustment = new Money(delta, target.Currency); wallet.Reserve(adjustment, Now, correlation);
+                        var journal = Journal(actor, JournalSourceType.UgcReservation, adjustment, "BusinessAvailable", "UgcAllocatedReserve", key, correlation, opportunity.Id, null);
+                        db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, adjustment, "UgcReserveAdjustment", journal.Id, Now, opportunity.Id));
+                        db.UgcBudgetEntries.Add(new(Guid.NewGuid(), opportunity.Id, null, adjustment, "Increased", journal.Id, Now));
+                    }
+                    else if (delta < 0)
+                    {
+                        var adjustment = new Money(-delta, target.Currency); wallet.ReleaseReserve(adjustment, Now, correlation);
+                        var journal = Journal(actor, JournalSourceType.UgcReservation, adjustment, "UgcAllocatedReserve", "BusinessAvailable", key, correlation, opportunity.Id, null);
+                        db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, adjustment, "UgcReleaseAdjustment", journal.Id, Now, opportunity.Id));
+                        db.UgcBudgetEntries.Add(new(Guid.NewGuid(), opportunity.Id, null, adjustment, "Released", journal.Id, Now));
+                    }
+                    opportunity.SetReservedFunding(target);
+                }
+                else opportunity.SetReservedFunding(Money.Zero(opportunity.CreatorPayment.Currency));
                 var offer = await db.UgcCustomerOffers.SingleOrDefaultAsync(x => x.UgcOpportunityId == opportunity.Id, token);
-                var offerEnabled = input.CustomerOfferEnabled ?? offer is not null;
-                if (!offerEnabled && offer is not null) db.UgcCustomerOffers.Remove(offer);
+                var offerEnabled = input.CustomerOfferEnabled ?? offer is { Status: UgcCustomerOfferStatus.Active or UgcCustomerOfferStatus.Exhausted };
+                if (!offerEnabled && offer is not null)
+                {
+                    if (wallet is not null && offer.Status == UgcCustomerOfferStatus.Active && offer.ReservedFunding.Amount > 0)
+                    {
+                        var released = offer.ReservedFunding; var correlation = Guid.NewGuid(); offer.Cancel(wallet, Now, correlation);
+                        var journal = Journal(actor, JournalSourceType.UgcCustomerOfferReservation, released, "UgcCustomerOfferReserve", "BusinessAvailable", key, correlation, opportunity.Id, null, offer.Id);
+                        db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, released, "UgcCustomerOfferReleased", journal.Id, Now, opportunity.Id, offer.Id));
+                        db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, null, released, "Released", journal.Id, Now));
+                    }
+                    else if (wallet is null && offer.Status == UgcCustomerOfferStatus.Draft) db.UgcCustomerOffers.Remove(offer);
+                }
                 else if (offerEnabled)
                 {
                     var config = await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token);
@@ -352,14 +391,52 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                             input.CustomerOfferStartsAtUtc, input.CustomerOfferEndsAtUtc,
                             platformSalePercent, ugc.EffectiveFromUtc, ugc.ConfigurationVersionId);
                         db.UgcCustomerOffers.Add(offer);
+                        if (wallet is not null)
+                        {
+                            var correlation = Guid.NewGuid();
+                            offer.Publish(wallet, Now, correlation);
+                            var journal = Journal(actor, JournalSourceType.UgcCustomerOfferReservation, offer.FundedLimit,
+                                "BusinessAvailable", "UgcCustomerOfferReserve", key, correlation, opportunity.Id, null, offer.Id);
+                            db.UgcCustomerOfferReservations.Add(new(offer.Id, opportunity.BusinessId, offer.FundedLimit, journal.Id, Now));
+                            db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, offer.FundedLimit, "UgcCustomerOfferReserve", journal.Id, Now, opportunity.Id, offer.Id));
+                            db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, null, offer.FundedLimit, "Reserved", journal.Id, Now));
+                        }
                     }
                     else
                     {
-                        offer.UpdateDraft(input.CustomerFacingSlogan ?? offer.CustomerFacingSlogan,
+                        var previousOfferReserved = offer.ReservedFunding;
+                        offer.ReviseBeforeApproval(input.CustomerFacingSlogan ?? offer.CustomerFacingSlogan,
                             input.CustomerDiscountPercent ?? offer.CustomerDiscountPercent,
                             input.CustomerOfferStartsAtUtc ?? offer.StartsAtUtc,
                             input.CustomerOfferEndsAtUtc ?? offer.EndsAtUtc,
                             input.CustomerOfferFundedAllocation is { } funded ? Amount(funded) : offer.FundedLimit);
+                        if (wallet is not null && offer.Status == UgcCustomerOfferStatus.Cancelled)
+                        {
+                            var correlation = Guid.NewGuid(); offer.Reactivate(wallet, Now, correlation);
+                            var journal = Journal(actor, JournalSourceType.UgcCustomerOfferReservation, offer.FundedLimit, "BusinessAvailable", "UgcCustomerOfferReserve", key, correlation, opportunity.Id, null, offer.Id);
+                            db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, offer.FundedLimit, "UgcCustomerOfferReserve", journal.Id, Now, opportunity.Id, offer.Id));
+                            db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, null, offer.FundedLimit, "Reserved", journal.Id, Now));
+                        }
+                        else if (wallet is not null)
+                        {
+                            var delta = offer.FundedLimit.Amount - previousOfferReserved.Amount;
+                            var correlation = Guid.NewGuid();
+                            if (delta > 0)
+                            {
+                                var adjustment = new Money(delta, offer.FundedLimit.Currency); wallet.Reserve(adjustment, Now, correlation);
+                                var journal = Journal(actor, JournalSourceType.UgcCustomerOfferReservation, adjustment, "BusinessAvailable", "UgcCustomerOfferReserve", key, correlation, opportunity.Id, null, offer.Id);
+                                db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, adjustment, "UgcCustomerOfferReserveAdjustment", journal.Id, Now, opportunity.Id, offer.Id));
+                                db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, null, adjustment, "Increased", journal.Id, Now));
+                            }
+                            else if (delta < 0)
+                            {
+                                var adjustment = new Money(-delta, offer.FundedLimit.Currency); wallet.ReleaseReserve(adjustment, Now, correlation);
+                                var journal = Journal(actor, JournalSourceType.UgcCustomerOfferReservation, adjustment, "UgcCustomerOfferReserve", "BusinessAvailable", key, correlation, opportunity.Id, null, offer.Id);
+                                db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, adjustment, "UgcCustomerOfferReleaseAdjustment", journal.Id, Now, opportunity.Id, offer.Id));
+                                db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, null, adjustment, "Released", journal.Id, Now));
+                            }
+                            offer.SetReservedFunding(offer.FundedLimit);
+                        }
                     }
                 }
             }
@@ -469,13 +546,14 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var offers = await db.UgcCustomerOffers.AsNoTracking()
             .Where(x => businessIds.Contains(x.BusinessId))
             .ToDictionaryAsync(x => x.UgcOpportunityId, ct);
+        var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, ct)).EnforceAudienceRequirements;
         return rows.Where(x => activeBusinesses.Contains(x.BusinessId)
                 && x.ReservedFunding.Amount + x.UsedFunding.Amount >= x.RequiredFunding.Amount
                 && x.ProductProvided != x.CreatorMustPurchase
                 && (HasPlatformSlots(x)
-                    ? x.PlatformCapacities.Any(slot => socials.Any(profile => profile.Platform == slot.Platform && MatchesProfile(profile, x)))
-                    : Eligible(socials, x) && x.ApprovedCreatorCount < x.CreatorCapacity))
-            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), offers.GetValueOrDefault(x.Id), false, socials)).ToArray();
+                    ? x.PlatformCapacities.Any(slot => slot.Available > 0 && socials.Any(profile => profile.Platform == slot.Platform && MatchesProfile(profile, x, enforceAudience)))
+                    : Eligible(socials, x, enforceAudience) && x.ApprovedCreatorCount < x.CreatorCapacity))
+            .Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), requests.FirstOrDefault(r => r.UgcOpportunityId == x.Id)?.Status.ToString(), offers.GetValueOrDefault(x.Id), false, socials, enforceAudience)).ToArray();
     }
 
     public async Task<IReadOnlyList<UgcRequestView>> CreatorRequestsAsync(Actor actor, CancellationToken ct)
@@ -600,18 +678,18 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     private static void Own(Actor actor, UgcOpportunity opportunity)
     { if (actor.BusinessId != opportunity.BusinessId) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC opportunity belongs to another Business."); }
 
-    private async Task EnsureCreatorEligibility(Guid creatorId, UgcOpportunity opportunity, CancellationToken ct)
+    private async Task EnsureCreatorEligibility(Guid creatorId, UgcOpportunity opportunity, bool enforceAudience, CancellationToken ct)
     {
         var socials = await db.CreatorSocialProfiles.AsNoTracking().Where(x => x.CreatorId == creatorId && x.IsActive).ToListAsync(ct);
-        if (!Eligible(socials, opportunity)) throw new ApplicationFailure(FailureKind.Validation, "Your Creator social profiles do not meet this UGC opportunity's optional platform requirement.");
+        if (!Eligible(socials, opportunity, enforceAudience)) throw new ApplicationFailure(FailureKind.Validation, "Your Creator social profiles do not meet this UGC opportunity's optional platform requirement.");
     }
-    private async Task EnsureVerifiedProfile(Guid creatorId, CreatorPlatform platform, Guid profileId,
-        UgcOpportunity opportunity, CancellationToken ct)
+    private async Task EnsureEligibleProfile(Guid creatorId, CreatorPlatform platform, Guid profileId,
+        UgcOpportunity opportunity, bool enforceAudience, CancellationToken ct)
     {
         var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.Id == profileId, ct);
         if (profile is null || profile.CreatorId != creatorId || profile.Platform != platform || !profile.IsActive
-            || !MatchesProfile(profile, opportunity))
-            throw new ApplicationFailure(FailureKind.Validation, "Choose your verified social profile for this UGC platform.");
+            || !MatchesProfile(profile, opportunity, enforceAudience))
+            throw new ApplicationFailure(FailureKind.Validation, "Choose an eligible social profile for this UGC platform.");
     }
     private static bool HasPlatformSlots(UgcOpportunity opportunity) =>
         opportunity.PlatformCapacities.Any(slot => slot.Capacity > 0);
@@ -620,19 +698,17 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             ? opportunity.PlatformRequirements
             : opportunity.PlatformRequirements.Where(requirement => opportunity.PlatformCapacities.Any(
                 slot => slot.Platform == requirement.Platform && slot.Capacity > 0)).ToArray();
-    private static bool MatchesProfile(CreatorSocialProfileRecord profile, UgcOpportunity opportunity)
+    private static bool MatchesProfile(CreatorSocialProfileRecord profile, UgcOpportunity opportunity, bool enforceAudience)
     {
-        if (profile.VerificationStatus != "Verified") return false;
         var requirement = PostingRequirements(opportunity).SingleOrDefault(x => x.Platform == profile.Platform);
-        return requirement?.MinimumAudience is not { } minimum || profile.VerifiedAudience >= minimum;
+        return requirement is not null && SocialAudienceEligibility.Matches(profile, requirement, enforceAudience);
     }
-    private static bool Eligible(IReadOnlyCollection<CreatorSocialProfileRecord> socials, UgcOpportunity opportunity) =>
+    private static bool Eligible(IReadOnlyCollection<CreatorSocialProfileRecord> socials, UgcOpportunity opportunity, bool enforceAudience) =>
         HasPlatformSlots(opportunity)
             ? opportunity.PlatformCapacities.Any(slot => slot.Available > 0 && socials.Any(profile =>
-                profile.Platform == slot.Platform && MatchesProfile(profile, opportunity)))
-            : PostingRequirements(opportunity).Where(x => x.MinimumAudience is not null).All(requirement =>
-                socials.Any(s => s.Platform == requirement.Platform && s.VerificationStatus == "Verified"
-                    && s.VerifiedAudience >= requirement.MinimumAudience));
+                profile.Platform == slot.Platform && MatchesProfile(profile, opportunity, enforceAudience)))
+            : PostingRequirements(opportunity).All(requirement =>
+                socials.Any(s => MatchesProfile(s, opportunity, enforceAudience)));
 
     private FinancialJournal Journal(Actor actor, JournalSourceType source, Money amount, string debit, string credit,
         string key, Guid correlation, Guid opportunityId, Guid? assignmentId, Guid? customerOfferId = null)
@@ -687,7 +763,9 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         {
             if (!Enum.TryParse<CreatorPlatform>(row.Platform, true, out var platform) || !Enum.IsDefined(platform))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose a supported social platform.");
-            result.Add((platform, row.Format, row.MinimumAudience));
+            if (row.MinimumAudience is < 0)
+                throw new ApplicationFailure(FailureKind.Validation, "Audience minimum cannot be negative.");
+            result.Add((platform, row.Format, row.MinimumAudience is 0 ? null : row.MinimumAudience));
         }
         return result;
     }
@@ -697,7 +775,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         foreach (var row in input ?? [])
         {
             if (!Enum.TryParse<CreatorPlatform>(row.Platform, true, out var platform) || !Enum.IsDefined(platform)
-                || row.Capacity is < 1 or > 100)
+                || row.Capacity is < 1 or > 100 || row.MinimumAudience is < 0)
                 throw new ApplicationFailure(FailureKind.Validation, "Choose supported UGC platforms and valid Creator capacity.");
             result.Add((platform, row.Capacity));
         }
@@ -706,13 +784,13 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         return result;
     }
     private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer,
-        bool includeBusinessFinancials, IReadOnlyCollection<CreatorSocialProfileRecord>? socials = null) => new(x.Id, x.BusinessId, business,
+        bool includeBusinessFinancials, IReadOnlyCollection<CreatorSocialProfileRecord>? socials = null, bool enforceAudience = false) => new(x.Id, x.BusinessId, business,
         x.Title, x.Slogan, x.ContentType.ToString(), x.Status.ToString(),
         includeBusinessFinancials ? x.RequiredFunding.Amount / x.CreatorCapacity : x.CreatorPayment.Amount, x.CreatorCapacity,
         x.ApprovedCreatorCount, includeBusinessFinancials ? x.RequiredFunding.Amount : null,
         includeBusinessFinancials ? x.ReservedFunding.Amount : null, includeBusinessFinancials ? x.UsedFunding.Amount : null, x.DueDateUtc,
         x.Location, PostingRequirements(x).Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(), requestStatus, x.Version,
-        offer is not null,
+        offer is { Status: UgcCustomerOfferStatus.Active or UgcCustomerOfferStatus.Exhausted },
         offer?.CustomerDiscountPercent,
         includeBusinessFinancials ? offer?.FundedLimit.Amount : null,
         includeBusinessFinancials ? offer?.RemainingFunding.Amount : null,
@@ -722,7 +800,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         includeBusinessFinancials ? x.PlatformFee.Amount : null, x.ProductProvided, x.CreatorMustPurchase,
         x.PlatformCapacities.Where(slot => slot.Capacity > 0).Select(slot => new UgcPlatformCapacityView(slot.Platform.ToString(), slot.Capacity, slot.ApprovedCount, slot.Available)).ToArray(),
         socials?.Where(profile => profile.IsActive && x.PlatformCapacities.Any(slot => slot.Platform == profile.Platform && slot.Capacity > 0)
-            && MatchesProfile(profile, x)).Select(profile => new UgcEligibleSocialProfile(profile.Id, profile.Platform.ToString(), profile.ProfileUrl)).ToArray(),
+            && MatchesProfile(profile, x, enforceAudience)).Select(profile => new UgcEligibleSocialProfile(profile.Id, profile.Platform.ToString(), profile.ProfileUrl)).ToArray(),
         x.ApplicationClosesAtUtc);
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,

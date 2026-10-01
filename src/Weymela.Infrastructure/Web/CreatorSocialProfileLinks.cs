@@ -11,10 +11,14 @@ namespace Weymela.Infrastructure.Web;
 // A Creator-entered public link is evidence of neither provider connection nor audience verification.
 public sealed class CreatorSocialProfileLinks(WeymelaDbContext db, TimeProvider clock)
 {
-    public async Task<Guid> SaveAsync(Actor actor, CreatorPlatform platform, string? profileUrl, CancellationToken ct)
+    private const long MaximumAudience = 9_000_000_000_000_000;
+    public Task<Guid> SaveAsync(Actor actor, CreatorPlatform platform, string? profileUrl, CancellationToken ct)
+        => SaveAsync(actor, platform, profileUrl, 0, ct);
+    public async Task<Guid> SaveAsync(Actor actor, CreatorPlatform platform, string? profileUrl, long audience, CancellationToken ct)
     {
         await OwnCreator(actor, ct);
         var url = Normalize(platform, profileUrl);
+        ValidateAudience(audience);
         var now = clock.GetUtcNow().UtcDateTime;
         var row = await db.CreatorSocialProfiles
             .Where(x => x.CreatorId == actor.CreatorId && x.Platform == platform)
@@ -23,17 +27,23 @@ public sealed class CreatorSocialProfileLinks(WeymelaDbContext db, TimeProvider 
         if (row is null)
         {
             row = new CreatorSocialProfileRecord { CreatorId = actor.CreatorId!.Value, Platform = platform,
-                ProfileUrl = url, CreatedAtUtc = now, UpdatedAtUtc = now, VerificationStatus = "SelfReported" };
+                ProfileUrl = url, SelfReportedAudience = audience, CreatedAtUtc = now, UpdatedAtUtc = now,
+                VerificationStatus = "SelfReported", AudienceVerificationSource = "SelfReported" };
             db.CreatorSocialProfiles.Add(row);
         }
         else
         {
+            var evidenceChanged = row.ProfileUrl != url || row.SelfReportedAudience != audience;
             row.ProfileUrl = url;
             row.IsActive = true;
             row.UpdatedAtUtc = now;
-            row.SelfReportedAudience = 0;
-            row.VerificationStatus = "SelfReported";
-            row.VerifiedAudience = null;
+            row.SelfReportedAudience = audience;
+            if (evidenceChanged)
+            {
+                row.VerificationStatus = "SelfReported";
+                row.VerifiedAudience = null;
+                row.AudienceVerificationSource = "SelfReported";
+            }
         }
         Audit(actor, "CreatorSocialProfileLinkSaved", platform, now);
         await db.SaveChangesAsync(ct);
@@ -48,6 +58,7 @@ public sealed class CreatorSocialProfileLinks(WeymelaDbContext db, TimeProvider 
         if (row is null) return;
         row.IsActive = false;
         row.VerificationStatus = "SelfReported";
+        row.AudienceVerificationSource = "SelfReported";
         row.VerifiedAudience = null;
         row.SelfReportedAudience = 0;
         row.UpdatedAtUtc = clock.GetUtcNow().UtcDateTime;
@@ -61,6 +72,12 @@ public sealed class CreatorSocialProfileLinks(WeymelaDbContext db, TimeProvider 
     private void Audit(Actor actor, string action, CreatorPlatform platform, DateTime now)
         => db.AuditEvents.Add(new(Guid.NewGuid(), action, actor.UserId, null, null,
             actor.CreatorId, Guid.NewGuid(), now, platform.ToString()));
+
+    private static void ValidateAudience(long audience)
+    {
+        if (audience is < 0 or > MaximumAudience)
+            throw new ApplicationFailure(FailureKind.Validation, "Enter a whole-number audience count between 0 and 9,000,000,000,000,000.");
+    }
 
     public static string Normalize(CreatorPlatform platform, string? value)
     {

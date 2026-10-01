@@ -86,11 +86,20 @@ describe("shared app navigation", () => {
       return Promise.resolve(Response.json([]));
     }));
     renderApp("/creator");
-    const heading = await screen.findByRole("heading", { name: "Home" });
+    const mainNavigation = await waitFor(() => {
+      const navigation = document.querySelector('nav[aria-label="Main navigation"]');
+      if (!navigation) throw new Error("Creator navigation is not ready.");
+      return navigation;
+    });
+    const homeLink = await waitFor(() => {
+      const link = mainNavigation.querySelector('a[href="/creator"]');
+      if (!link) throw new Error("Creator home link is not ready.");
+      return link;
+    });
     const shell = document.querySelector(".app-shell");
     await userEvent.click(screen.getByRole("navigation", { name: "Main navigation" }).querySelector('a[href="/creator/discover"]')!);
     await waitFor(() => expect(finishDiscover).toBeDefined());
-    expect(screen.getByRole("heading", { name: "Home" })).toBe(heading);
+    expect(mainNavigation.querySelector('a[href="/creator"]')).toBe(homeLink);
     expect(screen.getByLabelText("Path")).toHaveTextContent("/creator");
     expect(screen.queryByRole("status", { name: "Loading workspace" })).not.toBeInTheDocument();
     await act(async () => finishDiscover(Response.json([])));

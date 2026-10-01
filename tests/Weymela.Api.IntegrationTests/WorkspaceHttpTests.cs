@@ -388,7 +388,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         Assert.Equal("TikTok", profile["platform"]!.GetValue<string>());
         Assert.Equal("https://www.tiktok.com/@bella", profile["profileUrl"]!.GetValue<string>());
         Assert.Equal("Verified", profile["verificationStatus"]!.GetValue<string>());
-        Assert.Equal(6, profile.AsObject().Count);
+        Assert.Equal(7, profile.AsObject().Count);
         foreach (var secret in new[] { "token", "secret", "credential", "password" })
             Assert.DoesNotContain(secret, profile.ToJsonString(), StringComparison.OrdinalIgnoreCase);
     }

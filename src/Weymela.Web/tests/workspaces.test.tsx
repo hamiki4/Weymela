@@ -183,7 +183,6 @@ describe("Business workspace", () => {
     expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
     await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
-    await userEvent.type(screen.getByLabelText("Creator category"), "Food");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(
       screen.getByLabelText("Promotion budget"),

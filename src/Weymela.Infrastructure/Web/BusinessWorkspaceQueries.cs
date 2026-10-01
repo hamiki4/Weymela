@@ -52,7 +52,15 @@ public sealed partial class WorkspaceQueries
         await DemandBusiness(actor,ct);var p=await Campaign(id,ct);
         if(p.BusinessId!=actor.BusinessId)throw new ApplicationFailure(FailureKind.Forbidden,"This Promotion belongs to another Business.");
         var applications=await db.CreatorApplications.AsNoTracking().Where(x=>x.PromotionId==id).OrderBy(x=>x.AppliedAtUtc).ToListAsync(ct);
-        var applicants=new List<ApplicantCard>();foreach(var a in applications)applicants.Add(new(a.Id,await directory.CreatorCardAsync(a.CreatorId,ct),a.Message,a.ContentConcept,a.Status.ToString(),a.AppliedAtUtc,a.Platform?.ToString()));
+        var applicants=new List<ApplicantCard>();foreach(var a in applications)
+        {
+            CreatorSocialProfileView? social = null;
+            if (a.CreatorSocialProfileId is { } profileId)
+                social = await db.CreatorSocialProfiles.AsNoTracking().Where(x => x.Id == profileId && x.IsActive)
+                    .Select(x => new CreatorSocialProfileView(x.Id,x.Platform.ToString(),x.ProfileUrl,x.SelfReportedAudience,x.VerificationStatus,x.VerifiedAudience,x.AudienceVerificationSource))
+                    .SingleOrDefaultAsync(ct);
+            applicants.Add(new(a.Id,await directory.CreatorCardAsync(a.CreatorId,ct),a.Message,a.ContentConcept,a.Status.ToString(),a.AppliedAtUtc,a.Platform?.ToString(),social));
+        }
         var creators=new List<CreatorBudgetCard>();
         foreach(var a in p.Allocations)
         {

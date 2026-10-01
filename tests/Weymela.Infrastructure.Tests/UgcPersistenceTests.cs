@@ -211,7 +211,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Product_arrangement_is_required_to_publish_and_is_visible_without_changing_ugc_accounting()
+    public async Task Product_arrangement_is_required_to_publish_and_can_be_edited_before_first_approval()
     {
         var state = await Setup();
         await using var db = state.Database.Open();
@@ -245,20 +245,20 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(500m, businessDraft.CreatorPayment);
         await service.PublishAsync(state.Business, purchase, 0, "arrangement-publish", default);
         var publishedVersion = (await db.UgcOpportunities.SingleAsync(x => x.Id == purchase)).Version;
-        var rewrite = await Assert.ThrowsAsync<ApplicationFailure>(() => service.UpdateAsync(state.Business, purchase,
+        await service.UpdateAsync(state.Business, purchase,
             new(null, "Create a 30-60 second vertical video.", [], "Addis Ababa", null, false,
-                ProductProvided: true, CreatorMustPurchase: false), publishedVersion, "arrangement-rewrite", default));
-        Assert.Equal(FailureKind.Validation, rewrite.Kind);
+                ProductProvided: true, CreatorMustPurchase: false), publishedVersion, "arrangement-rewrite", default);
+        db.ChangeTracker.Clear();
         var creatorCard = (await service.DiscoverAsync(state.Creator, default)).Single(x => x.Id == purchase);
-        Assert.True(creatorCard.CreatorMustPurchase);
-        Assert.False(creatorCard.ProductProvided);
-        Assert.Equal(450m, creatorCard.CreatorPayment);
+        Assert.False(creatorCard.CreatorMustPurchase);
+        Assert.True(creatorCard.ProductProvided);
+        Assert.Equal(405m, creatorCard.CreatorPayment);
         var request = await service.RequestAsync(state.Creator, purchase, "arrangement-request", default);
         await service.ReviewRequestAsync(state.Business, request, true, null, "arrangement-approve", default);
         var assignment = (await service.CreatorAssignmentsAsync(state.Creator, default)).Single(x => x.OpportunityId == purchase);
-        Assert.True(assignment.CreatorMustPurchase);
-        Assert.Equal(450m, assignment.CreatorPayment);
-        Assert.Equal(before - 1500m, (await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId)).AvailableBalance.Amount);
+        Assert.False(assignment.CreatorMustPurchase);
+        Assert.Equal(405m, assignment.CreatorPayment);
+        Assert.Equal(before - 1350m, (await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId)).AvailableBalance.Amount);
         Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == purchase).ToListAsync());
     }
 
@@ -742,13 +742,12 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Optional_platform_minimum_is_enforced_but_absent_minimum_does_not_block_creator()
+    public async Task Audience_minimum_is_informational_when_enforcement_is_off()
     {
         var state = await Setup(); await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
         var restricted = await service.CreateAsync(state.Business, Input(minimumAudience: 30_000), "ugc-restricted-create", default);
         await service.PublishAsync(state.Business, restricted, 0, "ugc-restricted-publish", default);
-        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.RequestAsync(state.Creator, restricted, "ugc-restricted-request", default));
-        Assert.Equal(FailureKind.Validation, failure.Kind);
+        Assert.NotEqual(Guid.Empty, await service.RequestAsync(state.Creator, restricted, "ugc-restricted-request", default));
         var open = await service.CreateAsync(state.Business, Input(minimumAudience: null), "ugc-open-create", default);
         await service.PublishAsync(state.Business, open, 0, "ugc-open-publish", default);
         Assert.NotEqual(Guid.Empty, await service.RequestAsync(state.Creator, open, "ugc-open-request", default));
@@ -839,18 +838,17 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Published_ugc_rejects_financial_rewrite_and_keeps_original_creator_deal()
+    public async Task Published_ugc_allows_financial_rewrite_before_first_approval()
     {
         var state = await Setup(); await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
         var id = await service.CreateAsync(state.Business, Input(), "ugc-locked-create", default);
         await service.PublishAsync(state.Business, id, 0, "ugc-locked-publish", default);
         var current = await db.UgcOpportunities.AsNoTracking().SingleAsync(x => x.Id == id);
-        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.UpdateAsync(state.Business, id,
-            new(null, current.Instructions, [], current.Location, current.UsageRights, true, CreatorPayment: 200),
-            current.Version, "ugc-locked-update", default));
-        Assert.Equal(FailureKind.Validation, failure.Kind);
+        await service.UpdateAsync(state.Business, id,
+            new(null, current.Instructions, [], current.Location, current.UsageRights, true, CreatorPayment: 600),
+            current.Version, "ugc-preapproval-update", default);
         db.ChangeTracker.Clear(); current = await db.UgcOpportunities.AsNoTracking().SingleAsync(x => x.Id == id);
-        Assert.Equal(450m, current.CreatorPayment.Amount); Assert.Equal(1500m, current.RequiredFunding.Amount);
+        Assert.Equal(540m, current.CreatorPayment.Amount); Assert.Equal(1800m, current.RequiredFunding.Amount);
     }
 
     [Fact]
@@ -914,7 +912,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Creator_entered_link_cannot_satisfy_verified_ugc_platform_requirement()
+    public async Task Creator_entered_link_satisfies_platform_presence_when_enforcement_is_off()
     {
         var state = await Setup();
         await using var db = state.Database.Open();
@@ -925,8 +923,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         await new Weymela.Infrastructure.Web.CreatorSocialProfileLinks(db, new FixedTime(Now))
             .SaveAsync(state.Creator, CreatorPlatform.TikTok, "https://www.tiktok.com/@mimi_new", default);
         db.ChangeTracker.Clear();
-        Assert.DoesNotContain(await ugc.DiscoverAsync(state.Creator, default), x => x.Id == opportunity);
-        await Assert.ThrowsAsync<ApplicationFailure>(() => ugc.RequestAsync(state.Creator, opportunity, "ugc-manual-link-request", default));
+        Assert.Contains(await ugc.DiscoverAsync(state.Creator, default), x => x.Id == opportunity);
+        Assert.NotEqual(Guid.Empty, await ugc.RequestAsync(state.Creator, opportunity, "ugc-self-reported-link-request", default));
     }
 
     private async Task<State> Setup(decimal deposit = 10_000)

@@ -79,14 +79,14 @@ public sealed class Promotion
     public Guid Id { get; } = Guid.NewGuid(); public string PublicPromotionId { get; } = $"PROM-{Guid.NewGuid():N}"[..13]; public Guid BusinessId { get; }
     public string Title { get; private set; } public string Description { get; private set; } public string? Slogan { get; private set; }
     public string? Location { get; private set; } public string? ResourcesJson { get; private set; }
-    public PromotionType PromotionType { get; }
-    public Money TotalBudget { get; } public Money ReservedBudget { get; private set; } public Money UsedBudget { get; private set; }
+    public PromotionType PromotionType { get; private set; }
+    public Money TotalBudget { get; private set; } public Money ReservedBudget { get; private set; } public Money UsedBudget { get; private set; }
     // Active/exhausted allocations remain committed; completed allocations retain only consumed funds.
     public Money AllocatedBudget => allocations.Where(x => x.Status is not CreatorAllocationStatus.Cancelled).Aggregate(Money.Zero(TotalBudget.Currency), (a, x) => a.Add(x.Status == CreatorAllocationStatus.Completed ? x.UsedAmount : x.OriginalAllocation));
     public Money RemainingBudget => TotalBudget.Subtract(UsedBudget); public Money UnallocatedBudget => TotalBudget.Subtract(AllocatedBudget);
-    public CreatorEligibilityCriteria Eligibility { get; } public DateTime StartDateUtc { get; private set; } public DateTime EndDateUtc { get; }
+    public CreatorEligibilityCriteria Eligibility { get; private set; } public DateTime StartDateUtc { get; private set; } public DateTime EndDateUtc { get; private set; }
     public DateTime? ApplicationClosesAtUtc { get; private set; } public DateTime? ContentDueAtUtc { get; private set; }
-    public PricingSnapshot PricingSnapshot { get; } public int PromotionLiveDurationDays { get; } public PromotionStatus Status { get; private set; } = PromotionStatus.Draft; public DateTime CreatedAtUtc { get; } public DateTime? PublishedAtUtc { get; private set; } public DateTime? ActivatedAtUtc { get; private set; } public DateTime? CompletedAtUtc { get; private set; } public long Version { get; private set; }
+    public PricingSnapshot PricingSnapshot { get; private set; } public int PromotionLiveDurationDays { get; } public PromotionStatus Status { get; private set; } = PromotionStatus.Draft; public DateTime CreatedAtUtc { get; } public DateTime? PublishedAtUtc { get; private set; } public DateTime? ActivatedAtUtc { get; private set; } public DateTime? CompletedAtUtc { get; private set; } public long Version { get; private set; }
     public IReadOnlyList<CreatorAllocation> Allocations => allocations; public IReadOnlyList<PromotionPlatform> Platforms => platforms; public IReadOnlyList<DomainEvent> DomainEvents => events;
     public Promotion(Guid businessId, string title, string description, PromotionType type, Money totalBudget, CreatorEligibilityCriteria eligibility, DateTime start, DateTime end, PricingSnapshot pricing, DateTime createdAt, int promotionLiveDurationDays,
         DateTime? applicationClosesAtUtc = null, DateTime? contentDueAtUtc = null) { if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("Title is required."); if (end <= start) throw new ArgumentException("End must follow start."); if (totalBudget.Amount <= 0) throw new ArgumentOutOfRangeException(nameof(totalBudget)); if (pricing.PromotionType != type) throw new ArgumentException("Pricing snapshot type mismatch."); PromotionLiveDurationPolicy.Validate(promotionLiveDurationDays); ValidateDeadlines(applicationClosesAtUtc, contentDueAtUtc); if (pricing.MinimumPromotionBudget is { } minimum && totalBudget.Amount < minimum.Amount) throw new InvalidOperationException("Promotion budget is below the effective minimum for this Promotion type."); BusinessId = businessId; Title = title.Trim(); Description = description?.Trim() ?? ""; PromotionType = type; TotalBudget = totalBudget; ReservedBudget = Money.Zero(totalBudget.Currency); UsedBudget = Money.Zero(totalBudget.Currency); Eligibility = eligibility; StartDateUtc = start; EndDateUtc = end; ApplicationClosesAtUtc = applicationClosesAtUtc; ContentDueAtUtc = contentDueAtUtc; PricingSnapshot = pricing; PromotionLiveDurationDays = promotionLiveDurationDays; CreatedAtUtc = createdAt; }
@@ -105,6 +105,19 @@ public sealed class Promotion
             if (item.Capacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(selectedPlatforms));
             platforms.Add(new PromotionPlatform(Id, item.Platform, item.Capacity));
         }
+    }
+    public Promotion(Guid businessId, string title, string description, PromotionType type, Money totalBudget,
+        CreatorEligibilityCriteria eligibility, DateTime start, DateTime end, PricingSnapshot pricing, DateTime createdAt,
+        string? slogan, string? location, string? resourcesJson,
+        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity, long? MinimumAudience)> selectedPlatforms, int promotionLiveDurationDays,
+        DateTime? applicationClosesAtUtc = null, DateTime? contentDueAtUtc = null)
+        : this(businessId, title, description, type, totalBudget, eligibility, start, end, pricing, createdAt,
+            slogan, location, resourcesJson, selectedPlatforms.Select(x => (x.Platform, x.Capacity)).ToArray(),
+            promotionLiveDurationDays, applicationClosesAtUtc, contentDueAtUtc)
+    {
+        platforms.Clear();
+        foreach (var item in selectedPlatforms)
+            platforms.Add(new PromotionPlatform(Id, item.Platform, item.Capacity, item.MinimumAudience));
     }
     public void Fund(BusinessWallet wallet, DateTime at, Guid correlation) { Ensure(PromotionStatus.Draft); wallet.ReserveForPromotion(TotalBudget, at, correlation); ReservedBudget = TotalBudget; Status = PromotionStatus.Funded; Version++; events.Add(new PromotionFunded(Id, TotalBudget, at, correlation)); }
     public void Publish(DateTime at, Guid correlation) { Ensure(PromotionStatus.Funded); if (EndDateUtc <= at) throw new InvalidOperationException("Promotion end date has passed."); if (ApplicationClosesAtUtc is { } closes && closes <= at) throw new InvalidOperationException("Application closes must be in the future."); if (ContentDueAtUtc is { } due && due <= at) throw new InvalidOperationException("Content due must be in the future."); if (StartDateUtc < at) StartDateUtc = at; Status = PromotionStatus.Published; PublishedAtUtc = at; Version++; events.Add(new PromotionPublished(Id, at, correlation)); }
@@ -136,6 +149,48 @@ public sealed class Promotion
         if (description.Length > 3000) throw new ArgumentException("Keep Promotion instructions concise.");
         Description = description.Trim(); Slogan = Clean(slogan, 160); Location = Clean(location, 160);
         ResourcesJson = Clean(resourcesJson, 4000); Version++;
+    }
+    public void ReviseBeforeApproval(string title, string description, PromotionType type, Money totalBudget,
+        CreatorEligibilityCriteria eligibility, DateTime start, DateTime end, PricingSnapshot pricing,
+        string? slogan, string? location, string? resourcesJson,
+        IReadOnlyCollection<(CreatorPlatform Platform, int Capacity, long? MinimumAudience)> selectedPlatforms,
+        DateTime? applicationClosesAtUtc, DateTime? contentDueAtUtc)
+    {
+        Ensure(PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active);
+        if (allocations.Count > 0)
+            throw new InvalidOperationException("Promotion terms are locked because a Creator has been approved.");
+        if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120 || description.Length > 3000)
+            throw new ArgumentException("Promotion title or instructions are invalid.");
+        if (end <= start || pricing.PromotionType != type || totalBudget.Amount <= 0)
+            throw new ArgumentException("Promotion terms are invalid.");
+        ValidateDeadlines(applicationClosesAtUtc, contentDueAtUtc);
+        if (pricing.MinimumPromotionBudget is { } minimum && totalBudget.Amount < minimum.Amount)
+            throw new InvalidOperationException("Promotion budget is below the effective minimum for this Promotion type.");
+        if (selectedPlatforms.Count == 0 || selectedPlatforms.GroupBy(x => x.Platform).Any(x => x.Count() > 1))
+            throw new ArgumentException("Select at least one supported platform once.");
+        foreach (var item in selectedPlatforms)
+        {
+            if (item.Capacity is < 1 or > 100 || item.MinimumAudience is < 0)
+                throw new ArgumentException("Promotion platform terms are invalid.");
+            var existing = platforms.SingleOrDefault(x => x.Platform == item.Platform);
+            if (existing is null) platforms.Add(new PromotionPlatform(Id, item.Platform, item.Capacity, item.MinimumAudience));
+            else existing.Revise(item.Capacity, item.MinimumAudience);
+        }
+        foreach (var existing in platforms.Where(x => selectedPlatforms.All(item => item.Platform != x.Platform)).ToArray())
+        {
+            if (existing.ApprovedCount > 0) throw new InvalidOperationException("An approved platform cannot be removed.");
+            platforms.Remove(existing);
+        }
+        Title = title.Trim(); Description = description.Trim(); PromotionType = type; TotalBudget = totalBudget;
+        Eligibility = eligibility; StartDateUtc = start; EndDateUtc = end; ApplicationClosesAtUtc = applicationClosesAtUtc;
+        ContentDueAtUtc = contentDueAtUtc; PricingSnapshot = pricing; Slogan = Clean(slogan, 160);
+        Location = Clean(location, 160); ResourcesJson = Clean(resourcesJson, 4000); Version++;
+    }
+    public void SetReservedBudget(Money amount)
+    {
+        if (amount.Currency != TotalBudget.Currency || amount.Amount < 0 || amount.Amount < UsedBudget.Amount)
+            throw new InvalidOperationException("Promotion reservation is invalid.");
+        ReservedBudget = amount;
     }
     private static void ValidateDeadlines(DateTime? applicationClosesAtUtc, DateTime? contentDueAtUtc)
     {
@@ -188,12 +243,15 @@ public sealed class PromotionPlatform
     public CreatorPlatform Platform { get; }
     public int Capacity { get; private set; }
     public int ApprovedCount { get; private set; }
+    public long? MinimumAudience { get; private set; }
     public long Version { get; private set; }
     public int Available => Math.Max(0, Capacity - ApprovedCount);
-    public PromotionPlatform(Guid promotionId, CreatorPlatform platform, int capacity)
-    { if (capacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(capacity)); PromotionId = promotionId; Platform = platform; Capacity = capacity; }
+    public PromotionPlatform(Guid promotionId, CreatorPlatform platform, int capacity, long? minimumAudience = null)
+    { if (capacity is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(capacity)); if (minimumAudience is < 0) throw new ArgumentOutOfRangeException(nameof(minimumAudience)); PromotionId = promotionId; Platform = platform; Capacity = capacity; MinimumAudience = minimumAudience is 0 ? null : minimumAudience; }
     public void Approve()
     { if (ApprovedCount >= Capacity) throw new InvalidOperationException("This Promotion platform is full."); ApprovedCount++; Version++; }
+    public void Revise(int capacity, long? minimumAudience)
+    { if (capacity is < 1 or > 100 || capacity < ApprovedCount || minimumAudience is < 0) throw new InvalidOperationException("Promotion platform capacity or audience requirement is invalid."); Capacity = capacity; MinimumAudience = minimumAudience is 0 ? null : minimumAudience; Version++; }
 }
 
 public sealed record PromotionViewVerification(Guid PromotionId, Guid CreatorId, Guid CreatorAllocationId, string ExternalPlatform, string ExternalContentId, long PreviousVerifiedViews, long CurrentVerifiedViews, long RewardedViewCount, DateTime VerifiedAtUtc, string EvidenceReference, string IdempotencyKey, long? ReportedViews = null, bool IsAnomaly = false, Guid? ParticipationId = null, bool IsBaseline = false) { public bool IsValid => CurrentVerifiedViews >= PreviousVerifiedViews && RewardedViewCount >= 0; }

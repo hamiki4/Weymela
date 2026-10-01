@@ -147,7 +147,8 @@ export interface AdminCommerceTransaction {
   cashierId: string | null;
 }
 export interface AdminBusinessData { availableWallet: number | null; reservedWallet: number | null; promotions: number; ugcOpportunities: number; ugcCustomerOffers: number; cashiers: number; deposits: number; transactions: number; }
-export interface AdminCreatorSocialProfile { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null; }
+export interface AdminCreatorSocialProfile { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null; audienceVerificationSource?: string; }
+export interface AdminSocialProfileReview { id: string; creatorId: string; creatorName: string; creatorNumber: number | null; creatorPhotoKey: string | null; platform: string; profileUrl: string; selfReportedAudience: number; verifiedAudience: number | null; verificationStatus: string; audienceVerificationSource: string; }
 export interface AdminCreatorData { promotionRequests: number; allocations: number; contentSubmissions: number; liveParticipations: number; earnings: number | null; payouts: number; socialProfiles: AdminCreatorSocialProfile[]; }
 export interface AdminCustomerData { cashback: number | null; purchases: number; qrHistory: number; payouts: number; }
 export interface AdminCashierData { businessId: string | null; businessName: string | null; activationState: string; transactionsProcessed: number; }
@@ -226,7 +227,7 @@ export interface CampaignRow {
   version: number;
   slogan?: string | null;
   location?: string | null;
-  platforms?: { platform: string; approved: number; capacity: number; available: number }[] | null;
+  platforms?: { platform: string; approved: number; capacity: number; available: number; minimumAudience?: number | null }[] | null;
   applicationClosesAtUtc?: string | null;
   contentDueAtUtc?: string | null;
 }
@@ -237,6 +238,8 @@ export interface Applicant {
   contentConcept: string | null;
   status: string;
   appliedAtUtc: string;
+  platform?: string | null;
+  socialProfile?: { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null; audienceVerificationSource?: string } | null;
 }
 export interface CreatorBudget {
   id: string;
@@ -497,6 +500,7 @@ export interface FinancialSettings {
   effectiveFromUtc: string | null;
   ugc: UgcSettings | null;
   promotionLiveDurationDays: number;
+  enforceAudienceRequirements: boolean;
 }
 export interface SettingsWorkspace {
   current: FinancialSettings;

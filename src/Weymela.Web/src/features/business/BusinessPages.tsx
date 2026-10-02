@@ -36,6 +36,7 @@ import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 import { DepositSubmission } from "./DepositSubmission";
 import { PromotionContentReviewQueue } from "./PromotionContentReviewQueue";
+import { BusinessUgcCard } from "./UgcPages";
 
 export function WalletMetrics({ wallet }: { wallet: Wallet }) {
   return (
@@ -469,30 +470,91 @@ export function CampaignTable({
   );
 }
 export function BusinessCampaigns() {
-  const resource = useResource<CampaignRow[]>("/business/campaigns");
+  const campaigns = useResource<CampaignRow[]>("/business/campaigns");
+  const ugc = useResource<UgcCard[]>("/business/ugc");
   const [params] = useSearchParams();
   const activeOnly = params.get("filter") === "Active";
+
   return (
     <>
       <PageHeader
-        title="Promotions" compact
+        title="Promotions"
+        compact
         action={
-          <span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">
-            Create Promotion
-          </ActionLink></span>
+          <span className="business-create-action">
+            <ActionLink to="/business/campaigns/new" icon="plus">
+              Create Promotion
+            </ActionLink>
+          </span>
         }
       />
-      <Resource resource={resource}>
-        {(rows) => (
-          <Section title={activeOnly ? "Active Promotions" : "Promotions"} action={activeOnly ? <Link className="text-link" to="/business/campaigns">Show all</Link> : <Currency />}>
-            <CampaignTable campaigns={rows.filter((row) => row.status !== "Draft" && (!activeOnly || ["Active", "Published"].includes(row.status)))} />
-          </Section>
-        )}
+
+      <Resource resource={campaigns}>
+        {(rows) => {
+          const visible = rows.filter(
+            (row) =>
+              row.status !== "Draft" &&
+              (!activeOnly || ["Active", "Published"].includes(row.status)),
+          );
+
+          return (
+            <Section
+              title={activeOnly ? "Active Views Promotions" : "Views Promotions"}
+              action={
+                activeOnly ? (
+                  <Link className="text-link" to="/business/campaigns">
+                    Show all
+                  </Link>
+                ) : (
+                  <Currency />
+                )
+              }
+            >
+              <CampaignTable campaigns={visible} />
+            </Section>
+          );
+        }}
       </Resource>
+
+      <Resource resource={ugc}>
+        {(rows) => {
+          const visible = rows.filter(
+            (item) =>
+              item.status !== "Draft" &&
+              (!activeOnly || item.status === "Open"),
+          );
+
+          return (
+            <Section title={activeOnly ? "Open UGC Promotions" : "UGC Promotions"}>
+              {visible.length ? (
+                <div className="card-stack">
+                  {visible.map((item) => (
+                    <BusinessUgcCard
+                      key={item.id}
+                      item={item}
+                      onChanged={() => ugc.reload()}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <Empty
+                  title={
+                    activeOnly
+                      ? "No open UGC Promotions."
+                      : "No UGC Promotions yet."
+                  }
+                />
+              )}
+            </Section>
+          );
+        }}
+      </Resource>
+
       <PromotionContentReviewQueue />
     </>
   );
 }
+
 export function BusinessRequests() {
   const resource = useResource<CampaignRow[]>("/business/campaigns");
   return (

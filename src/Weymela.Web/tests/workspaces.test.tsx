@@ -420,7 +420,8 @@ describe("Business workspace", () => {
   });
   it("has no destructive End Campaign action", async () => {
     mount(<BusinessCampaigns />);
-    await screen.findByRole("heading", { name: "Promotions", level: 2 });
+    await screen.findByRole("heading", { name: "Views Promotions", level: 2 });
+    expect(screen.getByRole("heading", { name: "UGC Promotions", level: 2 })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Promotions", level: 1 })).toBeVisible();
     const table = screen.getByRole("table", { name: "Business Promotions" });
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([

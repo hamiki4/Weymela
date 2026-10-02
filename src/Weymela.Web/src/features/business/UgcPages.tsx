@@ -76,7 +76,7 @@ function ProductArrangementChoice({ value, onChange, name = "product-arrangement
   </fieldset>;
 }
 
-function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => void }) {
+export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => void }) {
   const action = useAction();
   const editAction = useAction();
   const [creatorDetail, setCreatorDetail] = useState<UgcDetail | null>(null);
@@ -99,7 +99,7 @@ function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => 
   const [creatorError, setCreatorError] = useState("");
   return (
     <article className="data-card">
-      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Discount Sale" : "UGC Only"} · {item.contentType}</small><h3>{item.title}</h3></div><Badge status={item.status} /></div>
+      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sales" : "UGC"} · {item.contentType}</small><h3>{item.title}</h3></div><Badge status={item.status} /></div>
       <dl className="funds-grid">
         <div><dt>Creator payment</dt><dd>{item.requiredFunding === undefined ? "—" : amount(item.requiredFunding)} ETB</dd></div>
         <div><dt>Creators needed</dt><dd>{item.creatorsNeeded}</dd></div>

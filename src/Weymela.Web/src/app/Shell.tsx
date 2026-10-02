@@ -19,7 +19,6 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/business", "Home", "home"],
     ["/business/campaigns", "Promotions", "campaign"],
     ["/business/requests", "Requests", "people"],
-    ["/business/ugc", "UGC", "sparkle"],
     ["/business/wallet", "Wallet", "wallet"],
     ["/business/transactions", "Transactions", "document"],
     ["/checkout", "Checkout", "qr"],
@@ -125,7 +124,7 @@ export function Shell({ children }: { children?: ReactNode }) {
   const isProductRole = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
   const mobileItems = user.role === "PlatformAdmin"
     ? items.filter(([to]) => ["/admin", "/admin/wallets", "/admin/payouts"].includes(to))
-    : user.role === "Business" ? items.filter(([to]) => ["/business", "/business/campaigns", "/business/ugc", "/business/wallet", "/profile"].includes(to))
+    : user.role === "Business" ? items.filter(([to]) => ["/business", "/business/campaigns", "/business/wallet", "/profile"].includes(to))
     : items.slice(0, user.role === "OperationsAdmin" ? 3 : 5);
   const overflowItems = user.role === "PlatformAdmin"
     ? items.filter(([to]) => !mobileItems.some(([mobileTo]) => mobileTo === to))

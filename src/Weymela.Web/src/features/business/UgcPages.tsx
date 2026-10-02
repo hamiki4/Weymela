@@ -207,14 +207,19 @@ export function BusinessUgcPage() {
 
 export function CreateBusinessUgcPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const selectedType = params.get("type");
   const pricing = useResource<UgcPricing>("/business/ugc-pricing");
   const action = useAction();
-  const [form, setForm] = useState<BusinessUgcForm>(emptyForm);
+  const [form, setForm] = useState<BusinessUgcForm>(() => ({
+    ...emptyForm,
+    customerOffer: selectedType === "ugc-sales",
+  }));
   const set = <K extends keyof BusinessUgcForm>(key: K, value: BusinessUgcForm[K]) => setForm((current) => ({ ...current, [key]: value }));
 
   return (
     <>
-      <PageHeader title="Create UGC" />
+      <PageHeader title={selectedType === "ugc-sales" ? "Create UGC + Sales" : "Create UGC"} />
       <BusinessCreationGate>{creationWallet => <Resource resource={pricing}>
         {(config) => {
           const payment = Number(form.creatorPayment) || 0;
@@ -266,7 +271,24 @@ export function CreateBusinessUgcPage() {
                   </fieldset>
                   {form.mustPost ? <PlatformCapacityPicker value={form.platforms} onChange={(value) => set("platforms", value)} />
                     : <Field label="Creators needed"><input type="number" min="1" max="100" step="1" value={form.creatorsNeeded} onChange={(e) => set("creatorsNeeded", e.target.value)} required /></Field>}
-                  <label className="field wide"><span><input type="checkbox" checked={form.customerOffer} onChange={(e) => set("customerOffer", e.target.checked)} /> Add Customer discount sale</span></label>
+                  {selectedType ? (
+                      <div className="field wide promotion-selected-type">
+                        <span className="field-label">Promotion type</span>
+                        <strong>{selectedType === "ugc-sales" ? "UGC + Sales" : "UGC"}</strong>
+                        <Link className="text-link" to="/business/campaigns/new">Change</Link>
+                      </div>
+                    ) : (
+                      <label className="field wide">
+                        <span>
+                          <input
+                            type="checkbox"
+                            checked={form.customerOffer}
+                            onChange={(e) => set("customerOffer", e.target.checked)}
+                          />{" "}
+                          Add Customer discount sale
+                        </span>
+                      </label>
+                    )}
                   {form.customerOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer Reward Budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
                   {form.mustPost && form.platforms.length === 0 && <Notice error>Choose at least one social platform.</Notice>}
                   {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer Offers require an Admin platform sale fee configuration.</Notice>}

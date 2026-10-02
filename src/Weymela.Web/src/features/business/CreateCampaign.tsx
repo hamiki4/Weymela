@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
 import type { BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
@@ -7,11 +7,66 @@ import { PlatformCapacityPicker } from "./PlatformCapacityPicker";
 import { Button, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
 import { amount, count, isViewAndSale, promotionTypeCode } from "../../ui/format";
 
-export function CreateCampaign() { return <BusinessCreationGate>{wallet => <CreateCampaignForm wallet={wallet} />}</BusinessCreationGate>; }
+export function CreateCampaign() {
+  const [params] = useSearchParams();
+  const selected = params.get("type");
 
-function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
-  const pricing = useResource<BusinessPricing>("/business/pricing"); const action = useAction(); const navigate = useNavigate();
-  const [type, setType] = useState<CampaignTypeCode>("ViewOnly");
+  if (!selected) {
+    return (
+      <>
+        <PageHeader title="Create Promotion" compact />
+        <Section title="What do you want to achieve?">
+          <div className="promotion-type-grid">
+            <Link className="promotion-type-card" to="/business/campaigns/new?type=views">
+              <strong>Views</strong>
+              <span>Get visibility through Creator content.</span>
+            </Link>
+
+            <Link className="promotion-type-card" to="/business/campaigns/new?type=views-sales">
+              <strong>Views + Sales</strong>
+              <span>Get visibility and attributed sales.</span>
+            </Link>
+
+            <Link className="promotion-type-card" to="/business/ugc/new?type=ugc">
+              <strong>UGC</strong>
+              <span>Pay Creators to create content for your Business.</span>
+            </Link>
+
+            <Link className="promotion-type-card" to="/business/ugc/new?type=ugc-sales">
+              <strong>UGC + Sales</strong>
+              <span>Pay for content and offer customers a discount.</span>
+            </Link>
+          </div>
+        </Section>
+      </>
+    );
+  }
+
+  if (selected !== "views" && selected !== "views-sales") {
+    return <Notice error>Choose a valid Promotion type.</Notice>;
+  }
+
+  const type: CampaignTypeCode =
+    selected === "views-sales" ? "ViewPlusCommission" : "ViewOnly";
+
+  return (
+    <BusinessCreationGate>
+      {(wallet) => <CreateCampaignForm wallet={wallet} initialType={type} />}
+    </BusinessCreationGate>
+  );
+}
+
+function CreateCampaignForm({
+  wallet,
+  initialType,
+}: {
+  wallet: Wallet;
+  initialType: CampaignTypeCode;
+}) {
+  const pricing = useResource<BusinessPricing>("/business/pricing");
+  const action = useAction();
+  const navigate = useNavigate();
+  const [type] = useState<CampaignTypeCode>(initialType);
   const [form, setForm] = useState({ title: "", campaignBudget: "", description: "", region: "", applicationCloses: "", contentDue: "" });
   const [platforms, setPlatforms] = useState<{ platform: string; capacity: number }[]>([]);
   const set = (name: keyof typeof form, value: string) => setForm(current => ({ ...current, [name]: value }));
@@ -41,7 +96,11 @@ function CreateCampaignForm({ wallet }: { wallet: Wallet }) {
         await post(`/business/promotions/${result.id}/publish`, { version: 1 }, key); navigate(`/business/campaigns/${result.id}`);
       }); }}>
         <Field label="Promotion title" wide><input value={form.title} onChange={e => set("title", e.target.value)} maxLength={120} required /></Field>
-        <Field label="Promotion type" wide><select value={type} onChange={e => setType(e.target.value as CampaignTypeCode)}><option value="ViewOnly">View Only</option><option value="ViewPlusCommission">View &amp; Sale</option></select></Field>
+        <div className="field wide promotion-selected-type">
+          <span className="field-label">Promotion type</span>
+          <strong>{type === "ViewPlusCommission" ? "Views + Sales" : "Views"}</strong>
+          <Link className="text-link" to="/business/campaigns/new">Change</Link>
+        </div>
         <Field label="Application closes"><input type="date" value={form.applicationCloses} onChange={e => set("applicationCloses", e.target.value)} required /></Field>
         <Field label="Content due"><input type="date" value={form.contentDue} onChange={e => set("contentDue", e.target.value)} required /></Field>
         {!validDates && (form.applicationCloses || form.contentDue) && <Notice error>Application closes must be before content due.</Notice>}

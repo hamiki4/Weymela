@@ -84,7 +84,6 @@ export function BusinessDashboard() {
           <Section title="Quick actions" className="quick-actions-section">
             <div className="actions quick-actions">
               <ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink>
-              <ActionLink to="/business/ugc/new" secondary icon="sparkle">Create UGC</ActionLink>
               <ActionLink to="/checkout" secondary icon="qr">Checkout / Scan QR</ActionLink>
               <ActionLink to="/business/transactions" secondary icon="document">Transactions</ActionLink>
               <ActionLink to="/business/cashiers" secondary icon="people">Cashier Management</ActionLink>

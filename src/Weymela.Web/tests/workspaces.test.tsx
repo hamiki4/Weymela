@@ -172,9 +172,53 @@ describe("Business workspace", () => {
       screen.queryByText(/Creator:|Customer Cashback|Platform Keeps/),
     ).not.toBeInTheDocument();
   });
+  it("shows one Create Promotion gateway with all four Promotion types", async () => {
+    mount(<CreateCampaign />, "/business/campaigns/new");
+
+    expect(await screen.findByText("What do you want to achieve?")).toBeVisible();
+
+    const choices = screen.getAllByRole("link");
+
+    expect(choices.find(link => link.getAttribute("href") === "/business/campaigns/new?type=views")).toBeTruthy();
+    expect(choices.find(link => link.getAttribute("href") === "/business/campaigns/new?type=views-sales")).toBeTruthy();
+    expect(choices.find(link => link.getAttribute("href") === "/business/ugc/new?type=ugc")).toBeTruthy();
+    expect(choices.find(link => link.getAttribute("href") === "/business/ugc/new?type=ugc-sales")).toBeTruthy();
+  });
+
+  it("opens the selected Views Promotion form without asking for the type again", async () => {
+    mount(<CreateCampaign />, "/business/campaigns/new?type=views");
+
+    expect(await screen.findByLabelText("Promotion title")).toBeVisible();
+    expect(screen.getByText("Views", { selector: "strong" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Promotion type" })).not.toBeInTheDocument();
+  });
+
+  it("opens the selected Views + Sales Promotion form", async () => {
+    mount(<CreateCampaign />, "/business/campaigns/new?type=views-sales");
+
+    expect(await screen.findByLabelText("Promotion title")).toBeVisible();
+    expect(screen.getByText("Views + Sales", { selector: "strong" })).toBeVisible();
+  });
+
+  it("opens UGC from the unified Promotion choice without a Customer sale", async () => {
+    mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc");
+
+    expect(await screen.findByText("UGC", { selector: ".promotion-selected-type strong" })).toBeVisible();
+    expect(screen.queryByLabelText("Customer Discount %")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Customer Reward Budget")).not.toBeInTheDocument();
+  });
+
+  it("opens UGC + Sales with Customer sale fields already enabled", async () => {
+    mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc-sales");
+
+    expect(await screen.findByText("UGC + Sales", { selector: ".promotion-selected-type strong" })).toBeVisible();
+    expect(screen.getByLabelText("Customer Discount %")).toBeVisible();
+    expect(screen.getByLabelText("Customer Reward Budget")).toBeVisible();
+  });
+
   it("creates a guided Campaign without accepting platform rates", async () => {
     const api = mockApi();
-    mount(<CreateCampaign />);
+    mount(<CreateCampaign />, "/business/campaigns/new?type=views");
     await screen.findByLabelText("Promotion title");
     await userEvent.type(
       screen.getByLabelText("Promotion title"),
@@ -198,7 +242,7 @@ describe("Business workspace", () => {
       { id: "new-business-agreement", type: "BusinessAgreement", version: "2", contentHash: "new", accepted: false },
       { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
     ] });
-    mount(<CreateCampaign />, "/business/campaigns/new");
+    mount(<CreateCampaign />, "/business/campaigns/new?type=views");
     expect(await screen.findByLabelText("Promotion title")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Before you continue" })).not.toBeInTheDocument();
   });
@@ -263,7 +307,7 @@ describe("Business workspace", () => {
     [15000, 10000, "5,000", "Remaining after funding"],
   ])("shows authoritative available funds %i and a %s budget decision", async (available, budget, expected, label) => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: available, available, reserved: 0 } });
-    mount(<CreateCampaign />);
+    mount(<CreateCampaign />, "/business/campaigns/new?type=views");
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Local stories");
     await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19");
     await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20");
@@ -276,7 +320,7 @@ describe("Business workspace", () => {
   });
   it("omits the slogan and sends social capacities with the Promotion", async () => {
     const api = mockApi();
-    mount(<CreateCampaign />);
+    mount(<CreateCampaign />, "/business/campaigns/new?type=views");
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Weekend Special");
     expect(screen.queryByLabelText("Promotion slogan (optional)")).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19");

@@ -180,10 +180,10 @@ describe("Business workspace", () => {
       screen.getByLabelText("Promotion title"),
       "Local stories",
     );
-    expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Description")).toBeInTheDocument();
     expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
-    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(
       screen.getByLabelText("Promotion budget"),
@@ -265,8 +265,8 @@ describe("Business workspace", () => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: available, available, reserved: 0 } });
     mount(<CreateCampaign />);
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Local stories");
-    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
-    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(await screen.findByLabelText("Promotion budget"), String(budget));
     expect(screen.getByText(label, { selector: "dt" })).toBeVisible();
@@ -279,8 +279,8 @@ describe("Business workspace", () => {
     mount(<CreateCampaign />);
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Weekend Special");
     expect(screen.queryByLabelText("Promotion slogan (optional)")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19T10:00");
-    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20T10:00");
+    await userEvent.type(screen.getByLabelText("Application closes"), "2027-09-19");
+    await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(screen.getByLabelText("Promotion budget"), "1000");

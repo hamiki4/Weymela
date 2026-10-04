@@ -24,9 +24,16 @@ for (const width of [375, 1366])
     await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
     await screenshot(page, `${width}-flow-campaign-budget`);
     await page.getByRole("button", { name: "Publish Promotion" }).click();
-    await expect(
-      page.getByRole("heading", { name: title, exact: true }),
-    ).toBeVisible();
+    try {
+      await expect(
+        page.getByRole("heading", { name: title, exact: true }),
+      ).toBeVisible();
+    } catch (error) {
+      const notices = await page.locator(".notice.error").allTextContents();
+      throw new Error(
+        `Promotion publish did not navigate. url=${page.url()} errors=${JSON.stringify(notices)} original=${String(error)}`,
+      );
+    }
     const campaignId = page.url().split("/").pop()!;
     await login(context, "other-creator");
     await open(page, "/creator/discover");

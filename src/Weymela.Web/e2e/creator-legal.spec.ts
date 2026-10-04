@@ -29,7 +29,14 @@ test("Creator Promotion request opens normally without legacy agreement acceptan
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
   await page.getByRole("button", { name: "Publish Promotion" }).click();
-  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  try {
+    await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  } catch (error) {
+    const notices = await page.locator(".notice.error").allTextContents();
+    throw new Error(
+      `Promotion publish did not navigate. url=${page.url()} errors=${JSON.stringify(notices)} original=${String(error)}`,
+    );
+  }
 
   await login(context, "creator");
   await open(page, "/creator/discover");

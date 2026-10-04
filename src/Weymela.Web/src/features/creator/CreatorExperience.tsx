@@ -298,7 +298,7 @@ export function CreatorUgcOpportunity() {
   const { id } = useParams();
   const resource = useResource<UgcDetail>(`/creator/ugc/${id}`);
   return <>
-    <Link className="back-link" to="/creator/discover?tab=UGC">← UGC opportunities</Link>
+    <Link className="back-link" to="/creator/discover">← Discover</Link>
     <Resource resource={resource}>{(detail) => {
       const opportunity = detail.opportunity;
       const arrangement = opportunity.productProvided && !opportunity.creatorMustPurchase
@@ -308,12 +308,13 @@ export function CreatorUgcOpportunity() {
           : "Product arrangement unavailable";
       const requirements = opportunity.platformRequirements ?? [];
       return <>
-        <PageHeader eyebrow={opportunity.business} title={opportunity.title} description={opportunity.contentType}
+        <PageHeader eyebrow={opportunity.business} title={opportunity.title} description={opportunity.customerOfferEnabled ? "UGC + Sales" : "UGC"}
           action={opportunity.requestStatus && <Badge status={opportunity.requestStatus} />} />
         <div className="content-grid">
-          <Section title="UGC details">
+          <Section title="Promotion details">
             {opportunity.slogan?.trim() && <p className="creator-opportunity-slogan">{opportunity.slogan}</p>}
             <dl className="detail-list">
+              <div><dt>Content</dt><dd>{opportunity.contentType}</dd></div>
               <div><dt>Creator payment</dt><dd>{amount(opportunity.creatorPayment)} ETB</dd></div>
               <div><dt>Content due</dt><dd>{date(opportunity.dueDateUtc)}</dd></div>
               {opportunity.applicationClosesAtUtc && <div><dt>Application closes</dt><dd>{date(opportunity.applicationClosesAtUtc)}</dd></div>}

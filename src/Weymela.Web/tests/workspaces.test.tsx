@@ -298,7 +298,7 @@ describe("Business workspace", () => {
     expect(await screen.findByText("Creator purchases product", { selector: ".ugc-arrangement" })).toBeVisible();
     businessView.unmount();
     mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
-    expect(await screen.findByText("Creator purchases product", { selector: ".ugc-arrangement" })).toBeVisible();
+    expect(await screen.findByText("Creator purchases product")).toBeVisible();
     expect(screen.getByRole("button", { name: "Request to Join" })).toBeVisible();
   });
   it.each([
@@ -492,30 +492,40 @@ describe("Creator workspace", () => {
     expect(screen.getByRole("link", { name: /Active Promotions/ })).toHaveAttribute("href", "/creator/promotions?filter=Active");
     expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
   });
-  it("previews Discover opportunities before earnings and caps each list", async () => {
+  it("shows one simple Promotions feed on Creator Home", async () => {
     const ugcCard = { id: "ugc-home", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
       contentType: "Video", status: "Open", creatorPayment: 4750, creatorsNeeded: 1, approvedCreators: 0,
-      dueDateUtc: "2027-12-01T10:00:00Z", location: "Addis Ababa", platformRequirements: [{ platform: "TikTok", format: "Video", minimumAudience: 0 }],
-      platformCapacities: [{ platform: "TikTok", capacity: 1, approved: 0, available: 1 }], requestStatus: null, version: 1,
-      productProvided: true, creatorMustPurchase: false };
+      dueDateUtc: "2027-12-01T10:00:00Z", location: "Addis Ababa", platformRequirements: [],
+      requestStatus: null, version: 1, productProvided: true, creatorMustPurchase: false };
+
     mockCreatorApi({
-      "/creator/discover": [1, 2, 3, 4].map((id) => ({ ...opportunity, id: `campaign-${id}`, title: `Coffee stories ${id}`, platforms: [{ platform: "TikTok", approved: 0, capacity: 1, available: 1, minimumAudience: 30000 }] })),
-      "/creator/ugc": [ugcCard, { ...ugcCard, id: "ugc-home-2", title: "Coffee reels" }],
+      "/creator/discover": [1, 2, 3, 4].map((id) => ({
+        ...opportunity,
+        id: `campaign-${id}`,
+        title: `Coffee stories ${id}`,
+        platforms: [{ platform: "TikTok", approved: 0, capacity: 1, available: 1, minimumAudience: 30000 }],
+      })),
+      "/creator/ugc": [
+        ugcCard,
+        { ...ugcCard, id: "ugc-home-2", title: "Coffee reels" },
+      ],
     });
+
     mount(<CreatorDashboard />);
-    expect(await screen.findByRole("heading", { name: "Opportunities for you" })).toBeVisible();
-    const promotions = screen.getByRole("heading", { name: "Open Promotions" }).closest("section")!;
-    expect(within(promotions).getAllByRole("heading", { level: 3 })).toHaveLength(3);
-    expect(within(promotions).getAllByText("30,000 followers minimum")).toHaveLength(3);
-    expect(within(promotions).getByRole("link", { name: "See all" })).toHaveAttribute("href", "/creator/discover");
-    const ugc = screen.getByRole("heading", { name: "Open UGC" }).closest("section")!;
-    expect(within(ugc).getAllByText("No minimum")).toHaveLength(2);
-    expect(within(ugc).getAllByRole("link", { name: "View" })).toHaveLength(2);
-    expect(within(ugc).getAllByRole("link", { name: "View" })[0]).toHaveAttribute("href", "/creator/ugc/ugc-home");
-    expect(within(ugc).getAllByRole("button", { name: "Request to Join" })).toHaveLength(2);
-    expect(within(ugc).getByRole("link", { name: "See all" })).toHaveAttribute("href", "/creator/discover?tab=UGC");
-    expect(screen.queryByText("Category")).not.toBeInTheDocument();
-    expect(screen.queryByText("Verified followers")).not.toBeInTheDocument();
+
+    const feed = (await screen.findByRole("heading", { name: "Promotions for you" })).closest("section")!;
+
+    expect(within(feed).getAllByRole("heading", { level: 3 })).toHaveLength(5);
+    expect(within(feed).getAllByText("Views + Sales")).toHaveLength(3);
+    expect(within(feed).getAllByText("UGC")).toHaveLength(2);
+    expect(within(feed).getByRole("link", { name: "See all" })).toHaveAttribute(
+      "href",
+      "/creator/discover",
+    );
+
+    expect(screen.queryByRole("heading", { name: "Open Promotions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Open UGC" })).not.toBeInTheDocument();
+    expect(screen.queryByText("30,000 followers minimum")).not.toBeInTheDocument();
   });
   it("opens UGC detail through the existing Creator detail projection", async () => {
     const card = { id: "ugc-detail", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
@@ -534,8 +544,10 @@ describe("Creator workspace", () => {
     mockCreatorApi({ "/creator/ugc": [] });
     mount(<CreatorDiscover />);
     expect(await screen.findByRole("heading", { name: "Discover" })).toBeVisible();
-    const tabs = within(screen.getByRole("tablist", { name: "Opportunity type" }));
-    expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Promotions", "UGC"]);
+    expect(
+      screen.queryByRole("tablist", { name: "Opportunity type" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Opportunities" })).toBeVisible();
     expect(await screen.findByText(/Abc Coffee/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Request to Join" })).toHaveAttribute("href", "/creator/discover/campaign");
     expect(screen.queryByText(/Business Wallet|Reserved Funds|Campaign Budget/)).not.toBeInTheDocument();
@@ -549,17 +561,18 @@ describe("Creator workspace", () => {
   it("shows optional slogan and keeps pending requests out of platform occupancy", async () => {
     mockCreatorApi({ "/creator/discover": [{ ...opportunity, slogan: "Weekend Special", platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }], approvedCreators: 1, creatorCapacity: 2, requestStatus: "Pending" }] });
     mount(<CreatorDiscover />);
-    expect(await screen.findByText("Weekend Special")).toBeVisible();
-    expect(screen.getByLabelText("TikTok — 1 of 2 Creator slots filled")).toHaveTextContent("1/2");
-    expect(screen.getByLabelText("TikTok — 1 of 2 Creator slots filled").querySelector(".creator-platform-tiktok")).not.toBeNull();
-    expect(screen.getByText(/Creators 1\/2/)).toBeVisible();
+    expect(await screen.findByText("Coffee stories")).toBeVisible();
+    expect(screen.queryByText("Weekend Special")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Creators 1\/2/)).not.toBeInTheDocument();
+    expect(screen.getByText("TikTok")).toBeVisible();
     expect(screen.getByRole("link", { name: "View Promotion" })).toBeVisible();
   });
   it("shows a full Promotion without offering an impossible request", async () => {
     mockCreatorApi({ "/creator/discover": [{ ...opportunity, platforms: [{ platform: "TikTok", approved: 2, capacity: 2, available: 0 }], requestStatus: null }] });
     mount(<CreatorDiscover />);
-    expect(await screen.findByLabelText("TikTok — 2 of 2 Creator slots filled")).toHaveTextContent("2/2");
-    expect(screen.getByText("No spots available")).toBeVisible();
+    expect(await screen.findByText("No spots available")).toBeVisible();
+    expect(screen.getByText("TikTok")).toBeVisible();
+    expect(screen.queryByText(/2\/2/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Request to Join" })).not.toBeInTheDocument();
   });
   it("shows the UGC customer offer and net content earning without internal funding", async () => {
@@ -570,10 +583,10 @@ describe("Creator workspace", () => {
       customerOfferFundedAllocation: 10000, platformFee: 250, productProvided: true, creatorMustPurchase: false };
     mockCreatorApi({ "/creator/ugc": [card] });
     mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
-    expect(await screen.findByText("UGC + Sale")).toBeVisible();
+    expect(await screen.findByText("UGC + Sales")).toBeVisible();
     expect(screen.getByText("Earn 4,750 ETB")).toBeVisible();
-    expect(screen.getByText("Customer offer: 3% discount")).toBeVisible();
-    expect(screen.getByText("Product provided by Business")).toBeVisible();
+    expect(screen.getByText("Customer gets 3% off")).toBeVisible();
+    expect(screen.getByText("Product provided")).toBeVisible();
     expect(screen.queryByText(/10,000|Platform fee|250/)).not.toBeInTheDocument();
   });
   it("requires a specific available verified profile for posted UGC and sends its binding", async () => {
@@ -643,9 +656,9 @@ describe("Creator workspace", () => {
   it("has a designed empty discovery state", async () => {
     mockCreatorApi({ "/creator/discover": [], "/creator/ugc": [] });
     mount(<CreatorDiscover />);
-    expect(await screen.findByText("No available Promotions")).toBeVisible();
-    await userEvent.click(screen.getByRole("tab", { name: "UGC" }));
-    expect(screen.getByText("No available UGC opportunities")).toBeVisible();
+    expect(await screen.findByText("No available opportunities")).toBeVisible();
+    expect(screen.queryByRole("tablist", { name: "Opportunity type" })).not.toBeInTheDocument();
+
   });
   it("sends a join message without negotiating budget or rates", async () => {
     const api = mockCreatorApi();

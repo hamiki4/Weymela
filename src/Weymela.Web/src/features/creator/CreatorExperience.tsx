@@ -24,7 +24,7 @@ import {
 } from "../../ui/components";
 import { amount, campaignType, count, date, isViewOnly } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
-import { PlatformOccupancy, PlatformRequirements } from "./CreatorPlatformIcon";
+import { PlatformRequirements } from "./CreatorPlatformIcon";
 import { UgcJoinControls } from "./UgcJoinControls";
 
 function HomePreviewResource<T>({ resource, children }: {
@@ -50,17 +50,48 @@ export function CreatorDashboard() {
         <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Active"><Metric label="Active Promotions" value={count(data.activeCampaigns)} icon="campaign" /></Link>
         <Link className="creator-dashboard-metric" to="/creator/earnings"><Metric label="Available Earnings" value={amount(data.earnings.availableEarnings)} icon="wallet" emphasis /></Link>
       </div>
-      <Section title="Opportunities for you" description="Open opportunities matching your social profiles.">
-        <Section title="Open Promotions" action={<ActionLink to="/creator/discover" secondary>See all</ActionLink>}>
-          <HomePreviewResource resource={opportunities}>{(rows) => rows.length
-            ? <div className="creator-opportunity-grid">{rows.slice(0, 3).map((row) => <PromotionOpportunityCard key={row.id} row={row} />)}</div>
-            : <Empty title="No open Promotions for you right now." />}</HomePreviewResource>
-        </Section>
-        <Section title="Open UGC" action={<ActionLink to="/creator/discover?tab=UGC" secondary>See all</ActionLink>}>
-          <HomePreviewResource resource={ugc}>{(rows) => rows.length
-            ? <div className="creator-opportunity-grid">{rows.slice(0, 3).map((row) => <UGCOpportunityCard key={row.id} row={row} onChanged={ugc.reload} />)}</div>
-            : <Empty title="No open UGC opportunities for you right now." />}</HomePreviewResource>
-        </Section>
+      <Section
+        title="Promotions for you"
+        description="Promotions matching your profile."
+        action={<ActionLink to="/creator/discover" secondary>See all</ActionLink>}
+      >
+        <HomePreviewResource resource={opportunities}>
+          {(promotionRows) => (
+            <HomePreviewResource resource={ugc}>
+              {(ugcRows) => {
+                const promotionCards = promotionRows
+                  .slice(0, 3)
+                  .map((row) => (
+                    <PromotionOpportunityCard
+                      key={`promotion-${row.id}`}
+                      row={row}
+                    />
+                  ));
+
+                const remaining = Math.max(0, 6 - promotionCards.length);
+
+                const ugcCards = ugcRows
+                  .slice(0, remaining)
+                  .map((row) => (
+                    <UGCOpportunityCard
+                      key={`ugc-${row.id}`}
+                      row={row}
+                      onChanged={ugc.reload}
+                    />
+                  ));
+
+                return promotionCards.length || ugcCards.length ? (
+                  <div className="creator-opportunity-grid">
+                    {promotionCards}
+                    {ugcCards}
+                  </div>
+                ) : (
+                  <Empty title="No Promotions for you right now." />
+                );
+              }}
+            </HomePreviewResource>
+          )}
+        </HomePreviewResource>
       </Section>
       <Section title="Recent earnings">
         {data.earnings.history.length || data.earnings.payoutHistory.length ? <div className="creator-activity-list">
@@ -83,54 +114,184 @@ export function CreatorDashboard() {
 
 function PromotionOpportunityCard({ row }: { row: Opportunity }) {
   const full = !!row.platforms?.length && row.platforms.every((slot) => slot.available <= 0);
+  const typeLabel = isViewOnly(row.type) ? "Views" : "Views + Sales";
+  const platforms = row.platforms?.map((slot) => slot.platform).join(" · ");
+
   return <article className="creator-opportunity-card">
-    <div className="creator-opportunity-heading"><div><p className="card-eyebrow">{row.business.displayName}</p><h3>{row.title}</h3></div>{row.requestStatus && <Badge status={row.requestStatus} />}</div>
-    {row.slogan?.trim() && <p className="creator-opportunity-slogan">{row.slogan}</p>}
-    <span className="creator-opportunity-type">{campaignType(row.type)}</span>
-    <p className="creator-opportunity-earn"><strong>Earn {amount(row.earnings.youEarn)} ETB</strong><span>per {count(row.earnings.views)} verified views</span></p>
-    {!isViewOnly(row.type) && <p className="creator-opportunity-meta">+ {amount(row.earnings.saleCommissionPercent)}% from eligible purchases</p>}
-    {row.platforms?.length ? <PlatformOccupancy slots={row.platforms} /> : null}
-    {row.platforms?.length ? <PlatformRequirements slots={row.platforms} showIcons={false} /> : null}
-    {row.creatorCapacity ? <p className="creator-opportunity-meta">Creators {row.approvedCreators ?? 0}/{row.creatorCapacity}</p> : null}
-    {(row.location || row.business.region) && <p className="creator-opportunity-location"><Icon name="location" size={16} />{row.location || row.business.region}</p>}
-    {full && !row.requestStatus ? <span className="creator-opportunity-unavailable">No spots available</span> : <ActionLink to={`/creator/discover/${row.id}`}>{row.requestStatus ? "View Promotion" : "Request to Join"}</ActionLink>}
+    <div className="creator-opportunity-heading">
+      <div>
+        <p className="card-eyebrow">{row.business.displayName}</p>
+        <span className="creator-opportunity-type">{typeLabel}</span>
+        <h3>{row.title}</h3>
+      </div>
+      {row.requestStatus && <Badge status={row.requestStatus} />}
+    </div>
+
+    <p className="creator-opportunity-earn">
+      <strong>Earn {amount(row.earnings.youEarn)} ETB</strong>
+      <span>per {count(row.earnings.views)} verified views</span>
+    </p>
+
+    {!isViewOnly(row.type) &&
+      <p className="creator-opportunity-meta">
+        + {amount(row.earnings.saleCommissionPercent)}% from sales
+      </p>
+    }
+
+    {platforms &&
+      <p className="creator-opportunity-meta">{platforms}</p>
+    }
+
+    {(row.location || row.business.region) &&
+      <p className="creator-opportunity-location">
+        <Icon name="location" size={16} />
+        {row.location || row.business.region}
+      </p>
+    }
+
+    {full && !row.requestStatus ? (
+      <span className="creator-opportunity-unavailable">No spots available</span>
+    ) : (
+      <ActionLink to={`/creator/discover/${row.id}`}>
+        {row.requestStatus ? "View Promotion" : "Request to Join"}
+      </ActionLink>
+    )}
   </article>;
 }
 
 function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () => void }) {
+  const typeLabel = row.customerOfferEnabled ? "UGC + Sales" : "UGC";
+  const platforms = (row.platformRequirements ?? [])
+    .map((requirement) => requirement.platform)
+    .join(" · ");
+
+  const arrangement =
+    row.productProvided && !row.creatorMustPurchase
+      ? "Product provided"
+      : row.creatorMustPurchase && !row.productProvided
+        ? "Creator purchases product"
+        : null;
+
   return <article className="creator-opportunity-card">
-    <div className="creator-opportunity-heading"><div><p className="card-eyebrow">{row.business}</p><h3>{row.title}</h3></div><Badge status={row.requestStatus ?? row.status} /></div>
-    {row.slogan?.trim() && <p className="creator-opportunity-slogan">{row.slogan}</p>}
-    <span className="creator-opportunity-type">{row.customerOfferEnabled ? "UGC + Sale" : "UGC"}</span>
-    <p className="creator-opportunity-earn"><strong>Earn {amount(row.creatorPayment)} ETB</strong></p>
-    {row.customerOfferEnabled && row.customerDiscountPercent != null && <p className="creator-opportunity-meta">Customer offer: {amount(row.customerDiscountPercent)}% discount</p>}
-    <p className="ugc-arrangement">{row.productProvided && !row.creatorMustPurchase ? "Product provided by Business" : row.creatorMustPurchase && !row.productProvided ? "Creator purchases product" : "Product arrangement unavailable"}</p>
-    <p className="creator-opportunity-meta">{row.contentType} · Due {date(row.dueDateUtc)}</p>
-    {(row.platformRequirements ?? []).length ? <PlatformRequirements slots={(row.platformRequirements ?? []).map((requirement) => ({
-      platform: requirement.platform,
-      minimumAudience: requirement.minimumAudience,
-      capacity: row.platformCapacities?.find((slot) => slot.platform === requirement.platform)?.capacity ?? 1,
-    }))} showIcons={false} /> : null}
-    {row.location && <p className="creator-opportunity-location"><Icon name="location" size={16} />{row.location}</p>}
-    <ActionLink to={`/creator/ugc/${row.id}`} secondary>View</ActionLink>
-    <UgcJoinControls item={row} onChanged={onChanged} />
+    <div className="creator-opportunity-heading">
+      <div>
+        <p className="card-eyebrow">{row.business}</p>
+        <span className="creator-opportunity-type">{typeLabel}</span>
+        <h3>{row.title}</h3>
+      </div>
+      {row.requestStatus && <Badge status={row.requestStatus} />}
+    </div>
+
+    <p className="creator-opportunity-earn">
+      <strong>Earn {amount(row.creatorPayment)} ETB</strong>
+    </p>
+
+    {row.customerOfferEnabled && row.customerDiscountPercent != null &&
+      <p className="creator-opportunity-meta">
+        Customer gets {amount(row.customerDiscountPercent)}% off
+      </p>
+    }
+
+    {arrangement &&
+      <p className="creator-opportunity-meta">{arrangement}</p>
+    }
+
+    <p className="creator-opportunity-meta">
+      Due {date(row.dueDateUtc)}
+    </p>
+
+    {platforms &&
+      <p className="creator-opportunity-meta">{platforms}</p>
+    }
+
+    {row.location &&
+      <p className="creator-opportunity-location">
+        <Icon name="location" size={16} />
+        {row.location}
+      </p>
+    }
+
+    {row.requestStatus ? (
+      <ActionLink to={`/creator/ugc/${row.id}`}>View Promotion</ActionLink>
+    ) : (
+      <UgcJoinControls item={row} onChanged={onChanged} />
+    )}
   </article>;
 }
 
 export function CreatorDiscover() {
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<"Promotions" | "UGC">(() => searchParams.get("tab") === "UGC" ? "UGC" : "Promotions");
   const [search, setSearch] = useState("");
   const promotions = useResource<Opportunity[]>("/creator/discover");
   const ugc = useResource<UgcCard[]>("/creator/ugc");
-  const filteredPromotions = useMemo(() => promotions.data?.filter((row) => `${row.business.displayName} ${row.title} ${row.slogan ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [], [promotions.data, search]);
-  const filteredUgc = useMemo(() => ugc.data?.filter((row) => `${row.business} ${row.title} ${row.slogan ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [], [ugc.data, search]);
-  return <>
-    <PageHeader title="Discover" compact />
-    <div className="creator-discover-controls"><div className="creator-tabs" role="tablist" aria-label="Opportunity type">{(["Promotions", "UGC"] as const).map((item) => <button key={item} role="tab" aria-selected={tab === item} className={tab === item ? "selected" : ""} onClick={() => setTab(item)}>{item}</button>)}</div><label className="creator-search"><Icon name="search" /><span className="sr-only">Search opportunities</span><input aria-label="Search opportunities" placeholder="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} /></label></div>
-    {tab === "Promotions" ? <Resource resource={promotions}>{() => filteredPromotions.length ? <div className="creator-opportunity-grid">{filteredPromotions.map((row) => <PromotionOpportunityCard key={row.id} row={row} />)}</div> : <Empty title="No available Promotions" />}</Resource>
-      : <Resource resource={ugc}>{() => filteredUgc.length ? <div className="creator-opportunity-grid">{filteredUgc.map((row) => <UGCOpportunityCard key={row.id} row={row} onChanged={ugc.reload} />)}</div> : <Empty title="No available UGC opportunities" />}</Resource>}
-  </>;
+
+  const filteredPromotions = useMemo(
+    () =>
+      promotions.data?.filter((row) =>
+        `${row.business.displayName} ${row.title} ${row.slogan ?? ""}`
+          .toLocaleLowerCase()
+          .includes(search.toLocaleLowerCase()),
+      ) ?? [],
+    [promotions.data, search],
+  );
+
+  const filteredUgc = useMemo(
+    () =>
+      ugc.data?.filter((row) =>
+        `${row.business} ${row.title} ${row.slogan ?? ""}`
+          .toLocaleLowerCase()
+          .includes(search.toLocaleLowerCase()),
+      ) ?? [],
+    [ugc.data, search],
+  );
+
+  return (
+    <>
+      <PageHeader title="Discover" compact />
+
+      <div className="creator-discover-controls">
+        <label className="creator-search">
+          <Icon name="search" />
+          <span className="sr-only">Search opportunities</span>
+          <input
+            aria-label="Search opportunities"
+            placeholder="Search opportunities"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+      </div>
+
+      <Section title="Opportunities">
+        <HomePreviewResource resource={promotions}>
+          {() => (
+            <HomePreviewResource resource={ugc}>
+              {() => {
+                const total =
+                  filteredPromotions.length + filteredUgc.length;
+
+                return total ? (
+                  <div className="creator-opportunity-grid">
+                    {filteredPromotions.map((row) => (
+                      <PromotionOpportunityCard key={`promotion-${row.id}`} row={row} />
+                    ))}
+                    {filteredUgc.map((row) => (
+                      <UGCOpportunityCard
+                        key={`ugc-${row.id}`}
+                        row={row}
+                        onChanged={ugc.reload}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Empty title="No available opportunities" />
+                );
+              }}
+            </HomePreviewResource>
+          )}
+        </HomePreviewResource>
+      </Section>
+    </>
+  );
 }
 
 export function CreatorUgcOpportunity() {

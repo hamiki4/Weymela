@@ -71,7 +71,7 @@ describe("Creator Promotions work groups", () => {
     expect(within(row("Ready work")).getByRole("button", { name: "Go Live" })).toBeVisible();
     expect(within(row("Live work")).getByRole("link", { name: "View progress" })).toBeVisible();
     expect(within(row("Paused work")).getByText("Paused", { exact: true })).toBeVisible();
-    expect(within(row("Funding work")).getByText("Funding Required", { exact: true })).toBeVisible();
+    expect(within(row("Funding work")).getByText("Budget needed", { exact: true })).toBeVisible();
   });
 
   it("puts pending requests in Requests and terminal work in History without duplicate approved requests", async () => {

@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
-import type { UgcAssignment, UgcCard, UgcDetail, UgcPricing } from "../../api/types";
+import type { UgcCard, UgcDetail, UgcPricing } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
 import { PlatformCapacityPicker, type PlatformCapacity } from "./PlatformCapacityPicker";
-import { PlatformOccupancy } from "../creator/CreatorPlatformIcon";
-import { UgcJoinControls } from "../creator/UgcJoinControls";
 import {
   ActionLink,
   Badge,
@@ -19,7 +17,7 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, date } from "../../ui/format";
+import { amount, date, promotionStatusLabel } from "../../ui/format";
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
@@ -57,14 +55,6 @@ const emptyForm: BusinessUgcForm = {
   customerRewardBudget: "",
 };
 
-function PlatformList({ platforms }: { platforms: { platform: string }[] }) {
-  return platforms.length ? (
-    <div className="tag-row">
-      {platforms.map((item) => <Badge key={item.platform} status={item.platform} />)}
-    </div>
-  ) : <span className="muted">Deliver directly to the Business</span>;
-}
-
 function ProductArrangement({ provided, purchase }: { provided: boolean; purchase: boolean }) {
   return <p className="ugc-arrangement"><strong>Product arrangement:</strong> {provided && !purchase ? "Product provided by Business" : purchase && !provided ? "Creator purchases product" : "Not selected"}</p>;
 }
@@ -98,19 +88,17 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
   const [editOfferBudget, setEditOfferBudget] = useState("");
   const [creatorError, setCreatorError] = useState("");
   return (
-    <article className="data-card">
-      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sales" : "UGC"} · {item.contentType}</small><h3>{item.title}</h3></div><Badge status={item.status} /></div>
-      <dl className="funds-grid">
-        <div><dt>Creator payment</dt><dd>{item.requiredFunding === undefined ? "—" : amount(item.requiredFunding)} ETB</dd></div>
-        <div><dt>Creators needed</dt><dd>{item.creatorsNeeded}</dd></div>
-        {item.applicationClosesAtUtc && <div><dt>Application closes</dt><dd>{date(item.applicationClosesAtUtc)}</dd></div>}
+    <article className="data-card business-promotion-card">
+      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sales" : "UGC"}</small><h3>{item.title}</h3></div><Badge status={item.status} label={promotionStatusLabel(item.status)} /></div>
+      <dl className="promotion-summary-list">
+        <div><dt>Creator payment</dt><dd>{amount(item.creatorPayment)} ETB</dd></div>
         <div><dt>Content due</dt><dd>{date(item.dueDateUtc)}</dd></div>
+        <div><dt>Creators</dt><dd>{item.approvedCreators}/{item.creatorsNeeded}</dd></div>
+        {item.location && <div><dt>Location</dt><dd>{item.location}</dd></div>}
       </dl>
+      <p className="promotion-next-action"><strong>Next:</strong> {item.approvedCreators < item.creatorsNeeded ? "Review Creator requests" : "Review Promotion"}</p>
       <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
-      <p className="fine-print">{item.platformRequirements.length ? "Creator must post on:" : "Creator delivers content to the Business."}</p>
-      {item.platformCapacities?.length ? <PlatformOccupancy slots={item.platformCapacities} />
-        : <PlatformList platforms={item.platformRequirements} />}
-      {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && item.customerOfferFundedAllocation !== undefined && <p className="fine-print">Customer discount: {amount(item.customerDiscountPercent)}% · Discount funding: {amount(item.customerOfferFundedAllocation)}.</p>}
+      {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer gets {amount(item.customerDiscountPercent)}% off.</p>}
       {item.status !== "Draft" && <>
         <Button variant="secondary" onClick={() => void editAction.run(async () => {
           const detail = await request<UgcDetail>(`/business/ugc/${item.id}`);
@@ -150,7 +138,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
             <div><strong>{row.creator}</strong><small>{row.creatorNumber != null ? `Creator #${row.creatorNumber}` : "Creator"}</small></div><Badge status={row.status} />
           </div>)}</>}
         </div>}
-        <Dialog title="Edit UGC details" open={!!editDetail} onClose={() => { if (!editAction.busy) setEditDetail(null); }}>
+        <Dialog title="Edit Promotion details" open={!!editDetail} onClose={() => { if (!editAction.busy) setEditDetail(null); }}>
           <p className="muted">{editDetail && editDetail.opportunity.approvedCreators > 0 ? "Some terms are locked because a Creator has been approved." : "You can update the full UGC opportunity while no Creator is approved. Pending applications do not lock editing."}</p>
           <form className="form-grid" onSubmit={(event) => { event.preventDefault(); if (!editDetail) return; void editAction.run(async key => {
             const full = editDetail.opportunity.approvedCreators === 0;
@@ -167,7 +155,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
             setEditDetail(null); onChanged();
           }); }}>
             {editDetail && editDetail.opportunity.approvedCreators === 0 && <>
-              <Field label="UGC title" wide><input value={editTitle} onChange={event => setEditTitle(event.target.value)} maxLength={120} required /></Field>
+              <Field label="Promotion title" wide><input value={editTitle} onChange={event => setEditTitle(event.target.value)} maxLength={120} required /></Field>
               <Field label="Content type"><select value={editContentType} onChange={event => setEditContentType(event.target.value as "Video" | "Photos")}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
               <Field label="Creator payment"><input type="number" min="0.01" step="0.01" value={editPayment} onChange={event => setEditPayment(event.target.value)} required /></Field>
               <Field label="Creators needed"><input type="number" min="1" max="100" step="1" value={editCreators} onChange={event => setEditCreators(event.target.value)} required /></Field>
@@ -197,10 +185,10 @@ export function BusinessUgcPage() {
   const openOnly = params.get("filter") === "Open";
   const opportunities = useResource<UgcCard[]>("/business/ugc");
   return <>
-    <PageHeader title="UGC" compact action={<span className="business-create-action"><ActionLink to="/business/ugc/new" icon="plus">Create UGC</ActionLink></span>} />
-    <Section title={openOnly ? "Open UGC" : "Your UGC"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
+    <PageHeader title="Promotions" compact action={<span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink></span>} />
+    <Section title={openOnly ? "Active Promotions" : "Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
       const visible = rows.filter((item) => item.status !== "Draft" && (!openOnly || item.status === "Open"));
-      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No open UGC." : "No UGC yet."} />;
+      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No active Promotions." : "No Promotions yet."} />;
     }}</Resource></Section>
   </>;
 }
@@ -219,7 +207,7 @@ export function CreateBusinessUgcPage() {
 
   return (
     <>
-      <PageHeader title={selectedType === "ugc-sales" ? "Create UGC + Sales" : "Create UGC"} />
+      <PageHeader title="Create Promotion" compact />
       <BusinessCreationGate>{creationWallet => <Resource resource={pricing}>
         {(config) => {
           const payment = Number(form.creatorPayment) || 0;
@@ -236,7 +224,7 @@ export function CreateBusinessUgcPage() {
           const valid = Boolean(form.title.trim() && form.instructions.trim() && form.dueDate && form.applicationCloses && new Date(form.applicationCloses) < new Date(form.dueDate) && form.productArrangement && netCreatorPayment >= config.minimumCreatorPayment && creators >= 1 && minimumBudgetMet && (!form.mustPost || form.platforms.length > 0) && offerValid);
           return (
             <div className="content-grid form-layout">
-              <Section title="UGC details">
+              <Section title="Promotion details">
                 <form className="form-grid" onSubmit={(event) => {
                   event.preventDefault();
                   if (!valid) return;
@@ -254,14 +242,14 @@ export function CreateBusinessUgcPage() {
                       applicationClosesAtUtc: new Date(form.applicationCloses).toISOString(),
                     }, key);
                     await post(`/business/ugc/${created.id}/publish`, { version: 0 }, key);
-                    navigate("/business/ugc");
+                    navigate("/business/campaigns");
                   });
                 }}>
-                  <Field label="UGC title" wide><input value={form.title} onChange={(e) => set("title", e.target.value)} required /></Field>
+                  <Field label="Promotion title" wide><input value={form.title} onChange={(e) => set("title", e.target.value)} required /></Field>
                   <Field label="Content type"><select value={form.contentType} onChange={(e) => set("contentType", e.target.value as BusinessUgcForm["contentType"])}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
                   <Field label="Application closes"><input type="datetime-local" value={form.applicationCloses} onChange={(e) => set("applicationCloses", e.target.value)} required /></Field>
                   <Field label="Content due"><input type="datetime-local" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} required /></Field>
-                  <Field label="Creator payment"><input type="number" min="0.01" step="0.01" value={form.creatorPayment} onChange={(e) => set("creatorPayment", e.target.value)} required /></Field>
+                  <Field label="Creator payment (ETB)"><input type="number" min="0.01" step="0.01" value={form.creatorPayment} onChange={(e) => set("creatorPayment", e.target.value)} required /></Field>
                   <Field label="Location"><input value={form.location} onChange={(e) => set("location", e.target.value)} /></Field>
                   <Field label="Instructions" wide><textarea value={form.instructions} onChange={(e) => set("instructions", e.target.value)} required /></Field>
                   <ProductArrangementChoice value={form.productArrangement} onChange={(value) => set("productArrangement", value)} />
@@ -289,55 +277,20 @@ export function CreateBusinessUgcPage() {
                         </span>
                       </label>
                     )}
-                  {form.customerOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer Reward Budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
+                  {form.customerOffer && <><Field label="Customer discount %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer offer budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
                   {form.mustPost && form.platforms.length === 0 && <Notice error>Choose at least one social platform.</Notice>}
-                  {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer Offers require an Admin platform sale fee configuration.</Notice>}
+                  {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer discounts are unavailable for this Promotion right now.</Notice>}
                   {form.customerOffer && discount > 100 && <Notice error>Discount must be between 0 and 100%.</Notice>}
-                  {!minimumBudgetMet && <Notice error>Required UGC funding is below the configured minimum budget.</Notice>}
+                  {!minimumBudgetMet && <Notice error>The Promotion budget is below the minimum required to publish.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}
-                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Publishing…" : "Publish UGC"}</Button></div>
+                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Publishing…" : "Publish Promotion"}</Button></div>
                 </form>
               </Section>
-              <Section title="Funding Summary">
-                <dl className="funds-grid"><div><dt>Available funds</dt><dd>{amount(creationWallet.available)} ETB</dd></div><div><dt>Creator payment</dt><dd>{amount(requiredFunding)} ETB</dd></div>{form.customerOffer && <div><dt>Customer Discount</dt><dd>{amount(discount)}%</dd></div>}{form.customerOffer && <div><dt>Customer discount funding</dt><dd>{amount(discountFunding)} ETB</dd></div>}<div><dt>Total funding to publish</dt><dd>{amount(totalFunding)} ETB</dd></div>{totalFunding > 0 && <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : creationWallet.available - totalFunding)} ETB{shortfall > 0 ? " more" : ""}</dd></div>}</dl>
-                {shortfall > 0 && <Notice error><Link to="/business/wallet">Add Funds</Link> before publishing. No funds are reserved until publishing.</Notice>}
-              </Section>
+              {shortfall > 0 && <Notice error><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
             </div>
           );
         }}
       </Resource>}</BusinessCreationGate>
     </>
   );
-}
-
-export function CreatorAssignmentCard({ assignment, onSubmitted }: { assignment: UgcAssignment; onSubmitted: () => void }) {
-  const action = useAction();
-  const [url, setUrl] = useState(assignment.submissionUrl ?? "");
-  const socialRequired = assignment.platformRequirements.length > 0;
-  return <article className="data-card">
-    <div className="card-head"><div><small>UGC assignment</small><h3>{assignment.opportunity}</h3></div><Badge status={assignment.status} /></div>
-    <dl className="funds-grid"><div><dt>Your Payment</dt><dd>{amount(assignment.creatorPayment)}</dd></div><div><dt>Due</dt><dd>{date(assignment.dueDateUtc)}</dd></div></dl>
-    <ProductArrangement provided={assignment.productProvided} purchase={assignment.creatorMustPurchase} />
-    <p>{assignment.instructions}</p><p className="fine-print">{socialRequired ? "Post on:" : "Deliver the content directly to the Business."}</p><PlatformList platforms={assignment.platformRequirements} />
-    {assignment.feedback && <Notice>{assignment.feedback}</Notice>}
-    {(assignment.status === "InProgress" || assignment.status === "ChangesRequested") && <form className="actions" onSubmit={(event) => { event.preventDefault(); if (!url.trim()) return; void action.run(async (key) => { await post(`/creator/ugc/assignments/${assignment.id}/submit`, { submissionUrl: url }, key); onSubmitted(); }); }}><Field label={socialRequired ? "Social post link" : "Content delivery link"}><input type="url" value={url} onChange={(e) => setUrl(e.target.value)} required /></Field>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !url.trim()}>{action.busy ? "Submitting…" : "Submit Content"}</Button></form>}
-  </article>;
-}
-
-export function CreatorUgcPage() {
-  const opportunities = useResource<UgcCard[]>("/creator/ugc");
-  const assignments = useResource<UgcAssignment[]>("/creator/ugc/assignments");
-  const refresh = () => { opportunities.reload(); assignments.reload(); };
-  return <>
-    <PageHeader eyebrow="Creator content" title="UGC" description="Find UGC opportunities and deliver content for your agreed one-time payment." />
-    <Section title="Available UGC"><Resource resource={opportunities}>{(rows) => rows.length ? <div className="card-stack">{rows.map((item) => <article className="data-card" key={item.id}>
-        <div className="card-head"><div><small>{item.business}</small><h3>{item.title}</h3></div><Badge status={item.requestStatus ?? "Ready"} /></div>
-        <dl className="funds-grid"><div><dt>Your Payment</dt><dd>{amount(item.creatorPayment)}</dd></div><div><dt>Due</dt><dd>{date(item.dueDateUtc)}</dd></div></dl>
-        <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
-        <p className="fine-print">{item.platformRequirements.length ? "Creator must post on:" : "Creator delivers content to the Business."}</p>
-        {!item.platformCapacities?.length && <PlatformList platforms={item.platformRequirements} />}
-        <UgcJoinControls item={item} onChanged={refresh} />
-      </article>)}</div> : <Empty title="No available UGC right now" message="New opportunities will appear here when they are open." />}</Resource></Section>
-    <Section title="Your UGC assignments" description="Only your agreed Creator Payment is shown here."><Resource resource={assignments}>{(rows) => rows.length ? <div className="card-stack">{rows.map((assignment) => <CreatorAssignmentCard key={assignment.id} assignment={assignment} onSubmitted={refresh} />)}</div> : <Empty title="No UGC assignments yet" message="Approved UGC requests will appear here." />}</Resource></Section>
-  </>;
 }

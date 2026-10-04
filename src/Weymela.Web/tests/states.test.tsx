@@ -91,7 +91,7 @@ describe("Shared designed states and accessibility", () => {
         <BusinessCampaigns />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("No promotions yet.")).toBeVisible();
+    expect(await screen.findByText("No Promotions yet.")).toBeVisible();
     expect(
       screen.getAllByRole("link", { name: "Create Promotion" }).length,
     ).toBe(1);

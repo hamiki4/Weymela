@@ -42,6 +42,20 @@
 .product-shell .desktop-data td { color: var(--product-ink); font-size: .86rem; font-variant-numeric: tabular-nums; }
 .product-shell .desktop-data td.numeric { font-weight: 650; }
 .product-shell .data-card .funds-grid { padding: 10px 0; }
+.product-shell .promotion-summary-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 135px), 1fr));
+  gap: 8px 16px;
+  margin: 12px 0;
+}
+.product-shell .promotion-summary-list div { min-width: 0; }
+.product-shell .promotion-summary-list dt { color: var(--product-secondary); font-size: .76rem; }
+.product-shell .promotion-summary-list dd { margin: 2px 0 0; color: var(--product-ink); font-size: .9rem; font-weight: 650; overflow-wrap: anywhere; }
+.product-shell .promotion-next-action { margin: 10px 0 14px; color: var(--product-secondary); font-size: .84rem; }
+.product-shell .promotion-next-action strong { color: var(--product-ink); }
+.product-shell .business-promotion-list { gap: 0; }
+.product-shell .business-promotion-summary { padding-block: 16px; }
+.product-shell .business-promotion-card { padding-block: 16px; }
 .ugc-arrangement { margin: 8px 0; color: var(--product-ink); line-height: 1.4; }
 .ugc-arrangement strong { font-weight: 700; }
 .ugc-product-choice { display: grid; gap: 6px; }
@@ -143,7 +157,7 @@
 .role-business .page-heading { margin-bottom: 14px; }
 .role-business .page-heading h1 { font-size: clamp(1.35rem, 4.8vw, 1.7rem); }
 .role-business .business-create-action .button { min-height: 40px; padding: 7px 11px; font-size: .84rem; }
-.business-balance-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 14px 6px; margin-bottom: 16px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); }
+.business-balance-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; padding: 14px 6px; margin-bottom: 16px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); }
 .role-business .business-balance-summary { gap: 8px; padding: 0; border: 0; background: transparent; }
 .role-business .business-balance-summary > div { padding: 12px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; box-shadow: 0 2px 8px #17243d0b; }
 .role-business .business-operation-row, .role-business .data-card { border: 1px solid var(--product-line); border-radius: 12px; box-shadow: 0 2px 8px #17243d0b; }
@@ -316,10 +330,6 @@
 .role-creator .creator-opportunity-slogan { color: var(--product-secondary); border: 0; padding: 0; font-weight: 500; }
 .role-creator .creator-opportunity-meta { color: var(--product-secondary); font-size: .86rem; }
 .role-creator .creator-opportunity-location { display: inline-flex; align-items: center; gap: 4px; color: var(--product-secondary); font-size: .84rem; }
-.creator-platform-counts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-.creator-platform-counts > span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px 3px 3px; border: 1px solid var(--product-line); border-radius: 8px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.creator-platform-counts .creator-platform-icon { width: 25px; height: 25px; border-radius: 6px; }
-.creator-platform-counts .creator-platform-icon svg { width: 18px; height: 18px; }
 .creator-platform-requirements { display: grid; gap: 6px; width: 100%; margin: 6px 0; }
 .creator-platform-requirements > span { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .creator-platform-requirements .creator-platform-icon { flex: 0 0 auto; width: 25px; height: 25px; border-radius: 6px; }
@@ -331,10 +341,9 @@
 .role-creator .creator-opportunity-earn strong { color: var(--product-ink); font-size: 1rem; }
 .role-creator .creator-opportunity-earn span { color: var(--product-secondary); font-size: .84rem; }
 .role-creator .creator-opportunity-unavailable { color: var(--product-secondary); font-weight: 700; }
-.creator-platform-counts .platform-full { color: var(--product-muted); background: #f3f4f6; border-color: #d1d5db; }
 .ugc-join-profiles { display: grid; gap: 4px; min-width: 0; margin: 8px 0; padding: 9px 10px; border: 1px solid var(--product-line); border-radius: 10px; }
 .ugc-join-profiles legend { padding: 0 4px; font-weight: 700; font-size: .88rem; }
-.ugc-join-profiles label { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--product-line); }
+.ugc-join-profiles label { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--product-line); }
 .ugc-join-profiles label:last-child { border-bottom: 0; }
 .ugc-join-profiles label > span:nth-last-child(2) { display: grid; min-width: 0; }
 .ugc-join-profiles label small { overflow-wrap: anywhere; color: var(--product-secondary); }

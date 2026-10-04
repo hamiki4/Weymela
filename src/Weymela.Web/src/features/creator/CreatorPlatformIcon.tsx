@@ -30,21 +30,6 @@ export function CreatorPlatformIcon({ platform }: { platform: CreatorPlatform })
   </span>;
 }
 
-export function PlatformOccupancy({ slots, label = "Creator platform capacity" }: {
-  slots: { platform: string; approved: number; capacity: number; available?: number }[];
-  label?: string;
-}) {
-  const configured = slots.filter(slot => slot.capacity > 0);
-  return configured.length ? <div className="creator-platform-counts" aria-label={label}>
-    {configured.map(slot => <span key={slot.platform} className={slot.available === 0 ? "platform-full" : ""}
-      aria-label={`${slot.platform} — ${slot.approved} of ${slot.capacity} Creator slots filled`}
-      title={`${slot.platform}: ${slot.approved}/${slot.capacity}`}>
-      {isCreatorPlatform(slot.platform) ? <CreatorPlatformIcon platform={slot.platform} /> : <span>{slot.platform}</span>}
-      <span>{slot.approved}/{slot.capacity}</span>
-    </span>)}
-  </div> : null;
-}
-
 export function PlatformRequirements({ slots, label = "Platform requirements", showIcons = true }: {
   slots: { platform: string; capacity?: number; minimumAudience?: number | null }[];
   label?: string;
@@ -59,7 +44,7 @@ export function PlatformRequirements({ slots, label = "Platform requirements", s
         : "No minimum";
       return <span key={slot.platform}>
         {showIcons && (isCreatorPlatform(slot.platform) ? <CreatorPlatformIcon platform={slot.platform} /> : <strong>{slot.platform}</strong>)}
-        <span><strong>{slot.capacity} {slot.capacity === 1 ? "Creator" : "Creators"}</strong><small>{minimum}</small></span>
+        <span><strong>{slot.platform}</strong><small>{minimum}</small></span>
       </span>;
     })}
   </div> : null;

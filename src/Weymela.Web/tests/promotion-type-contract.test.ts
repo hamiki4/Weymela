@@ -3,6 +3,7 @@ import {
   campaignType,
   isViewAndSale,
   isViewOnly,
+  promotionTypeLabel,
   promotionTypeCode,
   statusLabel,
 } from "../src/ui/format";
@@ -23,5 +24,12 @@ describe("Promotion type API contract", () => {
   it("uses the locked user-facing View & Sale terminology", () => {
     expect(statusLabel("ViewPlusCommission")).toBe("View & Sale");
     expect(campaignType("ViewPlusCommission")).not.toContain("Commission");
+  });
+
+  it("uses the simple Promotion type labels in Business and Creator workspaces", () => {
+    expect(promotionTypeLabel("ViewOnly")).toBe("Views");
+    expect(promotionTypeLabel("ViewPlusCommission")).toBe("Views + Sales");
+    expect(promotionTypeLabel("UGC")).toBe("UGC");
+    expect(promotionTypeLabel("UGC + Sales")).toBe("UGC + Sales");
   });
 });

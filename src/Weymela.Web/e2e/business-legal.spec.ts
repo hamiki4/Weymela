@@ -14,8 +14,8 @@ for (const width of [320, 360, 375, 390, 430]) {
     await layout(page);
 
     await page.goto("/business/ugc/new");
-    await expect(page).toHaveURL(/\/business\/ugc\/new$/);
-    await expect(page.getByRole("heading", { name: "Create UGC", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/business\/campaigns\/new\?type=ugc$/);
+    await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
     await expect(page.getByText("Before you continue", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Business Terms|Anti-Circumvention Rules/)).toHaveCount(0);
     await layout(page);

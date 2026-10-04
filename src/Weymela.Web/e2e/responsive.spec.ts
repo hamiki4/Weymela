@@ -181,17 +181,16 @@ for (const viewport of viewports)
           await screenshot(page, `${viewport.width}-business-promotion-shortfall`);
         }
         if (viewport.width <= 430 && role === "business" && path === "/business/ugc") {
-          await expect(page.getByRole("heading", { name: "Your UGC" })).toBeVisible();
-          await expect(page.getByRole("link", { name: "Create UGC" })).toHaveAttribute("href", "/business/ugc/new");
-          await expect(page.getByLabel("UGC title")).toHaveCount(0);
+          await expect(page.getByRole("heading", { name: "Promotions" })).toBeVisible();
+          await expect(page.getByRole("link", { name: "Create Promotion" })).toHaveAttribute("href", "/business/campaigns/new");
+          await expect(page.getByLabel("Promotion title")).toHaveCount(0);
         }
         if (viewport.width <= 430 && role === "business" && path === "/business/ugc/new") {
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
-          await expect(page.getByRole("heading", { name: "Create UGC", exact: true })).toBeVisible();
-          const summary = page.locator("section.panel").filter({ has: page.getByRole("heading", { name: "Funding Summary" }) });
-          await page.getByLabel("Creator payment").fill(String(available + 1000));
-          await expect(summary.getByText("Need", { exact: true })).toBeVisible();
-          await expect(summary.getByRole("link", { name: "Add Funds" })).toBeVisible();
+          await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
+          await page.getByLabel("Creator payment (ETB)").fill(String(available + 1000));
+          await expect(page.getByText(/ETB more$/)).toBeVisible();
+          await expect(page.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-business-ugc-shortfall`);
         }

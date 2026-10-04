@@ -12,13 +12,11 @@ import {
 } from "../features/business/BusinessPages";
 import { CreateCampaign } from "../features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
-import { BusinessUgcPage, CreateBusinessUgcPage } from "../features/business/UgcPages";
 import {
   CreatorEarnings,
   CreatorHowYouEarn,
-  CreatorOpportunity,
 } from "../features/creator/CreatorPages";
-import { CreatorDashboard, CreatorDiscover, CreatorPromotions, CreatorUgcOpportunity } from "../features/creator/CreatorExperience";
+import { CreatorDashboard, CreatorDiscover, CreatorOpportunity, CreatorPromotions, CreatorUgcOpportunity } from "../features/creator/CreatorExperience";
 import { ProfilePage } from "./ProfilePage";
 import {
   CreatorActiveDetail,
@@ -141,8 +139,8 @@ export function App() {
           <Route path="/business/campaigns/:id" element={<BusinessCampaignDetail />} />
           <Route path="/business/requests" element={<BusinessRequests />} />
           <Route path="/business/pricing" element={<BusinessPricingPage />} />
-          <Route path="/business/ugc" element={<BusinessUgcPage />} />
-          <Route path="/business/ugc/new" element={<CreateBusinessUgcPage />} />
+          <Route path="/business/ugc" element={<Navigate to="/business/campaigns" replace />} />
+          <Route path="/business/ugc/new" element={<Navigate to="/business/campaigns/new?type=ugc" replace />} />
           <Route path="/business/cashiers" element={<BusinessCashiers />} />
         </Route>
         <Route element={<RoleGate roles={["Creator"]} />}>
@@ -155,7 +153,7 @@ export function App() {
           <Route path="/creator/campaigns/:id" element={<CreatorActiveDetail />} />
           <Route path="/creator/requests" element={<Navigate to="/creator/promotions" replace />} />
           <Route path="/creator/pricing" element={<CreatorHowYouEarn />} />
-          <Route path="/creator/ugc" element={<Navigate to="/creator/discover?tab=UGC" replace />} />
+          <Route path="/creator/ugc" element={<Navigate to="/creator/discover" replace />} />
           <Route path="/creator/earnings" element={<CreatorEarnings />} />
           <Route path="/creator/profile" element={<Navigate to="/profile#social-profiles" replace />} />
           <Route path="/creator/payouts" element={<Navigate to="/creator/earnings" replace />} />

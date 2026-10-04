@@ -1,22 +1,15 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
-import { PlatformOccupancy, PlatformRequirements } from "./CreatorPlatformIcon";
 import type {
-  CreatorHome,
   CreatorPricing,
   Earnings,
-  Opportunity,
 } from "../../api/types";
 import {
   ActionLink,
-  Badge,
   Button,
   Currency,
   DataTable,
   Empty,
-  Field,
-  Metric,
   Notice,
   PageHeader,
   Resource,
@@ -24,283 +17,13 @@ import {
 } from "../../ui/components";
 import {
   amount,
-  campaignType,
   count,
-  date,
   dateTime,
-  isViewAndSale,
   isViewOnly,
+  promotionTypeLabel,
 } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 
-export function CreatorDashboard() {
-  const resource = useResource<CreatorHome>("/creator/home");
-  return (
-    <Resource resource={resource}>
-      {(data) => (
-        <>
-          <PageHeader
-            eyebrow={`Welcome, ${data.creator.displayName}`}
-            title="Make your creativity count."
-            description="Discover Business-created opportunities, create something genuine and grow your earnings."
-            action={
-              <ActionLink to="/creator/discover">Discover</ActionLink>
-            }
-          />
-          <div className="metric-grid">
-            <Metric
-              label="Available Earnings"
-              value={amount(data.earnings.availableEarnings)}
-            note="Yours across every Promotion"
-              emphasis
-              icon="wallet"
-            />
-            <Metric
-              label="Active Promotions"
-              value={count(data.activeCampaigns)}
-              note="Your current collaborations"
-              icon="campaign"
-            />
-          </div>
-          <div className="quick-grid">
-            <Link className="quick-card" to="/creator/requests">
-              <Icon name="people" />
-              <span className="quick-value">{data.requests}</span>
-              <strong>Promotion Requests</strong>
-            </Link>
-            <Link className="quick-card" to="/creator/campaigns">
-              <Icon name="campaign" />
-              <strong>Active Promotions</strong>
-              <span>Content, views and your progress.</span>
-            </Link>
-            <Link className="quick-card" to="/creator/earnings">
-              <Icon name="wallet" />
-              <strong>Your Earnings</strong>
-              <span>Every verified moment counts.</span>
-            </Link>
-            <Link className="quick-card pricing-home-card" to="/creator/pricing">
-              <Icon name="spark" />
-              <strong>Pricing</strong>
-              <Icon name="arrow" />
-            </Link>
-          </div>
-          <div className="two-column section-kicker-space">
-            <Section title="Your next payout">
-              <Eligibility data={data.earnings} />
-              <ActionLink to="/creator/payouts" secondary>
-                Payout details
-              </ActionLink>
-            </Section>
-            <div className="overview-highlight">
-              <p className="eyebrow">The right fit, already found</p>
-              <h2>
-                Promotions made
-                <br />
-                for your kind of creativity.
-              </h2>
-              <p>
-                Discovery matches your active social profiles to funded Promotions.
-              </p>
-              <ActionLink to="/creator/discover" secondary>
-                Find your next opportunity
-              </ActionLink>
-            </div>
-          </div>
-        </>
-      )}
-    </Resource>
-  );
-}
-function OpportunityCard({ row }: { row: Opportunity }) {
-  return (
-    <article className="campaign-card">
-      <div className="campaign-art" aria-hidden="true">
-        <span>{row.business.displayName.charAt(0)}</span>
-        <Icon name="campaign" />
-      </div>
-      <p className="card-eyebrow">
-        {row.business.displayName} · {row.business.region}
-      </p>
-      <div className="card-head">
-        <h3>{row.title}</h3>
-        {row.requestStatus && <Badge status={row.requestStatus} />}
-      </div>
-      <div className="tag-row">
-        <Badge status={row.type} />
-      </div>
-      <p>{row.requirements || row.description}</p>
-      <div className="pricing-note">
-        <strong>
-          {amount(row.earnings.youEarn)} per {count(row.earnings.views)}{" "}
-          verified views
-        </strong>
-        {isViewAndSale(row.type) && (
-          <small>
-            Plus {amount(row.earnings.saleCommissionPercent)}% per verified
-            sale.
-          </small>
-        )}
-      </div>
-      <p className="fine-print">
-        {date(row.startUtc)} – {date(row.endUtc)}
-      </p>
-      <ActionLink to={`/creator/discover/${row.id}`} secondary>
-        {row.requestStatus ? "View Promotion" : "Request to Join"}
-      </ActionLink>
-    </article>
-  );
-}
-export function CreatorDiscovery() {
-  const resource = useResource<Opportunity[]>("/creator/discover");
-  return (
-    <>
-      <PageHeader
-        eyebrow="Create with a purpose"
-        title="Discover"
-        description="Funded Promotions that match your verified profile. Your next collaboration starts here."
-      />
-      <Resource resource={resource}>
-        {(rows) =>
-          rows.length ? (
-            <div className="card-stack campaign-grid">
-              {rows.map((row) => (
-                <OpportunityCard key={row.id} row={row} />
-              ))}
-            </div>
-          ) : (
-            <Section title="Made for your profile">
-              <Empty
-                title="No available Promotions right now"
-                message="New opportunities will appear when a funded Promotion matches your active social profiles and current requirements."
-              />
-            </Section>
-          )
-        }
-      </Resource>
-    </>
-  );
-}
-export function CreatorOpportunity() {
-  const { id } = useParams();
-  const resource = useResource<Opportunity>(`/creator/discover/${id}`);
-  const action = useAction();
-  const [message, setMessage] = useState("");
-  const [concept, setConcept] = useState("");
-  const [socialProfileId, setSocialProfileId] = useState("");
-  return (
-    <>
-      <Link className="back-link" to="/creator/discover">
-        ← Discover
-      </Link>
-      <Resource resource={resource}>
-        {(p) => (
-          <>
-            <PageHeader
-              eyebrow={p.business.displayName}
-              title={p.title}
-              description={campaignType(p.type)}
-              action={p.requestStatus && <Badge status={p.requestStatus} />}
-            />
-            <div className="content-grid">
-              <Section title="Promotion details">
-                {p.description?.trim() && <p className="preserve-lines">{p.description}</p>}
-                {p.slogan?.trim() && <p className="creator-opportunity-slogan">{p.slogan}</p>}
-                {p.requirements?.trim() && <div className="pricing-note">
-                  <strong>Requirements</strong>
-                  <p className="preserve-lines">{p.requirements}</p>
-                </div>}
-                <dl className="detail-list">
-                  <div>
-                    <dt>Duration</dt>
-                    <dd>
-                      {p.promotionLiveDurationDays} days after you go live
-                    </dd>
-                  </div>
-                  {p.region && <div>
-                    <dt>Region</dt>
-                    <dd>{p.region}</dd>
-                  </div>}
-                </dl>
-                {!!p.platforms?.length && <PlatformOccupancy slots={p.platforms} />}
-                {!!p.platforms?.length && <PlatformRequirements slots={p.platforms} />}
-              </Section>
-              <Section title="How You Earn" action={<Currency />}>
-                <div className="price-feature">
-                  <strong>{amount(p.earnings.youEarn)}</strong>
-                  <span>per {count(p.earnings.views)} verified views</span>
-                </div>
-                {isViewAndSale(p.type) && (
-                  <p>
-                    Plus {amount(p.earnings.saleCommissionPercent)}% per
-                    verified sale.
-                  </p>
-                )}
-              </Section>
-            </div>
-            <Section
-              title={p.requestStatus ? "Your request" : "Request to Join"}
-            >
-              {p.requestStatus ? (
-                <Notice>Request {p.requestStatus.toLowerCase()}. {p.requestStatus === "Pending" && "Waiting for approval."} <Link to="/creator/promotions">My Promotions</Link></Notice>
-              ) : (
-                <form
-                  className="contained-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const selectedProfile = p.eligibleSocialProfiles?.find((profile) => profile.id === socialProfileId);
-                    if (p.platforms?.length && !selectedProfile) return;
-                    void action.run(async (key) => {
-                      await post(
-                        `/creator/promotions/${id}/request`,
-                        { message, contentConcept: concept || null, ...(selectedProfile ? { platform: selectedProfile.platform, creatorSocialProfileId: selectedProfile.id } : {}) },
-                        key,
-                      );
-                      resource.reload();
-                    });
-                  }}
-                >
-                  <fieldset disabled={action.busy}>
-                    {!!p.platforms?.length && <div className="creator-platform-selector" role="radiogroup" aria-label="Choose platform">
-                      <strong>Choose platform</strong>
-                      {p.platforms.map((slot) => {
-                        const profiles = p.eligibleSocialProfiles?.filter((profile) => profile.platform === slot.platform) ?? [];
-                        return <div className="creator-platform-option" key={slot.platform}>
-                          <strong>{slot.platform}</strong><small>{slot.available > 0 ? `${slot.available} available` : "Full"}</small>
-                          {profiles.map((profile) => <label key={profile.id}><input type="radio" name="creator-platform" value={profile.id} checked={socialProfileId === profile.id} onChange={() => setSocialProfileId(profile.id)} disabled={slot.available <= 0} />{profile.profileUrl}</label>)}
-                          {profiles.length === 0 && <small>{slot.available > 0 ? "Connect a social profile to request" : "Unavailable"}</small>}
-                        </div>;
-                      })}
-                    </div>}
-                    <Field label="Short message">
-                      <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        maxLength={1000}
-                        rows={3}
-                      />
-                    </Field>
-                    <Field label="Content concept (optional)">
-                      <textarea
-                        value={concept}
-                        onChange={(e) => setConcept(e.target.value)}
-                        maxLength={2000}
-                        rows={3}
-                      />
-                    </Field>
-                    {action.error && <Notice error>{action.error}</Notice>}
-                    <Button type="submit" disabled={action.busy || (!!p.platforms?.length && !p.eligibleSocialProfiles?.some((profile) => profile.id === socialProfileId && p.platforms?.some((slot) => slot.platform === profile.platform && slot.available > 0)))}>
-                      {action.busy ? "Sending request…" : "Submit Request"}
-                    </Button>
-                  </fieldset>
-                </form>
-              )}
-            </Section>
-          </>
-        )}
-      </Resource>
-    </>
-  );
-}
 export function CreatorHowYouEarn() {
   const resource = useResource<CreatorPricing>("/creator/pricing");
   return (
@@ -326,7 +49,7 @@ export function CreatorHowYouEarn() {
                 <article className="pricing-card" key={r.type}>
                   <div className="pricing-card-heading">
                     <span className="pricing-card-kicker">Promotion type</span>
-                    <h3>{campaignType(r.type)}</h3>
+                    <h3>{promotionTypeLabel(r.type)}</h3>
                   </div>
                   <dl className="pricing-card-details">
                     <div>
@@ -454,83 +177,6 @@ export function CreatorEarnings() {
                 />
               </Section>
           </>
-        )}
-      </Resource>
-    </>
-  );
-}
-export function CreatorRequests() {
-  const resource = useResource<
-    {
-      id: string;
-      campaignId: string;
-      campaign: string;
-      business: string;
-      type: string;
-      status: string;
-      appliedAtUtc: string;
-    }[]
-  >("/creator/requests");
-  return (
-    <>
-      <PageHeader
-        eyebrow="Your next collaborations"
-        title="My Promotions"
-        description="Keep track of the Promotions you’ve requested to join."
-      />
-      <Resource resource={resource}>
-        {(rows) => (
-          <Section title="Your requests">
-            <DataTable
-              rows={rows}
-              rowKey={(r) => r.id}
-              label="Promotion Requests"
-              columns={[
-                {
-                  label: "Promotion",
-                  cell: (r) => (
-                    <>
-                      <strong>{r.campaign}</strong>
-                      <small>{r.business}</small>
-                    </>
-                  ),
-                },
-                { label: "Type", cell: (r) => campaignType(r.type) },
-                { label: "Requested", cell: (r) => date(r.appliedAtUtc) },
-                { label: "Status", cell: (r) => <Badge status={r.status} /> },
-              ]}
-              card={(r) => (
-                <>
-                  <div className="card-head">
-                    <div>
-                      <p className="subheading">{r.business}</p>
-                      <h3>{r.campaign}</h3>
-                    </div>
-                    <Badge status={r.status} />
-                  </div>
-                  <p className="fine-print">
-                    {campaignType(r.type)} · Requested {date(r.appliedAtUtc)}
-                  </p>
-                  {r.status === "Approved" && (
-                    <ActionLink to="/creator/promotions" secondary>
-                      My Promotions
-                    </ActionLink>
-                  )}
-                </>
-              )}
-              empty={
-                <Empty
-                  title="No Promotion requests yet"
-                  message="Discover funded Promotions that match your creativity."
-                  action={
-                    <ActionLink to="/creator/discover">
-                      Discover opportunities
-                    </ActionLink>
-                  }
-                />
-              }
-            />
-          </Section>
         )}
       </Resource>
     </>

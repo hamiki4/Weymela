@@ -21,7 +21,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await expect(page.getByText("Product arrangement")).toBeVisible();
     await expect(page.getByRole("radio", { name: /Product provided by Business/ })).not.toBeChecked();
     await expect(page.getByRole("radio", { name: /Creator purchases product/ })).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "Publish UGC" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
     await page.getByRole("radio", { name: /Creator purchases product/ }).check();
     await expect(page.getByText("Creator buys before creating content")).toBeVisible();
     await layout(page);
@@ -30,7 +30,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await expect(page.getByText(/Product arrangement:.*Creator purchases product/)).toBeVisible();
     await layout(page);
 
-    for (const [alias, path] of [["creator", "/creator/discover?tab=UGC"], ["customer", "/customer/offers"],
+    for (const [alias, path] of [["creator", "/creator/discover"], ["customer", "/customer/offers"],
       ["cashier", "/checkout"], ["admin", "/admin"], ["operations-admin", "/admin/operations"]] as const) {
       await login(context, alias);
       await open(page, path);

@@ -482,13 +482,27 @@ describe("Creator workspace", () => {
     expect(screen.queryByText("javascript:alert(1)")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "View TikTok profile" })).toHaveLength(1);
   });
+  it("uses Pending, Active and Completed for My Promotions", async () => {
+    mount(<CreatorPromotions />);
+
+    expect(await screen.findByRole("heading", { name: "My Promotions" })).toBeVisible();
+
+    const tabs = screen.getByRole("tablist", { name: "Filter Promotions" });
+    expect(
+      within(tabs).getAllByRole("tab").map((tab) => tab.textContent),
+    ).toEqual(["Pending", "Active", "Completed"]);
+
+    expect(within(tabs).queryByRole("tab", { name: "Requests" })).not.toBeInTheDocument();
+    expect(within(tabs).queryByRole("tab", { name: "History" })).not.toBeInTheDocument();
+  });
+
   it("groups own earnings and Campaigns", async () => {
     mount(<CreatorDashboard />);
     expect(
       await screen.findByRole("heading", { name: "Home" }),
     ).toBeVisible();
     expect(screen.getAllByText("5,400").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Pending Requests/ })).toHaveAttribute("href", "/creator/promotions?filter=Requests");
+    expect(screen.getByRole("link", { name: /Pending Requests/ })).toHaveAttribute("href", "/creator/promotions?filter=Pending");
     expect(screen.getByRole("link", { name: /Active Promotions/ })).toHaveAttribute("href", "/creator/promotions?filter=Active");
     expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
   });

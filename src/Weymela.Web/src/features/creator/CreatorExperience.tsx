@@ -46,7 +46,7 @@ export function CreatorDashboard() {
     <Resource resource={home}>{(data) => <>
       <PageHeader title="Home" compact />
       <div className="metric-grid creator-metrics">
-        <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Requests"><Metric label="Pending Requests" value={count(data.requests)} icon="people" /></Link>
+        <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Pending"><Metric label="Pending Requests" value={count(data.requests)} icon="people" /></Link>
         <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Active"><Metric label="Active Promotions" value={count(data.activeCampaigns)} icon="campaign" /></Link>
         <Link className="creator-dashboard-metric" to="/creator/earnings"><Metric label="Available Earnings" value={amount(data.earnings.availableEarnings)} icon="wallet" emphasis /></Link>
       </div>
@@ -338,8 +338,8 @@ export function CreatorUgcOpportunity() {
   </>;
 }
 
-type PromotionGroup = "Active" | "Requests" | "History";
-const GROUPS: PromotionGroup[] = ["Active", "Requests", "History"];
+type PromotionGroup = "Pending" | "Active" | "Completed";
+const GROUPS: PromotionGroup[] = ["Pending", "Active", "Completed"];
 const terminalPromotionStatuses = new Set(["Ended", "Completed", "Cancelled", "Rejected"]);
 const terminalRequestStatuses = new Set(["Rejected", "Declined", "Withdrawn"]);
 
@@ -349,7 +349,7 @@ function statusLabel(status: string) {
 
 function promotionGroup(row: CreatorCampaign): PromotionGroup {
   return terminalPromotionStatuses.has(row.status) || row.contentReviewStatus === "Rejected"
-    || (row.participationId !== null && row.remainingDays == null) ? "History" : "Active";
+    || (row.participationId !== null && row.remainingDays == null) ? "Completed" : "Active";
 }
 
 function promotionStatus(row: CreatorCampaign) {
@@ -371,15 +371,15 @@ function workItems(campaigns: CreatorCampaign[], requests: CreatorRequest[],
     ...campaigns.map((row): CreatorWorkItem => ({ kind: "promotion", row, group: promotionGroup(row), key: `promotion-${row.budgetId}` })),
     ...requests.filter((row) => !campaignIds.has(row.campaignId)).map((row): CreatorWorkItem => ({
       kind: "promotionRequest", row, key: `promotion-request-${row.id}`,
-      group: row.status === "Pending" ? "Requests" : terminalRequestStatuses.has(row.status) ? "History" : "Active",
+      group: row.status === "Pending" ? "Pending" : terminalRequestStatuses.has(row.status) ? "Completed" : "Active",
     })),
     ...assignments.map((row): CreatorWorkItem => ({
       kind: "ugcAssignment", row, key: `ugc-assignment-${row.id}`,
-      group: row.status === "Approved" || row.status === "Rejected" ? "History" : "Active",
+      group: row.status === "Rejected" ? "Completed" : "Active",
     })),
     ...ugcRequests.filter((row) => !assignedUgcIds.has(row.opportunityId)).map((row): CreatorWorkItem => ({
       kind: "ugcRequest", row, key: `ugc-request-${row.id}`,
-      group: row.status === "Pending" ? "Requests" : terminalRequestStatuses.has(row.status) ? "History" : "Active",
+      group: row.status === "Pending" ? "Pending" : terminalRequestStatuses.has(row.status) ? "Completed" : "Active",
     })),
   ];
 }
@@ -387,8 +387,12 @@ function workItems(campaigns: CreatorCampaign[], requests: CreatorRequest[],
 export function CreatorPromotions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedGroup = searchParams.get("filter");
-  const filter: PromotionGroup = requestedGroup === "Requests" || requestedGroup === "Requested" ? "Requests"
-    : requestedGroup === "History" || requestedGroup === "Ended" || requestedGroup === "DeclinedRejected" ? "History" : "Active";
+  const filter: PromotionGroup =
+    requestedGroup === "Pending" || requestedGroup === "Requests" || requestedGroup === "Requested"
+      ? "Pending"
+      : requestedGroup === "Completed" || requestedGroup === "History" || requestedGroup === "Ended" || requestedGroup === "DeclinedRejected"
+        ? "Completed"
+        : "Active";
   const promotions = useResource<CreatorCampaign[]>("/creator/campaigns");
   const requests = useResource<CreatorRequest[]>("/creator/requests");
   const assignments = useResource<UgcAssignment[]>("/creator/ugc/assignments");
@@ -404,7 +408,7 @@ export function CreatorPromotions() {
           {visible.map((item) => item.kind === "promotion" ? <PromotionParticipationCard key={item.key} row={item.row} onChanged={refresh} />
             : item.kind === "promotionRequest" ? <PromotionRequestCard key={item.key} row={item.row} />
               : <UgcWorkCard key={item.key} item={item} onSubmitted={refresh} />)}
-        </div> : <div className="creator-work-empty"><h2>{filter === "Requests" ? "No pending requests" : filter === "History" ? "No past work" : "No active promotions"}</h2>
+        </div> : <div className="creator-work-empty"><h2>{filter === "Pending" ? "No pending Promotions" : filter === "Completed" ? "No completed Promotions" : "No active Promotions"}</h2>
           <ActionLink to="/creator/discover">Discover Promotions</ActionLink></div>;
       }}</Resource>}</Resource>
     }</Resource>}</Resource>
@@ -432,8 +436,8 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
   const opportunity = detail.data?.opportunity;
   return <article className="creator-promotion-row creator-work-row">
     <div><small>{assignment?.business ?? opportunity?.business ?? "UGC"}</small>
-      <h3>{assignment?.opportunity ?? opportunity?.title ?? "UGC opportunity"}</h3>
-      <p>{opportunity?.customerOfferEnabled ? "UGC + Discount" : "UGC"}</p>
+      <h3>{assignment?.opportunity ?? opportunity?.title ?? "Promotion"}</h3>
+      <p>{opportunity?.customerOfferEnabled ? "UGC + Sales" : "UGC"}</p>
       {assignment && <p>Fixed Creator payment {amount(assignment.creatorPayment)} · Due {date(assignment.dueDateUtc)}</p>}
       {assignment && <p className="ugc-arrangement"><strong>Product arrangement:</strong> {assignment.productProvided ? "Product provided by Business" : assignment.creatorMustPurchase ? "Creator purchases product" : "Not selected"}</p>}
       {assignment?.instructions && <p>{assignment.instructions}</p>}
@@ -442,12 +446,12 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
         : "Deliver content to the Business"}</p>}
       {assignment?.feedback && <Notice>{assignment.feedback}</Notice>}
       {request?.rejectionReason && <Notice>{request.rejectionReason}</Notice>}
-      {detail.error && <div className="creator-work-detail-error"><span>UGC details unavailable.</span><Button variant="secondary" onClick={detail.reload}>Retry</Button></div>}
+      {detail.error && <div className="creator-work-detail-error"><span>Promotion details unavailable.</span><Button variant="secondary" onClick={detail.reload}>Retry</Button></div>}
     </div>
     <div className="creator-next-action"><Badge status={statusLabel(status)} />
       {status === "Pending" && <span>Waiting for Business decision</span>}
       {status === "Submitted" && <span>Waiting for Business review</span>}
-      {request?.status === "Approved" && <span>Waiting for your UGC assignment</span>}
+      {request?.status === "Approved" && <span>Preparing your Promotion</span>}
       {assignment?.revisionAcceptanceRequired && <span>Review updated requirements with the Business before submitting</span>}
       {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
         <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!url.trim()) return; void action.run(async (key) => {

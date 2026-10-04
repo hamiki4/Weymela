@@ -376,7 +376,7 @@ function workItems(campaigns: CreatorCampaign[], requests: CreatorRequest[],
     })),
     ...assignments.map((row): CreatorWorkItem => ({
       kind: "ugcAssignment", row, key: `ugc-assignment-${row.id}`,
-      group: row.status === "Rejected" ? "Completed" : "Active",
+      group: row.status === "Approved" || row.status === "Rejected" ? "Completed" : "Active",
     })),
     ...ugcRequests.filter((row) => !assignedUgcIds.has(row.opportunityId)).map((row): CreatorWorkItem => ({
       kind: "ugcRequest", row, key: `ugc-request-${row.id}`,
@@ -409,7 +409,7 @@ export function CreatorPromotions() {
           {visible.map((item) => item.kind === "promotion" ? <PromotionParticipationCard key={item.key} row={item.row} onChanged={refresh} />
             : item.kind === "promotionRequest" ? <PromotionRequestCard key={item.key} row={item.row} />
               : <UgcWorkCard key={item.key} item={item} onSubmitted={refresh} />)}
-        </div> : <div className="creator-work-empty"><h2>{filter === "Pending" ? "No pending Promotions" : filter === "Completed" ? "No completed Promotions" : "No active Promotions"}</h2>
+        </div> : <div className="creator-work-empty"><h2>{filter === "Pending" ? "No pending promotions" : filter === "Completed" ? "No completed promotions" : "No active promotions"}</h2>
           <ActionLink to="/creator/discover">Discover Promotions</ActionLink></div>;
       }}</Resource>}</Resource>
     }</Resource>}</Resource>

@@ -45,7 +45,7 @@ describe("Creator Promotions work groups", () => {
     mockApi({ "/creator/campaigns": [], "/creator/requests": [], "/creator/ugc/assignments": [], "/creator/ugc/requests": [] });
     mount();
     const tabs = within(screen.getByRole("tablist", { name: "Filter Promotions" }));
-    expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Active", "Requests", "History"]);
+    expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Pending", "Active", "Completed"]);
     expect(await screen.findByText("No active promotions")).toBeVisible();
     expect(screen.getByRole("link", { name: "Discover Promotions" })).toBeVisible();
     expect(screen.queryByText("UGC work")).not.toBeInTheDocument();
@@ -85,11 +85,11 @@ describe("Creator Promotions work groups", () => {
     mount();
     await screen.findByRole("heading", { name: "Approved work" });
     expect(screen.getAllByRole("article")).toHaveLength(1);
-    await userEvent.click(screen.getByRole("tab", { name: "Requests" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Pending" }));
     expect(await screen.findByRole("heading", { name: "Pending work" })).toBeVisible();
     expect(screen.getByText("Waiting for Business decision")).toBeVisible();
     expect(screen.getAllByRole("article")).toHaveLength(1);
-    await userEvent.click(screen.getByRole("tab", { name: "History" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Completed" }));
     for (const name of ["Ended work", "Rejected content", "Rejected request", "Withdrawn request"])
       expect(screen.getByRole("heading", { name })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Pending work" })).not.toBeInTheDocument();
@@ -107,16 +107,16 @@ describe("Creator Promotions work groups", () => {
     mount();
     const activeRow = (await screen.findByRole("heading", { name: "UGC active" })).closest("article")!;
     expect(screen.getByRole("heading", { name: "Promotion work" })).toBeVisible();
-    expect(await within(activeRow).findByText("UGC + Discount")).toBeVisible();
+    expect(await within(activeRow).findByText("UGC + Sales")).toBeVisible();
     expect(within(activeRow).getByText("Changes Requested", { exact: true })).toBeVisible();
     await userEvent.type(within(activeRow).getByLabelText("Social post link"), "https://example.com/post");
     await userEvent.click(within(activeRow).getByRole("button", { name: "Update Content" }));
     await waitFor(() => expect(api.writes[0]).toMatchObject({ path: "/creator/ugc/assignments/UGC active/submit",
       body: { submissionUrl: "https://example.com/post" } }));
-    await userEvent.click(screen.getByRole("tab", { name: "Requests" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Pending" }));
     expect(await screen.findByRole("heading", { name: "UGC pending" })).toBeVisible();
     expect(screen.getByText("Waiting for Business decision")).toBeVisible();
-    await userEvent.click(screen.getByRole("tab", { name: "History" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Completed" }));
     expect(await screen.findByRole("heading", { name: "UGC done" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "UGC declined" })).toBeVisible();
     expect(screen.getByText("Capacity reached")).toBeVisible();

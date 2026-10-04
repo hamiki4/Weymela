@@ -91,7 +91,7 @@ function CreateCampaignForm({
       {wallet.available === 0 && <Notice>Available funds: {amount(0)} ETB. <Link to="/business/wallet">Add Funds</Link> before publishing.</Notice>}
       <form className="form-grid" onSubmit={event => { event.preventDefault(); if (!validDates || platforms.length === 0) return; void action.run(async key => {
         const dueUtc = endOfLocalDayUtc(form.contentDue); const result = await post<{ id: string }>("/business/promotions", {
-          title: form.title, description: form.description || null, slogan: null, location: null, resources: [], type, campaignBudget: budget,
+          title: form.title, description: form.description.trim(), slogan: null, location: null, resources: [], type, campaignBudget: budget,
           requirements: null, category: null, region: form.region || null,
           minimumVerifiedFollowers: null,
           startUtc: new Date().toISOString(), endUtc: new Date(new Date(dueUtc).getTime() + 30 * 86400000).toISOString(),

@@ -239,7 +239,7 @@ describe("Business workspace", () => {
       "1000",
     );
     await userEvent.click(screen.getByRole("button", { name: "Publish Promotion" }));
-    await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ campaignBudget: 1000, platforms: [{ platform: "TikTok", capacity: 1 }] }));
+    await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ campaignBudget: 1000, description: "", platforms: [{ platform: "TikTok", capacity: 1 }] }));
     expect(api.writes.find(write => write.path === "/business/promotions")?.body).not.toHaveProperty("creatorCommissionPercent");
   });
   it("does not block Promotion creation on legacy Business agreements", async () => {

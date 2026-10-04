@@ -35,15 +35,13 @@ for (const viewport of viewports)
     const businessPromotions = await (await context.request.get("/api/business/campaigns"))
       .json() as { title: string; status: string }[];
     if (!businessPromotions.some(item => item.title === responsiveOpportunityTitle && item.status === "Active")) {
-      await page.goto("/business/campaigns/new");
+      await page.goto("/business/campaigns/new?type=views-sales");
       await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
       await page.getByLabel("Promotion title", { exact: true }).fill(responsiveOpportunityTitle);
-      await page.getByLabel("Promotion type", { exact: true }).selectOption("ViewPlusCommission");
       await page.getByLabel("Application closes", { exact: true })
-        .fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
+        .fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
       await page.getByLabel("Content due", { exact: true })
-        .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
-      await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
+        .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
       await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
       await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
       await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
@@ -168,9 +166,11 @@ for (const viewport of viewports)
         }
         if (viewport.width <= 430 && role === "business" && path === "/business/campaigns/new") {
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
+          await page.goto("/business/campaigns/new?type=views-sales");
+          await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
           await page.getByLabel("Promotion title").fill(`Responsive funding ${viewport.width}`);
-          await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
-          await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+          await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
+          await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
           if (viewport.width === 390 || viewport.width === 393)
             await screenshot(page, `${viewport.width}-business-promotion-creators`);
           await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();

@@ -8,18 +8,14 @@ for (const width of [375, 1366])
   }) => {
     await page.setViewportSize({ width, height: width < 600 ? 812 : 768 });
     await login(context, "business");
-    await page.goto("/business/campaigns/new");
+    await page.goto("/business/campaigns/new?type=views-sales");
     await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
     const title = `Local stories ${width}-${Date.now()}`;
     await page.getByLabel("Promotion title", { exact: true }).fill(title);
-    await page
-      .getByLabel("Promotion type", { exact: true })
-      .selectOption("ViewPlusCommission");
     const closes = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16);
     const due = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16);
     await page.getByLabel("Application closes", { exact: true }).fill(closes);
     await page.getByLabel("Content due", { exact: true }).fill(due);
-    await page.getByLabel("Requirements", { exact: true }).fill("One original video.");
     await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
     await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
     await page.getByLabel("Minimum followers", { exact: true }).first().fill("1000");

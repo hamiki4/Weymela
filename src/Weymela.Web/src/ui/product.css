@@ -553,3 +553,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+@media (max-width: 600px) {
+  .role-creator .creator-promotion-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .role-creator .creator-promotion-filters {
+    width: 100%;
+    max-width: 100%;
+  }
+}

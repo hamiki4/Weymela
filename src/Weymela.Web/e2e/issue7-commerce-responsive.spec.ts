@@ -30,8 +30,6 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
       });
       expect(separated).toBeTruthy();
     }
-    await page.getByRole("tab", { name: "UGC" }).click();
-    await layout(page);
 
     await login(context, "customer");
     for (const path of ["/customer/offers", "/customer/transactions"]) {

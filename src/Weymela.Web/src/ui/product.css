@@ -555,12 +555,18 @@
 }
 
 @media (max-width: 600px) {
-  .role-creator .creator-promotion-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .role-creator .creator-promotion-filters {
     width: 100%;
     max-width: 100%;
+    gap: 6px;
+  }
+
+  .role-creator .creator-promotion-filters button {
+    min-width: 0;
+    padding: 8px 5px;
+    font-size: .8rem;
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }

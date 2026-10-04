@@ -9,8 +9,8 @@ test("Business sees the Promotion shortfall before publishing an unfunded Promot
   await page.goto("/business/campaigns/new?type=views-sales");
   await expect(page.getByRole("heading", { name: "Create Promotion" })).toBeVisible();
   await page.getByLabel("Promotion title").fill(title);
-  await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
-  await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+  await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
+  await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget").fill(String(before.available + 1000));
   await expect(page.getByText("Need", { exact: true })).toBeVisible();

@@ -22,9 +22,9 @@ test("Creator Promotion request opens normally without legacy agreement acceptan
   const title = `Marketplace rules Promotion ${Date.now()}`;
   await page.getByLabel("Promotion title", { exact: true }).fill(title);
   await page.getByLabel("Application closes", { exact: true })
-    .fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
+    .fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
   await page.getByLabel("Content due", { exact: true })
-    .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16));
+    .fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget", { exact: true }).fill("1000");

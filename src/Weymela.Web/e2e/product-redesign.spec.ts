@@ -32,9 +32,17 @@ async function ensureVisualReviewUgc(context: BrowserContext) {
   await login(context, "creator");
   const assignments = await apiJson<{ opportunityId: string }[]>(context, "/creator/ugc/assignments");
   if (!assignments.some(row => row.opportunityId === opportunityId)) {
+    const creatorDetail = await apiJson<{ opportunity: {
+      eligibleSocialProfiles?: { id: string; platform: string }[];
+      platformCapacities?: { platform: string; available: number }[];
+    } }>(context, `/creator/ugc/${opportunityId}`);
+    const profile = creatorDetail.opportunity.eligibleSocialProfiles?.find(candidate =>
+      creatorDetail.opportunity.platformCapacities?.some(slot => slot.platform === candidate.platform && slot.available > 0),
+    );
+    if (!profile) throw new Error("The visual-review UGC fixture has no available verified Creator platform.");
     const requests = await apiJson<{ id: string; opportunityId: string; status: string }[]>(context, "/creator/ugc/requests");
     const existing = requests.find(row => row.opportunityId === opportunityId && ["Pending", "Approved"].includes(row.status));
-    if (!existing) await apiPost<{ id: string }>(context, `/creator/ugc/${opportunityId}/request`);
+    if (!existing) await apiPost<{ id: string }>(context, `/creator/ugc/${opportunityId}/request?selectedPlatform=${encodeURIComponent(profile.platform)}&verifiedSocialProfileId=${profile.id}`);
 
     await login(context, "business");
     const current = await apiJson<{ requests: { id: string; creator: string; status: string }[] }>(

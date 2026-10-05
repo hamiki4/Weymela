@@ -59,7 +59,7 @@ for (const viewport of viewports)
           "/business/campaigns",
           "/business/requests",
           "/business/ugc",
-          "/business/ugc/new",
+          "/business/campaigns/new?type=ugc",
           "/business/pricing",
           "/business/cashiers",
           "/profile",
@@ -185,7 +185,7 @@ for (const viewport of viewports)
           await expect(page.getByRole("link", { name: "Create Promotion" })).toHaveAttribute("href", "/business/campaigns/new");
           await expect(page.getByLabel("Promotion title")).toHaveCount(0);
         }
-        if (viewport.width <= 430 && role === "business" && path === "/business/ugc/new") {
+        if (viewport.width <= 430 && role === "business" && path === "/business/campaigns/new?type=ugc") {
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
           await page.getByLabel("Creator payment (ETB)").fill(String(available + 1000));

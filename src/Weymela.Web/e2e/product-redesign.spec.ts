@@ -285,6 +285,15 @@ test("Business visual review captures operational surfaces at approved widths", 
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/business");
+  const fundValues = page.locator(".business-home-fund strong");
+  await expect(fundValues).toHaveCount(3);
+  const fundBounds = await fundValues.evaluateAll((elements) => elements.map((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { left: bounds.left, right: bounds.right };
+  }));
+  for (let index = 1; index < fundBounds.length; index += 1) {
+    expect(fundBounds[index - 1].right).toBeLessThanOrEqual(fundBounds[index].left + 1);
+  }
   await layout(page);
   await screenshot(page, "business-home-1366");
 

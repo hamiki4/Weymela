@@ -19,40 +19,15 @@ async function apiPost<T>(context: BrowserContext, path: string, data?: unknown)
 }
 
 async function ensureVisualReviewUgc(context: BrowserContext) {
-  const title = "Creator visual review UGC";
   await login(context, "business");
-  let opportunities = await apiJson<{ id: string; title: string }[]>(context, "/business/ugc");
-  let opportunity = opportunities.find(row => row.title === title);
-  if (!opportunity) {
-    const created = await apiPost<{ id: string }>(context, "/business/ugc", {
-      title,
-      slogan: null,
-      contentType: "Video",
-      instructions: "Create an original product video.",
-      resources: [],
-      location: "Addis Ababa",
-      dueDateUtc: "2030-01-01T00:00:00Z",
-      productProvided: true,
-      creatorMustPurchase: false,
-      usageRights: null,
-      creatorPayment: 250,
-      creatorsNeeded: 2,
-      platformRequirements: [],
-      platformCapacities: [],
-      customerOfferEnabled: false,
-    });
-    opportunity = { id: created.id, title };
-  }
-  if (!opportunity) throw new Error("Visual review UGC fixture was not created.");
+  const opportunities = await apiJson<{ id: string; title: string; status: string }[]>(context, "/business/ugc");
+  const opportunity = opportunities.find(row => row.title.startsWith("UGC slots 320-") && !["Draft", "Cancelled"].includes(row.status));
+  if (!opportunity) throw new Error("The existing published UGC visual-review fixture was not found.");
   const opportunityId = opportunity.id;
-
-  let detail = await apiJson<{ opportunity: { id: string; version: number; status: string }; requests: { id: string; creator: string; status: string }[] }>(
+  const detail = await apiJson<{ opportunity: { id: string; version: number; status: string }; instructions: string; requests: { id: string; creator: string; status: string }[] }>(
     context,
     `/business/ugc/${opportunityId}`,
   );
-  if (detail.opportunity.status === "Draft") {
-    await apiPost(context, `/business/ugc/${opportunityId}/publish`, { version: detail.opportunity.version });
-  }
 
   await login(context, "creator");
   const assignments = await apiJson<{ opportunityId: string }[]>(context, "/creator/ugc/assignments");
@@ -62,14 +37,15 @@ async function ensureVisualReviewUgc(context: BrowserContext) {
     if (!existing) await apiPost<{ id: string }>(context, `/creator/ugc/${opportunityId}/request`);
 
     await login(context, "business");
-    detail = await apiJson<{ opportunity: { id: string; version: number; status: string }; requests: { id: string; creator: string; status: string }[] }>(
+    const current = await apiJson<{ requests: { id: string; creator: string; status: string }[] }>(
       context,
       `/business/ugc/${opportunityId}`,
     );
-    const pending = detail.requests.find(row => row.creator === "Bella" && row.status === "Pending");
+    const pending = current.requests.find(row => row.creator === "Bella" && row.status === "Pending");
     if (pending) await apiPost(context, `/business/ugc/requests/${pending.id}/approve`, { reason: null });
   }
-  return title;
+  await login(context, "creator");
+  return { title: opportunity.title, instructions: detail.instructions };
 }
 
 test("Customer, Creator and Business use compact horizontal navigation on desktop", async ({ page, context }) => {
@@ -161,39 +137,39 @@ test("Creator visual review captures Discover and compact work states", async ({
   await layout(page);
   await screenshot(page, "creator-promotions-regular-1366");
 
-  const visualUgcTitle = await ensureVisualReviewUgc(context);
+  const visualUgc = await ensureVisualReviewUgc(context);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/creator/discover");
-  await expect(page.getByRole("heading", { name: visualUgcTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: visualUgc.title })).toBeVisible();
   await layout(page);
   await screenshot(page, "creator-discover-390");
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/creator/discover");
-  await expect(page.getByRole("heading", { name: visualUgcTitle })).toBeVisible();
+  await expect(page.getByRole("heading", { name: visualUgc.title })).toBeVisible();
   await layout(page);
   await screenshot(page, "creator-discover-1366");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/creator/promotions?filter=Active");
-  const mobileUgcCard = page.locator(".creator-work-row").filter({ hasText: visualUgcTitle });
+  const mobileUgcCard = page.locator(".creator-work-row").filter({ hasText: visualUgc.title });
   await expect(mobileUgcCard).toHaveCount(1);
   await layout(page);
   await screenshot(page, "creator-promotions-ugc-390");
   await mobileUgcCard.locator("summary").click();
-  await expect(mobileUgcCard.getByText("Create an original product video.", { exact: true })).toBeVisible();
+  await expect(mobileUgcCard.getByText(visualUgc.instructions, { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "creator-promotions-ugc-details-390");
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/creator/promotions?filter=Active");
-  const desktopUgcCard = page.locator(".creator-work-row").filter({ hasText: visualUgcTitle });
+  const desktopUgcCard = page.locator(".creator-work-row").filter({ hasText: visualUgc.title });
   await expect(desktopUgcCard).toHaveCount(1);
   await layout(page);
   await screenshot(page, "creator-promotions-ugc-1366");
   await desktopUgcCard.locator("summary").click();
-  await expect(desktopUgcCard.getByText("Create an original product video.", { exact: true })).toBeVisible();
+  await expect(desktopUgcCard.getByText(visualUgc.instructions, { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "creator-promotions-ugc-details-1366");
 

@@ -25,6 +25,31 @@ test("Customer mobile Home shows real account information and useful offer links
   await screenshot(page, "product-mobile-customer");
 });
 
+test("Creator Home keeps the next destination clear across mobile and desktop", async ({ page, context }) => {
+  await login(context, "creator");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, "/creator");
+  await expect(page.getByRole("link", { name: "Discover Promotions" })).toHaveAttribute(
+    "href",
+    "/creator/discover",
+  );
+  await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "My Promotions" })).toHaveAttribute(
+    "href",
+    "/creator/promotions",
+  );
+  await layout(page);
+  await screenshot(page, "creator-home-390");
+
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await open(page, "/creator");
+  await expect(page.getByRole("link", { name: "Discover Promotions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Earnings" })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "creator-home-1366");
+});
+
 test("Creator Promotions uses three action-oriented groups", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "creator");

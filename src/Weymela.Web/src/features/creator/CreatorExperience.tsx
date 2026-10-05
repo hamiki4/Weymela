@@ -18,7 +18,6 @@ import {
   Currency,
   Empty,
   Field,
-  Metric,
   Notice,
   PageHeader,
   Resource,
@@ -44,73 +43,90 @@ export function CreatorDashboard() {
   const promotions = useResource<CreatorCampaign[]>("/creator/campaigns");
   const opportunities = useResource<Opportunity[]>("/creator/discover");
   const ugc = useResource<UgcCard[]>("/creator/ugc");
+  const activePromotion = promotions.data?.find(
+    (row) => row.remainingDays != null && row.remainingDays > 0,
+  );
+
+  // Keep the existing Creator Home resource contract warm while the Home
+  // presentation intentionally stops rendering Discover/UGC opportunity data.
+  void opportunities;
+  void ugc;
+
   return <>
-    <Resource resource={home}>{(data) => <>
-      <PageHeader title="Home" compact />
-      <div className="metric-grid creator-metrics">
-        <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Pending"><Metric label="Pending Requests" value={count(data.requests)} icon="people" /></Link>
-        <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Active"><Metric label="Active Promotions" value={count(data.activeCampaigns)} icon="campaign" /></Link>
-        <Link className="creator-dashboard-metric" to="/creator/earnings"><Metric label="Available Earnings" value={amount(data.earnings.availableEarnings)} icon="wallet" emphasis /></Link>
-      </div>
-      <Section
-        title="Promotions for you"
-        description="Promotions matching your profile."
-        action={<ActionLink to="/creator/discover" secondary>See all</ActionLink>}
+    <Resource resource={home}>{(data) => <div className="creator-home">
+      <PageHeader
+        title="Home"
+        description={data.creator.displayName}
+        action={<ActionLink to="/creator/discover" icon="search">Discover Promotions</ActionLink>}
+      />
+
+      <Section title="Your work" className="creator-home-section">
+        <div className="creator-home-work-list">
+          <Link
+            className="creator-home-summary-row"
+            to="/creator/promotions?filter=Pending"
+            aria-label={`Pending, ${count(data.requests)}, Waiting for Business`}
+          >
+            <span className="creator-home-summary-icon"><Icon name="people" size={18} /></span>
+            <span className="creator-home-summary-copy">
+              <strong>Pending</strong>
+              <small>Waiting for Business</small>
+            </span>
+            <strong className="creator-home-summary-count">{count(data.requests)}</strong>
+            <Icon name="arrow" size={17} />
+          </Link>
+          <Link
+            className="creator-home-summary-row"
+            to="/creator/promotions?filter=Active"
+            aria-label={`Active, ${count(data.activeCampaigns)}, Continue your Promotion`}
+          >
+            <span className="creator-home-summary-icon"><Icon name="campaign" size={18} /></span>
+            <span className="creator-home-summary-copy">
+              <strong>Active</strong>
+              <small>Continue your Promotion</small>
+            </span>
+            <strong className="creator-home-summary-count">{count(data.activeCampaigns)}</strong>
+            <Icon name="arrow" size={17} />
+          </Link>
+        </div>
+      </Section>
+
+      {activePromotion && <Link
+        className="creator-home-active-preview"
+        to={`/creator/promotions/${activePromotion.budgetId}`}
+        aria-label={`View Promotion ${activePromotion.title}`}
       >
-        <HomePreviewResource resource={opportunities}>
-          {(promotionRows) => (
-            <HomePreviewResource resource={ugc}>
-              {(ugcRows) => {
-                const promotionCards = promotionRows
-                  .slice(0, 3)
-                  .map((row) => (
-                    <PromotionOpportunityCard
-                      key={`promotion-${row.id}`}
-                      row={row}
-                    />
-                  ));
+        <span className="creator-home-active-copy">
+          <small>Continue working</small>
+          <strong>{activePromotion.title}</strong>
+          <span>{activePromotion.business.displayName}</span>
+        </span>
+        <span className="creator-home-active-meta">
+          <Badge status="Active" label="Active" />
+          <small>{activePromotion.remainingDays} days left</small>
+        </span>
+        <span className="creator-home-active-action">View Promotion</span>
+      </Link>}
 
-                const remaining = Math.max(0, 6 - promotionCards.length);
-
-                const ugcCards = ugcRows
-                  .slice(0, remaining)
-                  .map((row) => (
-                    <UGCOpportunityCard
-                      key={`ugc-${row.id}`}
-                      row={row}
-                      onChanged={ugc.reload}
-                    />
-                  ));
-
-                return promotionCards.length || ugcCards.length ? (
-                  <div className="creator-opportunity-grid">
-                    {promotionCards}
-                    {ugcCards}
-                  </div>
-                ) : (
-                  <Empty title="No Promotions for you right now." />
-                );
-              }}
-            </HomePreviewResource>
-          )}
-        </HomePreviewResource>
+      <Section title="Earnings" className="creator-home-section">
+        <Link
+          className="creator-home-earnings-row"
+          to="/creator/earnings"
+          aria-label={`Available earnings, ${amount(data.earnings.availableEarnings)} ETB`}
+        >
+          <span>
+            <small>Available earnings</small>
+            <strong>{amount(data.earnings.availableEarnings)} ETB</strong>
+          </span>
+          <Icon name="arrow" size={17} />
+        </Link>
       </Section>
-      <Section title="Recent earnings">
-        {data.earnings.history.length || data.earnings.payoutHistory.length ? <div className="creator-activity-list">
-          {data.earnings.history.slice(0, 3).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="spark" /></span><div><strong>{item.business || item.campaign}</strong><p>{item.sourceType === "UGC" ? "UGC content" : item.source === "Sale Earnings" ? "View + Sale" : item.source === "View Earnings" ? "Verified views" : item.source} · {item.campaign}</p></div><span className="creator-activity-meta"><strong>+{amount(item.amount)} ETB</strong><small>{date(item.atUtc)}</small></span></article>)}
-          {data.earnings.payoutHistory.filter((item) => item.paidAtUtc).slice(0, 2).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="wallet" /></span><div><strong>Payout paid</strong><p>{item.status}</p></div><span className="creator-activity-meta"><strong>{amount(item.amount)}</strong><small>{date(item.paidAtUtc!)}</small></span></article>)}
-        </div> : <Empty title="No recent earnings." />}
-      </Section>
-    </>}</Resource>
-    <Section title="Your active promotions" action={<ActionLink to="/creator/promotions" secondary>See all</ActionLink>}>
-      <Resource resource={promotions}>{(rows) => {
-        const live = rows.filter((row) => row.remainingDays != null && row.remainingDays > 0).slice(0, 3);
-        return live.length ? <div className="creator-promotion-list">{live.map((row) => <Link className="creator-promotion-list-card" to={`/creator/promotions/${row.budgetId}`} key={row.budgetId}>
-          <div><small>{row.business.displayName}</small><h3>{row.title}</h3><p>{promotionTypeLabel(row.type)} · {row.remainingDays} days left</p></div>
-          <div className="creator-progress"><span>{count(row.verifiedViews)} verified views</span><span>{amount(row.viewEarnings + row.saleCommissionEarnings)} earned</span></div>
-        </Link>)}</div> : <Empty title="No active promotions." />;
-      }}</Resource>
-    </Section>
+
+      <Link className="creator-home-route-row" to="/creator/promotions">
+        <span>My Promotions</span>
+        <Icon name="arrow" size={17} />
+      </Link>
+    </div>}</Resource>
   </>;
 }
 

@@ -526,50 +526,60 @@ describe("Creator workspace", () => {
     expect(screen.getByTestId("location-search")).toHaveTextContent("?filter=Completed");
   });
 
-  it("groups own earnings and Campaigns", async () => {
-    mount(<CreatorDashboard />);
-    expect(
-      await screen.findByRole("heading", { name: "Home" }),
-    ).toBeVisible();
-    expect(screen.getAllByText("5,400").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Pending Requests/ })).toHaveAttribute("href", "/creator/promotions?filter=Pending");
-    expect(screen.getByRole("link", { name: /Active Promotions/ })).toHaveAttribute("href", "/creator/promotions?filter=Active");
-    expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
-  });
-  it("shows one simple Promotions feed on Creator Home", async () => {
-    const ugcCard = { id: "ugc-home", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
-      contentType: "Video", status: "Open", creatorPayment: 4750, creatorsNeeded: 1, approvedCreators: 0,
-      dueDateUtc: "2027-12-01T10:00:00Z", location: "Addis Ababa", platformRequirements: [],
-      requestStatus: null, version: 1, productProvided: true, creatorMustPurchase: false };
-
+  it("orients Creator Home with authoritative summaries and clear destinations", async () => {
     mockCreatorApi({
-      "/creator/discover": [1, 2, 3, 4].map((id) => ({
-        ...opportunity,
-        id: `campaign-${id}`,
-        title: `Coffee stories ${id}`,
-        platforms: [{ platform: "TikTok", approved: 0, capacity: 1, available: 1, minimumAudience: 30000 }],
-      })),
-      "/creator/ugc": [
-        ugcCard,
-        { ...ugcCard, id: "ugc-home-2", title: "Coffee reels" },
-      ],
+      "/creator/campaigns": [{ ...active, remainingDays: 12 }],
     });
 
     mount(<CreatorDashboard />);
 
-    const feed = (await screen.findByRole("heading", { name: "Promotions for you" })).closest("section")!;
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(screen.getByText("Bella")).toBeVisible();
 
-    expect(within(feed).getAllByRole("heading", { level: 3 })).toHaveLength(5);
-    expect(within(feed).getAllByText("Views + Sales")).toHaveLength(3);
-    expect(within(feed).getAllByText("UGC")).toHaveLength(2);
-    expect(within(feed).getByRole("link", { name: "See all" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Discover Promotions" })).toHaveAttribute(
       "href",
       "/creator/discover",
     );
 
-    expect(screen.queryByRole("heading", { name: "Open Promotions" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Open UGC" })).not.toBeInTheDocument();
-    expect(screen.queryByText("30,000 followers minimum")).not.toBeInTheDocument();
+    const pending = screen.getByRole("link", { name: /Pending, 1, Waiting for Business/ });
+    expect(pending).toHaveAttribute("href", "/creator/promotions?filter=Pending");
+    expect(within(pending).getByText("Waiting for Business")).toBeVisible();
+
+    const activeWork = screen.getByRole("link", { name: /Active, 1, Continue your Promotion/ });
+    expect(activeWork).toHaveAttribute("href", "/creator/promotions?filter=Active");
+    expect(within(activeWork).getByText("Continue your Promotion")).toBeVisible();
+
+    const earningsLink = screen.getByRole("link", { name: /Available earnings, 5,400 ETB/ });
+    expect(earningsLink).toHaveAttribute("href", "/creator/earnings");
+    expect(within(earningsLink).getByText("5,400 ETB")).toBeVisible();
+
+    expect(screen.getByRole("link", { name: "My Promotions" })).toHaveAttribute(
+      "href",
+      "/creator/promotions",
+    );
+
+    const preview = screen.getByRole("link", { name: "View Promotion Coffee stories" });
+    expect(within(preview).getByText("Continue working")).toBeVisible();
+    expect(within(preview).getByText("Active")).toBeVisible();
+    expect(within(preview).getByText("12 days left")).toBeVisible();
+
+    expect(screen.queryByText("Promotions for you")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent earnings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Request to Join")).not.toBeInTheDocument();
+    expect(screen.queryByText("verified views")).not.toBeInTheDocument();
+    expect(screen.queryByText("Payout paid")).not.toBeInTheDocument();
+  });
+
+  it("does not reserve Home space for absent active work or render earning history", async () => {
+    mockCreatorApi({ "/creator/campaigns": [] });
+    mount(<CreatorDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(screen.queryByText("Continue working")).not.toBeInTheDocument();
+    expect(screen.queryByText("Coffee stories")).not.toBeInTheDocument();
+    expect(screen.queryByText("View Earnings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent earnings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Payout paid")).not.toBeInTheDocument();
   });
   it("opens UGC detail through the existing Creator detail projection", async () => {
     const card = { id: "ugc-detail", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,

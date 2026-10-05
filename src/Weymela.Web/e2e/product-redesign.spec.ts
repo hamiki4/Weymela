@@ -148,13 +148,16 @@ test("Creator visual review captures Discover and compact work states", async ({
 
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/creator/promotions?filter=Active");
-  await expect(page.getByRole("heading", { name: "A little coffee. A great story." })).toBeVisible();
+  const regularCards = page.locator("article.creator-promotion-row").filter({
+    has: page.locator(".creator-work-type").filter({ hasText: /^(Views|Views \+ Sales)$/ }),
+  });
+  await expect(regularCards).not.toHaveCount(0);
   await layout(page);
   await screenshot(page, "creator-promotions-regular-390");
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/creator/promotions?filter=Active");
-  await expect(page.getByRole("heading", { name: "A little coffee. A great story." })).toBeVisible();
+  await expect(regularCards).not.toHaveCount(0);
   await layout(page);
   await screenshot(page, "creator-promotions-regular-1366");
 

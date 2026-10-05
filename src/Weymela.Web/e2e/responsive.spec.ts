@@ -189,7 +189,7 @@ for (const viewport of viewports)
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
           await page.getByLabel("Creator payment (ETB)").fill(String(available + 1000));
-          await expect(page.getByText(/ETB more$/)).toBeVisible();
+          await expect(page.getByRole("alert")).toContainText("You need 1,000 ETB more.");
           await expect(page.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-business-ugc-shortfall`);

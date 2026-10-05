@@ -261,8 +261,9 @@ test("Business visual review captures operational surfaces at approved widths", 
   await layout(page);
   await screenshot(page, "business-promotions-390");
 
-  await open(page, "/business/campaigns/new?type=views-sales");
+  await open(page, "/business/campaigns/new");
   await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
+  await expect(page.getByText("UGC + Sales", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-create-390");
 
@@ -292,7 +293,8 @@ test("Business visual review captures operational surfaces at approved widths", 
   await layout(page);
   await screenshot(page, "business-promotions-1366");
 
-  await open(page, "/business/campaigns/new?type=views-sales");
+  await open(page, "/business/campaigns/new");
+  await expect(page.getByText("UGC + Sales", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-create-1366");
 

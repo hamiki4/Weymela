@@ -2,17 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, postForm, useAction, useResource } from "../../api/client";
 import { Button, Field, MoneyInput, Notice, Resource } from "../../ui/components";
 import { amount, date } from "../../ui/format";
-interface Receipt { id: string; amount: number; status: string; submittedAtUtc: string }
-export function DepositSubmission() {
+export interface DepositRequest { id: string; amount: number; status: string; submittedAtUtc: string }
+export function DepositSubmission({ showHistory = true, onSubmitted }: { showHistory?: boolean; onSubmitted?: () => void } = {}) {
   const method = useResource<{ mode: string }>("/business/deposit-method");
-  return <Resource resource={method}>{data => data.mode === "ManualApproval" ? <ManualDeposit /> : <Notice>Deposits are not connected. No payment will be taken or funds credited.</Notice>}</Resource>;
+  return <Resource resource={method}>{data => data.mode === "ManualApproval" ? <ManualDeposit showHistory={showHistory} onSubmitted={onSubmitted} /> : <Notice>Deposits are not connected. No payment will be taken or funds credited.</Notice>}</Resource>;
 }
-export function ManualDeposit() {
+export function ManualDeposit({ showHistory = true, onSubmitted }: { showHistory?: boolean; onSubmitted?: () => void } = {}) {
   const [value, setValue] = useState(""); const [receipt, setReceipt] = useState<File | null>(null);
   const [fileError, setFileError] = useState("");
   const [preview, setPreview] = useState(""); const [submitted, setSubmitted] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const action = useAction(); const history = useResource<Receipt[]>("/business/deposit-requests");
+  const action = useAction(); const history = useResource<DepositRequest[]>("/business/deposit-requests");
   useEffect(() => {
     if (!receipt || typeof URL.createObjectURL !== "function") { setPreview(""); return; }
     const url = URL.createObjectURL(receipt); setPreview(url);
@@ -31,7 +31,7 @@ export function ManualDeposit() {
           throw new Error("Adding funds is temporarily paused. Your receipt was not submitted.");
         throw error;
       }
-      setSubmitted(true); setValue(""); remove(); history.reload();
+      setSubmitted(true); setValue(""); remove(); history.reload(); onSubmitted?.();
     }); }}><fieldset disabled={action.busy}>
       <Field label="Amount"><MoneyInput value={value} onChange={event => { setValue(event.target.value); setSubmitted(false); }} /></Field>
       <Field label="Payment receipt"><input ref={input} type="file" accept="image/jpeg,image/png" aria-label="Payment receipt" className="receipt-file-input" onChange={event => { const file = event.target.files?.[0] ?? null; setSubmitted(false);
@@ -41,6 +41,6 @@ export function ManualDeposit() {
       {fileError && <Notice error>{fileError}</Notice>}{action.error && <Notice error>{action.error}</Notice>}{submitted && <Notice><strong>Under review</strong><br />Your payment is waiting for approval.</Notice>}
       <Button type="submit" disabled={!value || !receipt || action.busy}>{action.busy ? "Submitting…" : "Submit for Review"}</Button>
     </fieldset></form>
-    <Resource resource={history}>{rows => <>{rows.map(row => <div className="amount-row" key={row.id}><div><strong>{row.status === "Pending" ? "Under review" : row.status === "Approved" ? "Approved" : "Rejected"}</strong><small>{date(row.submittedAtUtc)}</small></div><strong>{amount(row.amount)}</strong></div>)}</>}</Resource>
+    {showHistory && <Resource resource={history}>{rows => <>{rows.map(row => <div className="amount-row" key={row.id}><div><strong>{row.status === "Pending" ? "Under review" : row.status === "Approved" ? "Approved" : "Rejected"}</strong><small>{date(row.submittedAtUtc)}</small></div><strong>{amount(row.amount)}</strong></div>)}</>}</Resource>}
   </>;
 }

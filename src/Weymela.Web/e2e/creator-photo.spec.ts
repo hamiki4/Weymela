@@ -113,6 +113,7 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   await login(context, "business");
   await open(page, "/business/campaigns");
   const ugcCard = page.locator(".data-card").filter({ hasText: title });
+  await ugcCard.getByRole("button", { name: "Manage" }).click();
   await ugcCard.getByRole("button", { name: "Creator requests & assignments" }).click();
   await rendered(ugcCard.locator(".business-ugc-creator-row .creator-photo-avatar img"), 3);
   for (const width of [320, 360, 375, 390, 393, 430]) {

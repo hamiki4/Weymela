@@ -87,19 +87,26 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
   const [editDiscount, setEditDiscount] = useState("");
   const [editOfferBudget, setEditOfferBudget] = useState("");
   const [creatorError, setCreatorError] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
   return (
-    <article className="data-card business-promotion-card">
+    <article className="data-card business-promotion-card" data-status={item.status}>
       <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sales" : "UGC"}</small><h3>{item.title}</h3></div><Badge status={item.status} label={promotionStatusLabel(item.status)} /></div>
       <dl className="promotion-summary-list">
         <div><dt>Creator payment</dt><dd>{amount(item.creatorPayment)} ETB</dd></div>
         <div><dt>Content due</dt><dd>{date(item.dueDateUtc)}</dd></div>
-        <div><dt>Creators</dt><dd>{item.approvedCreators}/{item.creatorsNeeded}</dd></div>
-        {item.location && <div><dt>Location</dt><dd>{item.location}</dd></div>}
       </dl>
-      <p className="promotion-next-action"><strong>Next:</strong> {item.approvedCreators < item.creatorsNeeded ? "Review Creator requests" : "Review Promotion"}</p>
-      <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
-      {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer gets {amount(item.customerDiscountPercent)}% off.</p>}
-      {item.status !== "Draft" && <>
+      <Button
+        variant="secondary"
+        className="business-promotion-manage"
+        aria-expanded={manageOpen}
+        onClick={() => setManageOpen((open) => !open)}
+      >
+        {manageOpen ? "Close management" : "Manage"}
+      </Button>
+      {manageOpen && <section className="business-promotion-management" aria-label={`${item.title} management`}>
+        <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
+        {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer gets {amount(item.customerDiscountPercent)}% off.</p>}
+        {item.status !== "Draft" && <>
         <Button variant="secondary" onClick={() => void editAction.run(async () => {
           const detail = await request<UgcDetail>(`/business/ugc/${item.id}`);
           const local = (value?: string | null) => value ? new Date(value).toISOString().slice(0, 16) : "";
@@ -174,7 +181,8 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
             <div className="form-actions wide"><Button type="submit" disabled={editAction.busy || !editInstructions.trim()}>{editAction.busy ? "Saving…" : "Save changes"}</Button></div>
           </form>
         </Dialog>
-      </>}
+        </>}
+      </section>}
       {action.error && <Notice error>{action.error}</Notice>}
     </article>
   );

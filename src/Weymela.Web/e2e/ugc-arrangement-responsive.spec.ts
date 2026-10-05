@@ -39,7 +39,9 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await layout(page);
     if (width === 390) await screenshot(page, "390-business-ugc-arrangement");
     await open(page, "/business/campaigns");
-    await expect(page.getByText(/Product arrangement:.*Creator purchases product/)).toBeVisible();
+    const businessCard = page.locator(".data-card").filter({ hasText: opportunity.title });
+    await businessCard.getByRole("button", { name: "Manage" }).click();
+    await expect(businessCard.getByText(/Product arrangement:.*Creator purchases product/)).toBeVisible();
     await layout(page);
 
     for (const [alias, path] of [["creator", "/creator/discover"], ["customer", "/customer/offers"],

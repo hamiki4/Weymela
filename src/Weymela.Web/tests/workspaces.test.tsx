@@ -53,6 +53,7 @@ import {
   opportunity,
   ugcCustomerOffer,
   wallet,
+  business,
 } from "./fixtures";
 vi.mock("../src/app/Session", () => ({
   useSession: () => ({ user: { developmentMode: true, role: "Business" } }),
@@ -115,12 +116,28 @@ describe("Business workspace", () => {
     ).toBeVisible();
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
-    expect(screen.queryByText("6,000")).not.toBeInTheDocument();
+    expect(screen.getByText("6,000")).toBeVisible();
+    expect(screen.getByText("Available")).toBeVisible();
+    expect(screen.getByText("Reserved")).toBeVisible();
+    expect(screen.getByText("Total")).toBeVisible();
     expect(
       screen.getByRole("link", {
         name: "Pricing",
       }),
     ).toBeVisible();
+  });
+  it("keeps Home focused while Wallet history remains reachable", async () => {
+    mockApi({ "/business/home": {
+      business,
+      wallet: { ...wallet, history: [{ id: "ledger", label: "Customer Offer funded", amount: 120, atUtc: "2026-09-29T12:00:00Z", reference: "ledger-ref" }] },
+      activeCampaigns: 1,
+      creatorRequests: 1,
+      confirmedSales: 1,
+    } });
+    mount(<BusinessDashboard />);
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Wallet history" })).toHaveAttribute("href", "/business/wallet");
+    expect(screen.queryByText("Customer Offer funded")).not.toBeInTheDocument();
   });
   it("routes Business operations to their destination and keeps one Create Promotion action", async () => {
     mount(<BusinessDashboard />);
@@ -147,6 +164,7 @@ describe("Business workspace", () => {
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
+    await userEvent.click(await screen.findByText("Open Add Funds", { exact: true }));
     await screen.findByLabelText("Amount");
     await userEvent.type(screen.getByLabelText("Amount"), "12.34");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
@@ -160,6 +178,7 @@ describe("Business workspace", () => {
   it("rejects a zero deposit in the rendered form", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
+    await userEvent.click(await screen.findByText("Open Add Funds", { exact: true }));
     const input = await screen.findByLabelText("Amount");
     await userEvent.type(input, "0");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
@@ -298,6 +317,7 @@ describe("Business workspace", () => {
       productProvided: false, creatorMustPurchase: true };
     mockApi({ "/business/ugc": [card], "/creator/ugc": [card] });
     const businessView = mount(<BusinessUgcPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Manage" }));
     expect(await screen.findByText("Creator purchases product", { selector: ".ugc-arrangement" })).toBeVisible();
     businessView.unmount();
     mount(<CreatorDiscover />, "/creator/discover");
@@ -430,7 +450,7 @@ describe("Business workspace", () => {
     await screen.findByRole("heading", { name: "Promotions", level: 2 });
     expect(screen.queryByRole("heading", { name: "UGC Promotions", level: 2 })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Promotions", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "View Promotion" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Manage" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /End Campaign|End Promotion/ }),
     ).not.toBeInTheDocument();

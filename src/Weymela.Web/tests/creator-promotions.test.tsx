@@ -41,7 +41,7 @@ function mount() {
 beforeEach(() => { invalidateResourceCache(false); vi.restoreAllMocks(); });
 
 describe("Creator Promotions work groups", () => {
-  it("shows only Active, Requests and History as primary filters", async () => {
+  it("shows only Pending, Active and Completed as primary filters", async () => {
     mockApi({ "/creator/campaigns": [], "/creator/requests": [], "/creator/ugc/assignments": [], "/creator/ugc/requests": [] });
     mount();
     const tabs = within(screen.getByRole("tablist", { name: "Filter Promotions" }));
@@ -109,6 +109,7 @@ describe("Creator Promotions work groups", () => {
     expect(screen.getByRole("heading", { name: "Promotion work" })).toBeVisible();
     expect(await within(activeRow).findByText("UGC + Sales")).toBeVisible();
     expect(within(activeRow).getByText("Changes Requested", { exact: true })).toBeVisible();
+    await userEvent.click(within(activeRow).getByText("View details", { exact: true, selector: "summary" }));
     await userEvent.type(within(activeRow).getByLabelText("Social post link"), "https://example.com/post");
     await userEvent.click(within(activeRow).getByRole("button", { name: "Update Content" }));
     await waitFor(() => expect(api.writes[0]).toMatchObject({ path: "/creator/ugc/assignments/UGC active/submit",
@@ -118,7 +119,9 @@ describe("Creator Promotions work groups", () => {
     expect(screen.getByText("Waiting for Business decision")).toBeVisible();
     await userEvent.click(screen.getByRole("tab", { name: "Completed" }));
     expect(await screen.findByRole("heading", { name: "UGC done" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "UGC declined" })).toBeVisible();
-    expect(screen.getByText("Capacity reached")).toBeVisible();
+    const declinedRow = screen.getByRole("heading", { name: "UGC declined" }).closest("article")!;
+    expect(declinedRow).toBeVisible();
+    await userEvent.click(within(declinedRow).getByText("View details", { exact: true, selector: "summary" }));
+    expect(within(declinedRow).getByText("Capacity reached")).toBeVisible();
   });
 });

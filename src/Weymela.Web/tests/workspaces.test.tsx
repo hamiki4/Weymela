@@ -322,7 +322,7 @@ describe("Business workspace", () => {
     businessView.unmount();
     mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("Product story")).toBeVisible();
-    expect(screen.queryByText("Creator purchases product")).not.toBeInTheDocument();
+    expect(screen.getByText("Creator purchases product")).toBeVisible();
     expect(screen.getByRole("button", { name: "Request to Join" })).toBeVisible();
   });
   it.each([
@@ -563,7 +563,14 @@ describe("Creator workspace", () => {
     expect(within(preview).getByText("Active")).toBeVisible();
     expect(within(preview).getByText("12 days left")).toBeVisible();
 
-    expect(screen.queryByText("Promotions for you")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Promotions for you" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "See all" })).toHaveAttribute("href", "/creator/discover");
+    const discoveryPreview = screen.getByText("Promotions for you").closest("section")!;
+    expect(within(discoveryPreview).getByText("Coffee stories")).toBeVisible();
+    expect(within(discoveryPreview).getByRole("link", { name: "View details" })).toHaveAttribute(
+      "href",
+      "/creator/discover/campaign",
+    );
     expect(screen.queryByText("Recent earnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Request to Join")).not.toBeInTheDocument();
     expect(screen.queryByText("verified views")).not.toBeInTheDocument();
@@ -571,12 +578,13 @@ describe("Creator workspace", () => {
   });
 
   it("does not reserve Home space for absent active work or render earning history", async () => {
-    mockCreatorApi({ "/creator/campaigns": [] });
+    mockCreatorApi({ "/creator/campaigns": [], "/creator/discover": [], "/creator/ugc": [] });
     mount(<CreatorDashboard />);
 
     expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
     expect(screen.queryByText("Continue working")).not.toBeInTheDocument();
     expect(screen.queryByText("Coffee stories")).not.toBeInTheDocument();
+    expect(screen.getByText("No new promotions right now.")).toBeVisible();
     expect(screen.queryByText("View Earnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent earnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Payout paid")).not.toBeInTheDocument();
@@ -638,9 +646,9 @@ describe("Creator workspace", () => {
     mockCreatorApi({ "/creator/ugc": [card] });
     mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("UGC + Sales")).toBeVisible();
-    expect(screen.getByText("Earn 4,750 ETB")).toBeVisible();
+    expect(screen.getByText("Creator payment 4,750 ETB")).toBeVisible();
     expect(screen.getByText("Customer gets 3% off")).toBeVisible();
-    expect(screen.queryByText("Product provided")).not.toBeInTheDocument();
+    expect(screen.getByText("Product provided by Business")).toBeVisible();
     expect(screen.queryByText(/10,000|Platform fee|250/)).not.toBeInTheDocument();
   });
   it("requires a specific available verified profile for posted UGC and sends its binding", async () => {

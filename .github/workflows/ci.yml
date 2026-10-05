@@ -193,6 +193,15 @@ jobs:
             # <role>-<screen>-<viewport>.png and must be added one by one.
             .artifacts/phase6-screenshots/creator-home-390.png
             .artifacts/phase6-screenshots/creator-home-1366.png
+            .artifacts/phase6-screenshots/creator-discover-390.png
+            .artifacts/phase6-screenshots/creator-discover-1366.png
+            .artifacts/phase6-screenshots/creator-promotions-regular-390.png
+            .artifacts/phase6-screenshots/creator-promotions-regular-1366.png
+            .artifacts/phase6-screenshots/creator-promotions-ugc-390.png
+            .artifacts/phase6-screenshots/creator-promotions-ugc-1366.png
+            .artifacts/phase6-screenshots/creator-promotions-ugc-details-390.png
+            .artifacts/phase6-screenshots/creator-promotions-ugc-details-1366.png
+            .artifacts/phase6-screenshots/creator-overflow-320.png
             .artifacts/ci/stage-timings.tsv
           # Never upload browser-host.json, its log, tokens, or a broad .artifacts glob.
 

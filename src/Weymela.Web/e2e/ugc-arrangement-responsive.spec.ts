@@ -50,7 +50,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
       await open(page, path);
       if (alias === "creator") {
         const card = page.locator(".creator-opportunity-card").filter({ hasText: opportunity.title });
-        await expect(card.getByText("Creator purchases product", { exact: true })).toHaveCount(0);
+        await expect(card.getByText("Creator purchases product", { exact: true })).toBeVisible();
         await expect(card.getByRole("button", { name: "Request to Join" })).toBeVisible();
         await open(page, `/creator/ugc/${opportunity.id}`);
         await expect(page.getByText("Creator purchases product", { exact: true })).toBeVisible();

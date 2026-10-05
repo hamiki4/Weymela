@@ -5,15 +5,18 @@ export function routeResources(pathname: string): string[] {
     case "/business": return ["/business/home"];
     case "/business/campaigns": return ["/business/campaigns", "/business/ugc", "/business/promotion-content-submissions"];
     case "/business/requests": return ["/business/campaigns"];
-    case "/business/ugc": return ["/business/ugc", "/business/wallet"];
-    case "/business/ugc/new": return ["/legal/current", "/business/wallet", "/business/ugc-pricing"];
+    case "/business/ugc": return ["/business/campaigns", "/business/ugc", "/business/promotion-content-submissions"];
+    case "/business/ugc/new": return ["/business/wallet", "/business/ugc-pricing"];
     case "/business/wallet": return ["/business/wallet", "/business/deposit-method", "/business/deposit-requests"];
     case "/business/pricing": return ["/business/pricing", "/business/ugc-pricing"];
     case "/business/cashiers": return ["/business/cashiers"];
-    case "/business/campaigns/new": return ["/business/pricing"];
-    case "/creator": return ["/creator/home", "/creator/campaigns"];
+    case "/business/campaigns/new": return ["/business/wallet", "/business/pricing", "/business/ugc-pricing"];
+    case "/creator": return ["/creator/home", "/creator/campaigns", "/creator/discover", "/creator/ugc"];
     case "/creator/discover": return ["/creator/discover", "/creator/ugc"];
     case "/creator/promotions": return ["/creator/campaigns", "/creator/requests", "/creator/ugc/assignments", "/creator/ugc/requests"];
+    case "/creator/campaigns":
+    case "/creator/requests": return ["/creator/campaigns", "/creator/requests", "/creator/ugc/assignments", "/creator/ugc/requests"];
+    case "/creator/ugc": return ["/creator/discover", "/creator/ugc"];
     case "/creator/earnings": return ["/creator/earnings"];
     case "/creator/pricing": return ["/creator/pricing"];
     case "/profile": return ["/profile"];
@@ -29,7 +32,9 @@ export function routeResources(pathname: string): string[] {
     default:
       if (/^\/business\/campaigns\/[^/]+$/.test(pathname)) return [pathname, "/business/wallet"];
       if (/^\/creator\/discover\/[^/]+$/.test(pathname)) return [pathname];
+      if (/^\/creator\/ugc\/[^/]+$/.test(pathname)) return [pathname];
       if (/^\/creator\/promotions\/[^/]+$/.test(pathname)) return ["/creator/campaigns"];
+      if (/^\/creator\/campaigns\/[^/]+$/.test(pathname)) return ["/creator/campaigns"];
       if (/^\/customer\/offers\/[^/]+$/.test(pathname)) return ["/customer/offers"];
       return [];
   }

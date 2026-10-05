@@ -5,7 +5,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
   test(`Business UGC posting and Creator slots at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
     await login(context, "business");
-    await open(page, "/business/ugc/new");
+    await open(page, "/business/campaigns/new?type=ugc");
     await expect(page.getByRole("radio", { name: "Deliver content only" })).toBeChecked();
     await expect(page.getByLabel("Creators needed")).toBeVisible();
 

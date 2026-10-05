@@ -227,6 +227,90 @@ test("Business keeps funding, Checkout and Cashier Management within reach", asy
   await screenshot(page, "product-mobile-business");
 });
 
+test("Business visual review captures operational surfaces at approved widths", async ({ page, context }) => {
+  const visualUgc = await ensureVisualReviewUgc(context);
+  await login(context, "business");
+  const campaigns = await apiJson<{ id: string; title: string; status: string }[]>(context, "/business/campaigns");
+  const detailCampaign = campaigns.find((row) => !["Draft", "Cancelled"].includes(row.status));
+  expect(detailCampaign, "an existing published Business Promotion is required for visual evidence").toBeDefined();
+
+  const assertMobileNavigation = async (height: number) => {
+    const navigation = page.getByRole("navigation", { name: "Mobile navigation" });
+    const bounds = await navigation.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height + 1);
+  };
+
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, "/business");
+  await layout(page);
+  await assertMobileNavigation(800);
+  await screenshot(page, "business-home-320");
+  await screenshot(page, "business-overflow-320");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, "/business");
+  await layout(page);
+  await assertMobileNavigation(844);
+  await screenshot(page, "business-home-390");
+
+  await open(page, "/business/campaigns");
+  const promotionsHeading = page.locator("main h2").filter({ hasText: /^Promotions$/ });
+  await expect(promotionsHeading).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
+  await layout(page);
+  await screenshot(page, "business-promotions-390");
+
+  await open(page, "/business/campaigns/new?type=views-sales");
+  await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "business-create-390");
+
+  await open(page, `/business/campaigns/${detailCampaign!.id}`);
+  await expect(page.getByRole("heading", { name: detailCampaign!.title, exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "business-promotion-detail-390");
+
+  await open(page, "/business/requests");
+  await expect(page.getByRole("heading", { name: "Creator Requests", exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "business-requests-390");
+
+  await open(page, "/business/wallet");
+  await page.locator("summary[aria-label='Open Add Funds']").click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "business-wallet-390");
+
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await open(page, "/business");
+  await layout(page);
+  await screenshot(page, "business-home-1366");
+
+  await open(page, "/business/campaigns");
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
+  await layout(page);
+  await screenshot(page, "business-promotions-1366");
+
+  await open(page, "/business/campaigns/new?type=views-sales");
+  await layout(page);
+  await screenshot(page, "business-create-1366");
+
+  await open(page, `/business/campaigns/${detailCampaign!.id}`);
+  await layout(page);
+  await screenshot(page, "business-promotion-detail-1366");
+
+  await open(page, "/business/requests");
+  await layout(page);
+  await screenshot(page, "business-requests-1366");
+
+  await open(page, "/business/wallet");
+  await page.locator("summary[aria-label='Open Add Funds']").click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "business-wallet-1366");
+});
+
 test("Cashier has Purchase, Transactions and Profile without a dashboard", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "cashier");

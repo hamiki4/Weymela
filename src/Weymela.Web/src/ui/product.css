@@ -833,3 +833,310 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* Business visual refresh: one restrained card language across operational surfaces. */
+.product-shell.role-business {
+  --business-card-border: #d6dfd9;
+  --business-card-shadow: 0 3px 12px rgb(23 36 61 / 7%);
+}
+
+.product-shell.role-business .business-home-overview {
+  gap: 18px;
+}
+
+.product-shell.role-business .business-home-fund-summary,
+.product-shell.role-business .business-home-promotion-row,
+.product-shell.role-business .business-promotion-card,
+.product-shell.role-business .business-promotion-review-row,
+.product-shell.role-business .campaign-grid > .campaign-card,
+.product-shell.role-business .campaign-grid > .data-card {
+  border-color: var(--business-card-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--business-card-shadow);
+}
+
+.product-shell.role-business .business-home-fund-summary {
+  box-shadow: 0 3px 12px rgb(23 36 61 / 6%);
+}
+
+.product-shell.role-business .business-home-promotion-row {
+  min-height: 60px;
+  box-shadow: 0 2px 9px rgb(23 36 61 / 6%);
+}
+
+.product-shell.role-business .business-home-promotion-list,
+.product-shell.role-business .business-promotion-list,
+.product-shell.role-business .card-stack.campaign-grid,
+.product-shell.role-business .business-promotion-review-list {
+  gap: 12px;
+}
+
+.product-shell.role-business .business-promotion-card,
+.product-shell.role-business .campaign-grid > .campaign-card,
+.product-shell.role-business .campaign-grid > .data-card {
+  min-width: 0;
+  padding: 15px;
+}
+
+.product-shell.role-business .business-promotion-card .card-head,
+.product-shell.role-business .campaign-grid > .campaign-card .card-head,
+.product-shell.role-business .campaign-grid > .data-card .card-head {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+}
+
+.product-shell.role-business .business-promotion-card .card-head > div,
+.product-shell.role-business .campaign-grid > .campaign-card .card-head > div,
+.product-shell.role-business .campaign-grid > .data-card .card-head > div {
+  min-width: 0;
+  flex: 1 1 150px;
+}
+
+.product-shell.role-business .business-promotion-card .card-eyebrow {
+  margin-bottom: 4px;
+  color: var(--role-accent);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.product-shell.role-business .business-promotion-card h3,
+.product-shell.role-business .campaign-grid > .campaign-card h3,
+.product-shell.role-business .campaign-grid > .data-card h3 {
+  margin: 0;
+  color: var(--product-ink);
+  font-size: 1rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.product-shell.role-business .business-promotion-card .badge,
+.product-shell.role-business .campaign-grid > .campaign-card .badge,
+.product-shell.role-business .campaign-grid > .data-card .badge {
+  flex: 0 1 auto;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.product-shell.role-business .business-promotion-card .promotion-summary-list {
+  gap: 7px 14px;
+  margin: 12px 0 13px;
+}
+
+.product-shell.role-business .business-promotion-card .promotion-summary-list dt,
+.product-shell.role-business .campaign-grid .funds-grid dt {
+  color: var(--product-secondary);
+}
+
+.product-shell.role-business .business-promotion-card .promotion-summary-list dd,
+.product-shell.role-business .campaign-grid .funds-grid dd {
+  overflow-wrap: anywhere;
+}
+
+.product-shell.role-business .business-promotion-card .business-promotion-manage {
+  width: fit-content;
+  min-width: 116px;
+  margin-top: 2px;
+  justify-content: center;
+}
+
+.product-shell.role-business .business-promotion-management {
+  gap: 10px;
+  margin-top: 13px;
+  padding-top: 12px;
+}
+
+.product-shell.role-business .business-ugc-creator-list {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.product-shell.role-business .business-ugc-creator-list h4 {
+  margin: 6px 0 0;
+  color: var(--product-ink);
+  font-size: .9rem;
+}
+
+.product-shell.role-business .business-ugc-creator-row {
+  gap: 8px;
+  padding: 9px;
+  border-color: var(--business-card-border);
+  border-radius: 10px;
+  background: #fbfcfb;
+}
+
+.product-shell.role-business .business-promotion-review-row {
+  min-width: 0;
+  padding: 14px;
+}
+
+.product-shell.role-business .business-review-heading {
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.product-shell.role-business .business-review-heading > div {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.product-shell.role-business .business-review-heading h3 {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--product-ink);
+  font-size: .98rem;
+}
+
+.product-shell.role-business .business-review-heading small,
+.product-shell.role-business .business-promotion-review-row > p {
+  color: var(--product-secondary);
+}
+
+.product-shell.role-business .form-layout > .panel,
+.product-shell.role-business .two-column > .panel {
+  padding: 16px;
+  border: 1px solid var(--business-card-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--business-card-shadow);
+}
+
+.product-shell.role-business .form-layout > .panel .section-heading,
+.product-shell.role-business .two-column > .panel .section-heading {
+  margin-bottom: 17px;
+}
+
+.product-shell.role-business .form-grid {
+  gap: 0 16px;
+}
+
+.product-shell.role-business .form-grid .field {
+  margin-bottom: 15px;
+}
+
+.product-shell.role-business .promotion-type-grid {
+  gap: 10px;
+}
+
+.product-shell.role-business .promotion-type-card {
+  padding: 14px;
+  border-color: var(--business-card-border);
+  border-radius: 12px;
+  box-shadow: 0 2px 9px rgb(23 36 61 / 5%);
+}
+
+.product-shell.role-business .promotion-selected-type {
+  padding: 11px 12px;
+  border: 1px solid var(--business-card-border);
+  border-radius: 10px;
+  background: #f8faf8;
+}
+
+.product-shell.role-business .form-actions {
+  margin-top: 5px;
+  padding-top: 14px;
+  border-top: 1px solid var(--product-line);
+}
+
+.product-shell.role-business .fund-metrics {
+  gap: 0;
+  margin-bottom: 19px;
+  padding: 4px;
+  border: 1px solid var(--business-card-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--business-card-shadow);
+}
+
+.product-shell.role-business .fund-metrics .metric {
+  min-width: 0;
+  padding: 13px 12px;
+  border: 0;
+  border-right: 1px solid var(--product-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.product-shell.role-business .fund-metrics .metric:last-child {
+  border-right: 0;
+}
+
+.product-shell.role-business .fund-metrics .metric strong {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.product-shell.role-business .fund-metrics .metric.emphasis {
+  color: var(--product-ink);
+}
+
+.product-shell.role-business .fund-metrics .metric.emphasis .metric-top svg {
+  color: var(--role-accent);
+}
+
+.product-shell.role-business .wallet-content {
+  max-width: 760px;
+}
+
+@media (max-width: 640px) {
+  .product-shell.role-business .business-promotion-card,
+  .product-shell.role-business .campaign-grid > .campaign-card,
+  .product-shell.role-business .campaign-grid > .data-card,
+  .product-shell.role-business .business-promotion-review-row,
+  .product-shell.role-business .form-layout > .panel,
+  .product-shell.role-business .two-column > .panel {
+    padding: 14px;
+  }
+
+  .product-shell.role-business .business-promotion-card .business-promotion-manage {
+    width: 100%;
+  }
+
+  .product-shell.role-business .business-promotion-card .actions,
+  .product-shell.role-business .campaign-grid .actions {
+    gap: 8px;
+  }
+
+  .product-shell.role-business .business-promotion-card .actions .button,
+  .product-shell.role-business .campaign-grid .actions .button {
+    min-width: 0;
+  }
+
+  .product-shell.role-business .business-home-fund span,
+  .product-shell.role-business .fund-metrics .metric-top span {
+    line-height: 1.2;
+  }
+
+  .product-shell.role-business .fund-metrics .metric {
+    padding-inline: 8px;
+  }
+}
+
+@media (max-width: 350px) {
+  .product-shell.role-business .business-home-fund {
+    padding-inline: 9px;
+  }
+
+  .product-shell.role-business .business-home-fund span,
+  .product-shell.role-business .fund-metrics .metric-top span {
+    font-size: .68rem;
+  }
+
+  .product-shell.role-business .business-home-fund strong {
+    font-size: clamp(.9rem, 4.8vw, 1.2rem);
+  }
+
+  .product-shell.role-business .fund-metrics .metric strong {
+    font-size: clamp(.78rem, 3.8vw, 1rem);
+    letter-spacing: -.04em;
+  }
+
+  .product-shell.role-business .business-promotion-card .card-head,
+  .product-shell.role-business .campaign-grid > .campaign-card .card-head,
+  .product-shell.role-business .campaign-grid > .data-card .card-head {
+    gap: 6px 8px;
+  }
+}

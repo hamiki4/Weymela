@@ -181,7 +181,7 @@ for (const viewport of viewports)
           await screenshot(page, `${viewport.width}-business-promotion-shortfall`);
         }
         if (viewport.width <= 430 && role === "business" && path === "/business/ugc") {
-          await expect(page.getByRole("heading", { name: "Promotions" })).toBeVisible();
+          await expect(page.getByRole("heading", { name: "Promotions", level: 2 })).toBeVisible();
           await expect(page.getByRole("link", { name: "Create Promotion" })).toHaveAttribute("href", "/business/campaigns/new");
           await expect(page.getByLabel("Promotion title")).toHaveCount(0);
         }

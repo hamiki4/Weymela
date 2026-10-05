@@ -62,11 +62,11 @@ export function CreatorDashboard() {
           <Link
             className="creator-home-summary-row"
             to="/creator/promotions?filter=Pending"
-            aria-label={`Pending, ${count(data.requests)}, Waiting for Business`}
+            aria-label={`Pending Requests, ${count(data.requests)}, Waiting for Business`}
           >
             <span className="creator-home-summary-icon"><Icon name="people" size={18} /></span>
             <span className="creator-home-summary-copy">
-              <strong>Pending</strong>
+              <strong>Pending Requests</strong>
               <small>Waiting for Business</small>
             </span>
             <strong className="creator-home-summary-count">{count(data.requests)}</strong>
@@ -75,11 +75,11 @@ export function CreatorDashboard() {
           <Link
             className="creator-home-summary-row"
             to="/creator/promotions?filter=Active"
-            aria-label={`Active, ${count(data.activeCampaigns)}, Continue your Promotion`}
+            aria-label={`Live Promotions, ${count(data.activeCampaigns)}, Continue your Promotion`}
           >
             <span className="creator-home-summary-icon"><Icon name="campaign" size={18} /></span>
             <span className="creator-home-summary-copy">
-              <strong>Active</strong>
+              <strong>Live Promotions</strong>
               <small>Continue your Promotion</small>
             </span>
             <strong className="creator-home-summary-count">{count(data.activeCampaigns)}</strong>
@@ -125,10 +125,10 @@ export function CreatorDashboard() {
         <Link
           className="creator-home-earnings-row"
           to="/creator/earnings"
-          aria-label={`Available earnings, ${amount(data.earnings.availableEarnings)} ETB`}
+          aria-label={`Available Earnings, ${amount(data.earnings.availableEarnings)} ETB`}
         >
           <span>
-            <small>Available earnings</small>
+            <small>Available Earnings</small>
             <strong>{amount(data.earnings.availableEarnings)} ETB</strong>
           </span>
           <Icon name="arrow" size={17} />

@@ -344,7 +344,7 @@
 .role-creator .creator-home-section { margin-bottom: 18px; }
 .role-creator .creator-home-section > .section-heading { margin-bottom: 12px; padding-bottom: 0; border-bottom: 0; }
 .role-creator .creator-home-work-list { display: grid; gap: 8px; }
-.role-creator .creator-home-summary-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 17px; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); box-shadow: 0 2px 8px rgb(43 33 70 / 5%); }
+.role-creator .creator-home-summary-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 17px; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--product-line); border-radius: 14px; background: #fff; color: var(--product-ink); box-shadow: 0 2px 8px rgb(23 36 61 / 6%); }
 .role-creator .creator-home-summary-row:hover { border-color: var(--role-accent); }
 .role-creator .creator-home-summary-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--role-soft); color: var(--role-accent); }
 .role-creator .creator-home-summary-copy { display: grid; min-width: 0; gap: 2px; }
@@ -361,7 +361,7 @@
 .role-creator .creator-home-active-meta { display: grid; justify-items: end; gap: 4px; white-space: nowrap; }
 .role-creator .creator-home-active-meta > small { color: var(--product-secondary); font-size: .73rem; }
 .role-creator .creator-home-active-action { color: var(--role-accent); font-size: .78rem; font-weight: 750; white-space: nowrap; }
-.role-creator .creator-home-earnings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 68px; padding: 12px 14px; border: 1px solid var(--role-border); border-radius: 12px; background: #fff; color: var(--product-ink); box-shadow: 0 2px 8px rgb(43 33 70 / 5%); }
+.role-creator .creator-home-earnings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--product-line); border-radius: 14px; background: #fff; color: var(--product-ink); box-shadow: 0 2px 8px rgb(23 36 61 / 6%); }
 .role-creator .creator-home-earnings-row > span { display: grid; min-width: 0; gap: 4px; }
 .role-creator .creator-home-earnings-row small { color: var(--product-secondary); font-size: .78rem; }
 .role-creator .creator-home-earnings-row strong { color: var(--role-accent); font-size: 1.2rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -401,7 +401,7 @@
 .role-creator .creator-discover-cta h2 { margin: 0; font-size: 1rem; }
 .role-creator .creator-activity-list { gap: 0; }
 .role-creator .creator-activity-list article { padding: 12px 0; border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0; }
-.role-creator .creator-opportunity-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px; border-color: #d8d2e8; border-radius: 12px; box-shadow: 0 2px 8px rgb(43 33 70 / 7%); }
+.role-creator .creator-opportunity-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px; border-color: var(--product-line); border-radius: 14px; box-shadow: 0 2px 8px rgb(23 36 61 / 6%); }
 .role-creator .creator-opportunity-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
 .role-creator .creator-opportunity-card h3 { margin: 0; }
 .role-creator .creator-opportunity-card p { margin: 0; }
@@ -687,16 +687,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   min-height: 24px;
   width: fit-content;
-  max-width: 100%;
+  max-width: none;
   padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 999px;
   font-size: .73rem;
   font-weight: 750;
   line-height: 1.1;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .product-shell.role-creator .creator-status-live { border-color: #b9dec2; background: #eef8f0; color: #22633a; }
 .product-shell.role-creator .creator-status-review { border-color: #ead9a8; background: #fff8e8; color: #8a5c08; }
@@ -744,12 +746,27 @@
 .product-shell.role-creator .creator-work-detail-error { flex-wrap: wrap; margin-top: 10px; }
 
 @media (max-width: 640px) {
+  .product-shell.role-creator .mobile-role-nav { gap: 2px; padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right)); }
+  .product-shell.role-creator .mobile-role-link { flex: 1 1 0; padding-inline: 1px; font-size: .7rem; letter-spacing: -.025em; }
+  .product-shell.role-creator .mobile-role-link-wide { flex-grow: 1.18; }
+  .product-shell.role-creator .mobile-role-link span { white-space: nowrap; }
   .product-shell.role-creator .creator-home-opportunity-preview { grid-template-columns: 1fr; gap: 8px; }
   .product-shell.role-creator .creator-home-opportunity-preview > .button,
   .product-shell.role-creator .creator-work-row .creator-next-action > a,
   .product-shell.role-creator .creator-work-row .creator-next-action > .button { width: 100%; justify-content: center; }
   .product-shell.role-creator .creator-work-row { grid-template-columns: 1fr; }
   .product-shell.role-creator .creator-work-row .creator-next-action { gap: 8px; }
+}
+@media (max-width: 350px) {
+  .product-shell.role-creator .creator-home-summary-row { grid-template-columns: 30px minmax(0, 1fr) auto 16px; gap: 7px; min-height: 58px; padding-inline: 8px; }
+  .product-shell.role-creator .creator-home-summary-icon { width: 30px; height: 30px; }
+  .product-shell.role-creator .creator-home-summary-copy strong { font-size: .88rem; white-space: nowrap; }
+  .product-shell.role-creator .creator-home-summary-copy small,
+  .product-shell.role-creator .creator-home-earnings-row small { font-size: .72rem; white-space: nowrap; }
+  .product-shell.role-creator .creator-home-earnings-row { min-height: 58px; padding-inline: 10px; }
+  .product-shell.role-creator .creator-home-earnings-row strong { font-size: 1.05rem; }
+  .product-shell.role-creator .mobile-role-link { font-size: .69rem; }
+  .product-shell.role-creator .mobile-role-link svg { width: 23px; height: 23px; }
 }
 @media (min-width: 1100px) {
   .sign-in-form { padding: 48px 24px; }

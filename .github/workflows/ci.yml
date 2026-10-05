@@ -191,6 +191,7 @@ jobs:
             .artifacts/phase6-screenshots/creator-choice-failure.png
             # Approved visual-review captures only. Future captures use
             # <role>-<screen>-<viewport>.png and must be added one by one.
+            .artifacts/phase6-screenshots/creator-home-320.png
             .artifacts/phase6-screenshots/creator-home-390.png
             .artifacts/phase6-screenshots/creator-home-1366.png
             .artifacts/phase6-screenshots/creator-discover-390.png

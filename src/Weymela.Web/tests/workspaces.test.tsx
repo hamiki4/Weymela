@@ -541,16 +541,19 @@ describe("Creator workspace", () => {
       "/creator/discover",
     );
 
-    const pending = screen.getByRole("link", { name: /Pending, 1, Waiting for Business/ });
+    const pending = screen.getByRole("link", { name: /Pending Requests, 1, Waiting for Business/ });
     expect(pending).toHaveAttribute("href", "/creator/promotions?filter=Pending");
+    expect(within(pending).getByText("Pending Requests")).toBeVisible();
     expect(within(pending).getByText("Waiting for Business")).toBeVisible();
 
-    const activeWork = screen.getByRole("link", { name: /Active, 1, Continue your Promotion/ });
+    const activeWork = screen.getByRole("link", { name: /Live Promotions, 1, Continue your Promotion/ });
     expect(activeWork).toHaveAttribute("href", "/creator/promotions?filter=Active");
+    expect(within(activeWork).getByText("Live Promotions")).toBeVisible();
     expect(within(activeWork).getByText("Continue your Promotion")).toBeVisible();
 
-    const earningsLink = screen.getByRole("link", { name: /Available earnings, 5,400 ETB/ });
+    const earningsLink = screen.getByRole("link", { name: /Available Earnings, 5,400 ETB/ });
     expect(earningsLink).toHaveAttribute("href", "/creator/earnings");
+    expect(within(earningsLink).getByText("Available Earnings")).toBeVisible();
     expect(within(earningsLink).getByText("5,400 ETB")).toBeVisible();
 
     expect(screen.getByRole("link", { name: "My Promotions" })).toHaveAttribute(

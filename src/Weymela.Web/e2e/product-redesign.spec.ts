@@ -90,12 +90,24 @@ test("Creator Home keeps the next destination clear across mobile and desktop", 
     "/creator/discover",
   );
   await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
+  const home = page.locator(".creator-home");
+  await expect(home.getByText("Pending Requests", { exact: true })).toBeVisible();
+  await expect(home.getByText("Live Promotions", { exact: true })).toBeVisible();
+  await expect(home.getByText("Available Earnings", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "My Promotions" })).toHaveAttribute(
     "href",
     "/creator/promotions",
   );
   await layout(page);
   await screenshot(page, "creator-home-390");
+
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, "/creator");
+  await expect(home.getByText("Pending Requests", { exact: true })).toBeVisible();
+  await expect(home.getByText("Live Promotions", { exact: true })).toBeVisible();
+  await expect(home.getByText("Available Earnings", { exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "creator-home-320");
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/creator");

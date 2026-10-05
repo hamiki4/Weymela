@@ -19,8 +19,8 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await expect(page.getByLabel("YouTube Creator slots")).toHaveText("0");
 
     const title = `UGC slots ${width}-${Date.now()}`;
-    await page.getByLabel("UGC title").fill(title);
-    await page.getByLabel("Creator payment").fill("500");
+    await page.getByLabel("Promotion title").fill(title);
+    await page.getByLabel("Creator payment (ETB)").fill("500");
     await page.getByLabel("Application closes").fill(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 16));
     await page.getByLabel("Content due").fill(new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 16));
     await page.getByLabel("Instructions").fill("Make a short product video.");
@@ -28,8 +28,8 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await layout(page);
     if (width === 390 || width === 393) await screenshot(page, `${width}-business-ugc-platform-capacity`);
     if (width === 320) {
-      await page.getByRole("button", { name: "Publish UGC" }).click();
-      await expect(page).toHaveURL(/\/business\/ugc$/);
+      await page.getByRole("button", { name: "Publish Promotion" }).click();
+      await expect(page).toHaveURL(/\/business\/campaigns$/);
       const response = await context.request.get("/api/business/ugc", { headers: { "X-Weymela-Request": "1" } });
       expect(response.ok()).toBeTruthy();
       const rows = await response.json() as { title: string; creatorsNeeded: number;

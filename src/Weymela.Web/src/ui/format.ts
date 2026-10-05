@@ -46,6 +46,30 @@ export const campaignType = (type: string) => {
       ? "View & Sale"
       : type;
 };
+export const promotionTypeLabel = (type: string) => {
+  const code = promotionTypeCode(type);
+  if (code === "ViewOnly") return "Views";
+  if (code === "ViewPlusCommission") return "Views + Sales";
+  if (type === "UGC" || type === "Content") return "UGC";
+  if (type === "UGC + Sales" || type === "UGCWithSales") return "UGC + Sales";
+  return type;
+};
+export const promotionStatusLabel = (status: string) => ({
+  Draft: "Draft",
+  Funded: "Ready to publish",
+  Published: "Active",
+  Open: "Active",
+  Active: "Active",
+  AwaitingContent: "Ready for content",
+  FundingRequired: "Budget needed",
+  BudgetExhausted: "Budget used",
+  Completed: "Completed",
+  Ended: "Completed",
+  Cancelled: "Completed",
+  Pending: "Pending",
+  Approved: "Approved",
+  Rejected: "Not approved",
+})[status] ?? status.replace(/([a-z])([A-Z])/g, "$1 $2");
 export const statusLabel = (status: string) =>
   ({
     AwaitingContent: "Ready for content",

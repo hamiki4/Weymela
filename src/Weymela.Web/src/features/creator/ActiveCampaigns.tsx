@@ -16,10 +16,10 @@ import {
   Section,
 } from "../../ui/components";
 import {
-  campaignType,
   count,
   date,
   isViewAndSale,
+  promotionTypeLabel,
 } from "../../ui/format";
 
 export function contentUrl(provider: string | null, id: string | null) {
@@ -52,7 +52,7 @@ export function CreatorActiveCampaigns() {
                     <h3>{r.title}</h3>
                     <Badge status={r.status} />
                   </div>
-                  <p>{campaignType(r.type)}</p>
+                  <p>{promotionTypeLabel(r.type)}</p>
                   <FundsGrid values={[["Verified Views", r.verifiedViews], ["Your Earnings", r.viewEarnings + r.saleCommissionEarnings]]} />
                   <p className="fine-print">
                     {count(r.verifiedViews)} verified views ·{" "}
@@ -228,7 +228,7 @@ export function CreatorActiveDetail() {
               <PageHeader
                 eyebrow={r.business.displayName}
                 title={r.title}
-                description={campaignType(r.type)}
+                description={promotionTypeLabel(r.type)}
                 action={<Badge status={r.status} />}
               />
               <div className="two-column">

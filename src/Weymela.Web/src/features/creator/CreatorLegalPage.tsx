@@ -15,8 +15,8 @@ type LegalContent = Pick<LegalDocument, "id" | "type" | "version" | "contentHash
 const creatorDetail = /^\/creator\/(?:discover|promotions|campaigns)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function creatorLegalReturn(value: string | null): string {
   if (value && (creatorDetail.test(value) || value === "/creator/discover"
-      || value === "/creator/discover?tab=UGC" || value === "/creator/promotions"
-      || /^\/creator\/promotions\?filter=(?:Active|Requests|Requested|History|Ended|DeclinedRejected)$/.test(value))) return value;
+      || value === "/creator/promotions"
+      || /^\/creator\/promotions\?filter=(?:Pending|Active|Completed|Requests|Requested|History|Ended|DeclinedRejected)$/.test(value))) return value;
   return "/creator";
 }
 export function creatorLegalPath(value: string): string {

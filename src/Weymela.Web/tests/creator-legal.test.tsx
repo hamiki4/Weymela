@@ -96,8 +96,10 @@ describe("Creator legal resolution", () => {
 
   it.each([
     [promotion, "Promotion action"],
-    ["/creator/discover?tab=UGC", "UGC destination"],
+    ["/creator/discover", "UGC destination"],
+    ["/creator/promotions?filter=Pending", "Promotions destination"],
     ["/creator/promotions?filter=Active", "Promotions destination"],
+    ["/creator/promotions?filter=Completed", "Promotions destination"],
   ])("accepts only the current shared version and returns to %s", async (destination, title) => {
     const { writes } = setup();
     mount(`/creator/legal?returnTo=${encodeURIComponent(destination)}`);

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import {
   BusinessDashboard,
@@ -15,13 +15,13 @@ import { BusinessUgcPage, CreateBusinessUgcPage } from "../src/features/business
 import { BusinessCampaignDetail } from "../src/features/business/CampaignDetail";
 import { PromotionContentReviewQueue } from "../src/features/business/PromotionContentReviewQueue";
 import {
-  CreatorOpportunity,
   CreatorHowYouEarn,
   CreatorEarnings,
 } from "../src/features/creator/CreatorPages";
 import {
   CreatorDashboard,
   CreatorDiscover,
+  CreatorOpportunity,
   CreatorPromotions,
   CreatorUgcOpportunity,
 } from "../src/features/creator/CreatorExperience";
@@ -63,6 +63,7 @@ vi.mock("qrcode", () => ({
 function mount(element: ReactNode, path = "/", pattern = "*") {
   return render(
     <MemoryRouter initialEntries={[path]}>
+      <LocationProbe />
       <Routes>
         <Route path={pattern} element={element} />
         <Route
@@ -73,6 +74,10 @@ function mount(element: ReactNode, path = "/", pattern = "*") {
       </Routes>
     </MemoryRouter>,
   );
+}
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location-search">{location.search}</output>;
 }
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -110,7 +115,7 @@ describe("Business workspace", () => {
     ).toBeVisible();
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
-    expect(screen.getByText("6,000")).toBeVisible();
+    expect(screen.queryByText("6,000")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
         name: "Pricing",
@@ -122,22 +127,22 @@ describe("Business workspace", () => {
     const active = await screen.findByRole("link", { name: /Active Promotions/ });
     expect(active).toHaveAttribute("href", "/business/campaigns?filter=Active");
     expect(screen.getByRole("link", { name: /Creator Requests/ })).toHaveAttribute("href", "/business/requests");
-    expect(screen.getByRole("link", { name: /Open UGC/ })).toHaveAttribute("href", "/business/ugc?filter=Open");
+    expect(screen.queryByRole("link", { name: /Open UGC/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
   });
   it("does not repeat the Create Promotion action on an empty Promotions page", async () => {
     mockApi({ "/business/campaigns": [] });
     mount(<BusinessCampaigns />);
-    expect(await screen.findByText("No promotions yet.")).toBeVisible();
+    expect(await screen.findByText("No Promotions yet.")).toBeVisible();
     expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
   });
-  it("keeps UGC management compact and routes creation to its own page", async () => {
+  it("keeps the legacy UGC workspace represented as Promotions", async () => {
     mockApi({ "/business/ugc": [] });
     mount(<BusinessUgcPage />);
-    expect(await screen.findByText("No UGC yet.")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Your UGC" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Create UGC" })).toHaveAttribute("href", "/business/ugc/new");
-    expect(screen.queryByLabelText("UGC title")).not.toBeInTheDocument();
+    expect(await screen.findByText("No Promotions yet.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Promotions", level: 2 })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Create Promotion" })).toHaveAttribute("href", "/business/campaigns/new");
+    expect(screen.queryByLabelText("Promotion title")).not.toBeInTheDocument();
   });
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
@@ -181,8 +186,8 @@ describe("Business workspace", () => {
 
     expect(choices.find(link => link.getAttribute("href") === "/business/campaigns/new?type=views")).toBeTruthy();
     expect(choices.find(link => link.getAttribute("href") === "/business/campaigns/new?type=views-sales")).toBeTruthy();
-    expect(choices.find(link => link.getAttribute("href") === "/business/ugc/new?type=ugc")).toBeTruthy();
-    expect(choices.find(link => link.getAttribute("href") === "/business/ugc/new?type=ugc-sales")).toBeTruthy();
+    expect(choices.find(link => link.getAttribute("href") === "/business/campaigns/new?type=ugc")).toBeTruthy();
+    expect(choices.find(link => link.getAttribute("href") === "/business/campaigns/new?type=ugc-sales")).toBeTruthy();
   });
 
   it("opens the selected Views Promotion form without asking for the type again", async () => {
@@ -204,16 +209,16 @@ describe("Business workspace", () => {
     mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc");
 
     expect(await screen.findByText("UGC", { selector: ".promotion-selected-type strong" })).toBeVisible();
-    expect(screen.queryByLabelText("Customer Discount %")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Customer Reward Budget")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Customer discount %")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Customer offer budget")).not.toBeInTheDocument();
   });
 
   it("opens UGC + Sales with Customer sale fields already enabled", async () => {
     mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc-sales");
 
     expect(await screen.findByText("UGC + Sales", { selector: ".promotion-selected-type strong" })).toBeVisible();
-    expect(screen.getByLabelText("Customer Discount %")).toBeVisible();
-    expect(screen.getByLabelText("Customer Reward Budget")).toBeVisible();
+    expect(screen.getByLabelText("Customer discount %")).toBeVisible();
+    expect(screen.getByLabelText("Customer offer budget")).toBeVisible();
   });
 
   it("creates a guided Campaign without accepting platform rates", async () => {
@@ -252,22 +257,20 @@ describe("Business workspace", () => {
       { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
     ] });
     mount(<CreateBusinessUgcPage />, "/business/ugc/new");
-    expect(await screen.findByLabelText("UGC title")).toBeVisible();
+    expect(await screen.findByLabelText("Promotion title")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Before you continue" })).not.toBeInTheDocument();
   });
-  it("separates UGC commitment from optional Customer discount funding", async () => {
+  it("keeps UGC creation focused on the Promotion without funding internals", async () => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: 1000, available: 1000, reserved: 0 } });
     mount(<CreateBusinessUgcPage />);
-    await userEvent.type(await screen.findByLabelText("Creator payment"), "500");
+    await userEvent.type(await screen.findByLabelText("Creator payment (ETB)"), "500");
     await userEvent.clear(screen.getByLabelText("Creators needed"));
     await userEvent.type(screen.getByLabelText("Creators needed"), "3");
-    expect(screen.getByText("Creator payment", { selector: "dt" }).nextElementSibling).toHaveTextContent("1,500");
-    expect(screen.getByText("Need").nextElementSibling).toHaveTextContent("500 ETB more");
+    expect(screen.queryByText(/Funding Summary|Total funding|Customer discount funding|Need/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("checkbox", { name: "Add Customer discount sale" }));
-    await userEvent.type(screen.getByLabelText("Customer Discount %"), "5");
-    await userEvent.type(screen.getByLabelText("Customer Reward Budget"), "200");
-    expect(screen.getByText("Customer discount funding").nextElementSibling).toHaveTextContent("200");
-    expect(screen.getByText("Need").nextElementSibling).toHaveTextContent("700 ETB more");
+    await userEvent.type(screen.getByLabelText("Customer discount %"), "5");
+    await userEvent.type(screen.getByLabelText("Customer offer budget"), "200");
+    expect(screen.queryByText(/10,000|Platform fee|Reserved/)).not.toBeInTheDocument();
   });
   it.each([
     ["Product provided by Business", true, false],
@@ -276,15 +279,15 @@ describe("Business workspace", () => {
     const { writes } = mockApi();
     mount(<CreateBusinessUgcPage />);
     expect(await screen.findByText("Product arrangement")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Publish UGC" })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText("UGC title"), "Product story");
+    expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Promotion title"), "Product story");
     await userEvent.type(screen.getByLabelText("Instructions"), "Make a short video");
     await userEvent.type(screen.getByLabelText("Application closes"), "2027-11-30T10:00");
     await userEvent.type(screen.getByLabelText("Content due"), "2027-12-01T10:00");
-    await userEvent.type(screen.getByLabelText("Creator payment"), "500");
+    await userEvent.type(screen.getByLabelText("Creator payment (ETB)"), "500");
     await userEvent.click(screen.getByRole("radio", { name: new RegExp(label) }));
-    expect(screen.getByRole("button", { name: "Publish UGC" })).toBeEnabled();
-    await userEvent.click(screen.getByRole("button", { name: "Publish UGC" }));
+    expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Publish Promotion" }));
     await waitFor(() => expect(writes.find((write) => write.path === "/business/ugc")?.body).toMatchObject({ productProvided, creatorMustPurchase, creatorPayment: 500, customerOfferEnabled: false }));
   });
   it("shows the arrangement in Business management and before a Creator joins", async () => {
@@ -297,15 +300,16 @@ describe("Business workspace", () => {
     const businessView = mount(<BusinessUgcPage />);
     expect(await screen.findByText("Creator purchases product", { selector: ".ugc-arrangement" })).toBeVisible();
     businessView.unmount();
-    mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
-    expect(await screen.findByText("Creator purchases product")).toBeVisible();
+    mount(<CreatorDiscover />, "/creator/discover");
+    expect(await screen.findByText("Product story")).toBeVisible();
+    expect(screen.queryByText("Creator purchases product")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request to Join" })).toBeVisible();
   });
   it.each([
-    [0, 10000, "10,000", "Need"],
-    [9000, 10000, "1,000", "Need"],
-    [15000, 10000, "5,000", "Remaining after funding"],
-  ])("shows authoritative available funds %i and a %s budget decision", async (available, budget, expected, label) => {
+    [0, 10000],
+    [9000, 10000],
+    [15000, 10000],
+  ])("shows the next funding action without exposing balance internals (%i, %i)", async (available, budget) => {
     mockApi({ "/business/wallet": { ...wallet, totalBalance: available, available, reserved: 0 } });
     mount(<CreateCampaign />, "/business/campaigns/new?type=views");
     await userEvent.type(await screen.findByLabelText("Promotion title"), "Local stories");
@@ -313,10 +317,13 @@ describe("Business workspace", () => {
     await userEvent.type(screen.getByLabelText("Content due"), "2027-09-20");
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(await screen.findByLabelText("Promotion budget"), String(budget));
-    expect(screen.getByText(label, { selector: "dt" })).toBeVisible();
-    expect(screen.getByText(expected + " ETB" + (label === "Need" ? " more" : ""), { selector: "dd" })).toBeVisible();
-    if (available < budget) expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
-    else expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeEnabled();
+    if (available < budget) {
+      expect(screen.getByText(/Available funds cannot cover this Promotion/)).toBeVisible();
+      expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
+    } else {
+      expect(screen.queryByText(/Available funds cannot cover this Promotion/)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Publish Promotion" })).toBeEnabled();
+    }
   });
   it("omits the slogan and sends social capacities with the Promotion", async () => {
     const api = mockApi();
@@ -335,9 +342,9 @@ describe("Business workspace", () => {
     mockApi({ "/business/campaigns/campaign": { ...detail, campaign: { ...campaign, slogan: "Weekend Special", platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }] } } });
     const { container } = mount(<BusinessCampaignDetail />, "/business/campaigns/campaign", "/business/campaigns/:id");
     expect(await screen.findByText("Weekend Special")).toBeVisible();
-    expect(screen.getByLabelText("TikTok — 1 of 2 Creator slots filled")).toHaveTextContent("1/2");
-    expect(screen.getByLabelText("TikTok — 1 of 2 Creator slots filled").querySelector(".creator-platform-tiktok")).not.toBeNull();
-    expect(container.querySelector(".business-platform-summary")).toHaveTextContent(/Creators 1\/2.*1 pending requests/);
+    expect(screen.getByText("Creators and platforms")).toBeVisible();
+    expect(screen.getByText("TikTok · 2 Creators")).toBeVisible();
+    expect(container.querySelector(".business-platform-summary")).not.toHaveTextContent(/pending requests/);
   });
   it("does not expose the legacy funding workflow for an unpublished Promotion", async () => {
     const api = mockApi({
@@ -420,13 +427,10 @@ describe("Business workspace", () => {
   });
   it("has no destructive End Campaign action", async () => {
     mount(<BusinessCampaigns />);
-    await screen.findByRole("heading", { name: "Views Promotions", level: 2 });
-    expect(screen.getByRole("heading", { name: "UGC Promotions", level: 2 })).toBeVisible();
+    await screen.findByRole("heading", { name: "Promotions", level: 2 });
+    expect(screen.queryByRole("heading", { name: "UGC Promotions", level: 2 })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Promotions", level: 1 })).toBeVisible();
-    const table = screen.getByRole("table", { name: "Business Promotions" });
-    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Promotion", "Budget", "Used", "Remaining", "Creators", "Status",
-    ]);
+    expect(screen.getByRole("link", { name: "View Promotion" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /End Campaign|End Promotion/ }),
     ).not.toBeInTheDocument();
@@ -494,6 +498,12 @@ describe("Creator workspace", () => {
 
     expect(within(tabs).queryByRole("tab", { name: "Requests" })).not.toBeInTheDocument();
     expect(within(tabs).queryByRole("tab", { name: "History" })).not.toBeInTheDocument();
+    await userEvent.click(within(tabs).getByRole("tab", { name: "Pending" }));
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?filter=Pending");
+    await userEvent.click(within(tabs).getByRole("tab", { name: "Active" }));
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?filter=Active");
+    await userEvent.click(within(tabs).getByRole("tab", { name: "Completed" }));
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?filter=Completed");
   });
 
   it("groups own earnings and Campaigns", async () => {
@@ -554,7 +564,7 @@ describe("Creator workspace", () => {
     expect(screen.getByText("Make a short video")).toBeVisible();
     expect(screen.getByRole("button", { name: "Request to Join" })).toBeVisible();
   });
-  it("discovers specific Business Promotions with a compact UGC switch", async () => {
+  it("discovers all Promotion types in one compact feed", async () => {
     mockCreatorApi({ "/creator/ugc": [] });
     mount(<CreatorDiscover />);
     expect(await screen.findByRole("heading", { name: "Discover" })).toBeVisible();
@@ -566,11 +576,11 @@ describe("Creator workspace", () => {
     expect(screen.getByRole("link", { name: "Request to Join" })).toHaveAttribute("href", "/creator/discover/campaign");
     expect(screen.queryByText(/Business Wallet|Reserved Funds|Campaign Budget/)).not.toBeInTheDocument();
   });
-  it("collapses an absent slogan and shows authoritative pending and approved slot counts", async () => {
+  it("collapses an absent slogan and hides slot occupancy details", async () => {
     const { container } = mount(<CreatorDiscover />);
     await screen.findByRole("link", { name: "Request to Join" });
     expect(container.querySelector(".creator-opportunity-slogan")).toBeNull();
-    expect(container.querySelector(".creator-platform-counts")).toBeNull();
+    expect(container.querySelector('[aria-label*="filled"]')).toBeNull();
   });
   it("shows optional slogan and keeps pending requests out of platform occupancy", async () => {
     mockCreatorApi({ "/creator/discover": [{ ...opportunity, slogan: "Weekend Special", platforms: [{ platform: "TikTok", approved: 1, capacity: 2, available: 1 }], approvedCreators: 1, creatorCapacity: 2, requestStatus: "Pending" }] });
@@ -596,11 +606,11 @@ describe("Creator workspace", () => {
       requestStatus: null, version: 1, customerOfferEnabled: true, customerDiscountPercent: 3,
       customerOfferFundedAllocation: 10000, platformFee: 250, productProvided: true, creatorMustPurchase: false };
     mockCreatorApi({ "/creator/ugc": [card] });
-    mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
+    mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("UGC + Sales")).toBeVisible();
     expect(screen.getByText("Earn 4,750 ETB")).toBeVisible();
     expect(screen.getByText("Customer gets 3% off")).toBeVisible();
-    expect(screen.getByText("Product provided")).toBeVisible();
+    expect(screen.queryByText("Product provided")).not.toBeInTheDocument();
     expect(screen.queryByText(/10,000|Platform fee|250/)).not.toBeInTheDocument();
   });
   it("requires a specific available verified profile for posted UGC and sends its binding", async () => {
@@ -613,10 +623,10 @@ describe("Creator workspace", () => {
       eligibleSocialProfiles: [{ id: "verified-tiktok", platform: "TikTok", profileUrl: "https://tiktok.com/@bella" },
         { id: "verified-instagram", platform: "Instagram", profileUrl: "https://instagram.com/bella" }] };
     const api = mockCreatorApi({ "/creator/ugc": [card] });
-    mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
+    mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("Posted story")).toBeVisible();
-    expect(screen.getByLabelText("TikTok — 1 of 1 Creator slots filled")).toHaveTextContent("1/1");
-    expect(screen.getByLabelText("Instagram — 0 of 1 Creator slots filled")).toHaveTextContent("0/1");
+    expect(screen.queryByText(/1\/1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0\/1/)).not.toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.getByText("Verified Instagram profile")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Request to Join" }));
@@ -629,7 +639,7 @@ describe("Creator workspace", () => {
       productProvided: true, creatorMustPurchase: false,
       platformCapacities: [{ platform: "TikTok", capacity: 1, approved: 1, available: 0 }],
       eligibleSocialProfiles: [{ id: "verified-tiktok", platform: "TikTok", profileUrl: "https://tiktok.com/@bella" }] }] });
-    mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
+    mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("All Creator spots filled")).toBeVisible();
     expect(screen.getByRole("button", { name: "Request to Join" })).toBeDisabled();
   });
@@ -638,7 +648,7 @@ describe("Creator workspace", () => {
       contentType: "Video", status: "Open", creatorPayment: 450, creatorsNeeded: 1, approvedCreators: 0,
       dueDateUtc: "2027-12-01T10:00:00Z", location: null, requestStatus: null, version: 1,
       productProvided: true, creatorMustPurchase: false, platformCapacities: [], eligibleSocialProfiles: [] }] });
-    mount(<CreatorDiscover />, "/creator/discover?tab=UGC");
+    mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("Delivery story")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Request to Join" }));
     await waitFor(() => expect(api.writes[0]?.path).toBe("/creator/ugc/delivery-ugc/request"));
@@ -659,7 +669,7 @@ describe("Creator workspace", () => {
     } });
     mount(<CreatorOpportunity />, "/creator/discover/campaign", "/creator/discover/:id");
     const selector = await screen.findByRole("radiogroup", { name: "Choose platform" });
-    expect(selector).toHaveTextContent("1 available");
+    expect(selector).toHaveTextContent("Available");
     expect(selector).toHaveTextContent("InstagramFull");
     const submit = screen.getByRole("button", { name: "Submit Request" });
     expect(submit).toBeDisabled();

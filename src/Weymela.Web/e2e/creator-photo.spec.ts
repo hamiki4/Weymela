@@ -105,7 +105,7 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   const published = await context.request.post(`/api/business/ugc/${ugcId}/publish`, { headers: { ...headers, "Idempotency-Key": crypto.randomUUID() }, data: { version: detail.opportunity.version } });
   expect(published.ok(), await published.text()).toBeTruthy();
   await login(context, "creator");
-  await open(page, "/creator/discover?tab=UGC");
+  await open(page, "/creator/discover");
   const opportunity = page.locator(".creator-opportunity-card").filter({ hasText: title });
   const joined = page.waitForResponse(response => response.request().method() === "POST" && response.url().includes(`/api/creator/ugc/${ugcId}/request`));
   await opportunity.getByRole("button", { name: "Request to Join" }).click();

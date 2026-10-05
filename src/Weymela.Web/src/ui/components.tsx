@@ -131,12 +131,12 @@ export function Metric({
 export function Currency() {
   return null;
 }
-export function Badge({ status }: { status: string }) {
+export function Badge({ status, label }: { status: string; label?: string }) {
   return (
     <span
       className={`badge ${["Active", "Approved", "Paid", "Eligible", "Ready"].includes(status) ? "positive" : ["FundingRequired", "BudgetExhausted", "Rejected", "Inactive"].includes(status) ? "attention" : ""}`}
     >
-      {statusLabel(status)}
+      {label ?? statusLabel(status)}
     </span>
   );
 }

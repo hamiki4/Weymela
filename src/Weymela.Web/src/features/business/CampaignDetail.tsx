@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
-import { PlatformOccupancy } from "../creator/CreatorPlatformIcon";
 import { PlatformCapacityPicker, type PlatformCapacity } from "./PlatformCapacityPicker";
 import type {
   Applicant,
@@ -30,10 +29,10 @@ import {
 } from "../../ui/components";
 import {
   amount,
-  campaignType,
   count,
   date,
-  isViewAndSale,
+  promotionStatusLabel,
+  promotionTypeLabel,
 } from "../../ui/format";
 
 export function BusinessCampaignDetail() {
@@ -105,10 +104,10 @@ export function BusinessCampaignDetail() {
               ← Promotions
             </Link>
             <PageHeader
-              eyebrow={campaignType(c.type)}
+              eyebrow={promotionTypeLabel(c.type)}
               title={c.title}
               description={`${c.applicationClosesAtUtc ? `Applications close ${date(c.applicationClosesAtUtc)} · ` : ""}${c.contentDueAtUtc ? `Content due ${date(c.contentDueAtUtc)}` : ""}`}
-              action={c.status === "Draft" ? undefined : <div className="actions"><Badge status={c.status} /><Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button></div>}
+              action={c.status === "Draft" ? undefined : <div className="actions"><Badge status={c.status} label={promotionStatusLabel(c.status)} /><Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button></div>}
             />
             {success && <Notice>{success}</Notice>}
             {action.error && !applicant && !budget && (
@@ -161,13 +160,13 @@ export function BusinessCampaignDetail() {
                 { value: "overview", label: "Overview" },
                 { value: "applicants", label: "Creator Applicants" },
                 { value: "budgets", label: "Approved Creators" },
-                { value: "funds", label: "Promotion funds" },
+                { value: "funds", label: "Funding" },
                 { value: "performance", label: "Performance" },
               ]}
             />
             {tab === "overview" && (
               <div className="two-column">
-                <Section title="Promotion">
+                <Section title="Promotion details">
                   {c.slogan?.trim() && <p className="business-promotion-slogan">{c.slogan}</p>}
                   <p className="preserve-lines">{data.description}</p>
                   <dl className="detail-list">
@@ -188,19 +187,14 @@ export function BusinessCampaignDetail() {
                       <dd>{count(data.minimumVerifiedFollowers)} minimum</dd>
                     </div>}
                   </dl>
-                  {!!c.platforms?.length && <div className="business-platform-summary"><strong>Social platforms</strong><PlatformOccupancy slots={c.platforms} /><small>Creators {c.platforms.reduce((total, slot) => total + slot.approved, 0)}/{c.platforms.reduce((total, slot) => total + slot.capacity, 0)} · {data.applicants.filter((applicant) => applicant.status === "Pending").length} pending requests</small></div>}
+                  {!!c.platforms?.length && <div className="business-platform-summary"><strong>Creators and platforms</strong><p>{c.platforms.map((slot) => `${slot.platform} · ${slot.capacity} ${slot.capacity === 1 ? "Creator" : "Creators"}`).join(" · ")}</p></div>}
                 </Section>
-                <Section title="Promotion funds" action={<Currency />}>
-                  <FundsGrid values={funds} />
-                  <div className="pricing-note">
-                    <strong>Saved Promotion pricing</strong>
-                    <p>
-                      {amount(data.pricing.businessPays)} per{" "}
-                      {count(data.pricing.views)} verified views
-                      {isViewAndSale(c.type) &&
-                        ` · ${amount(data.pricing.saleCostPercent)}% per verified sale`}
-                    </p>
-                  </div>
+                <Section title="Creator activity">
+                  <dl className="detail-list">
+                    <div><dt>Requests</dt><dd>{data.applicants.filter((applicant) => applicant.status === "Pending").length} pending</dd></div>
+                    <div><dt>Approved Creators</dt><dd>{approvedCount}</dd></div>
+                  </dl>
+                  <div className="actions"><Link className="button secondary" to={`?tab=applicants`}>Review requests</Link></div>
                 </Section>
               </div>
             )}
@@ -373,7 +367,7 @@ export function BusinessCampaignDetail() {
               </Section>
             )}
             {tab === "funds" && (
-              <Section title="Promotion funds" action={<Currency />}>
+              <Section title="Funding" action={<Currency />}>
                 <FundsGrid values={funds} />
                 <Notice>
                   Unused Creator Budget returns to the Available Promotion

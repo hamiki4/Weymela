@@ -2,7 +2,7 @@ import { useState } from "react";
 import { post, useAction } from "../../api/client";
 import type { UgcCard } from "../../api/types";
 import { Button, Notice } from "../../ui/components";
-import { CreatorPlatformIcon, creatorPublicHandle, isCreatorPlatform, PlatformOccupancy } from "./CreatorPlatformIcon";
+import { CreatorPlatformIcon, creatorPublicHandle, isCreatorPlatform } from "./CreatorPlatformIcon";
 
 export function UgcJoinControls({ item, onChanged }: { item: UgcCard; onChanged: () => void }) {
   const action = useAction();
@@ -15,7 +15,6 @@ export function UgcJoinControls({ item, onChanged }: { item: UgcCard; onChanged:
   const arrangementReady = item.productProvided !== item.creatorMustPurchase;
 
   return <>
-    <PlatformOccupancy slots={slots} />
     {!item.requestStatus && slots.length > 0 && eligible.length > 1 && <fieldset className="ugc-join-profiles">
       <legend>Choose verified social profile</legend>
       {eligible.map(profile => {
@@ -25,7 +24,6 @@ export function UgcJoinControls({ item, onChanged }: { item: UgcCard; onChanged:
             checked={selectedId === profile.id} onChange={() => setSelectedId(profile.id)} />
           {isCreatorPlatform(profile.platform) && <CreatorPlatformIcon platform={profile.platform} />}
           <span><strong>{profile.platform}</strong><small>{isCreatorPlatform(profile.platform) ? creatorPublicHandle(profile.platform, profile.profileUrl) ?? "Verified profile" : "Verified profile"}</small></span>
-          <span className="ugc-join-count">{slot.approved}/{slot.capacity}</span>
         </label>;
       })}
     </fieldset>}

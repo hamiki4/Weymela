@@ -1764,19 +1764,6 @@ td .button {
   border-inline-start: 3px solid var(--role-accent);
   color: var(--muted);
 }
-.creator-platform-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin: 0.65rem 0;
-}
-.creator-platform-counts > span {
-  padding: 0.35rem 0.55rem;
-  border: 1px solid var(--role-border);
-  border-radius: 8px;
-  background: var(--role-soft);
-  font-size: 0.82rem;
-}
 .creator-opportunity-reward {
   display: flex;
   flex-wrap: wrap;

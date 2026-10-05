@@ -35,17 +35,16 @@ async function createPublished(context: BrowserContext, title: string, capacitie
   return id;
 }
 
-test("posted UGC binds verified profile, counts approvals, and disables full platforms", async ({ page, context }) => {
+test("posted UGC binds verified profile and disables full platforms", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const title = `Posted UGC slots ${Date.now()}`;
   const id = await createPublished(context, title, [{ platform: "TikTok", capacity: 1 }, { platform: "Instagram", capacity: 1 }], 2);
 
   await login(context, "creator");
-  await open(page, "/creator/discover?tab=UGC");
+  await open(page, "/creator/discover");
   const card = page.locator(".creator-opportunity-card").filter({ hasText: title });
   await expect(card.getByRole("radio")).toHaveCount(2);
-  await expect(card.getByLabel("TikTok — 0 of 1 Creator slots filled")).toBeVisible();
-  await expect(card.getByLabel("Instagram — 0 of 1 Creator slots filled")).toBeVisible();
+  await expect(card.locator('[aria-label*="filled"]')).toHaveCount(0);
   await expect(card.getByRole("button", { name: "Request to Join" })).toBeDisabled();
   await card.getByRole("radio", { name: /TikTok/ }).check();
   const joinButton = card.getByRole("button", { name: "Request to Join" });
@@ -76,10 +75,9 @@ test("posted UGC binds verified profile, counts approvals, and disables full pla
   await login(context, "other-creator");
   const visibleToOtherCreator = await apiJson<{ id: string; title: string }[]>(context, "/creator/ugc");
   expect(visibleToOtherCreator.some(item => item.id === id), JSON.stringify(visibleToOtherCreator.map(item => item.title))).toBeTruthy();
-  await open(page, "/creator/discover?tab=UGC");
+  await open(page, "/creator/discover");
   const remaining = page.locator(".creator-opportunity-card").filter({ hasText: title });
-  await expect(remaining.getByLabel("TikTok — 1 of 1 Creator slots filled")).toBeVisible();
-  await expect(remaining.getByLabel("Instagram — 0 of 1 Creator slots filled")).toBeVisible();
+  await expect(remaining.locator('[aria-label*="filled"]')).toHaveCount(0);
   await expect(remaining.getByRole("radio")).toHaveCount(0);
   await expect(remaining.getByText("Verified Instagram profile")).toBeVisible();
   await expect(remaining.getByRole("button", { name: "Request to Join" })).toBeEnabled();
@@ -104,7 +102,7 @@ test("posted UGC binds verified profile, counts approvals, and disables full pla
   await page.setViewportSize({ width: 393, height: 852 });
   const unavailable = await apiJson<{ id: string }[]>(context, "/creator/ugc");
   expect(unavailable.some(item => item.id === id)).toBe(false);
-  await open(page, "/creator/discover?tab=UGC");
+  await open(page, "/creator/discover");
   await expect(page.locator(".creator-opportunity-card").filter({ hasText: title })).toHaveCount(0);
   await layout(page);
   await screenshot(page, "393-creator-ugc-all-full");
@@ -115,7 +113,7 @@ test("delivery-only UGC joins without a social-platform binding", async ({ page,
   const title = `Delivery UGC ${Date.now()}`;
   const id = await createPublished(context, title, [], 1);
   await login(context, "ineligible-creator");
-  await open(page, "/creator/discover?tab=UGC");
+  await open(page, "/creator/discover");
   const card = page.locator(".creator-opportunity-card").filter({ hasText: title });
   await expect(card.getByRole("radio")).toHaveCount(0);
   await expect(card.getByRole("button", { name: "Request to Join" })).toBeEnabled();

@@ -4,8 +4,9 @@ import { post, request, useAction, useResource } from "../../api/client";
 import type { BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
 import { PlatformCapacityPicker } from "./PlatformCapacityPicker";
+import { CreateBusinessUgcPage } from "./UgcPages";
 import { Button, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
-import { amount, count, isViewAndSale, promotionTypeCode } from "../../ui/format";
+import { amount, promotionTypeCode } from "../../ui/format";
 
 export function CreateCampaign() {
   const [params] = useSearchParams();
@@ -27,12 +28,12 @@ export function CreateCampaign() {
               <span>Get visibility and attributed sales.</span>
             </Link>
 
-            <Link className="promotion-type-card" to="/business/ugc/new?type=ugc">
+            <Link className="promotion-type-card" to="/business/campaigns/new?type=ugc">
               <strong>UGC</strong>
               <span>Pay Creators to create content for your Business.</span>
             </Link>
 
-            <Link className="promotion-type-card" to="/business/ugc/new?type=ugc-sales">
+            <Link className="promotion-type-card" to="/business/campaigns/new?type=ugc-sales">
               <strong>UGC + Sales</strong>
               <span>Pay for content and offer customers a discount.</span>
             </Link>
@@ -40,6 +41,10 @@ export function CreateCampaign() {
         </Section>
       </>
     );
+  }
+
+  if (selected === "ugc" || selected === "ugc-sales") {
+    return <CreateBusinessUgcPage />;
   }
 
   if (selected !== "views" && selected !== "views-sales") {
@@ -108,10 +113,9 @@ function CreateCampaignForm({
         <div className="field wide"><PlatformCapacityPicker value={platforms} onChange={setPlatforms} />{platforms.length === 0 && <Notice error>Choose at least one Creator slot.</Notice>}</div>
         <Field label="Description" wide><textarea value={form.description} onChange={e => set("description", e.target.value)} maxLength={3000} rows={4} /></Field>
         <Field label="Promotion budget"><MoneyInput value={form.campaignBudget} min={Math.max(0.01, price.minimumCampaignBudget ?? 0.01)} onChange={e => set("campaignBudget", e.target.value)} /></Field>
-        <dl className="funds-grid wide"><div><dt>Available funds</dt><dd>{amount(wallet.available)} ETB</dd></div><div><dt>Promotion budget</dt><dd>{amount(budget)} ETB</dd></div>{budget > 0 && <div><dt>{shortfall > 0 ? "Need" : "Remaining after funding"}</dt><dd>{amount(shortfall > 0 ? shortfall : wallet.available - budget)} ETB{shortfall > 0 ? " more" : ""}</dd></div>}</dl>
         {shortfall > 0 && <Notice error>Available funds cannot cover this Promotion. <Link to="/business/wallet">Add Funds</Link>.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
         <div className="form-actions wide"><Button type="submit" icon="arrow" disabled={action.busy || !validDates || platforms.length === 0 || shortfall > 0}>{action.busy ? "Publishing…" : "Publish Promotion"}</Button></div>
       </form>
-    </Section><aside><Section title="Activity rates"><strong>{amount(price.businessPays)}</strong><span> per {count(price.views)} verified views</span>{isViewAndSale(type) && <p>Plus {amount(price.saleCostPercent)}% per verified sale.</p>}</Section></aside></div>;
+    </Section></div>;
   }}</Resource></>;
 }

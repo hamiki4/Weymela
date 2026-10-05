@@ -189,6 +189,10 @@ jobs:
             .artifacts/phase6-screenshots/customer-form-failure.png
             .artifacts/phase6-creator-choice-diagnostics.json
             .artifacts/phase6-screenshots/creator-choice-failure.png
+            # Approved visual-review captures only. Future captures use
+            # <role>-<screen>-<viewport>.png and must be added one by one.
+            .artifacts/phase6-screenshots/creator-home-390.png
+            .artifacts/phase6-screenshots/creator-home-1366.png
             .artifacts/ci/stage-timings.tsv
           # Never upload browser-host.json, its log, tokens, or a broad .artifacts glob.
 

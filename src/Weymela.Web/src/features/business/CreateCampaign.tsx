@@ -113,7 +113,7 @@ function CreateCampaignForm({
         <div className="field wide"><PlatformCapacityPicker value={platforms} onChange={setPlatforms} />{platforms.length === 0 && <Notice error>Choose at least one Creator slot.</Notice>}</div>
         <Field label="Description" wide><textarea value={form.description} onChange={e => set("description", e.target.value)} maxLength={3000} rows={4} /></Field>
         <Field label="Promotion budget"><MoneyInput value={form.campaignBudget} min={Math.max(0.01, price.minimumCampaignBudget ?? 0.01)} onChange={e => set("campaignBudget", e.target.value)} /></Field>
-        {shortfall > 0 && <Notice error>Available funds cannot cover this Promotion. <Link to="/business/wallet">Add Funds</Link>.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
+        {shortfall > 0 && <Notice error>Available funds cannot cover this Promotion. You need <strong>{amount(shortfall)} ETB more</strong>. <Link to="/business/wallet">Add Funds</Link>.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
         <div className="form-actions wide"><Button type="submit" icon="arrow" disabled={action.busy || !validDates || platforms.length === 0 || shortfall > 0}>{action.busy ? "Publishing…" : "Publish Promotion"}</Button></div>
       </form>
     </Section></div>;

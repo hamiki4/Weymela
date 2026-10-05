@@ -2,8 +2,8 @@
  * their existing loaders; this list covers the persistent mobile navigation. */
 export function routeResources(pathname: string): string[] {
   switch (pathname) {
-    case "/business": return ["/business/home", "/business/ugc"];
-    case "/business/campaigns": return ["/business/campaigns", "/business/promotion-content-submissions"];
+    case "/business": return ["/business/home"];
+    case "/business/campaigns": return ["/business/campaigns", "/business/ugc", "/business/promotion-content-submissions"];
     case "/business/requests": return ["/business/campaigns"];
     case "/business/ugc": return ["/business/ugc", "/business/wallet"];
     case "/business/ugc/new": return ["/legal/current", "/business/wallet", "/business/ugc-pricing"];

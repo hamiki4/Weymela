@@ -13,7 +13,6 @@ test("Business sees the Promotion shortfall before publishing an unfunded Promot
   await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget").fill(String(before.available + 1000));
-  await expect(page.getByText("Need", { exact: true })).toBeVisible();
   await expect(page.getByText("1,000 ETB more", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add Funds" })).toHaveAttribute("href", "/business/wallet");
   await layout(page);

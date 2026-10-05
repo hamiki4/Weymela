@@ -15,9 +15,21 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await page.route("**/api/business/ugc", route => route.fulfill({ json: [opportunity] }));
     await page.route("**/api/creator/ugc", route => route.fulfill({ json: [opportunity] }));
+    await page.route(`**/api/creator/ugc/${opportunity.id}`, route => route.fulfill({ json: {
+      opportunity,
+      instructions: "",
+      resources: [],
+      productProvided: false,
+      creatorMustPurchase: true,
+      usageRights: null,
+      currentRevision: 1,
+      requests: [],
+      assignments: [],
+      revisions: [],
+    } }));
 
     await login(context, "business");
-    await open(page, "/business/ugc/new");
+    await open(page, "/business/campaigns/new?type=ugc");
     await expect(page.getByText("Product arrangement")).toBeVisible();
     await expect(page.getByRole("radio", { name: /Product provided by Business/ })).not.toBeChecked();
     await expect(page.getByRole("radio", { name: /Creator purchases product/ })).not.toBeChecked();
@@ -26,7 +38,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await expect(page.getByText("Creator buys before creating content")).toBeVisible();
     await layout(page);
     if (width === 390) await screenshot(page, "390-business-ugc-arrangement");
-    await open(page, "/business/ugc");
+    await open(page, "/business/campaigns");
     await expect(page.getByText(/Product arrangement:.*Creator purchases product/)).toBeVisible();
     await layout(page);
 
@@ -35,6 +47,10 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
       await login(context, alias);
       await open(page, path);
       if (alias === "creator") {
+        const card = page.locator(".creator-opportunity-card").filter({ hasText: opportunity.title });
+        await expect(card.getByText("Creator purchases product", { exact: true })).toHaveCount(0);
+        await expect(card.getByRole("button", { name: "Request to Join" })).toBeVisible();
+        await open(page, `/creator/ugc/${opportunity.id}`);
         await expect(page.getByText("Creator purchases product", { exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: "Request to Join" })).toBeVisible();
       }

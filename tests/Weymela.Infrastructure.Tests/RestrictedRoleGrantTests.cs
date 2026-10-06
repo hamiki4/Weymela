@@ -925,6 +925,10 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         string connectionString, string apiRole, string workerRole)
     {
         await ExecuteOwnerAsync(connectionString, $"""
+            -- A --no-acl restore omits the source database's routine ACLs and recreates
+            -- PostgreSQL's default PUBLIC EXECUTE privilege. Grant scripts must remain
+            -- independently safe when recovering such an archive.
+            GRANT EXECUTE ON FUNCTION v3.guard_ugc_assignment_qr() TO PUBLIC;
             GRANT UPDATE ("PushAttempts") ON TABLE v3."InAppNotifications" TO {QuoteIdentifier(apiRole)};
             GRANT SELECT ("PinVerifier"), REFERENCES ("Id")
                 ON TABLE v3."AuthorizedDevices" TO {QuoteIdentifier(workerRole)};

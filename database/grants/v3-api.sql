@@ -197,6 +197,7 @@ REVOKE EXECUTE ON FUNCTION v3.guard_cashback_sale() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_platform_revenue_journal() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_participation_baseline() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_qr_use() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_ugc_assignment_qr() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_sale_snapshot_amounts() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_payout_transition() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_earned_account() FROM PUBLIC, :"api_role";

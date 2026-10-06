@@ -21,8 +21,30 @@ async function apiPost<T>(context: BrowserContext, path: string, data?: unknown)
 async function ensureVisualReviewUgc(context: BrowserContext) {
   await login(context, "business");
   const opportunities = await apiJson<{ id: string; title: string; status: string }[]>(context, "/business/ugc");
-  const opportunity = opportunities.find(row => row.title.startsWith("UGC slots 320-") && !["Draft", "Cancelled"].includes(row.status));
-  if (!opportunity) throw new Error("The existing published UGC visual-review fixture was not found.");
+  let opportunity = opportunities.find(row => row.title.startsWith("UGC slots 320-") && !["Draft", "Cancelled"].includes(row.status));
+  if (!opportunity) {
+    const title = `UGC slots 320-${Date.now()}`;
+    const created = await apiPost<{ id: string }>(context, "/business/ugc", {
+      title,
+      slogan: null,
+      contentType: "Video",
+      instructions: "Create a short product video.",
+      resources: [],
+      location: "Addis Ababa",
+      dueDateUtc: new Date(Date.now() + 14 * 86400000).toISOString(),
+      productProvided: true,
+      creatorMustPurchase: false,
+      usageRights: null,
+      creatorPayment: 500,
+      creatorsNeeded: 1,
+      platformRequirements: [{ platform: "TikTok", format: "Social post", minimumAudience: null }],
+      platformCapacities: [{ platform: "TikTok", capacity: 1, minimumAudience: null }],
+      customerOfferEnabled: false,
+    });
+    const createdDetail = await apiJson<{ opportunity: { version: number } }>(context, `/business/ugc/${created.id}`);
+    await apiPost(context, `/business/ugc/${created.id}/publish`, { version: createdDetail.opportunity.version });
+    opportunity = { id: created.id, title, status: "Open" };
+  }
   const opportunityId = opportunity.id;
   const detail = await apiJson<{ opportunity: { id: string; version: number; status: string }; instructions: string; requests: { id: string; creator: string; status: string }[] }>(
     context,
@@ -254,8 +276,16 @@ test("Business visual review captures operational surfaces at approved widths", 
   await assertMobileNavigation(844);
   await screenshot(page, "business-home-390");
 
+  await page.setViewportSize({ width: 320, height: 800 });
   await open(page, "/business/campaigns");
   const promotionsHeading = page.locator("main h2").filter({ hasText: /^Promotions$/ });
+  await expect(promotionsHeading).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
+  await layout(page);
+  await screenshot(page, "business-promotions-320");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, "/business/campaigns");
   await expect(promotionsHeading).toHaveCount(1);
   await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
   await layout(page);
@@ -283,10 +313,17 @@ test("Business visual review captures operational surfaces at approved widths", 
   await layout(page);
   await screenshot(page, "business-wallet-390");
 
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, "/business/wallet");
+  await page.locator("summary[aria-label='Open Add Funds']").click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
+  await layout(page);
+  await screenshot(page, "business-wallet-320");
+
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/business");
   const fundValues = page.locator(".business-home-fund strong");
-  await expect(fundValues).toHaveCount(3);
+  await expect(fundValues).toHaveCount(2);
   const fundBounds = await fundValues.evaluateAll((elements) => elements.map((element) => {
     const bounds = element.getBoundingClientRect();
     return { left: bounds.left, right: bounds.right };

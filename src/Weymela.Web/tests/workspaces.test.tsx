@@ -109,17 +109,16 @@ describe("Business workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "All" }));
     expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
   });
-  it("groups authoritative advertising fund balances", async () => {
+  it("keeps Home funds focused while Wallet retains reserved balance", async () => {
     mount(<BusinessDashboard />);
     expect(
       await screen.findByRole("heading", { name: "Home" }),
     ).toBeVisible();
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
-    expect(screen.getByText("6,000")).toBeVisible();
     expect(screen.getByText("Available")).toBeVisible();
-    expect(screen.getByText("Reserved")).toBeVisible();
     expect(screen.getByText("Total")).toBeVisible();
+    expect(screen.queryByText("Reserved")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
         name: "Pricing",

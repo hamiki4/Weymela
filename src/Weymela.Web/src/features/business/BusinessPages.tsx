@@ -89,10 +89,6 @@ export function BusinessDashboard() {
                   <strong>{amount(data.wallet.available)} <small>ETB</small></strong>
                 </div>
                 <div className="business-home-fund">
-                  <span>Reserved</span>
-                  <strong>{amount(data.wallet.reserved)} <small>ETB</small></strong>
-                </div>
-                <div className="business-home-fund">
                   <span>Total</span>
                   <strong>{amount(data.wallet.totalBalance)} <small>ETB</small></strong>
                 </div>

@@ -94,6 +94,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
       <dl className="promotion-summary-list">
         <div><dt>Creator payment</dt><dd>{amount(item.creatorPayment)} ETB</dd></div>
         <div><dt>Content due</dt><dd>{date(item.dueDateUtc)}</dd></div>
+        {item.creatorsNeeded > 0 && <div><dt>Creators</dt><dd>{item.approvedCreators}/{item.creatorsNeeded}</dd></div>}
       </dl>
       <Button
         variant="secondary"

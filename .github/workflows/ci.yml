@@ -206,6 +206,7 @@ jobs:
             .artifacts/phase6-screenshots/business-home-320.png
             .artifacts/phase6-screenshots/business-home-390.png
             .artifacts/phase6-screenshots/business-home-1366.png
+            .artifacts/phase6-screenshots/business-promotions-320.png
             .artifacts/phase6-screenshots/business-promotions-390.png
             .artifacts/phase6-screenshots/business-promotions-1366.png
             .artifacts/phase6-screenshots/business-create-390.png
@@ -214,6 +215,7 @@ jobs:
             .artifacts/phase6-screenshots/business-promotion-detail-1366.png
             .artifacts/phase6-screenshots/business-requests-390.png
             .artifacts/phase6-screenshots/business-requests-1366.png
+            .artifacts/phase6-screenshots/business-wallet-320.png
             .artifacts/phase6-screenshots/business-wallet-390.png
             .artifacts/phase6-screenshots/business-wallet-1366.png
             .artifacts/phase6-screenshots/business-overflow-320.png

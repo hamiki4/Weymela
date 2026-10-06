@@ -1,9 +1,9 @@
 import { expect, test, type BrowserContext } from "@playwright/test";
-import { layout, login, open, screenshot } from "./helpers";
+import { ensureBusinessFunds, layout, login, open, screenshot } from "./helpers";
 
 const headers = { "X-Weymela-Request": "1" };
 type Slot = { platform: string; capacity: number; approved: number; available: number };
-type Detail = { opportunity: { version: number; platformCapacities: Slot[]; approvedCreators: number }; requests: { id: string; status: string }[] };
+type Detail = { opportunity: { version: number; requiredFunding: number; platformCapacities: Slot[]; approvedCreators: number }; requests: { id: string; status: string }[] };
 
 async function apiJson<T>(context: BrowserContext, path: string): Promise<T> {
   const response = await context.request.get(`/api${path}`, { headers });
@@ -31,6 +31,7 @@ async function createPublished(context: BrowserContext, title: string, capacitie
   });
   const { id } = await response.json() as { id: string };
   const detail = await apiJson<Detail>(context, `/business/ugc/${id}`);
+  await ensureBusinessFunds(context, detail.opportunity.requiredFunding);
   await apiPost(context, `/business/ugc/${id}/publish`, { version: detail.opportunity.version });
   return id;
 }

@@ -21,6 +21,8 @@ try {
   await page.route("**/api/account/security", route => route.fulfill({ json: { passwordEnrolled: true, phoneEnrolled: true } }));
   await page.route("**/api/business/deposit-method", route => route.fulfill({ json: { mode: "ManualApproval" } }));
   await page.goto("/business/wallet");
+  await page.getByText("Open Add Funds", { exact: true }).click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Amount", { exact: true }).fill("3000");
   await page.getByLabel("Payment receipt").setInputFiles(fixture);
   const response = page.waitForResponse(r => r.url().endsWith("/api/business/deposit-requests") && r.request().method() === "POST");

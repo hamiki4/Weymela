@@ -53,6 +53,7 @@ import {
   opportunity,
   ugcCustomerOffer,
   wallet,
+  business,
 } from "./fixtures";
 vi.mock("../src/app/Session", () => ({
   useSession: () => ({ user: { developmentMode: true, role: "Business" } }),
@@ -108,19 +109,34 @@ describe("Business workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "All" }));
     expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
   });
-  it("groups authoritative advertising fund balances", async () => {
+  it("keeps Home funds focused while Wallet retains reserved balance", async () => {
     mount(<BusinessDashboard />);
     expect(
       await screen.findByRole("heading", { name: "Home" }),
     ).toBeVisible();
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
-    expect(screen.queryByText("6,000")).not.toBeInTheDocument();
+    expect(screen.getByText("Available")).toBeVisible();
+    expect(screen.getByText("Total")).toBeVisible();
+    expect(screen.queryByText("Reserved")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
         name: "Pricing",
       }),
     ).toBeVisible();
+  });
+  it("keeps Home focused while Wallet history remains reachable", async () => {
+    mockApi({ "/business/home": {
+      business,
+      wallet: { ...wallet, history: [{ id: "ledger", label: "Customer Offer funded", amount: 120, atUtc: "2026-09-29T12:00:00Z", reference: "ledger-ref" }] },
+      activeCampaigns: 1,
+      creatorRequests: 1,
+      confirmedSales: 1,
+    } });
+    mount(<BusinessDashboard />);
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Wallet history" })).toHaveAttribute("href", "/business/wallet");
+    expect(screen.queryByText("Customer Offer funded")).not.toBeInTheDocument();
   });
   it("routes Business operations to their destination and keeps one Create Promotion action", async () => {
     mount(<BusinessDashboard />);
@@ -147,6 +163,7 @@ describe("Business workspace", () => {
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
+    await userEvent.click(await screen.findByText("Open Add Funds", { exact: true }));
     await screen.findByLabelText("Amount");
     await userEvent.type(screen.getByLabelText("Amount"), "12.34");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
@@ -160,6 +177,7 @@ describe("Business workspace", () => {
   it("rejects a zero deposit in the rendered form", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
+    await userEvent.click(await screen.findByText("Open Add Funds", { exact: true }));
     const input = await screen.findByLabelText("Amount");
     await userEvent.type(input, "0");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
@@ -298,11 +316,12 @@ describe("Business workspace", () => {
       productProvided: false, creatorMustPurchase: true };
     mockApi({ "/business/ugc": [card], "/creator/ugc": [card] });
     const businessView = mount(<BusinessUgcPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Manage" }));
     expect(await screen.findByText("Creator purchases product", { selector: ".ugc-arrangement" })).toBeVisible();
     businessView.unmount();
     mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("Product story")).toBeVisible();
-    expect(screen.queryByText("Creator purchases product")).not.toBeInTheDocument();
+    expect(screen.getByText("Creator purchases product")).toBeVisible();
     expect(screen.getByRole("button", { name: "Request to Join" })).toBeVisible();
   });
   it.each([
@@ -430,7 +449,7 @@ describe("Business workspace", () => {
     await screen.findByRole("heading", { name: "Promotions", level: 2 });
     expect(screen.queryByRole("heading", { name: "UGC Promotions", level: 2 })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Promotions", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "View Promotion" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Manage" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /End Campaign|End Promotion/ }),
     ).not.toBeInTheDocument();
@@ -506,50 +525,71 @@ describe("Creator workspace", () => {
     expect(screen.getByTestId("location-search")).toHaveTextContent("?filter=Completed");
   });
 
-  it("groups own earnings and Campaigns", async () => {
-    mount(<CreatorDashboard />);
-    expect(
-      await screen.findByRole("heading", { name: "Home" }),
-    ).toBeVisible();
-    expect(screen.getAllByText("5,400").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Pending Requests/ })).toHaveAttribute("href", "/creator/promotions?filter=Pending");
-    expect(screen.getByRole("link", { name: /Active Promotions/ })).toHaveAttribute("href", "/creator/promotions?filter=Active");
-    expect(screen.getByRole("link", { name: /Available Earnings/ })).toHaveAttribute("href", "/creator/earnings");
-  });
-  it("shows one simple Promotions feed on Creator Home", async () => {
-    const ugcCard = { id: "ugc-home", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
-      contentType: "Video", status: "Open", creatorPayment: 4750, creatorsNeeded: 1, approvedCreators: 0,
-      dueDateUtc: "2027-12-01T10:00:00Z", location: "Addis Ababa", platformRequirements: [],
-      requestStatus: null, version: 1, productProvided: true, creatorMustPurchase: false };
-
+  it("orients Creator Home with authoritative summaries and clear destinations", async () => {
     mockCreatorApi({
-      "/creator/discover": [1, 2, 3, 4].map((id) => ({
-        ...opportunity,
-        id: `campaign-${id}`,
-        title: `Coffee stories ${id}`,
-        platforms: [{ platform: "TikTok", approved: 0, capacity: 1, available: 1, minimumAudience: 30000 }],
-      })),
-      "/creator/ugc": [
-        ugcCard,
-        { ...ugcCard, id: "ugc-home-2", title: "Coffee reels" },
-      ],
+      "/creator/campaigns": [{ ...active, remainingDays: 12 }],
     });
 
     mount(<CreatorDashboard />);
 
-    const feed = (await screen.findByRole("heading", { name: "Promotions for you" })).closest("section")!;
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(screen.getByText("Bella")).toBeVisible();
 
-    expect(within(feed).getAllByRole("heading", { level: 3 })).toHaveLength(5);
-    expect(within(feed).getAllByText("Views + Sales")).toHaveLength(3);
-    expect(within(feed).getAllByText("UGC")).toHaveLength(2);
-    expect(within(feed).getByRole("link", { name: "See all" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Discover Promotions" })).toHaveAttribute(
       "href",
       "/creator/discover",
     );
 
-    expect(screen.queryByRole("heading", { name: "Open Promotions" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Open UGC" })).not.toBeInTheDocument();
-    expect(screen.queryByText("30,000 followers minimum")).not.toBeInTheDocument();
+    const pending = screen.getByRole("link", { name: /Pending Requests, 1, Waiting for Business/ });
+    expect(pending).toHaveAttribute("href", "/creator/promotions?filter=Pending");
+    expect(within(pending).getByText("Pending Requests")).toBeVisible();
+    expect(within(pending).getByText("Waiting for Business")).toBeVisible();
+
+    const activeWork = screen.getByRole("link", { name: /Live Promotions, 1, Continue your Promotion/ });
+    expect(activeWork).toHaveAttribute("href", "/creator/promotions?filter=Active");
+    expect(within(activeWork).getByText("Live Promotions")).toBeVisible();
+    expect(within(activeWork).getByText("Continue your Promotion")).toBeVisible();
+
+    const earningsLink = screen.getByRole("link", { name: /Available Earnings, 5,400 ETB/ });
+    expect(earningsLink).toHaveAttribute("href", "/creator/earnings");
+    expect(within(earningsLink).getByText("Available Earnings")).toBeVisible();
+    expect(within(earningsLink).getByText("5,400 ETB")).toBeVisible();
+
+    expect(screen.getByRole("link", { name: "My Promotions" })).toHaveAttribute(
+      "href",
+      "/creator/promotions",
+    );
+
+    const preview = screen.getByRole("link", { name: "View Promotion Coffee stories" });
+    expect(within(preview).getByText("Continue working")).toBeVisible();
+    expect(within(preview).getByText("Active")).toBeVisible();
+    expect(within(preview).getByText("12 days left")).toBeVisible();
+
+    expect(screen.getByRole("heading", { name: "Promotions for you" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "See all" })).toHaveAttribute("href", "/creator/discover");
+    const discoveryPreview = screen.getByText("Promotions for you").closest("section")!;
+    expect(within(discoveryPreview).getByText("Coffee stories")).toBeVisible();
+    expect(within(discoveryPreview).getByRole("link", { name: "View details" })).toHaveAttribute(
+      "href",
+      "/creator/discover/campaign",
+    );
+    expect(screen.queryByText("Recent earnings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Request to Join")).not.toBeInTheDocument();
+    expect(screen.queryByText("verified views")).not.toBeInTheDocument();
+    expect(screen.queryByText("Payout paid")).not.toBeInTheDocument();
+  });
+
+  it("does not reserve Home space for absent active work or render earning history", async () => {
+    mockCreatorApi({ "/creator/campaigns": [], "/creator/discover": [], "/creator/ugc": [] });
+    mount(<CreatorDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(screen.queryByText("Continue working")).not.toBeInTheDocument();
+    expect(screen.queryByText("Coffee stories")).not.toBeInTheDocument();
+    expect(screen.getByText("No new promotions right now.")).toBeVisible();
+    expect(screen.queryByText("View Earnings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent earnings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Payout paid")).not.toBeInTheDocument();
   });
   it("opens UGC detail through the existing Creator detail projection", async () => {
     const card = { id: "ugc-detail", businessId: "biz", business: "Abc Coffee", title: "Coffee video", slogan: null,
@@ -608,9 +648,9 @@ describe("Creator workspace", () => {
     mockCreatorApi({ "/creator/ugc": [card] });
     mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("UGC + Sales")).toBeVisible();
-    expect(screen.getByText("Earn 4,750 ETB")).toBeVisible();
+    expect(screen.getByText("Creator payment 4,750 ETB")).toBeVisible();
     expect(screen.getByText("Customer gets 3% off")).toBeVisible();
-    expect(screen.queryByText("Product provided")).not.toBeInTheDocument();
+    expect(screen.getByText("Product provided by Business")).toBeVisible();
     expect(screen.queryByText(/10,000|Platform fee|250/)).not.toBeInTheDocument();
   });
   it("requires a specific available verified profile for posted UGC and sends its binding", async () => {

@@ -18,7 +18,6 @@ import {
   Currency,
   Empty,
   Field,
-  Metric,
   Notice,
   PageHeader,
   Resource,
@@ -44,74 +43,142 @@ export function CreatorDashboard() {
   const promotions = useResource<CreatorCampaign[]>("/creator/campaigns");
   const opportunities = useResource<Opportunity[]>("/creator/discover");
   const ugc = useResource<UgcCard[]>("/creator/ugc");
+  const activePromotion = promotions.data?.find(
+    (row) => row.remainingDays != null && row.remainingDays > 0,
+  );
+  const featuredPromotion = opportunities.data?.[0];
+  const featuredUgc = !featuredPromotion ? ugc.data?.[0] : undefined;
+
   return <>
-    <Resource resource={home}>{(data) => <>
-      <PageHeader title="Home" compact />
-      <div className="metric-grid creator-metrics">
-        <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Pending"><Metric label="Pending Requests" value={count(data.requests)} icon="people" /></Link>
-        <Link className="creator-dashboard-metric" to="/creator/promotions?filter=Active"><Metric label="Active Promotions" value={count(data.activeCampaigns)} icon="campaign" /></Link>
-        <Link className="creator-dashboard-metric" to="/creator/earnings"><Metric label="Available Earnings" value={amount(data.earnings.availableEarnings)} icon="wallet" emphasis /></Link>
-      </div>
+    <Resource resource={home}>{(data) => <div className="creator-home">
+      <PageHeader
+        title="Home"
+        description={data.creator.displayName}
+        action={<ActionLink to="/creator/discover" icon="search">Discover Promotions</ActionLink>}
+      />
+
+      <Section title="Your work" className="creator-home-section">
+        <div className="creator-home-work-list">
+          <Link
+            className="creator-home-summary-row"
+            to="/creator/promotions?filter=Pending"
+            aria-label={`Pending Requests, ${count(data.requests)}, Waiting for Business`}
+          >
+            <span className="creator-home-summary-icon"><Icon name="people" size={18} /></span>
+            <span className="creator-home-summary-copy">
+              <strong>Pending Requests</strong>
+              <small>Waiting for Business</small>
+            </span>
+            <strong className="creator-home-summary-count">{count(data.requests)}</strong>
+            <Icon name="arrow" size={17} />
+          </Link>
+          <Link
+            className="creator-home-summary-row"
+            to="/creator/promotions?filter=Active"
+            aria-label={`Live Promotions, ${count(data.activeCampaigns)}, Continue your Promotion`}
+          >
+            <span className="creator-home-summary-icon"><Icon name="campaign" size={18} /></span>
+            <span className="creator-home-summary-copy">
+              <strong>Live Promotions</strong>
+              <small>Continue your Promotion</small>
+            </span>
+            <strong className="creator-home-summary-count">{count(data.activeCampaigns)}</strong>
+            <Icon name="arrow" size={17} />
+          </Link>
+        </div>
+      </Section>
+
+      {activePromotion && <Link
+        className="creator-home-active-preview"
+        to={`/creator/promotions/${activePromotion.budgetId}`}
+        aria-label={`View Promotion ${activePromotion.title}`}
+      >
+        <span className="creator-home-active-copy">
+          <small>Continue working</small>
+          <strong>{activePromotion.title}</strong>
+          <span>{activePromotion.business.displayName}</span>
+        </span>
+        <span className="creator-home-active-meta">
+          <Badge status="Active" label="Active" />
+          <small>{activePromotion.remainingDays} days left</small>
+        </span>
+        <span className="creator-home-active-action">View Promotion</span>
+      </Link>}
+
       <Section
         title="Promotions for you"
-        description="Promotions matching your profile."
-        action={<ActionLink to="/creator/discover" secondary>See all</ActionLink>}
+        className="creator-home-section creator-home-discover-preview"
+        action={<Link className="creator-home-section-link" to="/creator/discover">See all</Link>}
       >
-        <HomePreviewResource resource={opportunities}>
-          {(promotionRows) => (
-            <HomePreviewResource resource={ugc}>
-              {(ugcRows) => {
-                const promotionCards = promotionRows
-                  .slice(0, 3)
-                  .map((row) => (
-                    <PromotionOpportunityCard
-                      key={`promotion-${row.id}`}
-                      row={row}
-                    />
-                  ));
-
-                const remaining = Math.max(0, 6 - promotionCards.length);
-
-                const ugcCards = ugcRows
-                  .slice(0, remaining)
-                  .map((row) => (
-                    <UGCOpportunityCard
-                      key={`ugc-${row.id}`}
-                      row={row}
-                      onChanged={ugc.reload}
-                    />
-                  ));
-
-                return promotionCards.length || ugcCards.length ? (
-                  <div className="creator-opportunity-grid">
-                    {promotionCards}
-                    {ugcCards}
-                  </div>
-                ) : (
-                  <Empty title="No Promotions for you right now." />
-                );
-              }}
-            </HomePreviewResource>
-          )}
-        </HomePreviewResource>
+        {featuredPromotion || featuredUgc ? (
+          <CreatorHomeOpportunityPreview promotion={featuredPromotion} ugc={featuredUgc} />
+        ) : (opportunities.data === null && !opportunities.error) || (ugc.data === null && !ugc.error) ? (
+          <p className="creator-home-inline-state" aria-live="polite">Loading promotions…</p>
+        ) : opportunities.error || ugc.error ? (
+          <p className="creator-home-inline-state">Promotions are temporarily unavailable.</p>
+        ) : (
+          <p className="creator-home-inline-state">No new promotions right now.</p>
+        )}
       </Section>
-      <Section title="Recent earnings">
-        {data.earnings.history.length || data.earnings.payoutHistory.length ? <div className="creator-activity-list">
-          {data.earnings.history.slice(0, 3).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="spark" /></span><div><strong>{item.business || item.campaign}</strong><p>{item.sourceType === "UGC" ? "UGC content" : item.source === "Sale Earnings" ? "View + Sale" : item.source === "View Earnings" ? "Verified views" : item.source} · {item.campaign}</p></div><span className="creator-activity-meta"><strong>+{amount(item.amount)} ETB</strong><small>{date(item.atUtc)}</small></span></article>)}
-          {data.earnings.payoutHistory.filter((item) => item.paidAtUtc).slice(0, 2).map((item) => <article key={item.id}><span className="creator-activity-icon"><Icon name="wallet" /></span><div><strong>Payout paid</strong><p>{item.status}</p></div><span className="creator-activity-meta"><strong>{amount(item.amount)}</strong><small>{date(item.paidAtUtc!)}</small></span></article>)}
-        </div> : <Empty title="No recent earnings." />}
+
+      <Section title="Earnings" className="creator-home-section">
+        <Link
+          className="creator-home-earnings-row"
+          to="/creator/earnings"
+          aria-label={`Available Earnings, ${amount(data.earnings.availableEarnings)} ETB`}
+        >
+          <span>
+            <small>Available Earnings</small>
+            <strong>{amount(data.earnings.availableEarnings)} ETB</strong>
+          </span>
+          <Icon name="arrow" size={17} />
+        </Link>
       </Section>
-    </>}</Resource>
-    <Section title="Your active promotions" action={<ActionLink to="/creator/promotions" secondary>See all</ActionLink>}>
-      <Resource resource={promotions}>{(rows) => {
-        const live = rows.filter((row) => row.remainingDays != null && row.remainingDays > 0).slice(0, 3);
-        return live.length ? <div className="creator-promotion-list">{live.map((row) => <Link className="creator-promotion-list-card" to={`/creator/promotions/${row.budgetId}`} key={row.budgetId}>
-          <div><small>{row.business.displayName}</small><h3>{row.title}</h3><p>{promotionTypeLabel(row.type)} · {row.remainingDays} days left</p></div>
-          <div className="creator-progress"><span>{count(row.verifiedViews)} verified views</span><span>{amount(row.viewEarnings + row.saleCommissionEarnings)} earned</span></div>
-        </Link>)}</div> : <Empty title="No active promotions." />;
-      }}</Resource>
-    </Section>
+
+      <Link className="creator-home-route-row" to="/creator/promotions">
+        <span>My Promotions</span>
+        <Icon name="arrow" size={17} />
+      </Link>
+    </div>}</Resource>
   </>;
+}
+
+function CreatorHomeOpportunityPreview({ promotion, ugc }: { promotion?: Opportunity; ugc?: UgcCard }) {
+  const href = promotion ? `/creator/discover/${promotion.id}` : `/creator/ugc/${ugc?.id}`;
+  const business = promotion?.business.displayName ?? ugc?.business ?? "Promotion";
+  const title = promotion?.title ?? ugc?.title ?? "Promotion";
+  const type = promotion ? promotionTypeLabel(promotion.type) : ugc?.customerOfferEnabled ? "UGC + Sales" : "UGC";
+
+  return <article className="creator-home-opportunity-preview">
+    <div className="creator-home-opportunity-copy">
+      <p className="card-eyebrow">{business}</p>
+      <span className="creator-opportunity-type">{type}</span>
+      <h3>{title}</h3>
+      {promotion ? <p className="creator-opportunity-payment">
+        <strong>{amount(promotion.earnings.youEarn)} ETB</strong>
+        <span>per {count(promotion.earnings.views)} verified views</span>
+      </p> : <p className="creator-opportunity-payment">
+        <strong>Creator payment {amount(ugc?.creatorPayment ?? 0)} ETB</strong>
+        <span>Due {date(ugc?.dueDateUtc ?? "")}</span>
+      </p>}
+    </div>
+    <ActionLink to={href} secondary>View details</ActionLink>
+  </article>;
+}
+
+function creatorStatusTone(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === "live") return "live";
+  if (normalized === "completed" || normalized === "ended" || normalized === "cancelled") return "completed";
+  if (normalized === "rejected" || normalized === "declined" || normalized === "changesrequested") return "attention";
+  if (normalized === "inprogress" || normalized === "approved" || normalized === "readytogolive") return "progress";
+  return "review";
+}
+
+function CreatorStatus({ status, label }: { status: string; label?: string }) {
+  return <span className={`creator-status creator-status-${creatorStatusTone(status)}`} data-status={status}>
+    {label ?? promotionStatusLabel(status)}
+  </span>;
 }
 
 function PromotionOpportunityCard({ row }: { row: Opportunity }) {
@@ -126,17 +193,17 @@ function PromotionOpportunityCard({ row }: { row: Opportunity }) {
         <span className="creator-opportunity-type">{typeLabel}</span>
         <h3>{row.title}</h3>
       </div>
-      {row.requestStatus && <Badge status={row.requestStatus} />}
+      {row.requestStatus && <CreatorStatus status={row.requestStatus} />}
     </div>
 
-    <p className="creator-opportunity-earn">
-      <strong>Earn {amount(row.earnings.youEarn)} ETB</strong>
+    <p className="creator-opportunity-payment">
+      <strong>{amount(row.earnings.youEarn)} ETB</strong>
       <span>per {count(row.earnings.views)} verified views</span>
     </p>
 
     {!isViewOnly(row.type) &&
-      <p className="creator-opportunity-meta">
-        + {amount(row.earnings.saleCommissionPercent)}% from sales
+      <p className="creator-opportunity-payment creator-opportunity-commission">
+        + {amount(row.earnings.saleCommissionPercent)}% from verified sales
       </p>
     }
 
@@ -150,6 +217,8 @@ function PromotionOpportunityCard({ row }: { row: Opportunity }) {
         {row.location || row.business.region}
       </p>
     }
+
+    <p className="creator-opportunity-meta">Ends {date(row.endUtc)}</p>
 
     {full && !row.requestStatus ? (
       <span className="creator-opportunity-unavailable">No spots available</span>
@@ -174,11 +243,11 @@ function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () =>
         <span className="creator-opportunity-type">{typeLabel}</span>
         <h3>{row.title}</h3>
       </div>
-      {row.requestStatus && <Badge status={row.requestStatus} />}
+      {row.requestStatus && <CreatorStatus status={row.requestStatus} />}
     </div>
 
-    <p className="creator-opportunity-earn">
-      <strong>Earn {amount(row.creatorPayment)} ETB</strong>
+    <p className="creator-opportunity-payment">
+      <strong>Creator payment {amount(row.creatorPayment)} ETB</strong>
     </p>
 
     {row.customerOfferEnabled && row.customerDiscountPercent != null &&
@@ -190,6 +259,11 @@ function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () =>
     <p className="creator-opportunity-meta">
       Due {date(row.dueDateUtc)}
     </p>
+
+    {row.productProvided && !row.creatorMustPurchase &&
+      <p className="creator-opportunity-meta">Product provided by Business</p>}
+    {row.creatorMustPurchase && !row.productProvided &&
+      <p className="creator-opportunity-meta">Creator purchases product</p>}
 
     {platforms &&
       <p className="creator-opportunity-meta">{platforms}</p>
@@ -435,7 +509,7 @@ function promotionGroup(row: CreatorCampaign): PromotionGroup {
 
 function promotionStatus(row: CreatorCampaign) {
   if (row.participationId && row.remainingDays == null && !terminalPromotionStatuses.has(row.status)) return "Completed";
-  return row.status === "Active" ? "Live" : promotionStatusLabel(row.status);
+  return row.wentLiveAtUtc ? "Live" : promotionStatusLabel(row.status);
 }
 
 type CreatorWorkItem =
@@ -498,10 +572,18 @@ export function CreatorPromotions() {
 
 function PromotionRequestCard({ row }: { row: CreatorRequest }) {
   return <article className="creator-promotion-row creator-work-row">
-    <div><small>{row.business}</small><h3>{row.campaign}</h3><p>{promotionTypeLabel(row.type)}</p></div>
-    <div className="creator-next-action"><Badge status={row.status} label={promotionStatusLabel(row.status)} />
+    <div className="creator-work-main">
+      <div className="creator-work-top">
+        <div className="creator-work-copy"><small>{row.business}</small><h3>{row.campaign}</h3></div>
+        <CreatorStatus status={row.status} />
+      </div>
+      <p className="creator-work-type">{promotionTypeLabel(row.type)}</p>
+      <p className="creator-work-summary">Request sent {date(row.appliedAtUtc)}</p>
+    </div>
+    <div className="creator-next-action">
       {row.status === "Pending" && <span>Waiting for Business decision</span>}
       {row.status === "Approved" && <span>Waiting for your Promotion workspace</span>}
+      <ActionLink to={`/creator/discover/${row.campaignId}`} secondary>View details</ActionLink>
     </div>
   </article>;
 }
@@ -516,33 +598,50 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
   const status = item.row.status;
   const opportunity = detail.data?.opportunity;
   return <article className="creator-promotion-row creator-work-row">
-    <div><small>{assignment?.business ?? opportunity?.business ?? "UGC"}</small>
-      <h3>{assignment?.opportunity ?? opportunity?.title ?? "Promotion"}</h3>
-      <p>{opportunity?.customerOfferEnabled ? "UGC + Sales" : "UGC"}</p>
-      {assignment && <p>Fixed Creator payment {amount(assignment.creatorPayment)} · Due {date(assignment.dueDateUtc)}</p>}
-      {assignment && <p className="ugc-arrangement"><strong>Product arrangement:</strong> {assignment.productProvided ? "Product provided by Business" : assignment.creatorMustPurchase ? "Creator purchases product" : "Not selected"}</p>}
-      {assignment?.instructions && <p>{assignment.instructions}</p>}
-      {assignment && <p className="fine-print">{assignment.platformRequirements.length
-        ? `Post on ${assignment.platformRequirements.map((requirement) => requirement.platform).join(", ")}`
-        : "Deliver content to the Business"}</p>}
-      {assignment?.feedback && <Notice>{assignment.feedback}</Notice>}
-      {request?.rejectionReason && <Notice>{request.rejectionReason}</Notice>}
+    <div className="creator-work-main">
+      <div className="creator-work-top">
+        <div className="creator-work-copy"><small>{assignment?.business ?? opportunity?.business ?? "UGC"}</small>
+          <h3>{assignment?.opportunity ?? opportunity?.title ?? "Promotion"}</h3>
+        </div>
+        <CreatorStatus status={status} />
+      </div>
+      <p className="creator-work-type">{opportunity?.customerOfferEnabled ? "UGC + Sales" : "UGC"}</p>
+      {assignment && <p className="creator-work-summary">Payment {amount(assignment.creatorPayment)} ETB · Due {date(assignment.dueDateUtc)}</p>}
+      {request && <p className="creator-work-summary">Request {status.toLowerCase()}</p>}
       {detail.error && <div className="creator-work-detail-error"><span>Promotion details unavailable.</span><Button variant="secondary" onClick={detail.reload}>Retry</Button></div>}
+      {assignment ? <details className="creator-work-disclosure">
+        <summary>View details</summary>
+        <div className="creator-work-disclosure-body">
+          <p className="ugc-arrangement"><strong>Product arrangement:</strong> {assignment.productProvided ? "Product provided by Business" : assignment.creatorMustPurchase ? "Creator purchases product" : "Not selected"}</p>
+          {assignment.instructions && <p className="preserve-lines">{assignment.instructions}</p>}
+          <p className="fine-print">{assignment.platformRequirements.length
+            ? `Post on ${assignment.platformRequirements.map((requirement) => requirement.platform).join(", ")}`
+            : "Deliver content to the Business"}</p>
+          {assignment.feedback && <Notice>{assignment.feedback}</Notice>}
+          {request?.rejectionReason && <Notice>{request.rejectionReason}</Notice>}
+          {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
+            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!url.trim()) return; void action.run(async (key) => {
+              await post(`/creator/ugc/assignments/${assignment.id}/submit`, { submissionUrl: url.trim() }, key); onSubmitted();
+            }); }}>
+              <label>{assignment.platformRequirements.length ? "Social post link" : "Content delivery link"}
+                <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required /></label>
+              <Button type="submit" disabled={action.busy || !url.trim()}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Update Content" : "Submit Content"}</Button>
+            </form>}
+          {action.error && <Notice error>{action.error}</Notice>}
+        </div>
+      </details> : request?.rejectionReason ? <details className="creator-work-disclosure">
+        <summary>View details</summary>
+        <div className="creator-work-disclosure-body">
+          <Notice>{request.rejectionReason}</Notice>
+          <ActionLink to={`/creator/ugc/${opportunityId}`} secondary>View details</ActionLink>
+        </div>
+      </details> : <ActionLink to={`/creator/ugc/${opportunityId}`} secondary>View details</ActionLink>}
     </div>
-    <div className="creator-next-action"><Badge status={status} label={promotionStatusLabel(status)} />
+    <div className="creator-next-action">
       {status === "Pending" && <span>Waiting for Business decision</span>}
       {status === "Submitted" && <span>Waiting for Business review</span>}
       {request?.status === "Approved" && <span>Preparing your Promotion</span>}
       {assignment?.revisionAcceptanceRequired && <span>Review updated requirements with the Business before submitting</span>}
-      {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
-        <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!url.trim()) return; void action.run(async (key) => {
-          await post(`/creator/ugc/assignments/${assignment.id}/submit`, { submissionUrl: url.trim() }, key); onSubmitted();
-        }); }}>
-          <label>{assignment.platformRequirements.length ? "Social post link" : "Content delivery link"}
-            <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required /></label>
-          <Button type="submit" disabled={action.busy || !url.trim()}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Update Content" : "Submit Content"}</Button>
-        </form>}
-      {action.error && <Notice error>{action.error}</Notice>}
     </div>
   </article>;
 }
@@ -552,14 +651,16 @@ function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; 
   const state = row.status;
   const canGoLive = state === "ReadyToGoLive" && row.contentReviewStatus === "Approved" && !row.participationId;
   return <article className="creator-promotion-row creator-work-row">
-    <div><small>{row.business.displayName}</small><h3>{row.title}</h3><p>{promotionTypeLabel(row.type)}</p>
-      {row.participationId && row.remainingDays != null ? <p className="creator-live-days">{row.remainingDays} days left</p> : null}
-      {row.participationId && <p>{count(row.verifiedViews)} verified views · {amount(row.viewEarnings + row.saleCommissionEarnings)} earned</p>}
-      {row.contentReviewStatus && <p className="fine-print">Content · {row.contentReviewStatus.replace(/([A-Z])/g, " $1").trim()}{row.contentRevisionNumber ? ` · Revision ${row.contentRevisionNumber}` : ""}</p>}
-      {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
+    <div className="creator-work-main">
+      <div className="creator-work-top">
+        <div className="creator-work-copy"><small>{row.business.displayName}</small><h3>{row.title}</h3></div>
+        <CreatorStatus status={promotionStatus(row)} />
+      </div>
+      <p className="creator-work-type">{promotionTypeLabel(row.type)}</p>
+      {row.participationId && <p className="creator-work-summary">{count(row.verifiedViews)} verified views · {amount(row.viewEarnings + row.saleCommissionEarnings)} earnings</p>}
+      {row.participationId && row.remainingDays != null ? <p className="creator-work-summary">{row.remainingDays} days left</p> : null}
     </div>
     <div className="creator-next-action">
-      <Badge status={promotionStatus(row)} />
       {state === "UnderReview" && <span>Waiting for Business review</span>}
       {state === "Paused" && <span>Your Promotion is paused</span>}
       {state === "FundingRequired" && <span>Waiting for Business funding</span>}
@@ -567,7 +668,8 @@ function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; 
       {canGoLive && <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
         await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key); onChanged();
       })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
-      {row.participationId && <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>View progress</ActionLink>}
+      {!canGoLive && state !== "Approved" && state !== "ChangesRequested" && row.participationId && <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>View progress</ActionLink>}
+      {!canGoLive && state !== "Approved" && state !== "ChangesRequested" && !row.participationId && <ActionLink to={`/creator/promotions/${row.budgetId}`} secondary>View details</ActionLink>}
       {action.error && <Notice error>{action.error}</Notice>}
     </div>
   </article>;

@@ -31,7 +31,7 @@ function ReviewRow({ row, reload }: { row: PromotionContentReviewCard; reload: (
 
 export function PromotionContentReviewQueue() {
   const resource = useResource<PromotionContentReviewCard[]>("/business/promotion-content-submissions");
-  return <Section title="Content review">
+  return <Section title="Content review" className="business-content-review">
     <Resource resource={resource}>{(rows) => rows.length ? <div className="business-promotion-review-list">{rows.map((row) => <ReviewRow key={row.submissionId} row={row} reload={resource.reload} />)}</div> : <Empty title="Nothing to review." />}</Resource>
   </Section>;
 }

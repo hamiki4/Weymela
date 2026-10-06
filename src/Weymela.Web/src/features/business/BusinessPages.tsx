@@ -36,7 +36,7 @@ import {
 } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
-import { DepositSubmission } from "./DepositSubmission";
+import { DepositSubmission, type DepositRequest } from "./DepositSubmission";
 import { PromotionContentReviewQueue } from "./PromotionContentReviewQueue";
 import { BusinessUgcCard } from "./UgcPages";
 
@@ -44,15 +44,20 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
   return (
     <div className="metric-grid fund-metrics">
       <Metric
-        label="Total"
-        value={`${amount(wallet.totalBalance)} ETB`}
-        icon="wallet"
-        emphasis
-      />
-      <Metric
         label="Available"
         value={`${amount(wallet.available)} ETB`}
         icon="plus"
+        emphasis
+      />
+      <Metric
+        label="Reserved"
+        value={`${amount(wallet.reserved)} ETB`}
+        icon="lock"
+      />
+      <Metric
+        label="Total"
+        value={`${amount(wallet.totalBalance)} ETB`}
+        icon="wallet"
       />
     </div>
   );
@@ -62,58 +67,73 @@ export function BusinessDashboard() {
   return (
     <Resource resource={resource}>
       {(data) => (
-        <>
-          <PageHeader title="Home" compact />
-          <Link className="business-balance-summary" to="/business/wallet" aria-label="Available funds, view wallet">
-            <div><span>Available</span><strong>{amount(data.wallet.available)}</strong></div>
-            <div><span>Total</span><strong>{amount(data.wallet.totalBalance)}</strong></div>
-          </Link>
-          <div className="business-operation-list">
-            <Link className="business-operation-row" to="/business/campaigns?filter=Active"><Icon name="campaign" /><span>Active Promotions</span><strong>{count(data.activeCampaigns)}</strong><Icon name="arrow" /></Link>
-            <Link className="business-operation-row" to="/business/requests"><Icon name="people" /><span>Creator Requests</span><strong>{count(data.creatorRequests)}</strong><Icon name="arrow" /></Link>
+        <div className="business-home">
+          <PageHeader
+            title="Home"
+            description={data.business.displayName}
+            action={
+              <ActionLink to="/business/campaigns/new" icon="plus">
+                Create Promotion
+              </ActionLink>
+            }
+          />
+          <div className="business-home-overview">
+            <Section title="Funds" className="business-home-section business-home-funds">
+              <Link
+                className="business-home-fund-summary"
+                to="/business/wallet"
+                aria-label="Available funds, view wallet"
+              >
+                <div className="business-home-fund business-home-fund-primary">
+                  <span>Available</span>
+                  <strong>{amount(data.wallet.available)} <small>ETB</small></strong>
+                </div>
+                <div className="business-home-fund">
+                  <span>Total</span>
+                  <strong>{amount(data.wallet.totalBalance)} <small>ETB</small></strong>
+                </div>
+                <span className="business-home-wallet-action">
+                  Wallet <Icon name="arrow" size={17} />
+                </span>
+              </Link>
+            </Section>
+            <Section title="Your Promotions" className="business-home-section business-home-promotions">
+              <div className="business-home-promotion-list">
+                <Link className="business-home-promotion-row" to="/business/campaigns?filter=Active">
+                  <span className="business-home-row-icon" aria-hidden="true"><Icon name="campaign" /></span>
+                  <span className="business-home-row-label">Active Promotions</span>
+                  <strong>{count(data.activeCampaigns)}</strong>
+                  <Icon name="arrow" size={17} />
+                </Link>
+                <Link className="business-home-promotion-row" to="/business/requests">
+                  <span className="business-home-row-icon" aria-hidden="true"><Icon name="people" /></span>
+                  <span className="business-home-row-label">Creator Requests</span>
+                  <strong>{count(data.creatorRequests)}</strong>
+                  <Icon name="arrow" size={17} />
+                </Link>
+              </div>
+            </Section>
           </div>
-          <Section title="Quick actions" className="quick-actions-section">
-            <div className="actions quick-actions">
-              <ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink>
+          <Section title="Business tools" className="business-home-section business-home-tools">
+            <div className="business-home-tool-grid">
               <ActionLink to="/checkout" secondary icon="qr">Checkout / Scan QR</ActionLink>
               <ActionLink to="/business/transactions" secondary icon="document">Transactions</ActionLink>
               <ActionLink to="/business/cashiers" secondary icon="people">Cashier Management</ActionLink>
               <ActionLink to="/business/pricing" secondary icon="settings">Pricing</ActionLink>
             </div>
           </Section>
-          <div className="section-kicker-space">
-            <Section
-              title="Recent fund activity"
-              action={
-                <Link className="text-link" to="/business/wallet">
-                  Your wallet <Icon name="arrow" size={16} />
-                </Link>
-              }
-            >
-              {data.wallet.history.length ? (
-                data.wallet.history.slice(0, 4).map((item) => (
-                  <div className="amount-row" key={item.id}>
-                    <div>
-                      <strong>{item.label}</strong>
-                      <small>{date(item.atUtc)}{item.reason ? ` · Reason: ${item.reason}` : ""}</small>
-                    </div>
-                    <strong>{amount(item.amount)}</strong>
-                  </div>
-                ))
-              ) : (
-                <Empty
-                  title="No fund activity"
-                />
-              )}
-            </Section>
-          </div>
-        </>
+          <Link className="business-home-wallet-history" to="/business/wallet">
+            <span>Wallet history</span>
+            <Icon name="arrow" size={17} />
+          </Link>
+        </div>
       )}
     </Resource>
   );
 }
 export function BusinessWallet() {
   const resource = useResource<Wallet>("/business/wallet");
+  const depositRequests = useResource<DepositRequest[]>("/business/deposit-requests");
   const [value, setValue] = useState("");
   const [success, setSuccess] = useState(false);
   const action = useAction();
@@ -126,69 +146,88 @@ export function BusinessWallet() {
           <>
             <WalletMetrics wallet={wallet} />
             <div className="wallet-content">
-              <Section
-                title="Add Funds"
-              >
-                {!user?.developmentMode ? <DepositSubmission /> : <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void action.run(async (key) => {
-                      await post(
-                        "/business/wallet/deposits",
-                        {
-                          amount: Number(value),
-                          expectedVersion: wallet.version,
-                        },
-                        key,
-                      );
-                      setSuccess(true);
-                      setValue("");
-                      resource.reload();
-                    });
+              <Section title="Add Funds">
+                <details className="wallet-add-funds">
+                  <summary aria-label="Open Add Funds">Open Add Funds</summary>
+                  <div className="wallet-supporting-flow">
+                    {!user?.developmentMode ? <DepositSubmission showHistory={false} onSubmitted={depositRequests.reload} /> : <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void action.run(async (key) => {
+                          await post(
+                            "/business/wallet/deposits",
+                            {
+                              amount: Number(value),
+                              expectedVersion: wallet.version,
+                            },
+                            key,
+                          );
+                          setSuccess(true);
+                          setValue("");
+                          resource.reload();
+                        });
+                      }}
+                    >
+                      <fieldset disabled={action.busy || !user?.developmentMode}>
+                        <Field
+                          label="Amount"
+                          help="Enter the amount you want to add."
+                        >
+                          <MoneyInput
+                            value={value}
+                            onChange={(e) => {
+                              setValue(e.target.value);
+                              setSuccess(false);
+                            }}
+                          />
+                        </Field>
+                        {user?.developmentMode && (
+                          <p className="fine-print">
+                            Development funding only. This records test funds; no
+                            payment is taken.
+                          </p>
+                        )}
+                        {!user?.developmentMode && (
+                          <Notice>
+                            Deposit confirmation is not connected yet.
+                          </Notice>
+                        )}
+                        {action.error && <Notice error>{action.error}</Notice>}
+                        {success && (
+                          <Notice>
+                            Funds added. Your saved wallet balance is shown above.
+                          </Notice>
+                        )}
+                        <Button
+                          type="submit"
+                          icon="plus"
+                          disabled={action.busy || !value}
+                        >
+                          {action.busy ? "Adding funds…" : "Add Funds"}
+                        </Button>
+                      </fieldset>
+                    </form>}
+                  </div>
+                </details>
+              </Section>
+              <Section title="Funding requests">
+                <Resource resource={depositRequests}>
+                  {(rows) => {
+                    const requests = Array.isArray(rows) ? rows : [];
+                    return requests.length ? <div className="business-funding-requests">
+                      {requests.map((request) => <article className="business-funding-request" key={request.id}>
+                        <div>
+                          <strong><Badge status={request.status} label={request.status} /></strong>
+                          <small>{date(request.submittedAtUtc)}</small>
+                        </div>
+                        <strong>{amount(request.amount)} ETB</strong>
+                      </article>)}
+                    </div> : <Empty title="No funding requests" message="Submitted receipts will appear here for review." />;
                   }}
-                >
-                  <fieldset disabled={action.busy || !user?.developmentMode}>
-                    <Field
-                      label="Amount"
-                      help="Enter the amount you want to add."
-                    >
-                      <MoneyInput
-                        value={value}
-                        onChange={(e) => {
-                          setValue(e.target.value);
-                          setSuccess(false);
-                        }}
-                      />
-                    </Field>
-                    {user?.developmentMode && (
-                      <p className="fine-print">
-                        Development funding only. This records test funds; no
-                        payment is taken.
-                      </p>
-                    )}
-                    {!user?.developmentMode && (
-                      <Notice>
-                        Deposit confirmation is not connected yet.
-                      </Notice>
-                    )}
-                    {action.error && <Notice error>{action.error}</Notice>}
-                    {success && (
-                      <Notice>
-                        Funds added. Your saved wallet balance is shown above.
-                      </Notice>
-                    )}
-                    <Button
-                      type="submit"
-                      icon="plus"
-                      disabled={action.busy || !value}
-                    >
-                      {action.busy ? "Adding funds…" : "Add Funds"}
-                    </Button>
-                  </fieldset>
-                </form>}
+                </Resource>
               </Section>
             </div>
-            <Section title="Wallet history" action={<Currency />}>
+            <Section title="Wallet history" className="business-wallet-history">
               <DataTable
                 rows={wallet.history}
                 rowKey={(r) => r.id}
@@ -201,28 +240,18 @@ export function BusinessWallet() {
                     numeric: true,
                   },
                   { label: "Date", cell: (r) => date(r.atUtc) },
-                  {
-                    label: "Reference",
-                    cell: (r) => (
-                      <details>
-                        <summary>Reference</summary>
-                        <code>{r.reference}</code>
-                      </details>
-                    ),
-                  },
                 ]}
                 card={(r) => (
-                  <>
-                    <div className="card-head">
-                      <strong>{r.label}</strong>
-                      <strong>{amount(r.amount)}</strong>
+                  <details className="wallet-history-details">
+                    <summary>
+                      <span><strong>{r.label}</strong><small>{date(r.atUtc)}</small></span>
+                      <strong>{amount(r.amount)} ETB</strong>
+                    </summary>
+                    <div className="wallet-history-detail">
+                      {r.reason && <p>{r.reason}</p>}
+                      <small>Reference: <code>{r.reference}</code></small>
                     </div>
-                    <p className="fine-print">{date(r.atUtc)}{r.reason ? ` · Reason: ${r.reason}` : ""}</p>
-                    <details>
-                      <summary>Reference</summary>
-                      <code>{r.reference}</code>
-                    </details>
-                  </>
+                  </details>
                 )}
                 empty={
                   <Empty
@@ -461,27 +490,22 @@ export function CampaignTable({
 }
 
 function BusinessPromotionCard({ row }: { row: CampaignRow }) {
-  const nextAction = row.status === "Funded"
-    ? "Publish Promotion"
-    : ["Published", "Active"].includes(row.status)
-      ? "Review Creator requests"
-      : "View Promotion";
   return (
-    <article className="campaign-card business-promotion-summary">
+    <article className="campaign-card business-promotion-card" data-status={row.status}>
       <div className="card-head">
         <div>
           <p className="card-eyebrow">{promotionTypeLabel(row.type)}</p>
-          <h3><Link to={`/business/campaigns/${row.id}`}>{row.title}</Link></h3>
+          <h3>{row.title}</h3>
         </div>
         <Badge status={row.status} label={promotionStatusLabel(row.status)} />
       </div>
       <dl className="promotion-summary-list">
         {row.contentDueAtUtc && <div><dt>Content due</dt><dd>{date(row.contentDueAtUtc)}</dd></div>}
-        {row.location && <div><dt>Location</dt><dd>{row.location}</dd></div>}
         <div><dt>Creators</dt><dd>{row.creatorCount}</dd></div>
       </dl>
-      <p className="promotion-next-action"><strong>Next:</strong> {nextAction}</p>
-      <ActionLink to={`/business/campaigns/${row.id}`}>View Promotion</ActionLink>
+      <Link className="button secondary business-promotion-manage" to={`/business/campaigns/${row.id}`}>
+        Manage <Icon name="arrow" />
+      </Link>
     </article>
   );
 }

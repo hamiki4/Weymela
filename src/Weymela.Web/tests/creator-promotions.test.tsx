@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { invalidateResourceCache } from "../src/api/client";
@@ -110,10 +110,12 @@ describe("Creator Promotions work groups", () => {
     expect(await within(activeRow).findByText("UGC + Sales")).toBeVisible();
     expect(within(activeRow).getByText("Changes Requested", { exact: true })).toBeVisible();
     await userEvent.click(within(activeRow).getByText("View details", { exact: true, selector: "summary" }));
-    await userEvent.type(within(activeRow).getByLabelText("Social post link"), "https://example.com/post");
-    await userEvent.click(within(activeRow).getByRole("button", { name: "Update Content" }));
-    await waitFor(() => expect(api.writes[0]).toMatchObject({ path: "/creator/ugc/assignments/UGC active/submit",
-      body: { submissionUrl: "https://example.com/post" } }));
+    const review = new File(["review"], "review.mp4", { type: "video/mp4" });
+    await userEvent.upload(within(activeRow).getByLabelText("Private review copy"), review);
+    fireEvent.submit(within(activeRow).getByRole("button", { name: "Submit Revised Content" }).closest("form")!);
+    await waitFor(() => expect(api.writes[0]).toMatchObject({ path: "/creator/ugc/assignments/UGC active/submit-review",
+      body: expect.any(FormData) }));
+    expect(api.writes[0].body.get("media")).toBeInstanceOf(File);
     await userEvent.click(screen.getByRole("tab", { name: "Pending" }));
     expect(await screen.findByRole("heading", { name: "UGC pending" })).toBeVisible();
     expect(screen.getByText("Waiting for Business decision")).toBeVisible();

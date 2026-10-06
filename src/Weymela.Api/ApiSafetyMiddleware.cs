@@ -20,7 +20,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
         var productFormOrigin = productIntegration.Enabled
             ? " " + new Uri(productIntegration.BeginUrl).GetLeftPart(UriPartial.Authority)
             : "";
-        context.Response.Headers["Content-Security-Policy"]=$"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'{productFormOrigin}";
+        context.Response.Headers["Content-Security-Policy"]=$"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-src 'self' https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'{productFormOrigin}";
         context.Response.Headers["X-Frame-Options"]="DENY";
         if(!options.Development&&context.Request.IsHttps)context.Response.Headers.StrictTransportSecurity="max-age=31536000";
         if(context.Request.Path.StartsWithSegments("/api"))
@@ -46,8 +46,12 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                     && HttpMethods.IsPost(context.Request.Method);
                 var photoUpload=context.Request.Path.Equals("/api/creator/photo",StringComparison.OrdinalIgnoreCase)
                     && HttpMethods.IsPost(context.Request.Method);
-                var fileUpload=receiptUpload||photoUpload;
-                var limit=fileUpload?RuntimeOptions.ReceiptRequestBytes:RuntimeOptions.RequestBytes;
+                var reviewUpload=(context.Request.Path.Value?.EndsWith("/content/review",StringComparison.OrdinalIgnoreCase)==true
+                    ||context.Request.Path.Value?.EndsWith("/submit-review",StringComparison.OrdinalIgnoreCase)==true)
+                    && HttpMethods.IsPost(context.Request.Method);
+                var fileUpload=receiptUpload||photoUpload||reviewUpload;
+                var limit=reviewUpload?RuntimeOptions.ReviewMediaRequestBytes:fileUpload?RuntimeOptions.ReceiptRequestBytes:RuntimeOptions.RequestBytes;
+                if(reviewUpload&&context.Request.ContentLength is null){await Error(context,411,"LengthRequired","The review upload requires a known file size.");return;}
                 if(context.Request.ContentLength>limit){await Error(context,413,"RequestTooLarge","This request is too large.");return;}
                 // Bound unknown-length/chunked bodies too, including non-Kestrel test hosts. This remains in memory, never on disk.
                 if(context.Request.ContentLength is null)
@@ -64,7 +68,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 {
                     var media=context.Request.ContentType?.Split(';')[0].Trim();
                     if(fileUpload?media!="multipart/form-data":media!="application/json")
-                    {await Error(context,415,"UnsupportedContentType",fileUpload?"Choose a JPEG or PNG image.":"Use a JSON request.");return;}
+                    {await Error(context,415,"UnsupportedContentType",reviewUpload?"Choose a supported private review file.":fileUpload?"Choose a JPEG or PNG image.":"Use a JSON request.");return;}
                 }
             }
         }

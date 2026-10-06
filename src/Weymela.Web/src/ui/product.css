@@ -1089,7 +1089,93 @@
   max-width: 760px;
 }
 
+.customer-live-offer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr);
+  align-items: start;
+  gap: 20px;
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+.customer-live-video {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--product-line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.customer-live-video-frame {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: #eef2ef;
+  color: var(--product-secondary);
+}
+
+.private-review-media,
+.private-review-media video {
+  display: block;
+  width: min(100%, 720px);
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #111;
+}
+
+div.private-review-media {
+  display: grid;
+  gap: 6px;
+  background: transparent;
+}
+
+.collaboration-timeline {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding-left: 21px;
+  color: var(--product-secondary);
+  font-size: .84rem;
+}
+
+.business-collaboration-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--business-card-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 9px rgb(23 36 61 / 5%);
+}
+
+.creator-social-review {
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.business-collaboration-workspace .panel {
+  min-width: 0;
+}
+
 @media (max-width: 640px) {
+  .customer-live-offer-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .customer-live-video,
+  .business-collaboration-card {
+    padding: 13px;
+  }
+
   .product-shell.role-business .business-promotion-card,
   .product-shell.role-business .campaign-grid > .campaign-card,
   .product-shell.role-business .campaign-grid > .data-card,

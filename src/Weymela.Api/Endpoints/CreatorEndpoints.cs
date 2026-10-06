@@ -31,15 +31,27 @@ internal static class CreatorEndpoints
             EndpointSupport.Id(await commands.JoinAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/promotions/{id:guid}/request",async(Guid id,JoinInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.JoinAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
-        g.MapPost("/creator-budgets/{id:guid}/content",async(Guid id,ContentInput input,HttpContext c,CreatorPromotionContentService service,CancellationToken ct)=>
+        g.MapPost("/creator-budgets/{id:guid}/content/review",async(Guid id,HttpContext c,
+            PrivateReviewMediaStore media,CreatorPromotionContentService service,Weymela.Infrastructure.Persistence.WeymelaDbContext db,CancellationToken ct)=>
         {
-            Weymela.Infrastructure.Operations.InputRules.Reference(input.ExternalContentId,"video reference",100);
-            if(input.Provider is not ("TikTok" or "YouTube" or "Instagram")||string.IsNullOrWhiteSpace(input.ExternalContentId)||input.ExternalContentId.Length>100)
-                return Results.BadRequest(new{message="Choose a supported platform and valid video reference."});
-            return Results.Ok(await service.SubmitAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct));
+            if(!c.Request.HasFormContentType) throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,"Choose an MP4 review video.");
+            var form=await c.Request.ReadFormAsync(ct);
+            if(form.Count!=0||form.Files.Count!=1||form.Files[0].Name!="media")
+                throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,"Choose one MP4 review video.");
+            var saved=await media.SaveAsync(form.Files[0],true,ct);
+            try
+            {
+                var result=await service.SubmitPrivateAsync(EndpointSupport.Actor(c),id,
+                    new(saved.StorageKey,saved.ContentType,saved.Length,saved.Sha256,saved.OriginalFileName),EndpointSupport.Key(c),ct);
+                await media.PruneOrphansAsync(db,ct);
+                return Results.Ok(result);
+            }
+            catch { media.Delete(saved.StorageKey); throw; }
         });
-        g.MapPost("/creator-budgets/{id:guid}/go-live",async(Guid id,HttpContext c,VerifiedViewService service,CancellationToken ct)=>
-            EndpointSupport.Id(await service.GoLiveAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct:ct)));
+        g.MapPost("/creator-budgets/{id:guid}/publication",async(Guid id,PublicationInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            Results.Ok(await service.RequestPromotionAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
+        g.MapPost("/creator-budgets/{id:guid}/go-live",async(Guid id,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.GoLivePromotionAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct)));
         g.MapPost("/participations/{id:guid}/refresh",(Guid id,HttpContext c,VerifiedViewService service,CancellationToken ct)=>
             service.RefreshAsync(new(EndpointSupport.Actor(c),id,EndpointSupport.Key(c)),ct));
         g.MapPost("/payouts/request",async(HttpContext c,PayoutService service,CancellationToken ct)=>
@@ -50,8 +62,27 @@ internal static class CreatorEndpoints
         g.MapGet("/ugc/{id:guid}",(Guid id,HttpContext c,UgcService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct));
         g.MapPost("/ugc/{id:guid}/request",async(Guid id,string? selectedPlatform,Guid? verifiedSocialProfileId,HttpContext c,UgcService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.RequestAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct,selectedPlatform,verifiedSocialProfileId)));
-        g.MapPost("/ugc/assignments/{id:guid}/submit",async(Guid id,UgcSubmissionInput input,HttpContext c,UgcService service,CancellationToken ct)=>
-            EndpointSupport.Id(await service.SubmitAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
+        g.MapPost("/ugc/assignments/{id:guid}/submit-review",async(Guid id,HttpContext c,
+            PrivateReviewMediaStore media,UgcService service,Weymela.Infrastructure.Persistence.WeymelaDbContext db,CancellationToken ct)=>
+        {
+            if(!c.Request.HasFormContentType) throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,"Choose a private review file.");
+            var form=await c.Request.ReadFormAsync(ct);
+            if(form.Count!=0||form.Files.Count!=1||form.Files[0].Name!="media")
+                throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,"Choose one private review file.");
+            var saved=await media.SaveAsync(form.Files[0],false,ct);
+            try
+            {
+                var result=await service.SubmitPrivateAsync(EndpointSupport.Actor(c),id,
+                    new(saved.StorageKey,saved.ContentType,saved.Length,saved.Sha256,saved.OriginalFileName),EndpointSupport.Key(c),ct);
+                await media.PruneOrphansAsync(db,ct);
+                return EndpointSupport.Id(result);
+            }
+            catch { media.Delete(saved.StorageKey); throw; }
+        });
+        g.MapPost("/ugc/assignments/{id:guid}/publication",async(Guid id,PublicationInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            Results.Ok(await service.RequestUgcAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
+        g.MapPost("/ugc/assignments/{id:guid}/go-live",async(Guid id,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.GoLiveUgcAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/assignments/{id:guid}/accept-revision",async(Guid id,VersionInput input,HttpContext c,UgcService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.AcceptRevisionAsync(EndpointSupport.Actor(c),id,checked((int)input.Version),EndpointSupport.Key(c),ct)));
     }

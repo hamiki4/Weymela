@@ -124,7 +124,9 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
         for (var i = 0; i < 5; i++) { var id = Guid.NewGuid(); db.CommercePermissions.Add(new(id, ActorRole.PlatformAdmin, id, null, true, false)); }
         await db.SaveChangesAsync(); await Drain(s, 2);
         Assert.Equal(6, await db.InAppNotifications.CountAsync(x => x.EventType == "PromotionFunded"));
-        Assert.False(await db.OutboxMessages.AnyAsync(x => x.ProcessedAtUtc == null && x.FailedAtUtc == null));
+        var pending = await db.OutboxMessages.Where(x => x.ProcessedAtUtc == null && x.FailedAtUtc == null)
+            .Select(x => x.EventType).ToListAsync();
+        Assert.False(pending.Count > 0, "Pending notification events: " + string.Join(", ", pending));
     }
     [Fact] public async Task Malformed_event_retries_with_redacted_error_then_enters_failure_state()
     {

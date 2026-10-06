@@ -19,6 +19,8 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<UgcCreatorRequest> UgcCreatorRequests => Set<UgcCreatorRequest>();
     public DbSet<UgcAssignment> UgcAssignments => Set<UgcAssignment>();
     public DbSet<UgcSubmission> UgcSubmissions => Set<UgcSubmission>();
+    public DbSet<PrivateReviewMediaAsset> PrivateReviewMediaAssets => Set<PrivateReviewMediaAsset>();
+    public DbSet<CreatorPublicationVerification> CreatorPublicationVerifications => Set<CreatorPublicationVerification>();
     public DbSet<PromotionReservation> PromotionReservations => Set<PromotionReservation>();
     public DbSet<PromotionBudgetEntry> PromotionBudgetEntries => Set<PromotionBudgetEntry>();
     public DbSet<UgcReservation> UgcReservations => Set<UgcReservation>();
@@ -105,7 +107,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
                 throw new InvalidOperationException("Posted accounting, snapshots and audit records are append-only.");
             if (e.Entity is CreatorPromotionContentSubmission && e.State != EntityState.Added)
             {
-                if (e.State == EntityState.Deleted || new[] { "Id", "CreatorAllocationId", "RevisionNumber", "Provider", "ContentReference", "SubmittedAtUtc" }
+                if (e.State == EntityState.Deleted || new[] { "Id", "CreatorAllocationId", "RevisionNumber", "Provider", "ContentReference", "ReviewMediaAssetId", "SubmittedAtUtc" }
                     .Any(name => !Equals(e.Property(name).OriginalValue, e.Property(name).CurrentValue)))
                     throw new InvalidOperationException("Submitted Promotion content revisions are immutable; only review metadata may change.");
             }
@@ -135,5 +137,5 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     private static bool IsImmutable(object entity) => entity is FinancialJournal or FinancialJournalLine or
         WalletEntry or PlatformPromotionalFundingRecord or PromotionReservation or PromotionBudgetEntry or UgcReservation or UgcBudgetEntry or UgcCustomerOfferReservation or UgcCustomerOfferBudgetEntry or UgcRevision or StoredIdempotencyRecord or AuditEvent or AccountRoleHistoryRecord or
         PricingSnapshot or FinancialConfigurationVersion or LegalDocumentVersion or LegalAcceptance or
-        CreatorEarningEntry or CustomerCashbackEntry or PlatformRevenueEntry or PlatformSettlement or VerifiedSale or UgcCustomerOfferSale or PromotionViewVerification or ViewRewardReceipt;
+        CreatorEarningEntry or CustomerCashbackEntry or PlatformRevenueEntry or PlatformSettlement or VerifiedSale or UgcCustomerOfferSale or PromotionViewVerification or ViewRewardReceipt or PrivateReviewMediaAsset;
 }

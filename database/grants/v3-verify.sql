@@ -66,6 +66,8 @@ VALUES
     ('api', 'v3', 'CreatorAllocations', true, true, true),
     ('api', 'v3', 'CreatorEarningsAccounts', true, true, true),
     ('api', 'v3', 'CreatorPromotionParticipations', true, true, true),
+    ('api', 'v3', 'CreatorPublicationVerifications', true, true, true),
+    ('api', 'v3', 'PrivateReviewMediaAssets', true, true, false),
     ('api', 'v3', 'CreatorSocialProfiles', true, true, true),
     ('api', 'v3', 'CashierPreauthorizations', true, true, true),
     ('api', 'v3', 'DepositRequests', true, true, true),

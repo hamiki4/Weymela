@@ -15,6 +15,56 @@ public sealed class CreatorPromotionContentService(
     IWorkspaceDirectory directory,
     TimeProvider clock)
 {
+    public Task<CreatorContentSubmissionStatus> SubmitPrivateAsync(
+        Actor actor, Guid allocationId, PrivateReviewMediaInput input, string idempotencyKey, CancellationToken ct)
+        => new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+            var allocation = await db.CreatorAllocations.SingleOrDefaultAsync(x => x.Id == allocationId, token)
+                ?? throw new ApplicationFailure(FailureKind.NotFound, "Approved Promotion work not found.");
+            await access.EnsureCreatorAsync(actor, allocation.CreatorId, token);
+            var promotion = await db.Promotions.Include(x => x.Allocations)
+                .SingleOrDefaultAsync(x => x.Id == allocation.PromotionId, token)
+                ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
+            await access.EnsureBusinessAsync(promotion.BusinessId, token);
+            if (!await db.CreatorApplications.AnyAsync(x => x.PromotionId == promotion.Id
+                    && x.CreatorId == actor.CreatorId && x.Status == CreatorApplicationStatus.Approved, token))
+                throw new ApplicationFailure(FailureKind.Forbidden, "Business approval is required before submitting Promotion content.");
+            if (allocation.Status != CreatorAllocationStatus.Active || allocation.RemainingAmount.Amount <= 0
+                || promotion.Status is not (PromotionStatus.Published or PromotionStatus.Active)
+                || promotion.EndDateUtc <= now)
+                throw new ApplicationFailure(FailureKind.Validation, "This approved Promotion is no longer accepting Creator content.");
+            if (await db.CreatorPromotionParticipations.AnyAsync(x => x.CreatorAllocationId == allocation.Id, token))
+                throw new ApplicationFailure(FailureKind.Validation, "This Creator participation has already gone live.");
+
+            var latest = await db.CreatorPromotionContentSubmissions.Where(x => x.CreatorAllocationId == allocation.Id)
+                .OrderByDescending(x => x.RevisionNumber).FirstOrDefaultAsync(token);
+            var fingerprint = RequestFingerprint.Create(allocation.Id.ToString(), input.Sha256,
+                input.ContentType, input.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var operation = new FinancialOperation(db);
+            var replay = await operation.Replay(actor, "SubmitPrivatePromotionContent", idempotencyKey, fingerprint, token);
+            if (replay is not null)
+                return View(await db.CreatorPromotionContentSubmissions.SingleAsync(x => x.Id == Guid.Parse(replay), token));
+            if (latest is not null && latest.ReviewStatus != PromotionContentReviewStatus.ChangesRequested)
+                throw new ApplicationFailure(FailureKind.Validation,
+                    latest.ReviewStatus == PromotionContentReviewStatus.UnderReview
+                        ? "This content is already under Business review."
+                        : "A new content revision is allowed only after the Business requests changes.");
+
+            var revision = (latest?.RevisionNumber ?? 0) + 1;
+            var asset = new PrivateReviewMediaAsset(allocation.CreatorId, promotion.BusinessId,
+                allocation.Id, null, revision, input.StorageKey, input.ContentType, input.Length,
+                input.Sha256, input.OriginalFileName, now);
+            var submission = new CreatorPromotionContentSubmission(allocation.Id, revision, asset.Id, now);
+            db.PrivateReviewMediaAssets.Add(asset);
+            db.CreatorPromotionContentSubmissions.Add(submission);
+            operation.Remember(actor, "SubmitPrivatePromotionContent", idempotencyKey, fingerprint, submission.Id.ToString(), now);
+            operation.Audit(actor, "PromotionContentSubmitted", Guid.NewGuid(), now, promotion.Id, allocation.CreatorId);
+            operation.Event("PromotionContentSubmitted", new { PromotionId = promotion.Id,
+                CreatorAllocationId = allocation.Id, RevisionNumber = revision, CreatorId = allocation.CreatorId }, now);
+            return View(submission);
+        }, ct);
+
     public Task<CreatorContentSubmissionStatus> SubmitAsync(
         Actor actor, Guid allocationId, ContentInput input, string idempotencyKey, CancellationToken ct)
         => new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
@@ -63,6 +113,8 @@ public sealed class CreatorPromotionContentService(
             db.CreatorPromotionContentSubmissions.Add(submission);
             operation.Remember(actor, "SubmitPromotionContent", idempotencyKey, fingerprint, submission.Id.ToString(), now);
             operation.Audit(actor, "PromotionContentSubmitted", Guid.NewGuid(), now, promotion.Id, allocation.CreatorId);
+            operation.Event("PromotionContentSubmitted", new { PromotionId = promotion.Id,
+                CreatorAllocationId = allocation.Id, RevisionNumber = revision, CreatorId = allocation.CreatorId }, now);
             return View(submission);
         }, ct);
 
@@ -145,7 +197,9 @@ public sealed class CreatorPromotionContentService(
             var creator = await directory.CreatorCardAsync(row.Allocation.CreatorId, ct);
             result.Add(new(row.Submission.Id, creator.DisplayName, row.Promotion.Title, row.Submission.Provider,
                 row.Submission.ContentReference, row.Submission.RevisionNumber, row.Submission.SubmittedAtUtc,
-                row.Submission.ReviewStatus.ToString(), row.Submission.Feedback, row.Submission.ReviewedAtUtc));
+                row.Submission.ReviewStatus.ToString(), row.Submission.Feedback, row.Submission.ReviewedAtUtc,
+                row.Submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{row.Submission.Id}",
+                row.Allocation.Id, row.Promotion.Id));
         }
         return result;
     }
@@ -156,7 +210,9 @@ public sealed class CreatorPromotionContentService(
         var creator = await directory.CreatorCardAsync(allocation.CreatorId, ct);
         return new(submission.Id, creator.DisplayName, promotion.Title, submission.Provider, submission.ContentReference,
             submission.RevisionNumber, submission.SubmittedAtUtc, submission.ReviewStatus.ToString(),
-            submission.Feedback, submission.ReviewedAtUtc);
+            submission.Feedback, submission.ReviewedAtUtc,
+            submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{submission.Id}", allocation.Id,
+            promotion.Id);
     }
 
     private static CreatorContentSubmissionStatus View(CreatorPromotionContentSubmission row)

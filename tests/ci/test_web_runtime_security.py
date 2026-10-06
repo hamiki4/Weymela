@@ -30,7 +30,8 @@ class CreatorPhotoCspTests(unittest.TestCase):
             'frame-ancestors': "'none'", 'script-src': "'self'", 'style-src': "'self'",
             'img-src': "'self' data: blob:",
             'connect-src': "'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com",
-            'frame-src': "'self'", 'manifest-src': "'self'", 'worker-src': "'self'",
+            'frame-src': "'self' https://www.youtube-nocookie.com", 'manifest-src': "'self'", 'worker-src': "'self'",
+            'media-src': "'self' blob:",
         })
 
 
@@ -38,12 +39,18 @@ class UploadProxyContractTests(unittest.TestCase):
     def test_only_existing_upload_routes_receive_bounded_headroom(self):
         web = (ROOT / 'docker/web/nginx.conf').read_text()
         edge = (ROOT / 'docs/deployment/pilot-image-uploads.nginx.conf').read_text()
+        single_origin = (ROOT / 'docs/deployment/pilot-single-origin.nginx.conf').read_text()
         self.assertIn('client_max_body_size 32k;', web)
         for text in (web, edge):
             self.assertIn('^/api/(business/deposit-requests|creator/photo)$', text)
+            self.assertIn('^/api/creator/(creator-budgets/[^/]+/content/review|ugc/assignments/[^/]+/submit-review)$', text)
             self.assertEqual(text.count('client_max_body_size 5m;'), 1)
+            self.assertEqual(text.count('client_max_body_size 101m;'), 1)
+            self.assertEqual(text.count('proxy_request_buffering off;'), 1)
             self.assertNotIn('client_max_body_size 0;', text)
             self.assertIn('"code":"RequestTooLarge"', text)
+        self.assertNotIn('location ^~ /api/ {', single_origin)
+        self.assertIn('location /api/ {', single_origin)
         self.assertIn('COPY docker/web/api-proxy.conf', DOCKERFILE)
 
 

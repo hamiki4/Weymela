@@ -76,17 +76,17 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
     {
         await access.EnsureCustomerAsync(actor,ct);
         var now = clock.GetUtcNow().UtcDateTime;
+        var eligibility = new CustomerOfferEligibility(db, access, clock);
         var campaigns = await db.Promotions.AsNoTracking().Include(x => x.Allocations)
             .Where(x => x.PromotionType == PromotionType.ViewPlusCommission && x.Status == PromotionStatus.Active && x.StartDateUtc <= now && x.EndDateUtc > now).ToListAsync(ct);
         var result = new List<CustomerOffer>();
         foreach(var p in campaigns)
         {
-            if (!await db.CommercePermissions.AnyAsync(x => x.Role == ActorRole.Business && x.SubjectId == p.BusinessId && x.IsActive,ct)) continue;
             foreach(var a in p.Allocations.Where(x => x.Status == CreatorAllocationStatus.Active && x.ActivatedAtUtc != null && x.RemainingAmount.Amount > 0))
             {
-                var participation = await db.CreatorPromotionParticipations.AsNoTracking()
-                    .SingleOrDefaultAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active,ct);
-                if (participation is null || !participation.IsLive(now,p.PromotionLiveDurationDays)) continue;
+                CreatorPromotionParticipation participation;
+                try { participation = await eligibility.RequirePromotionAsync(p, a, ct); }
+                catch (ApplicationFailure) { continue; }
                 result.Add(new(a.Id,"VIEW_AND_SALE_PROMOTION",p.Title,await directory.BusinessAsync(p.BusinessId,ct),
                     await directory.CreatorAsync(a.CreatorId,ct),p.PricingSnapshot.CustomerCashbackPercent,p.Slogan,p.Location,
                     participation.WentLiveAtUtc,participation.ExpiresAtUtc(p.PromotionLiveDurationDays),participation.RemainingDays(now,p.PromotionLiveDurationDays)));
@@ -101,12 +101,12 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
             .ToDictionaryAsync(x => x.Id, ct);
         foreach (var offer in ugcOffers)
         {
-            if (!opportunities.TryGetValue(offer.UgcOpportunityId, out var ugc)
-                || !await db.CommercePermissions.AnyAsync(x => x.Role == ActorRole.Business
-                    && x.SubjectId == offer.BusinessId && x.IsActive, ct)) continue;
-            result.Add(new(offer.Id,"UGC_CUSTOMER_OFFER",offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off",
-                await directory.BusinessAsync(offer.BusinessId,ct),null,offer.CustomerDiscountPercent,
-                offer.CustomerFacingSlogan,ugc.Location));
+            if (!opportunities.TryGetValue(offer.UgcOpportunityId, out var ugc)) continue;
+            foreach (var live in await eligibility.EligibleUgcAsync(offer, ct))
+                result.Add(new(offer.Id,"UGC_CUSTOMER_OFFER",offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off",
+                    await directory.BusinessAsync(offer.BusinessId,ct),await directory.CreatorAsync(live.Assignment.CreatorId,ct),offer.CustomerDiscountPercent,
+                    offer.CustomerFacingSlogan,ugc.Location,UgcAssignmentId:live.Assignment.Id,
+                    Provider:live.Publication.Provider,ExternalContentId:live.Publication.ExternalContentId));
         }
         return result;
     }

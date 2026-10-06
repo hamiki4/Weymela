@@ -14,7 +14,8 @@ public sealed record CreatorCampaignFinance(Guid PromotionId, string Campaign, P
     long VerifiedViews, Money ViewEarnings, Money SaleCommissionEarnings, string Status);
 public sealed record CustomerOffer(Guid OfferId, string Source, string Offer, PublicBusiness Business,
     PublicCreator? Creator, decimal BenefitPercent, string? Slogan = null, string? Location = null,
-    DateTime? WentLiveAtUtc = null, DateTime? ExpiresAtUtc = null, int? RemainingDays = null)
+    DateTime? WentLiveAtUtc = null, DateTime? ExpiresAtUtc = null, int? RemainingDays = null,
+    Guid? UgcAssignmentId = null, string? Provider = null, string? ExternalContentId = null)
 {
     // Compatibility for the existing View & Sale projection. UGC Customer Offers expose BenefitPercent.
     public decimal CashbackPercent => BenefitPercent;

@@ -19,10 +19,12 @@ createRoot(document.getElementById("root")!).render(
 );
 if (import.meta.env.PROD && "serviceWorker" in navigator)
   void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(registration => {
-    const announce = () => { if (registration.waiting && navigator.serviceWorker.controller) window.dispatchEvent(new CustomEvent("weymela-update", { detail: registration.waiting })); };
-    announce();
-    registration.addEventListener("updatefound", () => registration.installing?.addEventListener("statechange", announce));
-    window.addEventListener("focus", () => { void registration.update().catch(() => {}); announce(); });
+    // Activate a worker already waiting at this natural application load. A
+    // worker found during an active session remains waiting, so no form,
+    // upload, checkout, or financial action is interrupted by a forced reload.
+    if (registration.waiting && navigator.serviceWorker.controller)
+      registration.waiting.postMessage({ type: "ACTIVATE_UPDATE" });
+    window.addEventListener("focus", () => { void registration.update().catch(() => {}); });
   }).catch(() => {
     /* Online behavior does not depend on installation support. */
   });

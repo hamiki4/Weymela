@@ -16,6 +16,8 @@ internal static class Phase4Configuration
         participation.HasIndex(x => new { x.Provider, x.ExternalContentId }).IsUnique();
         participation.HasOne<CreatorAllocation>().WithMany().HasForeignKey(x => new { x.CreatorAllocationId, x.PromotionId, x.CreatorId })
             .HasPrincipalKey(x => new { x.Id, x.PromotionId, x.CreatorId }).OnDelete(DeleteBehavior.Restrict);
+        participation.HasOne<CreatorPromotionContentSubmission>().WithMany().HasForeignKey(x => x.ApprovedContentSubmissionId).OnDelete(DeleteBehavior.Restrict);
+        participation.HasOne<CreatorSocialProfileRecord>().WithMany().HasForeignKey(x => x.CreatorSocialProfileId).OnDelete(DeleteBehavior.Restrict);
         Mapping.Version(participation);
         var views = model.Entity<PromotionViewVerification>();
         views.HasOne<CreatorPromotionParticipation>().WithMany().HasForeignKey(x => x.ParticipationId).OnDelete(DeleteBehavior.Restrict);

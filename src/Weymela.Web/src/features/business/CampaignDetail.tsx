@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
 import { PlatformCapacityPicker, type PlatformCapacity } from "./PlatformCapacityPicker";
+import { PromotionContentReviewQueue } from "./PromotionContentReviewQueue";
 import type {
   Applicant,
   BusinessCampaign,
   CreatorBudget,
   CreatorCard,
+  Wallet,
 } from "../../api/types";
 import {
   ActivityList,
@@ -38,6 +40,7 @@ import {
 export function BusinessCampaignDetail() {
   const { id } = useParams();
   const resource = useResource<BusinessCampaign>(`/business/campaigns/${id}`);
+  const wallet = useResource<Wallet>("/business/wallet");
   const [search, setSearch] = useSearchParams();
   const tab = search.get("tab") ?? "overview";
   const action = useAction();
@@ -107,16 +110,22 @@ export function BusinessCampaignDetail() {
               eyebrow={promotionTypeLabel(c.type)}
               title={c.title}
               description={`${c.applicationClosesAtUtc ? `Applications close ${date(c.applicationClosesAtUtc)} · ` : ""}${c.contentDueAtUtc ? `Content due ${date(c.contentDueAtUtc)}` : ""}`}
-              action={c.status === "Draft" ? undefined : <div className="actions"><Badge status={c.status} label={promotionStatusLabel(c.status)} /><Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button></div>}
+              action={<div className="actions"><Badge status={c.status} label={promotionStatusLabel(c.status)} />{c.status !== "Draft" && <Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button>}</div>}
             />
             {success && <Notice>{success}</Notice>}
             {action.error && !applicant && !budget && (
               <Notice error>{action.error}</Notice>
             )}
             {c.status === "Draft" && (
-              <Notice error>
-                This Promotion is not available in the current publishing workflow. Create a new Promotion to publish it directly.
-              </Notice>
+              <div className="callout">
+                <div><h2>Draft</h2><p>Fund this Promotion, then post it to eligible Creators.</p></div>
+                <Button disabled={action.busy || !wallet.data || wallet.data.available < c.campaignBudget} onClick={() => void action.run(async (key) => {
+                  if (!wallet.data) return;
+                  await post(`/business/campaigns/${id}/fund`, { campaignVersion: c.version, walletVersion: wallet.data.version }, key);
+                  changed("Promotion funded. It is ready to post to Creators."); wallet.reload();
+                })}>{action.busy ? "Funding…" : "Fund Promotion"}</Button>
+                {wallet.data && wallet.data.available < c.campaignBudget && <Notice><Link to="/business/wallet">Add Funds</Link> before posting. You need {amount(c.campaignBudget - wallet.data.available)} ETB more.</Notice>}
+              </div>
             )}
             {["Funded", "Published"].includes(c.status) && (
               <div className="callout">
@@ -128,7 +137,7 @@ export function BusinessCampaignDetail() {
                   </h2>
                   <p>
                     {c.status === "Funded"
-                        ? "Publish it so eligible Creators can request to join."
+                        ? "Post it so eligible Creators can request to join."
                         : "Eligible Creators can request to join."}
                   </p>
                 </div>
@@ -143,12 +152,12 @@ export function BusinessCampaignDetail() {
                       `/business/campaigns/${id}/${c.status === "Funded" ? "publish" : "start"}`,
                       { version: c.version },
                       c.status === "Funded"
-                        ? "Promotion published. Eligible Creators can now find it."
+                        ? "Promotion posted. Eligible Creators can now find it."
                         : "Promotion started.",
                     )
                   }
                 >
-                  {c.status === "Funded" ? "Publish Promotion" : "Open Promotion"}
+                  {c.status === "Funded" ? "Post to Creators" : "Open Promotion"}
                 </Button>
               </div>
             )}
@@ -398,6 +407,7 @@ export function BusinessCampaignDetail() {
                 </Section>
               </div>
             )}
+            <PromotionContentReviewQueue promotionId={id} />
             <Dialog title="Edit Promotion details" open={editOpen} onClose={() => { if (!action.busy) setEditOpen(false); }}>
               <p className="muted">{hasApproved ? "Some terms are locked because a Creator has been approved." : "You can update the full Promotion while no Creator is approved. Pending applications do not lock editing."}</p>
               <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void action.run(async key => {

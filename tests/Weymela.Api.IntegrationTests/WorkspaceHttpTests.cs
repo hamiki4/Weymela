@@ -12,6 +12,7 @@ using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
+using Weymela.Infrastructure.Web;
 using Xunit;
 
 namespace Weymela.Api.IntegrationTests;
@@ -365,10 +366,15 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         await using (var db = f.Database.Open())
         {
             var now = DateTime.UtcNow;
+            var creatorTikTok = await db.CreatorSocialProfiles.SingleAsync(x =>
+                x.CreatorId == DevelopmentDirectory.Id(300) && x.Platform == CreatorPlatform.TikTok);
+            creatorTikTok.ProfileUrl = "https://www.tiktok.com/@bella";
+            creatorTikTok.SelfReportedAudience = 42000;
+            creatorTikTok.VerificationStatus = "Verified";
+            creatorTikTok.VerifiedAudience = 40000;
+            creatorTikTok.AudienceVerificationSource = SocialAudienceEligibility.AdminVerified;
+            creatorTikTok.UpdatedAtUtc = now;
             db.CreatorSocialProfiles.AddRange(
-                new CreatorSocialProfileRecord { CreatorId = DevelopmentDirectory.Id(300), Platform = CreatorPlatform.TikTok,
-                    ProfileUrl = "https://www.tiktok.com/@bella", SelfReportedAudience = 42000,
-                    VerificationStatus = "Verified", VerifiedAudience = 40000, CreatedAtUtc = now, UpdatedAtUtc = now },
                 new CreatorSocialProfileRecord { CreatorId = DevelopmentDirectory.Id(300), Platform = CreatorPlatform.Instagram,
                     ProfileUrl = "https://www.instagram.com/bella", IsActive = false, CreatedAtUtc = now, UpdatedAtUtc = now },
                 new CreatorSocialProfileRecord { CreatorId = DevelopmentDirectory.Id(400), Platform = CreatorPlatform.YouTube,

@@ -34,6 +34,8 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
             ?? throw new ApplicationFailure(FailureKind.Validation, "Submit Promotion content and wait for Business approval before Go Live.");
         if (latest.ReviewStatus != PromotionContentReviewStatus.Approved)
             throw new ApplicationFailure(FailureKind.Validation, "The latest Promotion content revision is not approved.");
+        if (latest.Provider is null || latest.ContentReference is null)
+            throw new ApplicationFailure(FailureKind.Validation, "Complete publication verification before Go Live.");
         if ((expectedProvider is not null && expectedProvider != latest.Provider)
             || (expectedContentId is not null && expectedContentId != latest.ContentReference))
             throw new ApplicationFailure(FailureKind.Validation, "Go Live must use the latest Business-approved content revision.");
@@ -70,7 +72,8 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
                 throw new ApplicationFailure(FailureKind.InsufficientFunds, "Creator Budget is not active and funded.");
             a.Activate(now);
             var participation = new CreatorPromotionParticipation(p.Id, a.CreatorId, a.Id, latest.Provider,
-                latest.ContentReference, result.Count, now, result.VerifiedAtUtc);
+                latest.ContentReference, result.Count, now, result.VerifiedAtUtc,
+                latest.Id, a.CreatorSocialProfileId);
             db.CreatorPromotionParticipations.Add(participation);
             db.PromotionViewVerifications.Add(new(p.Id, a.CreatorId, a.Id, latest.Provider, latest.ContentReference, result.Count, result.Count, 0,
                 result.VerifiedAtUtc, result.EvidenceReference, Guid.NewGuid().ToString("N"), result.Count, false, participation.Id, true));

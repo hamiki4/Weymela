@@ -89,26 +89,38 @@ public sealed partial class WorkspaceQueries
             var live=await db.CreatorPromotionParticipations.AsNoTracking().SingleOrDefaultAsync(x=>x.CreatorAllocationId==a.Id,ct);
             var submission=await db.CreatorPromotionContentSubmissions.AsNoTracking().Where(x=>x.CreatorAllocationId==a.Id)
                 .OrderByDescending(x=>x.RevisionNumber).FirstOrDefaultAsync(ct);
+            var publication=await db.CreatorPublicationVerifications.AsNoTracking().Where(x=>x.CreatorAllocationId==a.Id)
+                .OrderByDescending(x=>x.RequestedAtUtc).FirstOrDefaultAsync(ct);
+            var socialProfile=a.CreatorSocialProfileId is {} socialId
+                ? await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==socialId,ct):null;
             var closed=a.Status is CreatorAllocationStatus.Completed or CreatorAllocationStatus.Cancelled;
             var remaining=live is null||live.Status==ParticipationStatus.Completed?null:live.RemainingDays(Now,p.PromotionLiveDurationDays);
             var status=closed?a.Status.ToString():live is not null
                 ? remaining is null?"Ended":live.Status.ToString()
+                : publication?.Status==PublicationVerificationStatus.VerificationPending?"VerificationPending"
+                : publication?.Status==PublicationVerificationStatus.Verified?"ReadyToGoLive"
                 : submission?.ReviewStatus switch
                 {
                     PromotionContentReviewStatus.UnderReview=>"UnderReview",
                     PromotionContentReviewStatus.ChangesRequested=>"ChangesRequested",
-                    PromotionContentReviewStatus.Approved=>"ReadyToGoLive",
+                    PromotionContentReviewStatus.Approved=>"ReadyToPublish",
                     PromotionContentReviewStatus.Rejected=>"Rejected",
                     _=>"Approved"
                 };
             var contentStatus=live is not null
                 ? remaining is null?"Ended":"Live"
+                : publication?.Status==PublicationVerificationStatus.VerificationPending?"VerificationPending"
+                : publication?.Status==PublicationVerificationStatus.Verified?"ReadyToGoLive"
                 : submission?.ReviewStatus.ToString()??"AddContent";
             result.Add(new(p.Id,a.Id,live?.Id,p.Title,await directory.BusinessCardAsync(p.BusinessId,ct),PromotionTypeLabel(p.PromotionType),a.OriginalAllocation.Amount,
                 closed?0:a.RemainingAmount.Amount,live?.CampaignVerifiedViews??0,live?.RewardedViewCount??0,f.ViewEarnings.Amount,f.SaleCommissionEarnings.Amount,
                 status,contentStatus,live?.Provider,live?.ExternalContentId,p.StartDateUtc,p.EndDateUtc,p.PromotionLiveDurationDays,
                 submission?.RevisionNumber,submission?.ReviewStatus.ToString(),submission?.Feedback,submission?.SubmittedAtUtc,
-                live?.WentLiveAtUtc,live is null ? null : live.ExpiresAtUtc(p.PromotionLiveDurationDays),remaining));
+                live?.WentLiveAtUtc,live is null ? null : live.ExpiresAtUtc(p.PromotionLiveDurationDays),remaining,
+                p.Description,p.Eligibility.Requirements,p.Location,a.ContentDueAtUtc??p.ContentDueAtUtc,
+                a.Platform?.ToString(),socialProfile?.ProfileUrl,
+                submission?.ReviewMediaAssetId is null?null:$"/api/review-media/promotions/{submission.Id}",
+                publication is null?null:CreatorPublicationService.View(publication),a.CreatorSocialProfileId));
         }
         return result;
     }

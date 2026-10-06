@@ -24,6 +24,9 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             "CreatorProfileApproved", "CreatorProfileCorrectionRequested", "CreatorProfileRejected",
             "BusinessProfileApproved", "BusinessProfileCorrectionRequested", "BusinessProfileRejected",
             "RoleEnrollmentSubmitted", "RoleEnrollmentApproved", "RoleEnrollmentRejected",
+            "PromotionContentSubmitted", "PromotionContentApproved", "PromotionContentChangesRequested", "PromotionContentRejected",
+            "PublicationVerificationRequested", "UgcPublicationVerificationRequested", "PublicationVerified", "PublicationVerificationFailed",
+            "CreatorParticipationActivated", "UgcPublicationActivated",
             "UgcRequestReceived", "UgcRequestApproved", "UgcRequestRejected", "UgcContentSubmitted",
             "UgcChangesRequested", "UgcContentApproved", "UgcContentRejected", "UgcMaterialRevision" };
         if (!supported.Contains(row.EventType, StringComparer.Ordinal)) return null;
@@ -174,6 +177,57 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 var opportunityId=Id("OpportunityId");var creators=await db.UgcAssignments.AsNoTracking().Where(x=>x.UgcOpportunityId==opportunityId&&x.RevisionAcceptanceRequired).Select(x=>x.CreatorId).Distinct().ToListAsync(ct);
                 return Plan("UGC requirements updated","Review and accept the updated requirements before continuing.",null,null,creators.Select(x=>new NotificationAudience(ActorRole.Creator,x)).ToArray()) with { UgcId=opportunityId };
             }
+            case "PromotionContentSubmitted":
+            {
+                var promotionId=Id("PromotionId");var promotion=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==promotionId,ct);
+                return Plan("Video ready for review","A Creator submitted a private revision for your review.",promotionId,null,
+                    new NotificationAudience(ActorRole.Business,promotion.BusinessId));
+            }
+            case "PromotionContentApproved": case "PromotionContentChangesRequested": case "PromotionContentRejected":
+                return Plan(row.EventType switch{"PromotionContentApproved"=>"Video approved","PromotionContentChangesRequested"=>"Video changes requested",_=>"Video reviewed"},
+                    row.EventType switch{"PromotionContentApproved"=>"Your approved revision is ready to publish.","PromotionContentChangesRequested"=>"Review the Business feedback and submit a new revision.",_=>"The Business did not approve this revision."},
+                    Id("PromotionId"),Id("CreatorAllocationId"),new NotificationAudience(ActorRole.Creator,Id("CreatorId")));
+            case "PublicationVerificationRequested": case "UgcPublicationVerificationRequested":
+                return Plan("Publication awaiting verification","Confirm the public post and selected Creator profile.",
+                    data.TryGetProperty("PromotionId",out var requestedPromotion)?requestedPromotion.GetGuid():null,null,
+                    new NotificationAudience(ActorRole.PlatformAdmin)) with
+                    { UgcId=data.TryGetProperty("OpportunityId",out var requestedUgc)?requestedUgc.GetGuid():null, WorkspacePath="publications" };
+            case "PublicationVerified": case "PublicationVerificationFailed":
+            {
+                var publicationId=Id("PublicationId");
+                var publication=await db.CreatorPublicationVerifications.AsNoTracking().SingleAsync(x=>x.Id==publicationId,ct);
+                Guid? promotionId=null;Guid? budgetId=publication.CreatorAllocationId;Guid? ugcId=null;
+                if(publication.CreatorAllocationId is {} allocationId)
+                    promotionId=await db.CreatorAllocations.AsNoTracking().Where(x=>x.Id==allocationId).Select(x=>x.PromotionId).SingleAsync(ct);
+                else if(publication.UgcAssignmentId is {} assignmentId)
+                    ugcId=await db.UgcAssignments.AsNoTracking().Where(x=>x.Id==assignmentId).Select(x=>x.UgcOpportunityId).SingleAsync(ct);
+                return Plan(row.EventType=="PublicationVerified"?"Publication verified":"Publication verification failed",
+                    row.EventType=="PublicationVerified"?"Your verified publication is ready to Go Live.":"Check the public post and submit it again.",
+                    promotionId,budgetId,new NotificationAudience(ActorRole.Creator,publication.CreatorId)) with { UgcId=ugcId };
+            }
+            case "CreatorParticipationActivated":
+            {
+                // Participation is the live authority and is present in both
+                // legacy and publication-verified event envelopes.
+                var participationId=Id("ParticipationId");
+                var participation=await db.CreatorPromotionParticipations.AsNoTracking()
+                    .SingleAsync(x=>x.Id==participationId,ct);
+                var allocation=await db.CreatorAllocations.AsNoTracking()
+                    .SingleAsync(x=>x.Id==participation.CreatorAllocationId,ct);
+                var promotion=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==allocation.PromotionId,ct);
+                return Plan("Creator work is Live","The verified Creator publication is now live.",promotion.Id,allocation.Id,
+                    new NotificationAudience(ActorRole.Business,promotion.BusinessId));
+            }
+            case "UgcPublicationActivated":
+            {
+                var publicationId=Id("PublicationId");
+                var publication=await db.CreatorPublicationVerifications.AsNoTracking()
+                    .SingleAsync(x=>x.Id==publicationId,ct);
+                var assignment=await db.UgcAssignments.AsNoTracking().SingleAsync(x=>x.Id==publication.UgcAssignmentId,ct);
+                var opportunity=await db.UgcOpportunities.AsNoTracking().SingleAsync(x=>x.Id==assignment.UgcOpportunityId,ct);
+                return Plan("Creator work is Live","The verified Creator publication is now live.",null,null,
+                    new NotificationAudience(ActorRole.Business,opportunity.BusinessId)) with { UgcId=opportunity.Id };
+            }
         }
         return null;
     }
@@ -186,8 +240,8 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         v.ViewPlusCommission.CreatorCommissionPercent, v.CreatorPayoutThreshold });
     public static string Route(NotificationPlan plan, ActorRole role) => role switch
     {
-        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.UgcId is {} au ? $"/admin/ugc/{au}" : plan.CampaignId is {} p ? $"/admin/promotions/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
-        ActorRole.Business => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/business/transactions":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/promotions/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
+        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} p ? $"/admin/campaigns/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
+        ActorRole.Business => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/business/transactions":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/campaigns/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
         ActorRole.Creator => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="earnings"?"/creator/earnings":plan.UgcId is {} cu ? $"/creator/ugc/{cu}" : plan.BudgetId is {} a ? $"/creator/promotions/{a}" : "/creator/" + (plan.WorkspacePath is "requests" or "payouts" ? plan.WorkspacePath : "discover"),
         ActorRole.Customer => plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/customer/transactions":"/customer/offers",
         _ => "/checkout"

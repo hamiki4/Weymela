@@ -36,6 +36,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."CreatorEarningsAccounts",
     v3."CashierPreauthorizations",
     v3."CreatorPromotionContentSubmissions",
+    v3."CreatorPublicationVerifications",
     v3."CreatorPromotionParticipations",
     v3."CreatorSocialProfiles",
     v3."CustomerCashbackAccounts",
@@ -62,6 +63,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."PlatformSettlements",
     v3."PricingSnapshots",
     v3."ProductHandoffTransactions",
+    v3."PrivateReviewMediaAssets",
     v3."PromotionBudgetEntries",
     v3."PromotionReservations",
     v3."PromotionPlatforms",
@@ -128,6 +130,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."CreatorEarningsAccounts",
     v3."CreatorPromotionContentSubmissions",
     v3."CreatorPromotionParticipations",
+    v3."CreatorPublicationVerifications",
     v3."CreatorSocialProfiles",
     v3."DepositRequests",
     v3."PayoutRecords",
@@ -139,6 +142,8 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."UgcOpportunities",
     v3."UgcSubmissions"
 TO :"api_role";
+
+GRANT SELECT, INSERT ON TABLE v3."PrivateReviewMediaAssets" TO :"api_role";
 
 GRANT SELECT, INSERT ON TABLE v3."UgcPlatformCapacities" TO :"api_role";
 GRANT UPDATE ("Capacity", "ApprovedCount") ON TABLE v3."UgcPlatformCapacities" TO :"api_role";

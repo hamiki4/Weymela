@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { post, postForm, useAction, useResource } from "../../api/client";
 import type {
   CreatorCampaign,
   CreatorHome,
@@ -530,7 +530,8 @@ function workItems(campaigns: CreatorCampaign[], requests: CreatorRequest[],
     })),
     ...assignments.map((row): CreatorWorkItem => ({
       kind: "ugcAssignment", row, key: `ugc-assignment-${row.id}`,
-      group: row.status === "Approved" || row.status === "Rejected" ? "Completed" : "Active",
+      group: row.status === "Rejected" || (row.status === "Approved"
+        && (!row.selectedPlatform || row.publication?.wentLiveAtUtc)) ? "Completed" : "Active",
     })),
     ...ugcRequests.filter((row) => !assignedUgcIds.has(row.opportunityId)).map((row): CreatorWorkItem => ({
       kind: "ugcRequest", row, key: `ugc-request-${row.id}`,
@@ -594,7 +595,8 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
   const opportunityId = item.row.opportunityId;
   const detail = useResource<UgcDetail>(`/creator/ugc/${opportunityId}`);
   const action = useAction();
-  const [url, setUrl] = useState(assignment?.submissionUrl ?? "");
+  const [media, setMedia] = useState<File | null>(null);
+  const [externalContentId, setExternalContentId] = useState("");
   const status = item.row.status;
   const opportunity = detail.data?.opportunity;
   return <article className="creator-promotion-row creator-work-row">
@@ -619,14 +621,38 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
             : "Deliver content to the Business"}</p>
           {assignment.feedback && <Notice>{assignment.feedback}</Notice>}
           {request?.rejectionReason && <Notice>{request.rejectionReason}</Notice>}
+          {assignment.reviewMediaUrl && <div className="private-review-media">
+            <video controls preload="metadata" src={assignment.reviewMediaUrl} aria-label={`Revision ${assignment.contentRevisionNumber ?? 1} review video`} />
+            <small>Private review · Revision {assignment.contentRevisionNumber ?? 1}</small>
+          </div>}
           {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
-            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!url.trim()) return; void action.run(async (key) => {
-              await post(`/creator/ugc/assignments/${assignment.id}/submit`, { submissionUrl: url.trim() }, key); onSubmitted();
+            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!media) return; void action.run(async (key) => {
+              const form = new FormData(); form.append("media", media);
+              await postForm(`/creator/ugc/assignments/${assignment.id}/submit-review`, form, key); setMedia(null); onSubmitted();
             }); }}>
-              <label>{assignment.platformRequirements.length ? "Social post link" : "Content delivery link"}
-                <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required /></label>
-              <Button type="submit" disabled={action.busy || !url.trim()}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Update Content" : "Submit Content"}</Button>
+              <label>Private review copy
+                <input type="file" accept="video/mp4,image/jpeg,image/png" onChange={(event) => setMedia(event.target.files?.[0] ?? null)} required /></label>
+              <small>Mark review video SAMPLE • WEYMELA REVIEW ONLY. Do not publish it yet.</small>
+              <Button type="submit" disabled={action.busy || !media}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}</Button>
             </form>}
+          {assignment?.status === "Approved" && assignment.selectedPlatform && (!assignment.publication || ["Failed", "Expired"].includes(assignment.publication.status)) &&
+            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!externalContentId.trim() || !assignment.selectedSocialProfileId) return; void action.run(async (key) => {
+              await post(`/creator/ugc/assignments/${assignment.id}/publication`, {
+                provider: assignment.selectedPlatform,
+                externalContentId: externalContentId.trim(),
+                creatorSocialProfileId: assignment.selectedSocialProfileId,
+              }, key); setExternalContentId(""); onSubmitted();
+            }); }}>
+              <label>{assignment.selectedPlatform} post ID
+                <input value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} required maxLength={100} /></label>
+              {assignment.selectedSocialProfileUrl && <a href={assignment.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">Selected social profile</a>}
+              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
+            </form>}
+          {assignment?.publication?.status === "VerificationPending" && <Notice>Publication verification pending.</Notice>}
+          {assignment?.publication?.status === "Verified" && !assignment.publication.wentLiveAtUtc && <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
+            await post(`/creator/ugc/assignments/${assignment.id}/go-live`, {}, key); onSubmitted();
+          })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
+          {assignment?.publication?.wentLiveAtUtc && <Notice>Live for Customers.</Notice>}
           {action.error && <Notice error>{action.error}</Notice>}
         </div>
       </details> : request?.rejectionReason ? <details className="creator-work-disclosure">
@@ -642,6 +668,11 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
       {status === "Submitted" && <span>Waiting for Business review</span>}
       {request?.status === "Approved" && <span>Preparing your Promotion</span>}
       {assignment?.revisionAcceptanceRequired && <span>Review updated requirements with the Business before submitting</span>}
+      {assignment?.status === "ChangesRequested" && <span>Submit the requested revision</span>}
+      {assignment?.status === "Approved" && !assignment.selectedPlatform && <span>Content approved</span>}
+      {assignment?.status === "Approved" && assignment.selectedPlatform && !assignment.publication && <span>Publish the approved content, then verify it</span>}
+      {assignment?.publication?.status === "VerificationPending" && <span>Waiting for publication verification</span>}
+      {assignment?.publication?.status === "Verified" && !assignment.publication.wentLiveAtUtc && <span>Ready to Go Live</span>}
     </div>
   </article>;
 }

@@ -12,9 +12,12 @@ public static class SocialAudienceEligibility
         long? minimumAudience, bool enforceAudienceRequirements)
     {
         if (!profile.IsActive || profile.Platform != platform) return false;
+        if (minimumAudience is > 0)
+            return profile.AudienceVerificationSource == AdminVerified
+                && profile.VerifiedAudience is { } verified && verified >= minimumAudience;
         if (!enforceAudienceRequirements) return true;
         return profile.AudienceVerificationSource == AdminVerified
-            && (minimumAudience is null or <= 0 || profile.VerifiedAudience is { } verified && verified >= minimumAudience);
+            && profile.VerifiedAudience is not null;
     }
 
     public static bool Matches(CreatorSocialProfileRecord profile, UgcPlatformRequirement requirement,

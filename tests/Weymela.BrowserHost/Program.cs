@@ -28,7 +28,10 @@ await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
 await postgres.StartAsync();
 var root=Path.GetFullPath(Environment.GetEnvironmentVariable("V3_SOURCE_ROOT")??Directory.GetCurrentDirectory());
 var creatorPhotoDirectory = Directory.CreateTempSubdirectory("v3-browser-creator-photos-");
+var reviewMediaDirectory = Directory.CreateTempSubdirectory("v3-browser-review-media-");
 if (OperatingSystem.IsLinux()) File.SetUnixFileMode(creatorPhotoDirectory.FullName,
+    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+if (OperatingSystem.IsLinux()) File.SetUnixFileMode(reviewMediaDirectory.FullName,
     UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 var key=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 var testBuildRevision=Environment.GetEnvironmentVariable("V3_TEST_BUILD_REVISION")??"local";
@@ -40,7 +43,8 @@ await using var app=ApiHost.Build(["--environment","Development"],builder=>
     {
         ["ConnectionStrings:WeymelaV3"]=postgres.GetConnectionString(),["V3:EnableDevelopmentIdentity"]="true",
         ["V3:DevelopmentAccessKey"]=key,["V3:Auth:CodeHashKey"]=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),["V3:Auth:PinPepper"]=Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),["V3:Auth:FirebaseProjectId"]="isolated-v3-test",["V3:WebRoot"]=Path.Combine(root,"src/Weymela.Web/dist"),["V3:RateLimitMultiplier"]="20",["V3:TestBuildRevision"]=testBuildRevision,
-        ["V3:CreatorPhotos:Directory"]=creatorPhotoDirectory.FullName
+        ["V3:CreatorPhotos:Directory"]=creatorPhotoDirectory.FullName,
+        ["V3:ReviewMedia:Directory"]=reviewMediaDirectory.FullName
     });
     builder.Services.AddSingleton<IEmailCodeDelivery, BrowserEmailCodeDelivery>();
     builder.Services.AddScoped<IFirebaseCustomTokenIssuer, BrowserFirebaseCustomTokenIssuer>();
@@ -159,6 +163,7 @@ Console.WriteLine("Isolated V3 browser host ready. Control file: .artifacts/brow
 await app.WaitForShutdownAsync();
 await worker;
 creatorPhotoDirectory.Delete(recursive: true);
+reviewMediaDirectory.Delete(recursive: true);
 
 static async Task<OfferQrSession?> FindQrAsync(string token, WeymelaDbContext db, CancellationToken ct)
 {

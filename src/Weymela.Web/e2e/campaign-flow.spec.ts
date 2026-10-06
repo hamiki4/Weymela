@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { layout, login, open, screenshot } from "./helpers";
+import { layout, login, open, reviewMp4, saveFundPostAndOpenPromotion, screenshot } from "./helpers";
 
 for (const width of [375, 1366])
   test(`real Promotion lifecycle through all three roles at ${width}px`, async ({
@@ -23,7 +23,7 @@ for (const width of [375, 1366])
     await screenshot(page, `${width}-flow-creator-requirements`);
     await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
     await screenshot(page, `${width}-flow-campaign-budget`);
-    await page.getByRole("button", { name: "Publish Promotion" }).click();
+    const campaignId = await saveFundPostAndOpenPromotion(page);
     try {
       await expect(
         page.getByRole("heading", { name: title, exact: true }),
@@ -34,7 +34,6 @@ for (const width of [375, 1366])
         `Promotion publish did not navigate. url=${page.url()} errors=${JSON.stringify(notices)} original=${String(error)}`,
       );
     }
-    const campaignId = page.url().split("/").pop()!;
     await login(context, "other-creator");
     await open(page, "/creator/discover");
     const card = page
@@ -82,14 +81,17 @@ for (const width of [375, 1366])
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) })
       .getByRole("link", { name: "Add Content" })
       .click();
-    await page
-      .getByLabel("Promotion content reference", { exact: true })
-      .fill(`${Date.now()}${width}`);
-    await page.getByRole("button", { name: "Submit Content for Review" }).click();
+    const creatorBudgetId = page.url().split("/").pop()!;
+    await page.getByLabel("Private review video", { exact: true }).setInputFiles({
+      name: "SAMPLE-WEYMELA-REVIEW-ONLY.mp4",
+      mimeType: "video/mp4",
+      buffer: reviewMp4,
+    });
+    await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
     await expect(page.getByText(/under Business review/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh Views" })).toHaveCount(0);
     await login(context, "business");
-    await open(page, "/business/campaigns");
+    await open(page, `/business/campaigns/${campaignId}`);
     const review = page.locator(".business-promotion-review-row").filter({ hasText: title });
     await review
       .getByLabel("Feedback (required for changes requested)")
@@ -100,24 +102,27 @@ for (const width of [375, 1366])
     await open(page, "/creator/promotions");
     const changesRequested = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     await changesRequested.getByRole("link", { name: "Update Content", exact: true }).click();
-    await page
-      .getByLabel("Promotion content reference", { exact: true })
-      .fill(`${Date.now()}${width}-revision-2`);
-    await page.getByRole("button", { name: "Submit Revised Content", exact: true }).click();
+    await page.getByLabel("Private review video", { exact: true }).setInputFiles({
+      name: "SAMPLE-WEYMELA-REVIEW-ONLY-revision-2.mp4",
+      mimeType: "video/mp4",
+      buffer: reviewMp4,
+    });
+    await page.getByRole("button", { name: "Submit Revised Video", exact: true }).click();
     await expect(page.getByText(/under Business review/i)).toBeVisible();
     await login(context, "business");
-    await open(page, "/business/campaigns");
+    await open(page, `/business/campaigns/${campaignId}`);
     const revisedReview = page
       .locator(".business-promotion-review-row")
       .filter({ hasText: title })
       .filter({ hasText: "Revision 2" });
-    await revisedReview.getByRole("button", { name: "Approve", exact: true }).click();
+    await revisedReview.getByRole("button", { name: "Approve Video", exact: true }).click();
     await expect(revisedReview.getByText("Approved")).toBeVisible();
     await login(context, "other-creator");
-    await open(page, "/creator/promotions");
-    const approved = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
-    await approved.getByRole("button", { name: "Go Live", exact: true }).click();
-    await approved.getByRole("link", { name: "View progress" }).click();
+    await open(page, `/creator/promotions/${creatorBudgetId}`);
+    await page.getByLabel("Public post ID", { exact: true }).fill(`${Date.now()}${width}`);
+    await page.getByRole("button", { name: "Verify Publication", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Go Live", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Go Live", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Refresh Views" }),
     ).toBeVisible();

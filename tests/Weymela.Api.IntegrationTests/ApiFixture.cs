@@ -22,19 +22,24 @@ public sealed class ApiFixture: IAsyncDisposable
     public required WebApplication App{get;init;}
     public required TestDatabase Database{get;init;}
     public required string AccessKey{get;init;}
+    private DirectoryInfo ReviewMediaDirectory{get;init;}=null!;
     public static async Task<ApiFixture> CreateAsync(PostgresFixture postgres, Action<WebApplicationBuilder>? configure = null)
     {
         var database=await postgres.CreateAsync();var key=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var reviewMediaDirectory=Directory.CreateTempSubdirectory("v3-http-review-media-");
+        if(OperatingSystem.IsLinux())File.SetUnixFileMode(reviewMediaDirectory.FullName,
+            UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
         var app=ApiHost.Build(["--environment","Development"],builder=>
         {
             builder.WebHost.UseTestServer();builder.Logging.ClearProviders();
             builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>{
-                ["ConnectionStrings:WeymelaV3"]=database.ConnectionString,["V3:EnableDevelopmentIdentity"]="true",["V3:DevelopmentAccessKey"]=key});
+                ["ConnectionStrings:WeymelaV3"]=database.ConnectionString,["V3:EnableDevelopmentIdentity"]="true",["V3:DevelopmentAccessKey"]=key,
+                ["V3:ReviewMedia:Directory"]=reviewMediaDirectory.FullName});
             configure?.Invoke(builder);
         });
         await using(var scope=app.Services.CreateAsyncScope())
             await DevelopmentWorkspaceSeed.SeedAsync(scope.ServiceProvider.GetRequiredService<WeymelaDbContext>(),scope.ServiceProvider.GetRequiredService<DevelopmentDirectory>(),scope.ServiceProvider.GetRequiredService<DevelopmentViewProvider>(),TimeProvider.System);
-        await app.StartAsync();return new(){App=app,Database=database,AccessKey=key};
+        await app.StartAsync();return new(){App=app,Database=database,AccessKey=key,ReviewMediaDirectory=reviewMediaDirectory};
     }
     public HttpClient Anonymous()
     {
@@ -45,7 +50,11 @@ public sealed class ApiFixture: IAsyncDisposable
         var client=Anonymous();var response=await client.PostAsJsonAsync("/api/development/session",new{alias,accessKey=AccessKey});response.EnsureSuccessStatusCode();
         client.DefaultRequestHeaders.Add("Cookie",response.Headers.GetValues("Set-Cookie").Single().Split(';')[0]);return client;
     }
-    public async ValueTask DisposeAsync()=>await App.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await App.DisposeAsync();
+        if(ReviewMediaDirectory.Exists)ReviewMediaDirectory.Delete(recursive:true);
+    }
 }
 internal static class JsonRequests
 {

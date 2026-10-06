@@ -315,14 +315,39 @@ public sealed class UgcAssignment
 
 public sealed class UgcSubmission
 {
-    private UgcSubmission() { SubmissionUrl = null!; }
+    private UgcSubmission() { }
     public Guid Id { get; } = Guid.NewGuid(); public Guid UgcAssignmentId { get; }
-    public int RevisionNumber { get; } public string SubmissionUrl { get; }
+    public int RevisionNumber { get; } public int ContentRevisionNumber { get; }
+    public string? SubmissionUrl { get; } public Guid? ReviewMediaAssetId { get; }
     public DateTime SubmittedAtUtc { get; } public DateTime? ReviewedAtUtc { get; private set; }
     public Guid? ReviewedByUserId { get; private set; } public string? Feedback { get; private set; }
     public UgcAssignmentStatus Status { get; private set; } = UgcAssignmentStatus.Submitted;
     public UgcSubmission(Guid assignmentId, int revision, string url, DateTime now)
-    { UgcAssignmentId = assignmentId; RevisionNumber = revision; SubmissionUrl = url; SubmittedAtUtc = now; }
+        : this(assignmentId, revision, 1, url, now) { }
+    public UgcSubmission(Guid assignmentId, int acceptedBriefRevision, int contentRevision,
+        string url, DateTime now)
+    {
+        if (assignmentId == Guid.Empty || acceptedBriefRevision <= 0 || contentRevision <= 0
+            || string.IsNullOrWhiteSpace(url)) throw new ArgumentException("UGC submission is invalid.");
+        UgcAssignmentId = assignmentId;
+        RevisionNumber = acceptedBriefRevision;
+        ContentRevisionNumber = contentRevision;
+        SubmissionUrl = url;
+        SubmittedAtUtc = now;
+    }
+    public UgcSubmission(Guid assignmentId, int acceptedBriefRevision, int contentRevision,
+        Guid reviewMediaAssetId, DateTime now)
+    {
+        if (assignmentId == Guid.Empty || reviewMediaAssetId == Guid.Empty)
+            throw new ArgumentException("UGC review content requires an assignment and private asset.");
+        if (acceptedBriefRevision <= 0 || contentRevision <= 0)
+            throw new ArgumentOutOfRangeException(nameof(contentRevision));
+        UgcAssignmentId = assignmentId;
+        RevisionNumber = acceptedBriefRevision;
+        ContentRevisionNumber = contentRevision;
+        ReviewMediaAssetId = reviewMediaAssetId;
+        SubmittedAtUtc = now;
+    }
     public void RequestChanges(Guid actor, string feedback, DateTime now) { if (Status != UgcAssignmentStatus.Submitted || string.IsNullOrWhiteSpace(feedback)) throw new InvalidOperationException("Feedback is required."); Status = UgcAssignmentStatus.ChangesRequested; ReviewedByUserId = actor; ReviewedAtUtc = now; Feedback = feedback.Trim(); }
     public void Approve(Guid actor, DateTime now) { if (Status != UgcAssignmentStatus.Submitted) throw new InvalidOperationException("Only submitted UGC can be approved."); Status = UgcAssignmentStatus.Approved; ReviewedByUserId = actor; ReviewedAtUtc = now; }
     public void Reject(Guid actor, string? feedback, DateTime now) { if (Status != UgcAssignmentStatus.Submitted) throw new InvalidOperationException("Only submitted UGC can be rejected."); Status = UgcAssignmentStatus.Rejected; ReviewedByUserId = actor; ReviewedAtUtc = now; Feedback = string.IsNullOrWhiteSpace(feedback) ? null : feedback.Trim(); }

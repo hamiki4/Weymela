@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { post, postForm, useAction, useResource } from "../../api/client";
 import type { CreatorCampaign } from "../../api/types";
 import {
   ActionLink,
@@ -16,6 +16,7 @@ import {
   Section,
 } from "../../ui/components";
 import {
+  amount,
   count,
   date,
   isViewAndSale,
@@ -89,65 +90,75 @@ function CreatorContent({
   row: CreatorCampaign;
   reload: () => void;
 }) {
-  const [provider, setProvider] = useState("TikTok");
   const [content, setContent] = useState("");
+  const [media, setMedia] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const action = useAction();
   const url = contentUrl(row.provider, row.externalContentId);
   const maySubmit = !row.participationId &&
     (row.contentReviewStatus == null || row.contentReviewStatus === "ChangesRequested") &&
     !["Completed", "Cancelled", "Rejected"].includes(row.status);
-  const mayGoLive = !row.participationId && row.contentReviewStatus === "Approved" && row.status === "ReadyToGoLive";
+  const mayPublish = !row.participationId && row.contentReviewStatus === "Approved"
+    && (!row.publication || ["Failed", "Expired"].includes(row.publication.status));
+  const mayGoLive = !row.participationId && row.publication?.status === "Verified";
   return (
-    <Section title="Promotion content" description={row.contentStatus}>
+    <Section title="Your next step" description={row.contentStatus}>
       {maySubmit ? (
         <form
           className="contained-form"
           onSubmit={(e) => {
             e.preventDefault();
             void action.run(async (key) => {
-              await post(
-                `/creator/creator-budgets/${row.budgetId}/content`,
-                { provider, externalContentId: content.trim() },
-                key,
-              );
-              setMessage("Content submitted. The Business must approve this revision before you go live.");
+              if (!media) return;
+              const form = new FormData(); form.append("media", media);
+              await postForm(`/creator/creator-budgets/${row.budgetId}/content/review`, form, key);
+              setMedia(null);
+              setMessage("Revision submitted for Business review.");
               reload();
             });
           }}
         >
           <fieldset disabled={action.busy}>
-            <Field label="Platform">
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-              >
-                <option>TikTok</option>
-                <option>YouTube</option>
-                <option>Instagram</option>
-              </select>
-            </Field>
             <Field
-              label="Promotion content reference"
-              help="Use the public content ID. Business review is required before Go Live."
+              label="Private review video"
+              help="Upload an MP4 review copy marked SAMPLE • WEYMELA REVIEW ONLY. Do not publish it yet."
             >
               <input
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                pattern="[a-zA-Z0-9_\-]+"
-                maxLength={100}
+                type="file"
+                accept="video/mp4"
+                onChange={(e) => setMedia(e.target.files?.[0] ?? null)}
                 required
               />
             </Field>
             {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
-            <Button type="submit" disabled={action.busy || !content}>
-              {row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Content" : "Submit Content for Review"}
+            <Button type="submit" disabled={action.busy || !media}>
+              {row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Video" : "Submit for Review"}
             </Button>
           </fieldset>
         </form>
+      ) : mayPublish ? (
+        <form className="contained-form" onSubmit={(event) => {
+          event.preventDefault();
+          void action.run(async (key) => {
+            if (!row.selectedSocialProfileId || !row.selectedPlatform) return;
+            await post(`/creator/creator-budgets/${row.budgetId}/publication`, {
+              provider: row.selectedPlatform,
+              externalContentId: content.trim(),
+              creatorSocialProfileId: row.selectedSocialProfileId,
+            }, key);
+            setMessage("Publication submitted for verification."); reload();
+          });
+        }}>
+          <Notice>Video approved. Publish this approved revision on {row.selectedPlatform ?? "the selected platform"}, then enter the public post ID.</Notice>
+          {row.selectedSocialProfileUrl && <p><a href={row.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">Open selected social profile</a></p>}
+          {row.selectedSocialProfileId && row.selectedPlatform ? <>
+            <Field label="Public post ID"><input value={content} onChange={(event) => setContent(event.target.value)} pattern={row.selectedPlatform === "TikTok" ? "[0-9]+" : "[a-zA-Z0-9_-]+"} maxLength={100} required /></Field>
+            <Button type="submit" disabled={action.busy || !content.trim()}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
+          </> : <Notice error>This work has no selected social profile. Contact the Business before publishing.</Notice>}
+        </form>
       ) : mayGoLive ? (
         <div className="creator-review-ready">
-          <Notice>Content approved by the Business. You decide when to go live.</Notice>
+          <Notice>{row.publication?.verificationLabel}. Go Live when you want the Customer offer and reward window to begin.</Notice>
           <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
             await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key);
               setMessage(`Promotion is live. Your ${row.promotionLiveDurationDays}-day window has started.`);
@@ -189,8 +200,10 @@ function CreatorContent({
           </Button>}
         </div>
       )}
+      {row.reviewMediaUrl && !row.participationId && <video className="private-review-media" src={row.reviewMediaUrl} controls preload="metadata">Private review video</video>}
       {row.contentReviewStatus === "UnderReview" && <Notice>Content is under Business review. Go Live is not available yet.</Notice>}
       {row.contentReviewStatus === "Rejected" && <Notice>This content revision was rejected and cannot go live.</Notice>}
+      {row.publication?.status === "VerificationPending" && <Notice>Publication verification is pending. Go Live remains unavailable.</Notice>}
       {row.participationId && row.remainingDays != null && <p className="creator-live-days">{row.remainingDays} days left</p>}
       {row.participationId && row.remainingDays == null && <p className="creator-live-days">Ended</p>}
       {action.error && <Notice error>{action.error}</Notice>}
@@ -231,6 +244,16 @@ export function CreatorActiveDetail() {
                 description={promotionTypeLabel(r.type)}
                 action={<Badge status={r.status} />}
               />
+              <Section title="Brief">
+                {r.description && <p className="preserve-lines">{r.description}</p>}
+                <dl className="detail-list">
+                  {r.requirements && <div><dt>Requirements</dt><dd>{r.requirements}</dd></div>}
+                  {r.location && <div><dt>Location</dt><dd>{r.location}</dd></div>}
+                  {r.contentDueAtUtc && <div><dt>Deadline</dt><dd>{date(r.contentDueAtUtc)}</dd></div>}
+                  <div><dt>Creator Budget</dt><dd>{amount(r.yourBudget)} ETB</dd></div>
+                  {r.selectedPlatform && <div><dt>Platform</dt><dd>{r.selectedPlatform}</dd></div>}
+                </dl>
+              </Section>
               <div className="two-column">
                 <Section title="Your Promotion progress">
                   <FundsGrid
@@ -283,7 +306,7 @@ export function CreatorActiveDetail() {
                       <dd>{r.remainingDays == null ? "Not live or ended" : `${r.remainingDays} days left`}</dd>
                     </div>
                     <div>
-                      <dt>Participation Status</dt>
+                      <dt>Status</dt>
                       <dd>
                         <Badge status={r.status} />
                       </dd>
@@ -296,6 +319,16 @@ export function CreatorActiveDetail() {
                 row={r}
                 reload={resource.reload}
               />
+              <Section title="Activity">
+                <ol className="collaboration-timeline">
+                  <li>Business approved your request</li>
+                  {r.contentRevisionNumber && <li>Revision {r.contentRevisionNumber} submitted</li>}
+                  {r.contentReviewStatus === "ChangesRequested" && <li>Business requested changes</li>}
+                  {r.contentReviewStatus === "Approved" && <li>Business approved revision {r.contentRevisionNumber}</li>}
+                  {r.publication && <li>Publication {r.publication.verificationLabel.toLowerCase()}</li>}
+                  {r.participationId && <li>Promotion went live</li>}
+                </ol>
+              </Section>
             </>
           );
         }}

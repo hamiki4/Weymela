@@ -27,7 +27,7 @@ for (const width of [375, 390, 393, 430, 768, 1366, 1440, 1920])
     await open(page, "/checkout");
     await page.getByRole("button", { name: "Scan QR", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(
-      "Camera permission was denied",
+      "Camera unavailable. Allow camera access and try again, or use manual checkout.",
     );
     await layout(page);
     await screenshot(page, `${width}-camera-permission-denied`);

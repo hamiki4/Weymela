@@ -9,6 +9,7 @@ using Weymela.Infrastructure.Development;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Web;
 using Weymela.Application.Web;
 using Weymela.Domain;
 
@@ -151,6 +152,7 @@ public static class BrowserFixtureSeed
                     CreatorId = creatorId, Platform = CreatorPlatform.TikTok,
                     ProfileUrl = $"https://www.tiktok.com/@{handle}", SelfReportedAudience = audience,
                     VerificationStatus = "Verified", VerifiedAudience = audience,
+                    AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
                     CreatedAtUtc = now, UpdatedAtUtc = now
                 });
         }
@@ -167,6 +169,7 @@ public static class BrowserFixtureSeed
                     CreatorId = creatorId, Platform = CreatorPlatform.Instagram,
                     ProfileUrl = $"https://www.instagram.com/{handle}", SelfReportedAudience = audience,
                     VerificationStatus = "Verified", VerifiedAudience = audience,
+                    AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
                     CreatedAtUtc = now, UpdatedAtUtc = now
                 });
         }

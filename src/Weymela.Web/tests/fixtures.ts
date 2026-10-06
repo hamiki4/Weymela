@@ -259,6 +259,7 @@ export const routes: Record<string, unknown> = {
   "/business/ugc-pricing": ugcPricing,
   "/business/campaigns": [campaign],
   "/business/campaigns/campaign": detail,
+  "/business/promotion-content-submissions": [],
   "/creator/home": { creator, requests: 1, activeCampaigns: 1, earnings },
   "/creator/pricing": creatorPricing,
   "/creator/discover": [opportunity],
@@ -361,12 +362,18 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input).replace(/^\/api/, "");
     if (init?.method === "POST") {
+      const submitted = typeof init.body === "string"
+        ? JSON.parse(init.body) : init.body ?? null;
       writes.push({
         path,
-        body: init.body instanceof FormData ? init.body : init.body ? JSON.parse(String(init.body)) : null,
+        body: submitted,
         key: new Headers(init.headers).get("Idempotency-Key"),
       });
-      const body = path.endsWith("/qr")
+      const body = path === "/checkout/manual-resolve"
+        ? { offers: [{ id: "offer", source: "VIEW_AND_SALE_PROMOTION", label: "Coffee stories", benefitPercent: 2 }] }
+        : path === "/checkout/manual-confirm"
+          ? { saleId: "sale", purchaseAmount: { amount: 1000 }, totalBusinessCharge: { amount: 100 }, createdAtUtc: new Date().toISOString() }
+        : path.endsWith("/qr")
         ? {
             id: "qr",
             token: "opaque-test-token",

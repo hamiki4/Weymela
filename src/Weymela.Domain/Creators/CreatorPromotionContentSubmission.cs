@@ -11,13 +11,14 @@ public enum PromotionContentReviewStatus
 /// <summary>One immutable Creator-submitted content revision for an approved Promotion allocation.</summary>
 public sealed class CreatorPromotionContentSubmission
 {
-    private CreatorPromotionContentSubmission() { Provider = null!; ContentReference = null!; }
+    private CreatorPromotionContentSubmission() { }
 
     public Guid Id { get; private set; } = Guid.NewGuid();
     public Guid CreatorAllocationId { get; private set; }
     public int RevisionNumber { get; private set; }
-    public string Provider { get; private set; }
-    public string ContentReference { get; private set; }
+    public string? Provider { get; private set; }
+    public string? ContentReference { get; private set; }
+    public Guid? ReviewMediaAssetId { get; private set; }
     public DateTime SubmittedAtUtc { get; private set; }
     public PromotionContentReviewStatus ReviewStatus { get; private set; } = PromotionContentReviewStatus.UnderReview;
     public string? Feedback { get; private set; }
@@ -38,6 +39,19 @@ public sealed class CreatorPromotionContentSubmission
         RevisionNumber = revisionNumber;
         Provider = provider;
         ContentReference = contentReference.Trim();
+        SubmittedAtUtc = submittedAtUtc;
+    }
+
+    public CreatorPromotionContentSubmission(Guid creatorAllocationId, int revisionNumber,
+        Guid reviewMediaAssetId, DateTime submittedAtUtc)
+    {
+        if (creatorAllocationId == Guid.Empty || reviewMediaAssetId == Guid.Empty)
+            throw new ArgumentException("An approved Creator work item and private review asset are required.");
+        if (revisionNumber <= 0) throw new ArgumentOutOfRangeException(nameof(revisionNumber));
+        if (submittedAtUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Submission time must be UTC.");
+        CreatorAllocationId = creatorAllocationId;
+        RevisionNumber = revisionNumber;
+        ReviewMediaAssetId = reviewMediaAssetId;
         SubmittedAtUtc = submittedAtUtc;
     }
 

@@ -148,10 +148,8 @@ export function Checkout() {
             error && typeof error === "object" && "name" in error ? error.name : "";
           setCameraError(
             failure === "NotAllowedError"
-              ? "Camera permission was denied. Allow camera access in your browser settings, or enter the opaque QR code below."
-              : failure === "NotFoundError"
-                ? "No camera was found on this device. Enter the opaque QR code below."
-                : "Camera access is unavailable. Close other camera apps and try again, or enter the opaque QR code below.",
+              ? "Camera unavailable. Allow camera access and try again, or use manual checkout."
+              : "Camera unavailable. Try again or use manual checkout.",
           );
           setCamera(false);
         }
@@ -266,33 +264,6 @@ export function Checkout() {
             </Button>
             {cameraError ? <Notice error>{cameraError}</Notice> : null}
             {resolve.error ? <Notice error>{resolve.error}</Notice> : null}
-            <details className="audit-detail">
-              <summary>Enter an opaque QR code</summary>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void resolveToken(token.trim());
-                }}
-              >
-                <Field
-                  label="QR code"
-                  help="Enter only the opaque code from the QR. No phone number or payment information."
-                >
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={token}
-                    onChange={(event) => setToken(event.target.value)}
-                    maxLength={256}
-                    required
-                  />
-                </Field>
-                <Button type="submit" variant="secondary" disabled={resolve.busy || !token}>
-                  {resolve.busy ? "Checking…" : "Resolve QR"}
-                </Button>
-              </form>
-            </details>
           </Section>
           <Section title="Can’t scan QR?">
             <p className="fine-print">

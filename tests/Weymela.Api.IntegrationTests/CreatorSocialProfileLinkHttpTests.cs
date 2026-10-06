@@ -122,13 +122,13 @@ public sealed class CreatorSocialProfileLinkHttpTests(PostgresFixture postgres)
         using var creator = await host.Login("creator");
         await using (var db = host.Database.Open())
         {
-            db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord
-            {
-                CreatorId = DevelopmentDirectory.Id(300), Platform = CreatorPlatform.TikTok,
-                ProfileUrl = "https://www.tiktok.com/@bella", SelfReportedAudience = 42000,
-                VerificationStatus = "Verified", VerifiedAudience = 40000,
-                CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow
-            });
+            var profile = await db.CreatorSocialProfiles.SingleAsync(x =>
+                x.CreatorId == DevelopmentDirectory.Id(300) && x.Platform == CreatorPlatform.TikTok);
+            profile.ProfileUrl = "https://www.tiktok.com/@bella";
+            profile.SelfReportedAudience = 42000;
+            profile.VerificationStatus = "Verified";
+            profile.VerifiedAudience = 40000;
+            profile.UpdatedAtUtc = DateTime.UtcNow;
             await db.SaveChangesAsync();
         }
         var wallet = await business.GetJson("/api/business/wallet");

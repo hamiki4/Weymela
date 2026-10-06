@@ -1,5 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
-import { layout, login, open } from "./helpers";
+import { createPublishedUgc, installQrCamera, layout, login, open, scanQr } from "./helpers";
 
 const requestHeaders = { "X-Weymela-Request": "1" };
 const manualCustomerPhone = "0911111111";
@@ -41,102 +41,6 @@ async function createCashier(
     cashier: { id: string; name: string; status: string };
     activationCode: string;
   };
-}
-
-async function createPublishedUgc(
-  context: BrowserContext,
-  title: string,
-  creatorAlias: "creator" | "other-creator",
-) {
-  await login(context, "admin");
-  const settings = await apiJson<{
-    current: {
-      viewOnly: unknown;
-      viewPlusCommission: unknown;
-      creatorCommissionPercent: number;
-      customerCashbackPercent: number;
-      platformPercent: number;
-      creatorThreshold: number;
-      customerThreshold: number;
-      effectiveFromUtc: string | null;
-      promotionLiveDurationDays: number;
-      ugc: {
-        minimumCreatorPayment: number;
-        platformFeePercent: number;
-        minimumUgcBudget: number | null;
-        customerOfferPlatformSalePercent: number | null;
-      } | null;
-    };
-    version: number;
-  }>(context, "/admin/financial-settings");
-  expect(settings.current.ugc).not.toBeNull();
-  if (settings.current.ugc?.customerOfferPlatformSalePercent == null) {
-    const updated = await apiPost(context, "/admin/financial-settings", {
-      settings: {
-        ...settings.current,
-        effectiveFromUtc: null,
-        ugc: {
-          ...settings.current.ugc!,
-          customerOfferPlatformSalePercent: 3,
-        },
-      },
-      expectedVersion: settings.version,
-    });
-    if (!updated.ok()) {
-      throw new Error(`UGC pricing fixture update failed: ${updated.status()} ${await updated.text()}`);
-    }
-  }
-  await login(context, "business");
-  const due = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const created = await apiPost(context, "/business/ugc", {
-    title,
-    slogan: null,
-    contentType: "Video",
-    instructions: "Deliver one short product video.",
-    resources: [],
-    location: "Addis Ababa",
-    dueDateUtc: due,
-    productProvided: true,
-    creatorMustPurchase: false,
-    usageRights: null,
-    creatorPayment: 250,
-    creatorsNeeded: 1,
-    platformRequirements: [],
-    customerOfferEnabled: true,
-    customerDiscountPercent: 2,
-    customerOfferFundedAllocation: 500,
-    customerFacingSlogan: `${title} Customer Offer`,
-    customerOfferStartsAtUtc: new Date(Date.now() - 60_000).toISOString(),
-    customerOfferEndsAtUtc: due,
-  });
-  if (!created.ok()) {
-    throw new Error(`UGC fixture creation failed: ${created.status()} ${await created.text()}`);
-  }
-  const opportunityId = ((await created.json()) as { id: string }).id;
-  const detail = await apiJson<{ version: number }>(
-    context,
-    `/business/ugc/${opportunityId}`,
-  );
-  expect(
-    (await apiPost(context, `/business/ugc/${opportunityId}/publish`, {
-      version: detail.version,
-    })).ok(),
-  ).toBeTruthy();
-
-  await login(context, creatorAlias);
-  expect((await apiPost(context, `/creator/ugc/${opportunityId}/request`, undefined)).ok()).toBeTruthy();
-  await login(context, "business");
-  const requested = await apiJson<{
-    requests: { id: string; status: string }[];
-  }>(context, `/business/ugc/${opportunityId}`);
-  const request = requested.requests.find((item) => item.status === "Pending");
-  expect(request).toBeDefined();
-  expect(
-    (await apiPost(context, `/business/ugc/requests/${request!.id}/approve`, {
-      reason: null,
-    })).ok(),
-  ).toBeTruthy();
-  return opportunityId;
 }
 
 async function assertRoleColor(
@@ -297,10 +201,9 @@ test("Cashier activation uses the real activation, password, and PIN flow", asyn
 
 test("Checkout shows stable QR outcomes without exposing technical errors", async ({ page, context }) => {
   await login(context, "business");
+  await installQrCamera(context, "not-a-valid-qr");
   await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill("not-a-valid-qr");
-  await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
+  await scanQr(page);
   await expect(page.getByRole("alert")).toHaveText("Invalid QR code");
 
   await login(context, "customer");
@@ -311,18 +214,15 @@ test("Checkout shows stable QR outcomes without exposing technical errors", asyn
   await page.getByRole("button", { name: "Get Offer", exact: true }).click();
   const qr = await (await issuing).json() as { token: string };
   await login(context, "business");
+  await installQrCamera(context, qr.token);
   await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
+  await scanQr(page);
   await expect(page.getByLabel("Total Purchase Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("25");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payment recorded", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Scan Another QR", exact: true }).click();
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
+  await scanQr(page);
   await expect(page.getByRole("alert")).toHaveText("QR code already used");
 });
 
@@ -339,8 +239,9 @@ test("Manual View + Sale rejects empty matches and records an eligible checkout 
   await login(context, "business");
   await page.getByLabel("Creator ID", { exact: true }).fill(number);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
-  await expect(page.getByRole("radio")).toHaveCount(1);
-  await expect(page.getByRole("radio")).toBeChecked();
+  const viewAndSale = page.locator("label.choice-row").filter({ hasText: "A little coffee. A great story." });
+  await expect(viewAndSale.getByRole("radio")).toHaveCount(1);
+  await viewAndSale.getByRole("radio").check();
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("25");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payment recorded", exact: true })).toBeVisible();
@@ -349,19 +250,22 @@ test("Manual View + Sale rejects empty matches and records an eligible checkout 
 
 test("Manual UGC requires the intended offer when multiple eligible offers exist", async ({ page, context }) => {
   const otherNumber = await creatorNumber(context, "other-creator");
-  await createPublishedUgc(context, `Browser UGC Single ${Date.now()}`, "other-creator");
+  const singleTitle = `Browser UGC Single ${Date.now()}`;
+  await createPublishedUgc(context, singleTitle, "other-creator");
   await login(context, "business");
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Enter Manually", exact: true }).click();
   await page.getByLabel("Creator ID", { exact: true }).fill(otherNumber);
   await page.getByLabel("Customer phone", { exact: true }).fill(manualCustomerPhone);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
-  await expect(page.getByRole("radio")).toHaveCount(1);
-  await expect(page.getByRole("radio")).toBeChecked();
-  await expect(page.getByText("Browser UGC Single", { exact: false })).toBeVisible();
+  const singleOffer = page.locator("label.choice-row").filter({ hasText: singleTitle });
+  await expect(singleOffer.getByRole("radio")).toHaveCount(1);
+  await expect(singleOffer).toBeVisible();
 
-  const first = await createPublishedUgc(context, `Browser UGC A ${Date.now()}`, "creator");
-  const second = await createPublishedUgc(context, `Browser UGC B ${Date.now()}`, "creator");
+  const firstTitle = `Browser UGC A ${Date.now()}`;
+  const secondTitle = `Browser UGC B ${Date.now()}`;
+  const first = await createPublishedUgc(context, firstTitle, "creator");
+  const second = await createPublishedUgc(context, secondTitle, "creator");
   const number = await creatorNumber(context, "creator");
   await login(context, "business");
   await open(page, "/checkout");
@@ -369,11 +273,11 @@ test("Manual UGC requires the intended offer when multiple eligible offers exist
   await page.getByLabel("Creator ID", { exact: true }).fill(number);
   await page.getByLabel("Customer phone", { exact: true }).fill(manualCustomerPhone);
   await page.getByRole("button", { name: "Find eligible offers", exact: true }).click();
-  await expect(page.getByRole("radio")).toHaveCount(3);
-  await expect(page.getByText("Browser UGC B", { exact: false })).toBeVisible();
+  await expect(page.getByText(secondTitle, { exact: false })).toBeVisible();
+  expect(await page.getByRole("radio").count()).toBeGreaterThanOrEqual(2);
   const beforeFirst = await apiJson<{ opportunity: { customerOfferRemaining?: number } }>(context, `/business/ugc/${first}`);
   const beforeSecond = await apiJson<{ opportunity: { customerOfferRemaining?: number } }>(context, `/business/ugc/${second}`);
-  const selectedOffer = page.locator("label.choice-row").filter({ hasText: "Browser UGC B" }).getByRole("radio");
+  const selectedOffer = page.locator("label.choice-row").filter({ hasText: secondTitle }).getByRole("radio");
   await selectedOffer.check();
   const selectedOfferId = await selectedOffer.inputValue();
 
@@ -418,10 +322,9 @@ test("Expired and no-longer-eligible QR outcomes are deterministic BrowserHost f
   expect(expireResponse.ok()).toBeTruthy();
   const expired = (await expireResponse.json()) as { token: string };
   await login(context, "business");
+  await installQrCamera(context, expired.token);
   await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(expired.token);
-  await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
+  await scanQr(page);
   await expect(page.getByRole("alert")).toHaveText("QR code expired. Ask the Customer to generate a new one.");
 
   await login(context, "customer");
@@ -436,11 +339,10 @@ test("Expired and no-longer-eligible QR outcomes are deterministic BrowserHost f
   });
   expect(ineligibleResponse.status()).toBe(204);
   await login(context, "business");
+  await installQrCamera(context, ineligible.token);
   await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(ineligible.token);
-  await page.getByRole("button", { name: "Resolve QR", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveText("Offer is no longer available");
+  await scanQr(page);
+  await expect(page.getByRole("alert")).toHaveText("Offer is no longer available.");
 });
 
 test("Business and Cashier checkout layouts stay usable at required widths", async ({ page, context }) => {

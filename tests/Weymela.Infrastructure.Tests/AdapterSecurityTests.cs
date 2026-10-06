@@ -18,9 +18,17 @@ namespace Weymela.Infrastructure.Tests;
 public sealed class AdapterSecurityTests
 {
     private static readonly DirectoryInfo PhotoDirectory = CreatePhotoDirectory();
+    private static readonly DirectoryInfo ReviewMediaDirectory = CreateReviewMediaDirectory();
     private static DirectoryInfo CreatePhotoDirectory()
     {
         var directory = Directory.CreateTempSubdirectory("v3-creator-photo-config-");
+        if (OperatingSystem.IsLinux()) File.SetUnixFileMode(directory.FullName,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return directory;
+    }
+    private static DirectoryInfo CreateReviewMediaDirectory()
+    {
+        var directory = Directory.CreateTempSubdirectory("v3-review-media-config-");
         if (OperatingSystem.IsLinux()) File.SetUnixFileMode(directory.FullName,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return directory;
@@ -42,7 +50,8 @@ public sealed class AdapterSecurityTests
         ["V3:Security:TlsEdgeConfirmed"] = "true", ["V3:Auth:CookieKeyDirectory"] = "/run/weymela-v3/keys",
         ["V3:Auth:CookieCertificatePath"] = "/run/secrets/v3-cookie-protection.pfx",
         ["V3:Auth:CookieCertificatePassword"] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("isolated-cookie-password"))),
-        ["V3:CreatorPhotos:Directory"] = PhotoDirectory.FullName
+        ["V3:CreatorPhotos:Directory"] = PhotoDirectory.FullName,
+        ["V3:ReviewMedia:Directory"] = ReviewMediaDirectory.FullName
     };
     [Fact] public void Fully_explicit_pilot_configuration_defaults_to_frozen_and_bounded_without_connecting()
     {
@@ -130,6 +139,7 @@ public sealed class AdapterSecurityTests
     {
         var config = Config();
         config.Remove("V3:CreatorPhotos:Directory");
+        config.Remove("V3:ReviewMedia:Directory");
         config["V3:Deposits:Mode"] = "ManualApproval";
         config["V3:FinancialWritesEnabled"] = "false";
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot", worker: true);
@@ -144,6 +154,10 @@ public sealed class AdapterSecurityTests
         config["V3:CreatorPhotos:Directory"] = PhotoDirectory.FullName;
         Assert.Contains("Worker cannot configure private Creator photo storage", Assert.Throws<InvalidOperationException>(() =>
             RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot", worker: true)).Message);
+        config.Remove("V3:CreatorPhotos:Directory");
+        config["V3:ReviewMedia:Directory"] = ReviewMediaDirectory.FullName;
+        Assert.Contains("Worker cannot configure private review media storage", Assert.Throws<InvalidOperationException>(() =>
+            RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot", worker: true)).Message);
     }
     [Fact] public void Pilot_api_requires_a_separate_private_creator_photo_directory()
     {
@@ -153,6 +167,16 @@ public sealed class AdapterSecurityTests
             RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot")).Message);
         config["V3:CreatorPhotos:Directory"] = PhotoDirectory.FullName;
         Assert.Equal(PhotoDirectory.FullName, RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot").CreatorPhotoDirectory);
+    }
+    [Fact] public void Pilot_api_requires_a_separate_private_review_media_directory()
+    {
+        var config = Config();
+        config.Remove("V3:ReviewMedia:Directory");
+        Assert.Contains("private durable review media directory", Assert.Throws<InvalidOperationException>(() =>
+            RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot")).Message);
+        config["V3:ReviewMedia:Directory"] = ReviewMediaDirectory.FullName;
+        Assert.Equal(ReviewMediaDirectory.FullName,
+            RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot").ReviewMediaDirectory);
     }
     [Fact] public void Pilot_modes_replace_only_the_disabled_adapter_registrations()
     {

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { layout, login, open } from "./helpers";
+import { layout, login, open, saveFundPostAndOpenPromotion } from "./helpers";
 
 for (const width of [320, 360, 375, 390, 430]) {
   test(`Existing Creator marketplace access has no legacy agreement gate at ${width}px`, async ({ page, context }) => {
@@ -28,7 +28,7 @@ test("Creator Promotion request opens normally without legacy agreement acceptan
   await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
-  await page.getByRole("button", { name: "Publish Promotion" }).click();
+  await saveFundPostAndOpenPromotion(page);
   try {
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   } catch (error) {

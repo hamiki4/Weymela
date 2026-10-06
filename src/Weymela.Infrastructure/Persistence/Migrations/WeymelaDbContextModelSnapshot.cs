@@ -274,7 +274,6 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("ContentReference")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -286,9 +285,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)");
 
                     b.Property<string>("Provider")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("ReviewMediaAssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ReviewStatus")
                         .IsRequired()
@@ -319,6 +320,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ReviewMediaAssetId")
+                        .IsUnique();
+
                     b.HasIndex("CreatorAllocationId", "RevisionNumber")
                         .IsUnique();
 
@@ -330,13 +334,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Feedback", "\"Feedback\" IS NULL OR length(\"Feedback\") <= 2000");
 
-                            t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram')");
-
-                            t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Reference", "length(trim(\"ContentReference\")) > 0 AND length(\"ContentReference\") <= 100");
-
                             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Review", "(\"ReviewStatus\" = 'UnderReview' AND \"ReviewedAtUtc\" IS NULL AND \"ReviewedByUserId\" IS NULL) OR (\"ReviewStatus\" IN ('ChangesRequested','Approved','Rejected') AND \"ReviewedAtUtc\" IS NOT NULL AND \"ReviewedByUserId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Revision", "\"RevisionNumber\" > 0");
+
+                            t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Source", "(\"ReviewMediaAssetId\" IS NOT NULL AND \"Provider\" IS NULL AND \"ContentReference\" IS NULL) OR (\"ReviewMediaAssetId\" IS NULL AND \"Provider\" IN ('TikTok','YouTube','Instagram') AND length(trim(\"ContentReference\")) > 0 AND length(\"ContentReference\") <= 100)");
 
                             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Status", "\"ReviewStatus\" IN ('UnderReview','ChangesRequested','Approved','Rejected')");
                         });
@@ -348,6 +350,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ApprovedContentSubmissionId")
+                        .HasColumnType("uuid");
+
                     b.Property<long>("BaselineViews")
                         .HasColumnType("bigint");
 
@@ -355,6 +360,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CreatorSocialProfileId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("ExternalContentId")
@@ -397,8 +405,12 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ApprovedContentSubmissionId");
+
                     b.HasIndex("CreatorAllocationId")
                         .IsUnique();
+
+                    b.HasIndex("CreatorSocialProfileId");
 
                     b.HasIndex("Provider", "ExternalContentId")
                         .IsUnique();
@@ -408,6 +420,117 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.ToTable("CreatorPromotionParticipations", "v3", t =>
                         {
                             t.HasCheckConstraint("CK_Participation_Views", "\"BaselineViews\" >= 0 AND \"LatestVerifiedViews\" >= \"BaselineViews\" AND \"RewardedViewCount\" >= 0 AND \"RewardedViewCount\" <= \"LatestVerifiedViews\" - \"BaselineViews\"");
+                        });
+                });
+
+            modelBuilder.Entity("Weymela.Domain.CreatorPublicationVerification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("BaselineViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("CreatorAllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CreatorSocialProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EvidenceReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ExternalContentId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("PromotionContentSubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("UgcAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("UgcSubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VerificationMethod")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("VerifiedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("WentLiveAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatorAllocationId")
+                        .IsUnique()
+                        .HasFilter("\"CreatorAllocationId\" IS NOT NULL AND \"Status\" IN ('VerificationPending','Verified')");
+
+                    b.HasIndex("CreatorSocialProfileId");
+
+                    b.HasIndex("PromotionContentSubmissionId");
+
+                    b.HasIndex("UgcAssignmentId")
+                        .IsUnique()
+                        .HasFilter("\"UgcAssignmentId\" IS NOT NULL AND \"Status\" IN ('VerificationPending','Verified')");
+
+                    b.HasIndex("UgcSubmissionId");
+
+                    b.HasIndex("Status", "RequestedAtUtc");
+
+                    b.ToTable("CreatorPublicationVerifications", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_Publication_Baseline", "\"BaselineViews\" IS NULL OR \"BaselineViews\" >= 0");
+
+                            t.HasCheckConstraint("CK_Publication_Content", "length(trim(\"ExternalContentId\")) > 0 AND length(\"ExternalContentId\") <= 100");
+
+                            t.HasCheckConstraint("CK_Publication_GoLive", "\"WentLiveAtUtc\" IS NULL OR \"VerifiedAtUtc\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_Publication_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram')");
+
+                            t.HasCheckConstraint("CK_Publication_Status", "\"Status\" IN ('VerificationPending','Verified','Failed','Expired')");
+
+                            t.HasCheckConstraint("CK_Publication_Verification", "(\"Status\" = 'Verified' AND \"VerifiedAtUtc\" IS NOT NULL AND \"EvidenceReference\" IS NOT NULL AND \"VerificationMethod\" IS NOT NULL) OR \"Status\" <> 'Verified'");
+
+                            t.HasCheckConstraint("CK_Publication_Work", "(\"CreatorAllocationId\" IS NOT NULL AND \"UgcAssignmentId\" IS NULL AND \"PromotionContentSubmissionId\" IS NOT NULL AND \"UgcSubmissionId\" IS NULL) OR (\"CreatorAllocationId\" IS NULL AND \"UgcAssignmentId\" IS NOT NULL AND \"PromotionContentSubmissionId\" IS NULL AND \"UgcSubmissionId\" IS NOT NULL)");
                         });
                 });
 
@@ -936,6 +1059,89 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.ToTable("PlatformSettlements", "v3", t =>
                         {
                             t.HasCheckConstraint("CK_Settlement_Positive", "\"Amount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Weymela.Domain.PrivateReviewMediaAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BusinessId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatorAllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Length")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(66)
+                        .HasColumnType("character varying(66)");
+
+                    b.Property<Guid?>("UgcAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.HasIndex("CreatorAllocationId", "RevisionNumber")
+                        .IsUnique()
+                        .HasFilter("\"CreatorAllocationId\" IS NOT NULL");
+
+                    b.HasIndex("UgcAssignmentId", "RevisionNumber")
+                        .IsUnique()
+                        .HasFilter("\"UgcAssignmentId\" IS NOT NULL");
+
+                    b.ToTable("PrivateReviewMediaAssets", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_ReviewMedia_Digest", "\"Sha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_ReviewMedia_Key", "\"StorageKey\" ~ '^m_[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_ReviewMedia_Length", "\"Length\" > 0");
+
+                            t.HasCheckConstraint("CK_ReviewMedia_Revision", "\"RevisionNumber\" > 0");
+
+                            t.HasCheckConstraint("CK_ReviewMedia_State", "\"State\" IN ('Active','Retained')");
+
+                            t.HasCheckConstraint("CK_ReviewMedia_Type", "\"ContentType\" IN ('video/mp4','image/jpeg','image/png')");
+
+                            t.HasCheckConstraint("CK_ReviewMedia_Work", "(\"CreatorAllocationId\" IS NOT NULL AND \"UgcAssignmentId\" IS NULL) OR (\"CreatorAllocationId\" IS NULL AND \"UgcAssignmentId\" IS NOT NULL)");
                         });
                 });
 
@@ -1655,8 +1861,14 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ContentRevisionNumber")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Feedback")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("ReviewMediaAssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("ReviewedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1673,8 +1885,8 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("SubmissionUrl")
-                        .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<DateTime>("SubmittedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1684,9 +1896,20 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ReviewMediaAssetId")
+                        .IsUnique();
+
+                    b.HasIndex("UgcAssignmentId", "ContentRevisionNumber")
+                        .IsUnique();
+
                     b.HasIndex("UgcAssignmentId", "SubmittedAtUtc");
 
-                    b.ToTable("UgcSubmissions", "v3");
+                    b.ToTable("UgcSubmissions", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_UgcSubmission_ContentRevision", "\"ContentRevisionNumber\" > 0");
+
+                            t.HasCheckConstraint("CK_UgcSubmission_Source", "(\"ReviewMediaAssetId\" IS NOT NULL AND \"SubmissionUrl\" IS NULL) OR (\"ReviewMediaAssetId\" IS NULL AND length(trim(\"SubmissionUrl\")) > 0)");
+                        });
                 });
 
             modelBuilder.Entity("Weymela.Domain.VerifiedSale", b =>
@@ -3665,16 +3888,60 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CreatorAllocationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Weymela.Domain.PrivateReviewMediaAsset", null)
+                        .WithOne()
+                        .HasForeignKey("Weymela.Domain.CreatorPromotionContentSubmission", "ReviewMediaAssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Weymela.Domain.CreatorPromotionParticipation", b =>
                 {
+                    b.HasOne("Weymela.Domain.CreatorPromotionContentSubmission", null)
+                        .WithMany()
+                        .HasForeignKey("ApprovedContentSubmissionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Weymela.Infrastructure.Persistence.Records.CreatorSocialProfileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CreatorSocialProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Weymela.Domain.CreatorAllocation", null)
                         .WithMany()
                         .HasForeignKey("CreatorAllocationId", "PromotionId", "CreatorId")
                         .HasPrincipalKey("Id", "PromotionId", "CreatorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Weymela.Domain.CreatorPublicationVerification", b =>
+                {
+                    b.HasOne("Weymela.Domain.CreatorAllocation", null)
+                        .WithMany()
+                        .HasForeignKey("CreatorAllocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Weymela.Infrastructure.Persistence.Records.CreatorSocialProfileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CreatorSocialProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Weymela.Domain.CreatorPromotionContentSubmission", null)
+                        .WithMany()
+                        .HasForeignKey("PromotionContentSubmissionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Weymela.Domain.UgcAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("UgcAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Weymela.Domain.UgcSubmission", null)
+                        .WithMany()
+                        .HasForeignKey("UgcSubmissionId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Weymela.Domain.CustomerCashbackEntry", b =>
@@ -3807,6 +4074,19 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasForeignKey("JournalId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Weymela.Domain.PrivateReviewMediaAsset", b =>
+                {
+                    b.HasOne("Weymela.Domain.CreatorAllocation", null)
+                        .WithMany()
+                        .HasForeignKey("CreatorAllocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Weymela.Domain.UgcAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("UgcAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Weymela.Domain.Promotion", b =>
@@ -4103,6 +4383,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Weymela.Domain.UgcSubmission", b =>
                 {
+                    b.HasOne("Weymela.Domain.PrivateReviewMediaAsset", null)
+                        .WithOne()
+                        .HasForeignKey("Weymela.Domain.UgcSubmission", "ReviewMediaAssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Weymela.Domain.UgcAssignment", null)
                         .WithMany()
                         .HasForeignKey("UgcAssignmentId")

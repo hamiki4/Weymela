@@ -45,6 +45,9 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             db.UgcOpportunities.Add(opportunity);
             if (input.CustomerOfferEnabled)
             {
+                if (requirements.Count == 0 || capacities.Count == 0)
+                    throw new ApplicationFailure(FailureKind.Validation,
+                        "UGC + Sales requires Creator publication on a selected social platform.");
                 if (pricing.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
                     throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
                 var offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,
@@ -210,12 +213,51 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 if (!MatchesRequiredSocialPlatform(url, postingPlatforms))
                     throw new ApplicationFailure(FailureKind.Validation, "Submit a secure social post link from one of the required platforms.");
             }
+            var contentRevision = (await db.UgcSubmissions.Where(x => x.UgcAssignmentId == assignment.Id)
+                .MaxAsync(x => (int?)x.ContentRevisionNumber, token) ?? 0) + 1;
             assignment.Submitted();
-            var submission = new UgcSubmission(assignment.Id, assignment.AcceptedRevisionNumber, url, Now);
+            var submission = new UgcSubmission(assignment.Id, assignment.AcceptedRevisionNumber, contentRevision, url, Now);
             db.UgcSubmissions.Add(submission);
             operation.Remember(actor, "SubmitUgc", key, fingerprint, submission.Id.ToString(), Now);
             Record(actor, "UgcContentSubmitted", opportunity.Id, assignment.CreatorId, Guid.NewGuid(),
                 new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id, SubmissionId = submission.Id, opportunity.BusinessId });
+            return submission.Id;
+        }, ct);
+
+    public Task<Guid> SubmitPrivateAsync(Actor actor, Guid assignmentId, PrivateReviewMediaInput input,
+        string key, CancellationToken ct) => Transaction.ExecuteAsync(async token =>
+        {
+            await DemandCreator(actor, token);
+            var fingerprint = RequestFingerprint.Create(assignmentId.ToString(), input.Sha256,
+                input.ContentType, input.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var operation = new FinancialOperation(db);
+            if (await operation.Replay(actor, "SubmitPrivateUgc", key, fingerprint, token) is { } replay)
+                return Guid.Parse(replay);
+            var assignment = await db.UgcAssignments.SingleOrDefaultAsync(x => x.Id == assignmentId, token)
+                ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC assignment not found.");
+            if (assignment.CreatorId != actor.CreatorId)
+                throw new ApplicationFailure(FailureKind.Forbidden, "This UGC assignment belongs to another Creator.");
+            var opportunity = await Opportunity(assignment.UgcOpportunityId, token);
+            if (opportunity.DueDateUtc < Now)
+                throw new ApplicationFailure(FailureKind.Validation, "The content deadline has passed.");
+            if (opportunity.ContentType == UgcContentType.Video && input.ContentType != "video/mp4"
+                || opportunity.ContentType == UgcContentType.Photos && input.ContentType is not ("image/jpeg" or "image/png"))
+                throw new ApplicationFailure(FailureKind.Validation,
+                    opportunity.ContentType == UgcContentType.Video ? "Choose an MP4 review video." : "Choose a JPEG or PNG review image.");
+            var contentRevision = (await db.UgcSubmissions.Where(x => x.UgcAssignmentId == assignment.Id)
+                .MaxAsync(x => (int?)x.ContentRevisionNumber, token) ?? 0) + 1;
+            var asset = new PrivateReviewMediaAsset(assignment.CreatorId, opportunity.BusinessId, null,
+                assignment.Id, contentRevision, input.StorageKey, input.ContentType, input.Length,
+                input.Sha256, input.OriginalFileName, Now);
+            var submission = new UgcSubmission(assignment.Id, assignment.AcceptedRevisionNumber,
+                contentRevision, asset.Id, Now);
+            assignment.Submitted();
+            db.PrivateReviewMediaAssets.Add(asset);
+            db.UgcSubmissions.Add(submission);
+            operation.Remember(actor, "SubmitPrivateUgc", key, fingerprint, submission.Id.ToString(), Now);
+            Record(actor, "UgcContentSubmitted", opportunity.Id, assignment.CreatorId, Guid.NewGuid(),
+                new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id,
+                    SubmissionId = submission.Id, opportunity.BusinessId });
             return submission.Id;
         }, ct);
 
@@ -557,7 +599,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         await DemandCreator(actor, ct);
         var requests = await db.UgcCreatorRequests.AsNoTracking().Where(x => x.CreatorId == actor.CreatorId).OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
         var name = (await db.PublicWorkspaceProfiles.AsNoTracking().SingleAsync(x => x.Role == ActorRole.Creator && x.SubjectId == actor.CreatorId, ct)).DisplayName;
-        return requests.Select(x => new UgcRequestView(x.Id, x.UgcOpportunityId, x.CreatorId, name, x.Status.ToString(), x.RequestedAtUtc, x.RejectionReason)).ToArray();
+        var socialIds=requests.Where(x=>x.VerifiedSocialProfileId!=null).Select(x=>x.VerifiedSocialProfileId!.Value).ToArray();
+        var socials=await db.CreatorSocialProfiles.AsNoTracking().Where(x=>socialIds.Contains(x.Id)).ToDictionaryAsync(x=>x.Id,ct);
+        return requests.Select(x => new UgcRequestView(x.Id, x.UgcOpportunityId, x.CreatorId, name, x.Status.ToString(), x.RequestedAtUtc, x.RejectionReason,
+            SocialProfile:x.VerifiedSocialProfileId is {} profileId&&socials.TryGetValue(profileId,out var profile)?SocialView(profile):null)).ToArray();
     }
 
     public async Task<IReadOnlyList<UgcAssignmentView>> CreatorAssignmentsAsync(Actor actor, CancellationToken ct)
@@ -591,7 +636,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         if (isCreator) requestRows = requestRows.Where(x => x.CreatorId == actor.CreatorId).ToList();
         var creatorIds = requestRows.Select(x => x.CreatorId).Distinct().ToArray();
         var creatorProfiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Creator && creatorIds.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, ct);
-        var requests = requestRows.Select(x => new UgcRequestView(x.Id, id, x.CreatorId, creatorProfiles.GetValueOrDefault(x.CreatorId)?.DisplayName ?? "Creator", x.Status.ToString(), x.RequestedAtUtc, x.RejectionReason, creatorProfiles.GetValueOrDefault(x.CreatorId)?.CreatorNumber)).ToArray();
+        var requestSocialIds=requestRows.Where(x=>x.VerifiedSocialProfileId!=null).Select(x=>x.VerifiedSocialProfileId!.Value).Distinct().ToArray();
+        var requestSocials=await db.CreatorSocialProfiles.AsNoTracking().Where(x=>requestSocialIds.Contains(x.Id)).ToDictionaryAsync(x=>x.Id,ct);
+        var requests = requestRows.Select(x => new UgcRequestView(x.Id, id, x.CreatorId, creatorProfiles.GetValueOrDefault(x.CreatorId)?.DisplayName ?? "Creator", x.Status.ToString(), x.RequestedAtUtc, x.RejectionReason, creatorProfiles.GetValueOrDefault(x.CreatorId)?.CreatorNumber,
+            x.VerifiedSocialProfileId is {} profileId&&requestSocials.TryGetValue(profileId,out var profile)?SocialView(profile):null)).ToArray();
         var assignmentRows = await db.UgcAssignments.AsNoTracking().Where(x => x.UgcOpportunityId == id && (!isCreator || x.CreatorId == actor.CreatorId)).ToListAsync(ct);
         var assignments = await AssignmentViews(assignmentRows, ct);
         var revisions = await db.UgcRevisions.AsNoTracking().Where(x => x.UgcOpportunityId == id)
@@ -640,9 +688,25 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var creatorIds = rows.Select(x => x.CreatorId).Distinct().ToArray();
         var profiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => businessIds.Contains(x.SubjectId) || creatorIds.Contains(x.SubjectId)).ToListAsync(ct);
         var submissions = await db.UgcSubmissions.AsNoTracking().Where(x => rows.Select(r => r.Id).Contains(x.UgcAssignmentId)).OrderByDescending(x => x.SubmittedAtUtc).ToListAsync(ct);
+        var assetIds = submissions.Where(x => x.ReviewMediaAssetId != null).Select(x => x.ReviewMediaAssetId!.Value).Distinct().ToArray();
+        var assets = await db.PrivateReviewMediaAssets.AsNoTracking().Where(x => assetIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        var assignmentIds = rows.Select(x => x.Id).ToArray();
+        var publications = await db.CreatorPublicationVerifications.AsNoTracking()
+            .Where(x => x.UgcAssignmentId != null && assignmentIds.Contains(x.UgcAssignmentId.Value))
+            .OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
+        var requestIds = rows.Select(x => x.UgcCreatorRequestId).ToArray();
+        var requests = await db.UgcCreatorRequests.AsNoTracking().Where(x => requestIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
+        var socialIds = requests.Values.Where(x => x.VerifiedSocialProfileId != null)
+            .Select(x => x.VerifiedSocialProfileId!.Value).Distinct().ToArray();
+        var socials = await db.CreatorSocialProfiles.AsNoTracking().Where(x => socialIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
         return rows.Select(x =>
         {
             var opportunity = opportunities[x.UgcOpportunityId]; var submission = submissions.FirstOrDefault(s => s.UgcAssignmentId == x.Id);
+            var publication = publications.FirstOrDefault(p => p.UgcAssignmentId == x.Id);
+            var request = requests[x.UgcCreatorRequestId];
+            var social = request.VerifiedSocialProfileId is { } socialId ? socials.GetValueOrDefault(socialId) : null;
             return new UgcAssignmentView(x.Id, x.UgcOpportunityId, opportunity.Title, opportunity.BusinessId,
                 profiles.FirstOrDefault(p => p.SubjectId == opportunity.BusinessId && p.Role == ActorRole.Business)?.DisplayName ?? "Business",
                 x.CreatorId, profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.DisplayName ?? "Creator",
@@ -650,7 +714,12 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 x.ContentDueAtUtc ?? opportunity.DueDateUtc, opportunity.Instructions, ParseResources(opportunity.ResourcesJson), opportunity.Location,
                 PostingRequirements(opportunity).Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(),
                 submission?.Feedback, submission?.SubmissionUrl, opportunity.ProductProvided, opportunity.CreatorMustPurchase,
-                profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.CreatorNumber);
+                profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.CreatorNumber,
+                submission?.ContentRevisionNumber,
+                submission?.ReviewMediaAssetId is null ? null : $"/api/review-media/ugc/{submission.Id}",
+                publication is null ? null : CreatorPublicationService.View(publication),
+                request.SelectedPlatform?.ToString(), social?.ProfileUrl, social?.Id,
+                submission?.ReviewMediaAssetId is { } assetId ? assets.GetValueOrDefault(assetId)?.ContentType : null);
         }).ToArray();
     }
 
@@ -779,6 +848,9 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             throw new ApplicationFailure(FailureKind.Validation, "Add each UGC platform once.");
         return result;
     }
+    private static CreatorSocialProfileView SocialView(CreatorSocialProfileRecord profile) =>
+        new(profile.Id, profile.Platform.ToString(), profile.ProfileUrl, profile.SelfReportedAudience,
+            profile.VerificationStatus, profile.VerifiedAudience, profile.AudienceVerificationSource);
     private static UgcCard Card(UgcOpportunity x, string business, string? requestStatus, UgcCustomerOffer? offer,
         bool includeBusinessFinancials, IReadOnlyCollection<CreatorSocialProfileRecord>? socials = null, bool enforceAudience = false) => new(x.Id, x.BusinessId, business,
         x.Title, x.Slogan, x.ContentType.ToString(), x.Status.ToString(),

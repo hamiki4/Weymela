@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
-import type { UgcCard, UgcDetail, UgcPricing } from "../../api/types";
+import type { UgcAssignment, UgcCard, UgcDetail, UgcPricing, Wallet } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
 import { PlatformCapacityPicker, type PlatformCapacity } from "./PlatformCapacityPicker";
 import {
@@ -17,7 +17,7 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
-import { amount, date, promotionStatusLabel } from "../../ui/format";
+import { amount, count, date, promotionStatusLabel } from "../../ui/format";
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
@@ -87,7 +87,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
   const [editDiscount, setEditDiscount] = useState("");
   const [editOfferBudget, setEditOfferBudget] = useState("");
   const [creatorError, setCreatorError] = useState("");
-  const [manageOpen, setManageOpen] = useState(false);
+  const manageOpen = false;
   return (
     <article className="data-card business-promotion-card" data-status={item.status}>
       <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sales" : "UGC"}</small><h3>{item.title}</h3></div><Badge status={item.status} label={promotionStatusLabel(item.status)} /></div>
@@ -96,14 +96,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
         <div><dt>Content due</dt><dd>{date(item.dueDateUtc)}</dd></div>
         {item.creatorsNeeded > 0 && <div><dt>Creators</dt><dd>{item.approvedCreators}/{item.creatorsNeeded}</dd></div>}
       </dl>
-      <Button
-        variant="secondary"
-        className="business-promotion-manage"
-        aria-expanded={manageOpen}
-        onClick={() => setManageOpen((open) => !open)}
-      >
-        {manageOpen ? "Close management" : "Manage"}
-      </Button>
+      <Link className="button secondary business-promotion-manage" to={`/business/ugc/${item.id}`}>Manage</Link>
       {manageOpen && <section className="business-promotion-management" aria-label={`${item.title} management`}>
         <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
         {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer gets {amount(item.customerDiscountPercent)}% off.</p>}
@@ -189,6 +182,97 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
   );
 }
 
+function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () => void }) {
+  const action = useAction();
+  const [feedback, setFeedback] = useState("");
+  const review = (decision: "approve" | "changes" | "reject") => void action.run(async (key) => {
+    await post(`/business/ugc/assignments/${row.id}/review/${decision}`, { reason: feedback.trim() || null }, key);
+    setFeedback(""); reload();
+  });
+  return <article className="business-collaboration-card">
+    <div className="card-head"><div className="business-ugc-creator-row"><CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} /><div><strong>{row.creator}</strong><small>Revision {row.contentRevisionNumber ?? 1}</small></div></div><Badge status={row.status} /></div>
+    {row.selectedPlatform && <p className="fine-print"><strong>{row.selectedPlatform}</strong>{row.selectedSocialProfileUrl && <> · <a href={row.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">View selected profile</a></>}</p>}
+    {row.reviewMediaUrl && (row.reviewMediaContentType?.startsWith("image/")
+      ? <img className="private-review-media" src={row.reviewMediaUrl} alt={`Revision ${row.contentRevisionNumber ?? 1} review`} />
+      : <video className="private-review-media" controls preload="metadata" src={row.reviewMediaUrl}>Private review video</video>)}
+    {row.feedback && <Notice>{row.feedback}</Notice>}
+    {row.status === "Submitted" && <div className="business-review-actions">
+      <Field label="Feedback (required for changes)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
+      <div className="actions"><Button disabled={action.busy} onClick={() => review("approve")}>Approve Video</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("changes")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
+    </div>}
+    {row.status === "Approved" && !row.selectedPlatform && <Notice>Content approved. Delivery-only work is complete and has no Customer offer.</Notice>}
+    {row.status === "Approved" && row.selectedPlatform && !row.publication && <Notice>Content approved. Waiting for the Creator to publish.</Notice>}
+    {row.publication && <p className="fine-print">Publication: {row.publication.wentLiveAtUtc ? "Live" : row.publication.verificationLabel}</p>}
+    {action.error && <Notice error>{action.error}</Notice>}
+    <ol className="collaboration-timeline" aria-label="Activity">
+      <li>Business approved Creator</li>
+      {row.contentRevisionNumber && <li>Creator submitted revision {row.contentRevisionNumber}</li>}
+      {row.status === "ChangesRequested" && <li>Business requested changes</li>}
+      {row.status === "Approved" && <li>Business approved revision {row.contentRevisionNumber ?? 1}</li>}
+      {row.publication && <li>Creator submitted the public post for verification</li>}
+      {row.publication?.wentLiveAtUtc && <li>Creator went Live</li>}
+    </ol>
+  </article>;
+}
+
+export function BusinessUgcDetail() {
+  const { id } = useParams();
+  const detail = useResource<UgcDetail>(`/business/ugc/${id}`);
+  const wallet = useResource<Wallet>("/business/wallet");
+  const action = useAction();
+  const reload = () => { detail.reload(); wallet.reload(); };
+  return <Resource resource={detail}>{data => {
+    const item = data.opportunity;
+    const required = item.requiredFunding ?? 0;
+    const shortfall = Math.max(0, required - (wallet.data?.available ?? 0));
+    return <>
+      <Link className="back-link" to="/business/campaigns">← Promotions</Link>
+      <PageHeader eyebrow={item.customerOfferEnabled ? "UGC + Sales" : "UGC"} title={item.title}
+        description={`Content due ${date(item.dueDateUtc)}`}
+        action={<Badge status={item.status} label={promotionStatusLabel(item.status)} />} />
+      {item.status === "Draft" && <div className="callout">
+        <div><h2>Draft</h2><p>Post this Promotion when confirmed funds are available.</p></div>
+        <Button disabled={action.busy || !wallet.data || shortfall > 0} onClick={() => void action.run(async key => {
+          await post(`/business/ugc/${item.id}/publish`, { version: item.version }, key); reload();
+        })}>{action.busy ? "Posting…" : "Post to Creators"}</Button>
+        {wallet.data && shortfall > 0 && <Notice><Link to="/business/wallet">Add Funds</Link> before posting. You need {amount(shortfall)} ETB more.</Notice>}
+      </div>}
+      {action.error && <Notice error>{action.error}</Notice>}
+      <div className="two-column business-collaboration-workspace">
+        <Section title="Brief">
+          <p className="preserve-lines">{data.instructions}</p>
+          <dl className="detail-list">
+            <div><dt>Creator payment</dt><dd>{amount(item.creatorPayment)} ETB</dd></div>
+            <div><dt>Content due</dt><dd>{date(item.dueDateUtc)}</dd></div>
+            {item.location && <div><dt>Location</dt><dd>{item.location}</dd></div>}
+            <div><dt>Product</dt><dd>{data.productProvided ? "Provided by Business" : data.creatorMustPurchase ? "Creator purchases" : "Not selected"}</dd></div>
+            {!!item.platformRequirements.length && <div><dt>Publish on</dt><dd>{item.platformRequirements.map(row => row.platform).join(", ")}</dd></div>}
+          </dl>
+        </Section>
+        <Section title="Creator requests">
+          {data.requests.length ? <div className="card-stack">{data.requests.map(row => <article className="business-collaboration-card" key={row.id}>
+            <div className="card-head"><div className="business-ugc-creator-row"><CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} /><strong>{row.creator}</strong></div><Badge status={row.status} /></div>
+            {row.socialProfile ? <div className="creator-social-review"><a href={row.socialProfile.profileUrl} target="_blank" rel="noopener noreferrer">{row.socialProfile.platform} profile</a>
+              <small>{row.socialProfile.verificationStatus === "Verified" && row.socialProfile.verifiedAudience != null
+                ? `${count(row.socialProfile.verifiedAudience)} Admin-verified audience`
+                : `${count(row.socialProfile.selfReportedAudience)} self-reported audience · Not independently verified`}</small></div>
+              : <p className="fine-print">Delivery-only request · no social profile required</p>}
+            {row.status === "Pending" && <div className="actions"><Button disabled={action.busy} onClick={() => void action.run(async key => {
+              await post(`/business/ugc/requests/${row.id}/approve`, { reason: null }, key); reload();
+            })}>Approve</Button><Button variant="secondary" disabled={action.busy} onClick={() => void action.run(async key => {
+              await post(`/business/ugc/requests/${row.id}/reject`, { reason: null }, key); reload();
+            })}>Reject</Button></div>}
+          </article>)}</div> : <Empty title="No Creator requests yet." />}
+        </Section>
+      </div>
+      <Section title="Creator work">
+        {data.assignments.length ? <div className="card-stack">{data.assignments.map(row => <UgcAssignmentReview key={row.id} row={row} reload={reload} />)}</div>
+          : <Empty title="No approved Creators yet." />}
+      </Section>
+    </>;
+  }}</Resource>;
+}
+
 export function BusinessUgcPage() {
   const [params] = useSearchParams();
   const openOnly = params.get("filter") === "Open";
@@ -250,8 +334,7 @@ export function CreateBusinessUgcPage() {
                       customerOfferEndsAtUtc: form.customerOffer ? new Date(form.dueDate).toISOString() : null,
                       applicationClosesAtUtc: new Date(form.applicationCloses).toISOString(),
                     }, key);
-                    await post(`/business/ugc/${created.id}/publish`, { version: 0 }, key);
-                    navigate("/business/campaigns");
+                    navigate(`/business/ugc/${created.id}`);
                   });
                 }}>
                   <Field label="Promotion title" wide><input value={form.title} onChange={(e) => set("title", e.target.value)} required /></Field>
@@ -292,10 +375,10 @@ export function CreateBusinessUgcPage() {
                   {form.customerOffer && discount > 100 && <Notice error>Discount must be between 0 and 100%.</Notice>}
                   {!minimumBudgetMet && <Notice error>The Promotion budget is below the minimum required to publish.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}
-                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Publishing…" : "Publish Promotion"}</Button></div>
+                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save Draft"}</Button></div>
                 </form>
               </Section>
-              {shortfall > 0 && <Notice error><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
+              {shortfall > 0 && <Notice>You can save the Draft. <Link to="/business/wallet">Add Funds</Link> before posting it to Creators. You need {amount(shortfall)} ETB more.</Notice>}
             </div>
           );
         }}

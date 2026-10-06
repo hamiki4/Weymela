@@ -15,7 +15,8 @@ export function AdminMore() {
   const groups: [string, MoreLink[]][] = platform ? [
     ["Accounts", [["Customers", "/admin/customers"], ["Creators", "/admin/creators"],
       ["Businesses", "/admin/businesses"], ["Admins", "/admin/admins"]]],
-    ["Promotions", [["Campaigns", "/admin/campaigns"], ["UGC", "/admin/ugc"]]],
+    ["Promotions", [["Campaigns", "/admin/campaigns"], ["UGC", "/admin/ugc"],
+      ["Publication Verification", "/admin/publications"]]],
     ["Management", [["Reports", "/admin/reports"], ["Financial Settings", "/admin/settings"],
       ["Notifications", "/notifications"]]],
   ] : [

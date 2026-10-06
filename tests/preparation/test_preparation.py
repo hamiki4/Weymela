@@ -93,7 +93,7 @@ class RepositoryGateTests(unittest.TestCase):
     def test_source_migration_order_includes_approved_creator_photo_reference(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos', '20260930210000_AddAgreementDeadlines', '20261001043831_AddAdminVerifiedAudienceAndEnforcement'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos', '20260930210000_AddAgreementDeadlines', '20261001043831_AddAdminVerifiedAudienceAndEnforcement', '20261006050542_CompleteCreatorCollaborationWorkflow'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -116,10 +116,10 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('authorized repository/server operator', policy)
         self.assertIn('Main branch protection is not a prerequisite', policy)
         self.assertIn('Production retains its separate stricter authorization policy', policy)
-        self.assertIn('fresh protected PostgreSQL/receipt/Creator-photo backup', policy)
-        self.assertIn('packaged baseline-24 verifier against the installed grants', policy)
+        self.assertIn('fresh protected PostgreSQL, receipt, Creator-photo and private-review-media backups', policy)
+        self.assertIn('packaged baseline-28 verifier against the installed grants', policy)
         self.assertIn('packaged target verifier after those grants are installed', policy)
-        self.assertIn('financial test window stays off by default', policy)
+        self.assertIn('Financial functionality remains enabled only through the existing bounded Pilot authorization controls', policy)
 
     def test_ci_does_not_upload_browser_identity_control(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text()
@@ -201,10 +201,13 @@ class ComposeIsolationTests(unittest.TestCase):
         root = pathlib.Path(cls.directory.name)
         (root / 'receipts').mkdir(mode=0o700)
         (root / 'creator-photos').mkdir(mode=0o700)
+        (root / 'review-media').mkdir(mode=0o700)
         cls.old_receipt_host, cls.old_receipt_owner = preflight.RECEIPT_HOST, preflight.RECEIPT_OWNER
         cls.old_photo_host = preflight.CREATOR_PHOTO_HOST
+        cls.old_review_host = preflight.REVIEW_MEDIA_HOST
         preflight.RECEIPT_HOST = root / 'receipts'
         preflight.CREATOR_PHOTO_HOST = root / 'creator-photos'
+        preflight.REVIEW_MEDIA_HOST = root / 'review-media'
         preflight.RECEIPT_OWNER = (os.geteuid(), os.getegid())
         code_secret = base64.b64encode(hashlib.sha512(b'compose-code-secret').digest()).decode('ascii')
         pin_secret = base64.b64encode(hashlib.sha512(b'compose-pin-secret').digest()).decode('ascii')
@@ -261,6 +264,7 @@ class ComposeIsolationTests(unittest.TestCase):
                     'V3_FIREBASE_ADMIN_CREDENTIALS_FILE': str(firebase),
                     'V3_COOKIE_KEYS_DIRECTORY': str(root), 'V3_RECEIPT_STORAGE_DIRECTORY': str(root/'receipts'),
                     'V3_CREATOR_PHOTO_STORAGE_DIRECTORY': str(root/'creator-photos'),
+                    'V3_REVIEW_MEDIA_STORAGE_DIRECTORY': str(root/'review-media'),
                     'V3_EDGE_SUBNET': '172.30.73.0/24', 'V3_WEB_PROXY_IP': '172.30.73.10'})
         cls.config = json.loads(subprocess.check_output(['docker', 'compose', '-f', str(ROOT/'docker/compose.pilot.yml'), 'config', '--format', 'json'], env=env, text=True))
         # Some Compose releases omit explicit false values from rendered JSON.
@@ -274,11 +278,16 @@ class ComposeIsolationTests(unittest.TestCase):
                   if item.get('target') == '/run/weymela-v3/creator-photos']
         if len(photos) == 1 and photos[0].get('bind', {}).get('create_host_path') is None:
             photos[0].setdefault('bind', {})['create_host_path'] = False
+        reviews = [item for item in cls.config['services']['api']['volumes']
+                   if item.get('target') == '/run/weymela-v3/review-media']
+        if len(reviews) == 1 and reviews[0].get('bind', {}).get('create_host_path') is None:
+            reviews[0].setdefault('bind', {})['create_host_path'] = False
 
     @classmethod
     def tearDownClass(cls):
         preflight.RECEIPT_HOST, preflight.RECEIPT_OWNER = cls.old_receipt_host, cls.old_receipt_owner
         preflight.CREATOR_PHOTO_HOST = cls.old_photo_host
+        preflight.REVIEW_MEDIA_HOST = cls.old_review_host
         cls.directory.cleanup()
 
     def test_compose_is_image_only_and_digest_pinned(self):
@@ -333,12 +342,17 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertEqual(photo_mount['type'], 'bind')
         self.assertFalse(photo_mount.get('read_only', False))
         self.assertFalse(photo_mount['bind']['create_host_path'])
+        review_mount = next(item for item in api['volumes'] if item['target'] == '/run/weymela-v3/review-media')
+        self.assertEqual(review_mount['type'], 'bind')
+        self.assertFalse(review_mount.get('read_only', False))
+        self.assertFalse(review_mount['bind']['create_host_path'])
         for part in ('worker', 'web'):
             service = self.config['services'][part]
             self.assertNotIn('v3-cookie-protection.pfx', {item['source'] for item in service.get('secrets', [])})
             self.assertNotIn('/run/weymela-v3/keys', {item.get('target') for item in service.get('volumes', [])})
             self.assertNotIn('/run/weymela-v3/receipts', {item.get('target') for item in service.get('volumes', [])})
             self.assertNotIn('/run/weymela-v3/creator-photos', {item.get('target') for item in service.get('volumes', [])})
+            self.assertNotIn('/run/weymela-v3/review-media', {item.get('target') for item in service.get('volumes', [])})
 
     def test_firebase_admin_and_resend_secrets_are_api_only(self):
         api = self.config['services']['api']
@@ -351,10 +365,12 @@ class ComposeIsolationTests(unittest.TestCase):
             self.assertNotIn('v3-firebase-admin.json', {item['source'] for item in service.get('secrets', [])})
 
     def test_readonly_apps_have_exact_single_bounded_tmpfs(self):
-        for part in ('api', 'worker', 'web'):
+        for part in ('worker', 'web'):
             app = self.config['services'][part]
             self.assertTrue(app['read_only'])
             self.assertEqual(app['tmpfs'], ['/tmp:size=32m,mode=1777'])
+        self.assertTrue(self.config['services']['api']['read_only'])
+        self.assertEqual(self.config['services']['api']['tmpfs'], ['/tmp:size=128m,mode=1777'])
 
     def manifest(self):
         images = [{'component': p, 'commit': 'test-commit', 'digest': self.config['services'][p]['image']} for p in ('api', 'worker', 'web')]
@@ -444,6 +460,20 @@ class ComposeIsolationTests(unittest.TestCase):
             self.assertIn(f'{part}: private Creator photo storage is API-only.',
                           preflight.validate(config, self.manifest()))
 
+    def test_preflight_rejects_missing_or_public_review_media_mount(self):
+        config = copy.deepcopy(self.config)
+        config['services']['api']['volumes'] = [v for v in config['services']['api']['volumes']
+                                               if v['target'] != '/run/weymela-v3/review-media']
+        self.assertIn('api: private persistent review media bind mount is required.',
+                      preflight.validate(config, self.manifest()))
+        for part in ('worker', 'web'):
+            config = copy.deepcopy(self.config)
+            review = next(v for v in config['services']['api']['volumes']
+                          if v['target'] == '/run/weymela-v3/review-media')
+            config['services'][part]['volumes'] = [review]
+            self.assertIn(f'{part}: private review media storage is API-only.',
+                          preflight.validate(config, self.manifest()))
+
     def test_preflight_rejects_disabled_or_mismatched_authentication(self):
         for key, value in (
             ('V3__Auth__EmailDeliveryMode', 'Disabled'),
@@ -510,7 +540,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             (self.root/f"images/{image['component']}-image.json").write_text(json.dumps(image))
         (self.root/'migrations/efbundle').write_text('inert test artifact, not executable')
         (self.root/'migrations/v3-forward.sql').write_text('-- inert fixture')
-        baseline = 'grants/baseline-24/v3-verify.sql'
+        baseline = 'grants/baseline-28/v3-verify.sql'
         current = [f'grants/current/v3-{name}.sql' for name in
                    ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
         verifier = 'grants/current/v3-verify.sql'
@@ -519,10 +549,30 @@ class ReleaseIntegrityTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             if name == baseline:
                 path.write_bytes(subprocess.check_output(['git', 'show',
-                    '47e63df0b71be941922ff9b316e3a0a0466ab187:database/grants/v3-verify.sql'], cwd=ROOT))
+                    '0c546ee17030e1cf44f1e6d667a02611c6fc0ac2:database/grants/v3-verify.sql'], cwd=ROOT))
             else:
                 path.write_text('-- inert grant fixture')
-        order = [f'migration-{i}' for i in range(20)] + [
+        order = [
+            '20260911225904_InitialV3Schema',
+            '20260911233032_AddViewRewardsQrAndPayouts',
+            '20260912011149_AddOperationalSecurityAndNotifications',
+            '20260913045523_AddAuthenticationRecovery',
+            '20260913054814_AddRoleEnrollments',
+            '20260913062900_AddPhoneLoginAliases',
+            '20260914022116_AddDevicePinSessionFoundation',
+            '20260916042557_AddPasswordCredentials',
+            '20260916202055_AddCustomerProfiles',
+            '20260917020034_AddProductHandoffTransactions',
+            '20260917233008_AddBusinessLedPromotionAndUgc',
+            '20260918144832_AddUgcCustomerOffers',
+            '20260919120000_AddUgcCustomerDiscountLimit',
+            '20260922004528_AddBusinessProfileCoordinates',
+            '20260922161742_AddCreatorPromotionContentSubmissions',
+            '20260922184111_AddPromotionLiveDurationSnapshots',
+            '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout',
+            '20260924034537_AddAdminAccountAuthorityFoundation',
+            '20260925010921_AddViewAsSupportSessions',
+            '20260925203153_AddPlatformPromotionalFunding',
             '20260925212120_RetireSupportSessions',
             '20260928213157_AlignDepositReviewAuthority',
             '20260928230108_AddCreatorNumbers',
@@ -530,11 +580,12 @@ class ReleaseIntegrityTests(unittest.TestCase):
             '20260929203557_AddUgcPlatformCapacities',
             '20260930031549_AddCreatorProfilePhotos',
             '20260930210000_AddAgreementDeadlines',
-            '20261001043831_AddAdminVerifiedAudienceAndEnforcement']
+            '20261001043831_AddAdminVerifiedAudienceAndEnforcement',
+            '20261006050542_CompleteCreatorCollaborationWorkflow']
         migration = {'commit':commit, 'migrationOrder':order,
                      'grantContracts':{
-                         'from':{'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',
-                                 'migrationCount':24,'verifier':baseline},
+                         'from':{'sourceCommit':'0c546ee17030e1cf44f1e6d667a02611c6fc0ac2',
+                                 'migrationCount':28,'verifier':baseline},
                          'to':{'sourceCommit':commit,'migrationCount':len(order),
                                'scripts':current,'verifier':verifier}},
                      'files':{p.relative_to(self.root/'migrations').as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
@@ -577,9 +628,15 @@ class ReleaseIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Grant contract stage'):
             release.verify(self.root)
 
-    def test_release_requires_both_reviewed_upgrade_migrations(self):
+    def test_release_requires_reviewed_upgrade_migration(self):
         self.manifest['migrations']['migrationOrder'].pop()
         self.manifest['migrations']['grantContracts']['to']['migrationCount'] -= 1
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, 'Grant contract stage'):
+            release.verify(self.root)
+
+    def test_release_rejects_altered_baseline_migration(self):
+        self.manifest['migrations']['migrationOrder'][0] = '20260911225904_AlteredBaseline'
         self.write_manifest()
         with self.assertRaisesRegex(ValueError, 'Grant contract stage'):
             release.verify(self.root)

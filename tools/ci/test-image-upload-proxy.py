@@ -41,6 +41,7 @@ def png(size):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runner', help='Owned local SDK container; omitted on hosted CI')
+    parser.add_argument('--node-runner', help='Optional owned Node container when the SDK runner has no Node binary')
     args = parser.parse_args()
     control = ROOT / '.artifacts/browser-host.json'
     if control.exists():
@@ -119,15 +120,20 @@ def main():
                     print(f'Two proxies -> real API: {size} bytes -> FinancialWritesPaused PASS', flush=True)
                 status, body = upload(5 * 1024 * 1024 + 1)
                 assert status == 413 and json.loads(body)['code'] == 'RequestTooLarge'
-                assert request('/api/session/switch-profile', b'x' * 32769)[0] == 413
                 assert request('/api/business/deposit-requests')[1] == b'[]'
                 assert not list(receipts.iterdir())
-                print('Bounded JSON 413, ordinary 32 KiB limit, no receipt/deposit persisted PASS', flush=True)
+                status, _ = request('/api/development/session', json.dumps({'alias': 'creator', 'accessKey': identity['accessKey']}).encode())
+                assert status == 204, status
+                review = b'--fixture\r\nContent-Disposition: form-data; name="media"; filename="review.mp4"\r\nContent-Type: video/mp4\r\n\r\n' + b'x' * 65752 + b'\r\n--fixture--\r\n'
+                status, body = request('/api/creator/creator-budgets/11111111-1111-1111-1111-111111111111/content/review', review, 'multipart/form-data; boundary=fixture')
+                assert status != 413, (status, body)
+                assert request('/api/session/switch-profile', b'x' * 32769)[0] == 413
+                print('Bounded JSON 413, review upload route, ordinary 32 KiB limit, no receipt/deposit persisted PASS', flush=True)
                 fixture = temp / 'receipt.png'
                 fixture.write_bytes(png(65752))
                 command = ['node', 'src/Weymela.Web/scripts/test-upload-proxy.mjs', base, str(fixture)]
-                if args.runner:
-                    command = ['docker', 'exec', args.runner, *command]
+                if args.node_runner or args.runner:
+                    command = ['docker', 'exec', args.node_runner or args.runner, *command]
                 subprocess.run(command, check=True, cwd=ROOT, timeout=90)
             finally:
                 subprocess.run(['docker', 'rm', '-f', container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

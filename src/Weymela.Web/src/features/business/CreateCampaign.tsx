@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { post, request, useAction, useResource } from "../../api/client";
+import { post, useAction, useResource } from "../../api/client";
 import type { BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
 import { PlatformCapacityPicker } from "./PlatformCapacityPicker";
@@ -88,7 +88,7 @@ function CreateCampaignForm({
       return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
     };
     return <div className="content-grid form-layout"><Section title="Promotion details">
-      {wallet.available === 0 && <Notice>Available funds: {amount(0)} ETB. <Link to="/business/wallet">Add Funds</Link> before publishing.</Notice>}
+      {wallet.available === 0 && <Notice>You can save this Draft now. <Link to="/business/wallet">Add Funds</Link> before posting it to Creators.</Notice>}
       <form className="form-grid" onSubmit={event => { event.preventDefault(); if (!validDates || platforms.length === 0) return; void action.run(async key => {
         const dueUtc = endOfLocalDayUtc(form.contentDue); const result = await post<{ id: string }>("/business/promotions", {
           title: form.title, description: form.description.trim(), slogan: null, location: null, resources: [], type, campaignBudget: budget,
@@ -96,9 +96,7 @@ function CreateCampaignForm({
           minimumVerifiedFollowers: null,
           startUtc: new Date().toISOString(), endUtc: new Date(new Date(dueUtc).getTime() + 30 * 86400000).toISOString(),
           applicationClosesAtUtc: endOfLocalDayUtc(form.applicationCloses), contentDueAtUtc: dueUtc, platforms,
-        }, key); const latest = await request<Wallet>("/business/wallet");
-        await post(`/business/promotions/${result.id}/fund`, { campaignVersion: 0, walletVersion: latest.version }, key);
-        await post(`/business/promotions/${result.id}/publish`, { version: 1 }, key); navigate(`/business/campaigns/${result.id}`);
+        }, key); navigate(`/business/campaigns/${result.id}`);
       }); }}>
         <Field label="Promotion title" wide><input value={form.title} onChange={e => set("title", e.target.value)} maxLength={120} required /></Field>
         <div className="field wide promotion-selected-type">
@@ -113,8 +111,8 @@ function CreateCampaignForm({
         <div className="field wide"><PlatformCapacityPicker value={platforms} onChange={setPlatforms} />{platforms.length === 0 && <Notice error>Choose at least one Creator slot.</Notice>}</div>
         <Field label="Description" wide><textarea value={form.description} onChange={e => set("description", e.target.value)} maxLength={3000} rows={4} /></Field>
         <Field label="Promotion budget"><MoneyInput value={form.campaignBudget} min={Math.max(0.01, price.minimumCampaignBudget ?? 0.01)} onChange={e => set("campaignBudget", e.target.value)} /></Field>
-        {shortfall > 0 && <Notice error>Available funds cannot cover this Promotion. You need <strong>{amount(shortfall)} ETB more</strong>. <Link to="/business/wallet">Add Funds</Link>.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
-        <div className="form-actions wide"><Button type="submit" icon="arrow" disabled={action.busy || !validDates || platforms.length === 0 || shortfall > 0}>{action.busy ? "Publishing…" : "Publish Promotion"}</Button></div>
+        {shortfall > 0 && <Notice>You can save the Draft. <Link to="/business/wallet">Add Funds</Link>: you need <strong>{amount(shortfall)} ETB</strong> before posting it to Creators.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
+        <div className="form-actions wide"><Button type="submit" icon="arrow" disabled={action.busy || !validDates || platforms.length === 0}>{action.busy ? "Saving…" : "Save Draft"}</Button></div>
       </form>
     </Section></div>;
   }}</Resource></>;

@@ -26,26 +26,48 @@ def verify(root):
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
     migrations = manifest['migrations']
-    baseline = 'grants/baseline-24/v3-verify.sql'
+    baseline = 'grants/baseline-28/v3-verify.sql'
     current = [f'grants/current/v3-{name}.sql' for name in
                ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
     verifier = 'grants/current/v3-verify.sql'
     contracts = migrations.get('grantContracts', {})
-    approved_upgrade = ['20260929203557_AddUgcPlatformCapacities',
-                        '20260930031549_AddCreatorProfilePhotos',
-                        '20260930210000_AddAgreementDeadlines',
-                        '20261001043831_AddAdminVerifiedAudienceAndEnforcement']
-    expected_order_tail = ['20260928213157_AlignDepositReviewAuthority',
-                           '20260928230108_AddCreatorNumbers',
-                           '20260929022846_BindUgcSaleAssignments', *approved_upgrade]
-    expected_count = 24 + len(approved_upgrade)
-    if (contracts.get('from') != {'sourceCommit':'47e63df0b71be941922ff9b316e3a0a0466ab187',
-                                  'migrationCount':24, 'verifier':baseline}
+    expected_order = [
+        '20260911225904_InitialV3Schema',
+        '20260911233032_AddViewRewardsQrAndPayouts',
+        '20260912011149_AddOperationalSecurityAndNotifications',
+        '20260913045523_AddAuthenticationRecovery',
+        '20260913054814_AddRoleEnrollments',
+        '20260913062900_AddPhoneLoginAliases',
+        '20260914022116_AddDevicePinSessionFoundation',
+        '20260916042557_AddPasswordCredentials',
+        '20260916202055_AddCustomerProfiles',
+        '20260917020034_AddProductHandoffTransactions',
+        '20260917233008_AddBusinessLedPromotionAndUgc',
+        '20260918144832_AddUgcCustomerOffers',
+        '20260919120000_AddUgcCustomerDiscountLimit',
+        '20260922004528_AddBusinessProfileCoordinates',
+        '20260922161742_AddCreatorPromotionContentSubmissions',
+        '20260922184111_AddPromotionLiveDurationSnapshots',
+        '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout',
+        '20260924034537_AddAdminAccountAuthorityFoundation',
+        '20260925010921_AddViewAsSupportSessions',
+        '20260925203153_AddPlatformPromotionalFunding',
+        '20260925212120_RetireSupportSessions',
+        '20260928213157_AlignDepositReviewAuthority',
+        '20260928230108_AddCreatorNumbers',
+        '20260929022846_BindUgcSaleAssignments',
+        '20260929203557_AddUgcPlatformCapacities',
+        '20260930031549_AddCreatorProfilePhotos',
+        '20260930210000_AddAgreementDeadlines',
+        '20261001043831_AddAdminVerifiedAudienceAndEnforcement',
+        '20261006050542_CompleteCreatorCollaborationWorkflow',
+    ]
+    expected_count = len(expected_order)
+    if (contracts.get('from') != {'sourceCommit':'0c546ee17030e1cf44f1e6d667a02611c6fc0ac2',
+                                  'migrationCount':28, 'verifier':baseline}
             or contracts.get('to') != {'sourceCommit':manifest['commit'],
                                        'migrationCount':expected_count, 'scripts':current, 'verifier':verifier}
-            or len(migrations.get('migrationOrder', [])) != expected_count
-            or migrations['migrationOrder'][20] != '20260925212120_RetireSupportSessions'
-            or migrations['migrationOrder'][21:] != expected_order_tail):
+            or migrations.get('migrationOrder') != expected_order):
         raise ValueError('Grant contract stage/source mismatch')
     checksums = manifest.get('checksums', {})
     required = {'migrations/efbundle', 'migrations/v3-forward.sql', 'migrations/migration-manifest.json'}
@@ -70,7 +92,7 @@ def verify(root):
     for name in artifact_names:
         if migration_files.get(name) != checksums['migrations/'+name]:
             raise ValueError('Grant/migration checksum binding mismatch')
-    if migration_files[baseline] != 'ef06c1b2690ba02db3329027c49b4286684ff9e6e898225cba9d0c82e9c287b0':
+    if migration_files[baseline] != 'a5568f3a9f9a59b686b4c8b44df8bd3729256176cb2021324a54522991cfdf64':
         raise ValueError('Baseline grant verifier digest mismatch')
     return {'commit': manifest['commit'], 'verifiedArtifacts': len(checksums), 'deploymentAuthorized': False}
 

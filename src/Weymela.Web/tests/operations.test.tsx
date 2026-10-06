@@ -36,27 +36,17 @@ describe("Operational states", () => {
     wrap(<><ConnectionStatus /><Inbox /></>); await userEvent.click(await screen.findByRole("button", { name: "Mark read" }));
     expect(screen.getAllByText(/Nothing.*queued/).length).toBeGreaterThan(0); expect(api.writes).toHaveLength(0);
   });
-  it("requires user confirmation before installing an available update", async () => {
+  it("does not interrupt an active session when an update becomes available", () => {
     const worker = { postMessage: vi.fn() }; vi.stubGlobal("navigator", { onLine: true, serviceWorker: { addEventListener: vi.fn() } });
     wrap(<ConnectionStatus />); act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: worker })));
-    expect(screen.getByRole("status", { name: "Update available" })).toBeVisible();
-    expect(worker.postMessage).not.toHaveBeenCalled(); await userEvent.click(screen.getByRole("button", { name: /^Reload$/ }));
-    expect(worker.postMessage).toHaveBeenCalledWith({ type: "ACTIVATE_UPDATE" });
+    expect(screen.queryByRole("status", { name: "Update available" })).not.toBeInTheDocument();
+    expect(worker.postMessage).not.toHaveBeenCalled();
   });
-  it("dismisses a waiting update for the current session without activating it", async () => {
-    const first = { postMessage: vi.fn() };
-    const second = { postMessage: vi.fn() };
-    vi.stubGlobal("navigator", { onLine: true, serviceWorker: { addEventListener: vi.fn() } });
+  it("keeps the offline warning after removing the update prompt", () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     wrap(<ConnectionStatus />);
-    act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: first })));
-    await userEvent.click(screen.getByRole("button", { name: "Dismiss update notice" }));
-    expect(screen.queryByRole("status", { name: "Update available" })).not.toBeInTheDocument();
-    act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: first })));
-    expect(screen.queryByRole("status", { name: "Update available" })).not.toBeInTheDocument();
-    act(() => window.dispatchEvent(new CustomEvent("weymela-update", { detail: second })));
-    expect(screen.getByRole("status", { name: "Update available" })).toBeVisible();
-    expect(first.postMessage).not.toHaveBeenCalled();
-    expect(second.postMessage).not.toHaveBeenCalled();
+    expect(screen.getByText(/You’re offline/)).toBeVisible();
+    expect(screen.queryByText("Update available")).not.toBeInTheDocument();
   });
   it("never pretends disconnected deposit processing credited funds", async () => {
     mockApi({ "/business/deposit-method": { mode: "Disabled" } }); wrap(<DepositSubmission />);
@@ -92,10 +82,10 @@ describe("Operational states", () => {
   });
 });
 describe("Camera lifecycle", () => {
-  it.each([ ["NotAllowedError", /Camera permission was denied/], ["NotFoundError", /No camera was found/] ])("renders %s without exposing browser error internals", async (name, message) => {
+  it.each(["NotAllowedError", "NotFoundError"])("renders %s without exposing browser error internals", async (name) => {
     vi.stubGlobal("navigator", { onLine: true, mediaDevices: { getUserMedia: vi.fn().mockRejectedValue(new DOMException("sensitive browser detail", name as string)) } });
     wrap(<Checkout />); await userEvent.click(screen.getByRole("button", { name: "Scan QR" }));
-    expect(await screen.findByText(message as RegExp)).toBeVisible(); expect(screen.queryByText(/sensitive browser detail/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Camera unavailable/)).toBeVisible(); expect(screen.queryByText(/sensitive browser detail/)).not.toBeInTheDocument();
   });
   it("stops every camera track when leaving checkout", async () => {
     const stop = vi.fn(); const stream = { getTracks: () => [{ stop }] }; decoder.start.mockResolvedValue({ stop: decoder.stop });

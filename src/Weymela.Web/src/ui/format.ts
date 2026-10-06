@@ -56,8 +56,8 @@ export const promotionTypeLabel = (type: string) => {
 };
 export const promotionStatusLabel = (status: string) => ({
   Draft: "Draft",
-  Funded: "Ready to publish",
-  Published: "Active",
+  Funded: "Ready to post",
+  Published: "Posted to Creators",
   Open: "Active",
   Active: "Active",
   AwaitingContent: "Ready for content",

@@ -41,6 +41,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 CreatorId = second.CreatorId!.Value, Platform = CreatorPlatform.TikTok,
                 ProfileUrl = "https://www.tiktok.com/@second", SelfReportedAudience = 20_000,
                 VerificationStatus = "Verified", VerifiedAudience = 20_000,
+                AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
                 CreatedAtUtc = Now, UpdatedAtUtc = Now
             };
             secondProfile = profile.Id;
@@ -142,7 +143,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var state = await Setup();
         await using var db = state.Database.Open();
         var ugc = new UgcService(db, new FixedTime(Now));
-        var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+        var opportunityId = await ugc.CreateAsync(state.Business, SalesInput() with
         {
             CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
             CustomerOfferFundedAllocation = 1000m,
@@ -150,6 +151,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         }, "historical-offer-create", default);
         await ugc.PublishAsync(state.Business, opportunityId, 0, "historical-offer-publish", default);
         var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == opportunityId).Select(x => x.Id).SingleAsync();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM v3.\"UgcPlatformCapacities\"");
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("20260928230108_AddCreatorNumbers");
         var historicalId = Guid.NewGuid();
@@ -356,14 +358,14 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     {
         var state = await Setup();
         await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
-        var id = await service.CreateAsync(state.Business, Input() with
+        var id = await service.CreateAsync(state.Business, SalesInput() with
         {
             CustomerOfferEnabled = true, CustomerDiscountPercent = 80m,
             CustomerOfferFundedAllocation = 1000m, CustomerOfferStartsAtUtc = Now,
             CustomerOfferEndsAtUtc = Now.AddDays(7)
         }, "ugc-discount-basic-validation", default);
         Assert.NotEqual(Guid.Empty, id);
-        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, Input() with
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, SalesInput() with
         {
             CustomerOfferEnabled = true, CustomerDiscountPercent = 100.0001m,
             CustomerOfferFundedAllocation = 1000m, CustomerOfferStartsAtUtc = Now,
@@ -389,17 +391,18 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
             await db.SaveChangesAsync();
             var ugc = new UgcService(db, new FixedTime(Now));
-            var id = await ugc.CreateAsync(state.Business, Input() with
+            var id = await ugc.CreateAsync(state.Business, SalesInput() with
             {
                 CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
                 CustomerOfferFundedAllocation = 5600m, CustomerFacingSlogan = "Save on your next visit",
                 CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
             }, "offer-create", default);
             await ugc.PublishAsync(state.Business, id, 0, "offer-publish", default);
-            var request = await ugc.RequestAsync(state.Creator, id, "offer-creator-request", default);
+            var request = await RequestForTikTok(ugc, db, state, id, "offer-creator-request");
             await ugc.ReviewRequestAsync(state.Business, request, true, null, "offer-creator-approve", default);
             var assignmentId = await db.UgcAssignments.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
             expectedAssignmentId = assignmentId;
+            await GoLiveUgc(ugc, db, state, assignmentId, "offer");
             var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
             qr = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
                 .IssueUgcAsync(new(customer, offerId, assignmentId, "offer-qr"), default);
@@ -423,11 +426,15 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(expectedAssignmentId, sale.UgcAssignmentId);
         Assert.Equal(expectedAssignmentId, (await verify.OfferQrSessions.SingleAsync()).UgcAssignmentId);
         Assert.Equal(50m, sale.CustomerDiscountAmount.Amount); Assert.Equal(30m, sale.PlatformRevenueAmount.Amount);
-        Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
+        Assert.Single(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.Ugc).ToListAsync());
+        Assert.Empty(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.SaleCommission).ToListAsync());
         Assert.Empty(await verify.CustomerCashbackEntries.ToListAsync());
         Assert.Single(await verify.PlatformRevenueEntries.Where(x => x.Source == PlatformRevenueSource.UgcCustomerOfferSaleFee).ToListAsync());
         Assert.Equal(5520m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
-        Assert.Equal(7020m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
+        // Content approval has already consumed the fixed 500 ETB Creator
+        // production payment. The sale consumes only its separate 80 ETB
+        // Customer discount/platform funding and never adds Creator commission.
+        Assert.Equal(6520m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
         Assert.Equal(OfferQrStatus.Used, (await verify.OfferQrSessions.SingleAsync()).Status);
         var workspace = new WorkspaceQueries(verify, new PersistentWorkspaceDirectory(verify), new FixedTime(Now));
         var businessTransaction = Assert.Single(await workspace.RecentSalesAsync(state.Business, default));
@@ -506,15 +513,16 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             });
             await db.SaveChangesAsync();
             var ugc = new UgcService(db, new FixedTime(Now));
-            var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+            var opportunityId = await ugc.CreateAsync(state.Business, SalesInput() with
             {
                 CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
                 CustomerOfferFundedAllocation = 5600m,
                 CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
             }, "manual-ugc-create", default);
             await ugc.PublishAsync(state.Business, opportunityId, 0, "manual-ugc-publish", default);
-            var requestId = await ugc.RequestAsync(state.Creator, opportunityId, "manual-ugc-request", default);
+            var requestId = await RequestForTikTok(ugc, db, state, opportunityId, "manual-ugc-request");
             assignmentId = await ugc.ReviewRequestAsync(state.Business, requestId, true, null, "manual-ugc-approve", default);
+            await GoLiveUgc(ugc, db, state, assignmentId, "manual-ugc");
             offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == opportunityId).Select(x => x.Id).SingleAsync();
             creatorNumber = (await db.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == state.Creator.CreatorId)).CreatorNumber!.Value.ToString();
         }
@@ -534,7 +542,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             new FixedTime(Now)).RecentSalesAsync(state.Business, default);
         Assert.Equal("••••0000", Assert.Single(businessHistory).CustomerMasked);
         Assert.Single(await verify.FinancialJournals.Where(x => x.SourceType == JournalSourceType.UgcCustomerOfferSale).ToListAsync());
-        Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
+        Assert.Single(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.Ugc).ToListAsync());
+        Assert.Empty(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.SaleCommission).ToListAsync());
     }
 
     [Fact]
@@ -554,15 +563,16 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
             await db.SaveChangesAsync();
             var ugc = new UgcService(db, new FixedTime(Now));
-            var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+            var opportunityId = await ugc.CreateAsync(state.Business, SalesInput() with
             {
                 CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
                 CustomerOfferFundedAllocation = 80m,
                 CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7)
             }, "final-fund-create", default);
             await ugc.PublishAsync(state.Business, opportunityId, 0, "final-fund-publish", default);
-            var requestId = await ugc.RequestAsync(state.Creator, opportunityId, "final-fund-request", default);
+            var requestId = await RequestForTikTok(ugc, db, state, opportunityId, "final-fund-request");
             var assignmentId = await ugc.ReviewRequestAsync(state.Business, requestId, true, null, "final-fund-approve", default);
+            await GoLiveUgc(ugc, db, state, assignmentId, "final-fund");
             var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == opportunityId).Select(x => x.Id).SingleAsync();
             var checkout = new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now));
             firstQr = await checkout.IssueUgcAsync(new(firstCustomer, offerId, assignmentId, "first-final-qr"), default);
@@ -585,7 +595,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Single(await verify.UgcCustomerOfferSales.ToListAsync());
         Assert.Single(await verify.FinancialJournals.Where(x => x.SourceType == JournalSourceType.UgcCustomerOfferSale).ToListAsync());
         Assert.Equal(0m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
-        Assert.Empty(await verify.CreatorEarningEntries.ToListAsync());
+        Assert.Single(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.Ugc).ToListAsync());
+        Assert.Empty(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.SaleCommission).ToListAsync());
     }
 
     [Fact]
@@ -602,16 +613,17 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
             await db.SaveChangesAsync();
             var ugc = new UgcService(db, new FixedTime(Now));
-            var id = await ugc.CreateAsync(state.Business, Input() with
+            var id = await ugc.CreateAsync(state.Business, SalesInput() with
             {
                 CustomerOfferEnabled = true, CustomerDiscountPercent = 5m,
                 CustomerOfferFundedAllocation = 79m, CustomerOfferStartsAtUtc = Now,
                 CustomerOfferEndsAtUtc = Now.AddDays(7)
             }, "small-offer-create", default);
             await ugc.PublishAsync(state.Business, id, 0, "small-offer-publish", default);
-            var request = await ugc.RequestAsync(state.Creator, id, "small-offer-creator-request", default);
+            var request = await RequestForTikTok(ugc, db, state, id, "small-offer-creator-request");
             await ugc.ReviewRequestAsync(state.Business, request, true, null, "small-offer-creator-approve", default);
             var assignmentId = await db.UgcAssignments.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
+            await GoLiveUgc(ugc, db, state, assignmentId, "small-offer");
             var offerId = await db.UgcCustomerOffers.Where(x => x.UgcOpportunityId == id).Select(x => x.Id).SingleAsync();
             qr = await new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now))
                 .IssueUgcAsync(new(customer, offerId, assignmentId, "small-offer-qr"), default);
@@ -643,7 +655,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var ugc = new UgcService(db, new FixedTime(Now));
         var hidden = await ugc.CreateAsync(state.Business, Input() with { Title = "Internal hidden brief" }, "hidden-create", default);
         await ugc.PublishAsync(state.Business, hidden, 0, "hidden-publish", default);
-        var visible = await ugc.CreateAsync(state.Business, Input() with
+        var visible = await ugc.CreateAsync(state.Business, SalesInput() with
         {
             Title = "Internal customer must never see this title",
             CustomerOfferEnabled = true,
@@ -654,8 +666,9 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             CustomerOfferEndsAtUtc = Now.AddDays(7)
         }, "visible-create", default);
         await ugc.PublishAsync(state.Business, visible, 0, "visible-publish", default);
-        var request = await ugc.RequestAsync(state.Creator, visible, "visible-creator-request", default);
+        var request = await RequestForTikTok(ugc, db, state, visible, "visible-creator-request");
         var assignmentId = await ugc.ReviewRequestAsync(state.Business, request, true, null, "visible-creator-approve", default);
+        await GoLiveUgc(ugc, db, state, assignmentId, "visible");
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE v3."PublicWorkspaceProfiles" SET "Latitude"={9.01m}, "Longitude"={38.72m}
             WHERE "SubjectId"={state.Business.BusinessId} AND "Role"='Business'
@@ -671,7 +684,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal("Bella Beauty", card.Business.DisplayName);
         Assert.Equal(5m, card.BenefitPercent);
         Assert.NotNull(card.Creator);
-        Assert.Null(card.WatchUrl);
+        Assert.Equal("https://www.tiktok.com/@creator/video/7412345678901234567", card.WatchUrl);
         Assert.Equal(9.01m, card.Business.Latitude);
         Assert.Equal(38.72m, card.Business.Longitude);
         Assert.DoesNotContain("Internal", card.Offer, StringComparison.Ordinal);
@@ -732,12 +745,13 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Audience_minimum_is_informational_when_enforcement_is_off()
+    public async Task Configured_audience_minimum_is_a_hard_gate_when_general_enforcement_is_off()
     {
         var state = await Setup(); await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
         var restricted = await service.CreateAsync(state.Business, Input(minimumAudience: 30_000), "ugc-restricted-create", default);
         await service.PublishAsync(state.Business, restricted, 0, "ugc-restricted-publish", default);
-        Assert.NotEqual(Guid.Empty, await service.RequestAsync(state.Creator, restricted, "ugc-restricted-request", default));
+        Assert.Equal(FailureKind.Validation, (await Assert.ThrowsAsync<ApplicationFailure>(() =>
+            service.RequestAsync(state.Creator, restricted, "ugc-restricted-request", default))).Kind);
         var open = await service.CreateAsync(state.Business, Input(minimumAudience: null), "ugc-open-create", default);
         await service.PublishAsync(state.Business, open, 0, "ugc-open-publish", default);
         Assert.NotEqual(Guid.Empty, await service.RequestAsync(state.Creator, open, "ugc-open-request", default));
@@ -753,7 +767,9 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             db.PublicWorkspaceProfiles.Add(new() { SubjectId = second.CreatorId.Value, Role = ActorRole.Creator, DisplayName = "Second Creator", PublicId = "CR-SECOND" });
             db.CreatorSocialProfiles.Add(new CreatorSocialProfileRecord { CreatorId = second.CreatorId.Value, Platform = CreatorPlatform.TikTok,
                 ProfileUrl = "https://www.tiktok.com/@second", SelfReportedAudience = 25_000,
-                VerificationStatus = "Verified", VerifiedAudience = 25_000, CreatedAtUtc = Now, UpdatedAtUtc = Now });
+                VerificationStatus = "Verified", VerifiedAudience = 25_000,
+                AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
+                CreatedAtUtc = Now, UpdatedAtUtc = Now });
             await db.SaveChangesAsync();
             var service = new UgcService(db, new FixedTime(Now));
             var id = await service.CreateAsync(state.Business, Input(creators: 1), "ugc-capacity-create", default);
@@ -935,6 +951,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             CreatorId = creator.CreatorId.Value, Platform = CreatorPlatform.TikTok,
             ProfileUrl = "https://www.tiktok.com/@mimi", SelfReportedAudience = 20_000,
             VerificationStatus = "Verified", VerifiedAudience = 20_000,
+            AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
             CreatedAtUtc = Now, UpdatedAtUtc = Now
         });
         db.FinancialConfigurations.Add(new(configurationId, "PlatformPricing"));
@@ -955,6 +972,41 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     private static CreateUgcInput Input(int creators = 3, long? minimumAudience = 10_000) => new CreateUgcInput("Morning Hair Transformation", null, "Video", "Create a 30-60 second vertical video.",
         ["https://example.com/reference"], "Addis Ababa", Now.AddDays(14), true, false, "90-day digital use", 500, creators,
         [new("TikTok", "TikTok-style", minimumAudience)]);
+
+    private static CreateUgcInput SalesInput(int creators = 3) => Input(creators) with
+    {
+        PlatformCapacities = [new("TikTok", creators)]
+    };
+
+    private static async Task<Guid> RequestForTikTok(UgcService service, Weymela.Infrastructure.Persistence.WeymelaDbContext db,
+        State state, Guid opportunityId, string key)
+    {
+        var profileId = await db.CreatorSocialProfiles.Where(x => x.CreatorId == state.Creator.CreatorId
+            && x.Platform == CreatorPlatform.TikTok && x.IsActive).Select(x => x.Id).SingleAsync();
+        return await service.RequestAsync(state.Creator, opportunityId, key, default, "TikTok", profileId);
+    }
+
+    private static async Task GoLiveUgc(UgcService service,
+        Weymela.Infrastructure.Persistence.WeymelaDbContext db, State state, Guid assignmentId, string key)
+    {
+        var id = assignmentId.ToString("N");
+        await service.SubmitPrivateAsync(state.Creator, assignmentId,
+            new("m_" + id + id, "video/mp4", 1024, new string('a', 64), "review.mp4"),
+            key + "-review", default);
+        await service.ReviewSubmissionAsync(state.Business, assignmentId, "approve", null,
+            key + "-approve", default);
+        var profileId = await db.CreatorSocialProfiles.Where(x => x.CreatorId == state.Creator.CreatorId
+            && x.Platform == CreatorPlatform.TikTok && x.IsActive).Select(x => x.Id).SingleAsync();
+        var clock = new TestClock { Now = Now };
+        var publications = new CreatorPublicationService(db, new TestViews(clock),
+            new CommerceAccessPolicy(db), new TestDirectory(), new FixedTime(Now));
+        var publication = await publications.RequestUgcAsync(state.Creator, assignmentId,
+            new("TikTok", "7412345678901234567", profileId), key + "-publication", default);
+        if (publication.Status == PublicationVerificationStatus.VerificationPending.ToString())
+            await publications.AdminReviewAsync(Phase4Scenario.Admin, publication.Id,
+                new("verify", "test-evidence", null), key + "-verify", default);
+        await publications.GoLiveUgcAsync(state.Creator, assignmentId, key + "-go-live", default);
+    }
 
     private static async Task DrainNotifications(TestDatabase database)
     {

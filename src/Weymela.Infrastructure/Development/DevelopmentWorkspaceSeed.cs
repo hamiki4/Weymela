@@ -5,6 +5,7 @@ using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Web;
 
 namespace Weymela.Infrastructure.Development;
 
@@ -36,6 +37,23 @@ public static class DevelopmentWorkspaceSeed
             foreach(var persona in directory.Personas.Where(x=>type is not (LegalDocumentType.TermsOfService or LegalDocumentType.PrivacyPolicy) && x.Actor.Role is ActorRole.Business or ActorRole.Creator))
                 db.LegalAcceptances.Add(new(persona.Actor.UserId,persona.Actor.Role==ActorRole.Business?LegalRole.Business:LegalRole.Creator,id,now,null,null));
         }
+        var creatorTikTok = new CreatorSocialProfileRecord
+        {
+            CreatorId = creator.CreatorId!.Value, Platform = CreatorPlatform.TikTok,
+            ProfileUrl = "https://www.tiktok.com/@bella", SelfReportedAudience = 42000,
+            VerificationStatus = "Verified", VerifiedAudience = 42000,
+            AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
+            CreatedAtUtc = now, UpdatedAtUtc = now
+        };
+        var otherCreatorTikTok = new CreatorSocialProfileRecord
+        {
+            CreatorId = directory.Get("other-creator").Actor.CreatorId!.Value, Platform = CreatorPlatform.TikTok,
+            ProfileUrl = "https://www.tiktok.com/@elias", SelfReportedAudience = 29000,
+            VerificationStatus = "Verified", VerifiedAudience = 29000,
+            AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
+            CreatedAtUtc = now, UpdatedAtUtc = now
+        };
+        db.CreatorSocialProfiles.AddRange(creatorTikTok, otherCreatorTikTok);
         await db.SaveChangesAsync();db.ChangeTracker.Clear();var commands=new FinancialCommands(db,clock);
         await commands.CreditDepositAsync(new(business,new Money(18000),"fixture-deposit",now),0);
         await commands.CreditDepositAsync(new(directory.Get("other-business").Actor,new Money(3000),"fixture-deposit",now),0);
@@ -45,12 +63,14 @@ public static class DevelopmentWorkspaceSeed
             var hybrid=type==PromotionType.ViewPlusCommission;var id=await commands.CreateCampaignOnceAsync(new(business,
                 hybrid?"A little coffee. A great story.":"Made for your morning.",
                 hybrid?"Bring your audience into our everyday coffee ritual. Share an honest visit, a favourite cup, and a moment worth coming back for.":"Tell the story behind a better morning. Create thoughtful short-form content celebrating local coffee.",
-                type,new Money(hybrid?6000:4000),new("Food",10000,"Addis Ababa","One original short video. Authentic storytelling. Clearly disclose the partnership."),now.AddHours(-1),now.AddDays(21),now),"fixture-create-"+type);
+                type,new Money(hybrid?6000:4000),new("Food",10000,"Addis Ababa","One original short video. Authentic storytelling. Clearly disclose the partnership."),now.AddHours(-1),now.AddDays(21),now,
+                Platforms: [(CreatorPlatform.TikTok, 2, 10000)]),"fixture-create-"+type);
             var w=await db.BusinessWallets.AsNoTracking().SingleAsync(x=>x.BusinessId==business.BusinessId);var p=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==id);
             await commands.FundPromotionAsync(new(business,id,p.Version,w.Version,"fixture-fund-"+type,now));
             p=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==id);
             await commands.PublishCampaignOnceAsync(new(business,id,p.Version,now),"fixture-publish-"+type);
-            var app=await commands.JoinCampaignOnceAsync(new(creator,id,"I'd love to tell this story.","A warm, honest look at a local favourite.",new("Food","Addis Ababa",42000,true),now),"fixture-join-"+type);
+            var app=await commands.JoinCampaignOnceAsync(new(creator,id,"I'd love to tell this story.","A warm, honest look at a local favourite.",new("Food","Addis Ababa",42000,true),now,
+                creatorTikTok.Id, CreatorPlatform.TikTok),"fixture-join-"+type);
             p=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==id);
             var allocation=await commands.ApproveAndSetBudgetAsync(business,app,new Money(hybrid?2000:1500),p.Version,"fixture-approve-"+type,now);
             var content=hybrid?"7611111111111111111":"7611111111111111112";provider.SetCount(content,1000);
@@ -67,7 +87,8 @@ public static class DevelopmentWorkspaceSeed
                 var qr=await checkout.IssueAsync(new(directory.Get("customer").Actor,allocation,"fixture-offer"));
                 await checkout.RedeemAsync(new(directory.Get("cashier").Actor,qr.Token!,new Money(6000),"fixture-sale"));
                 var other=directory.Get("other-creator").Actor;
-                await commands.JoinCampaignOnceAsync(new(other,id,"A Campaign that fits my audience.","A behind-the-scenes coffee tasting.",new("Food","Addis Ababa",29000,true),now),"fixture-pending");
+                await commands.JoinCampaignOnceAsync(new(other,id,"A Campaign that fits my audience.","A behind-the-scenes coffee tasting.",new("Food","Addis Ababa",29000,true),now,
+                    otherCreatorTikTok.Id, CreatorPlatform.TikTok),"fixture-pending");
             }
             campaigns.Add(id);
         }

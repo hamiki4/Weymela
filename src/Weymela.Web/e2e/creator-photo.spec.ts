@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Locator } from "@playwright/test";
-import { layout, login, open, screenshot } from "./helpers";
+import { ensureBusinessFunds, layout, login, open, screenshot } from "./helpers";
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4AWIqjpn8H4SZGKAAAAAA//+9j9SYAAAABklEQVQDAD6oBMcQkXozAAAAAElFTkSuQmCC", "base64");
 
@@ -88,6 +88,7 @@ test("Creator photo changes on Profile and is visible only through Business Crea
     .filter({ has: page.getByRole("heading", { name: "Approved Creators", exact: true }) });
   await expect(approvedCreators.locator(".person:visible").filter({ hasText: "Bella" })
     .locator(".creator-photo-avatar img:visible")).toHaveCount(1);
+  await ensureBusinessFunds(context, 250);
   const title = `Creator photo UGC ${Date.now()}`;
   const headers = { "X-Weymela-Request": "1", "Idempotency-Key": crypto.randomUUID() };
   const created = await context.request.post("/api/business/ugc", { headers, data: {
@@ -113,17 +114,20 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   await login(context, "business");
   await open(page, "/business/campaigns");
   const ugcCard = page.locator(".data-card").filter({ hasText: title });
-  await ugcCard.getByRole("button", { name: "Manage" }).click();
-  await ugcCard.getByRole("button", { name: "Creator requests & assignments" }).click();
-  await rendered(ugcCard.locator(".business-ugc-creator-row .creator-photo-avatar img"), 3);
+  await ugcCard.getByRole("link", { name: "Manage" }).click();
+  const creatorRequests = page.locator("section.panel")
+    .filter({ has: page.getByRole("heading", { name: "Creator requests", exact: true }) });
+  await rendered(creatorRequests.locator(".business-ugc-creator-row .creator-photo-avatar img"), 3);
   for (const width of [320, 360, 375, 390, 393, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await layout(page);
     if (width === 390 || width === 393) await screenshot(page, `business-ugc-creator-photo-${width}`);
   }
-  await ugcCard.getByRole("button", { name: "Approve" }).click();
-  await expect(ugcCard.getByRole("heading", { name: "Approved Creators" })).toBeVisible();
-  await expect(ugcCard.locator(".business-ugc-creator-row .creator-photo-avatar img")).toHaveCount(2);
+  await creatorRequests.getByRole("button", { name: "Approve" }).click();
+  const creatorWork = page.locator("section.panel")
+    .filter({ has: page.getByRole("heading", { name: "Creator work", exact: true }) });
+  await rendered(creatorWork.locator(".business-ugc-creator-row .creator-photo-avatar img"), 3);
+  await expect(page.locator(".business-ugc-creator-row .creator-photo-avatar img")).toHaveCount(2);
   await login(context, "creator");
   await open(page, "/profile");
   const creatorId = "00000000-0000-4000-8000-000000000300";

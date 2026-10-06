@@ -12,8 +12,7 @@ internal sealed class CreatorPromotionContentSubmissionConfiguration
         b.ToTable("CreatorPromotionContentSubmissions", t =>
         {
             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Revision", "\"RevisionNumber\" > 0");
-            t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram')");
-            t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Reference", "length(trim(\"ContentReference\")) > 0 AND length(\"ContentReference\") <= 100");
+            t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Source", "(\"ReviewMediaAssetId\" IS NOT NULL AND \"Provider\" IS NULL AND \"ContentReference\" IS NULL) OR (\"ReviewMediaAssetId\" IS NULL AND \"Provider\" IN ('TikTok','YouTube','Instagram') AND length(trim(\"ContentReference\")) > 0 AND length(\"ContentReference\") <= 100)");
             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Review", "(\"ReviewStatus\" = 'UnderReview' AND \"ReviewedAtUtc\" IS NULL AND \"ReviewedByUserId\" IS NULL) OR (\"ReviewStatus\" IN ('ChangesRequested','Approved','Rejected') AND \"ReviewedAtUtc\" IS NOT NULL AND \"ReviewedByUserId\" IS NOT NULL)");
             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Status", "\"ReviewStatus\" IN ('UnderReview','ChangesRequested','Approved','Rejected')");
             t.HasCheckConstraint("CK_CreatorPromotionContentSubmission_Feedback", "\"Feedback\" IS NULL OR length(\"Feedback\") <= 2000");
@@ -26,6 +25,7 @@ internal sealed class CreatorPromotionContentSubmissionConfiguration
         b.Property(x => x.ReviewStatus).HasConversion<string>().HasMaxLength(64);
         b.Property(x => x.Feedback).HasMaxLength(2000);
         b.HasOne<CreatorAllocation>().WithMany().HasForeignKey(x => x.CreatorAllocationId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<PrivateReviewMediaAsset>().WithOne().HasForeignKey<CreatorPromotionContentSubmission>(x => x.ReviewMediaAssetId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => new { x.CreatorAllocationId, x.RevisionNumber }).IsUnique();
         b.HasIndex(x => new { x.CreatorAllocationId, x.SubmittedAtUtc });
         Mapping.Version(b);

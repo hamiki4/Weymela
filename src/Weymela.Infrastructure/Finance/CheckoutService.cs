@@ -267,15 +267,19 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
                 && request.Status == UgcRequestStatus.Approved
                 && permission.Role == ActorRole.Creator && permission.IsActive
                 && ugcOpportunityIds.Contains(assignment.UgcOpportunityId)
-            select assignment.UgcOpportunityId).Distinct().ToListAsync(ct);
+            select assignment).Distinct().ToListAsync(ct);
         var titles = await db.UgcOpportunities.AsNoTracking()
             .Where(x => ugcOpportunityIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, x => x.Title, ct);
-        foreach (var offer in ugcOffers.Where(x => approvedUgc.Contains(x.UgcOpportunityId)))
+        foreach (var offer in ugcOffers)
         {
             try
             {
                 await ValidateUgcOffer(offer, ct);
+                var assignment = approvedUgc.SingleOrDefault(x => x.UgcOpportunityId == offer.UgcOpportunityId)
+                    ?? throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
+                await new CustomerOfferEligibility(db, access, clock)
+                    .RequireUgcAsync(offer, assignment.Id, creatorId, ct);
                 choices.Add(new(offer.Id, "UGC_CUSTOMER_OFFER",
                     offer.CustomerFacingSlogan ?? titles.GetValueOrDefault(offer.UgcOpportunityId, "Customer Offer"),
                     offer.CustomerDiscountPercent));
@@ -401,21 +405,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
 
     private async Task ValidateOffer(Promotion p, CreatorAllocation a, CancellationToken ct)
     {
-        if (p.PromotionType != PromotionType.ViewPlusCommission)
-            throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
-        var now = clock.GetUtcNow().UtcDateTime;
-        try { VerifiedViewService.EnsureCampaignActive(p, now); }
-        catch (ApplicationFailure ex)
-        { throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available", ex); }
-        await access.EnsureBusinessAsync(p.BusinessId, ct);
-        if (a.Status != CreatorAllocationStatus.Active || a.ActivatedAtUtc is null || a.RemainingAmount.Amount <= 0)
-            throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
-        var participation = await db.CreatorPromotionParticipations.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.CreatorAllocationId == a.Id && x.Status == ParticipationStatus.Active, ct);
-        if (participation is null)
-            throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
-        if (!participation.IsLive(now,p.PromotionLiveDurationDays))
-            throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
+        await new CustomerOfferEligibility(db, access, clock).RequirePromotionAsync(p, a, ct);
     }
     private async Task ValidateUgcOffer(UgcCustomerOffer offer, CancellationToken ct)
     {
@@ -427,17 +417,8 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
     private async Task<UgcAssignment> EligibleUgcAssignment(UgcCustomerOffer offer, Guid assignmentId,
         Guid? creatorId, CancellationToken ct)
     {
-        var assignment = await db.UgcAssignments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == assignmentId, ct);
-        if (assignment is null || assignment.UgcOpportunityId != offer.UgcOpportunityId
-            || (creatorId is not null && assignment.CreatorId != creatorId)
-            || assignment.Status == UgcAssignmentStatus.Rejected
-            || !await db.UgcCreatorRequests.AsNoTracking().AnyAsync(x => x.Id == assignment.UgcCreatorRequestId
-                && x.CreatorId == assignment.CreatorId && x.UgcOpportunityId == offer.UgcOpportunityId
-                && x.Status == UgcRequestStatus.Approved, ct)
-            || !await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Creator
-                && x.SubjectId == assignment.CreatorId && x.IsActive, ct))
-            throw CheckoutError(FailureKind.Validation, "NOT_ELIGIBLE", "Offer is no longer available");
-        return assignment;
+        return (await new CustomerOfferEligibility(db, access, clock)
+            .RequireUgcAsync(offer, assignmentId, creatorId, ct)).Assignment;
     }
     private void ValidateQr(OfferQrSession session, Guid business)
     {

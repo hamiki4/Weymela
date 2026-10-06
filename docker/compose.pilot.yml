@@ -43,6 +43,8 @@ services:
       start_period: 30s
   api:
     <<: *app
+    # ASP.NET's bounded multipart parser may spool a 100 MB review upload here.
+    tmpfs: ["/tmp:size=128m,mode=1777"]
     image: ${V3_API_IMAGE:?Use approved ghcr V3 API sha256 digest}
     platform: linux/amd64
     env_file: ["${V3_API_ENV_FILE:?External protected V3 API environment file required}"]
@@ -56,6 +58,7 @@ services:
       V3__Auth__CookieKeyDirectory: /run/weymela-v3/keys
       V3__Deposits__ReceiptDirectory: /run/weymela-v3/receipts
       V3__CreatorPhotos__Directory: /run/weymela-v3/creator-photos
+      V3__ReviewMedia__Directory: /run/weymela-v3/review-media
       V3__Auth__CookieCertificatePath: /run/secrets/v3-cookie-protection.pfx
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/v3-firebase-admin.json
       V3__Security__TrustedProxies__0: "${V3_WEB_PROXY_IP:?Approved isolated proxy IP required}"
@@ -74,6 +77,11 @@ services:
       - type: bind
         source: ${V3_CREATOR_PHOTO_STORAGE_DIRECTORY:?Pre-provision protected API-only Creator photo directory}
         target: /run/weymela-v3/creator-photos
+        read_only: false
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${V3_REVIEW_MEDIA_STORAGE_DIRECTORY:?Pre-provision protected API-only review media directory}
+        target: /run/weymela-v3/review-media
         read_only: false
         bind: { create_host_path: false }
     networks: [data, edge]

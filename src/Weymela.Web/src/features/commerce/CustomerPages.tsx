@@ -18,16 +18,24 @@ import { Coordinates, nearestOffers, offerDistanceKm, validCoordinates } from ".
 
 type CustomerOffersProps = { discover?: boolean };
 
-const sourceLabel = (source: string) =>
-  source === "UGC_CUSTOMER_OFFER" ? "Customer offer" : "Creator promotion";
-
 const sourceFilterLabel = (source: string) =>
-  source === "UGC_CUSTOMER_OFFER" ? "Customer offers" : "Creator picks";
+  source === "UGC_CUSTOMER_OFFER" ? "Discount offers" : "Cashback offers";
 
 const benefitLabel = (offer: Offer) =>
   `${amount(offer.benefitPercent)}% ${offer.source === "UGC_CUSTOMER_OFFER" ? "off" : "cashback"}`;
 
 const initial = (value: string) => value.trim().slice(0, 1).toUpperCase() || "W";
+
+function trustedVideoEmbed(value: string | null | undefined) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !["www.youtube.com", "youtube.com"].includes(url.hostname)) return undefined;
+    const id = url.pathname === "/watch" ? url.searchParams.get("v") : null;
+    return id && /^[A-Za-z0-9_-]{1,100}$/.test(id)
+      ? `https://www.youtube-nocookie.com/embed/${id}` : undefined;
+  } catch { return undefined; }
+}
 
 const CUSTOMER_LOCATION_KEY = "weymela.customer-location";
 
@@ -104,7 +112,6 @@ function CustomerLocationCard({
 
 function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm: number | null }) {
   const watchUrl = safeExternal(offer.watchUrl);
-  const directionsUrl = safeExternal(offer.business.directionsUrl);
   const headingId = `customer-offer-${offer.id}-${offer.ugcAssignmentId ?? "promotion"}`;
   const customerFacingTitle = offer.slogan?.trim() || offer.offer;
 
@@ -116,9 +123,6 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             {initial(offer.business.displayName)}
           </span>
           <div>
-            <span className="customer-promotion-source">
-              {sourceLabel(offer.source)}
-            </span>
             <h2 id={headingId}>{offer.business.displayName}</h2>
           </div>
         </div>
@@ -159,18 +163,7 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             rel="noreferrer"
           >
             <Icon name="video" />
-            Watch Promotion
-          </a>
-        )}
-        {directionsUrl && (
-          <a
-            className="button secondary"
-            href={directionsUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Icon name="location" />
-            Get Directions
+            Watch Video
           </a>
         )}
         <ActionLink to={`/customer/offers/${offer.id}${offer.ugcAssignmentId ? `?assignment=${offer.ugcAssignmentId}` : ""}`} icon="qr">
@@ -368,7 +361,7 @@ function CustomerHomeSummary() {
   const cashback = useResource<CashbackSummary>("/customer/cashback");
   const transactions = useResource<CustomerTransaction[]>("/customer/transactions");
   return <section className="product-home-summary" aria-label="Your account summary">
-    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Available cashback</span><strong>{amount(data.availableCashback.amount)}</strong><small>{cashbackStatusLabel(data.status)}</small></Link>}</Resource>
+    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Cashback</span><strong>{amount(data.availableCashback.amount)} ETB</strong><small>{data.eligible ? "Ready to cash out" : `Cash out at ${amount(data.minimumCashOut.amount)} ETB`}</small></Link>}</Resource>
     <Resource resource={transactions}>{(rows) => rows.length ? <Link to="/customer/transactions" className="product-summary-row"><span>Latest purchase</span><strong>{rows[0].business}</strong><small>{dateTime(rows[0].purchasedAtUtc)}</small></Link> : null}</Resource>
   </section>;
 }
@@ -532,8 +525,19 @@ export function CustomerOfferQr() {
       <Resource resource={resource}>
         {(rows) => {
           const offer = rows.find((row) => row.id === id && (row.ugcAssignmentId ?? null) === assignmentId);
+          const watchUrl = offer ? safeExternal(offer.watchUrl) : null;
+          const embedUrl = trustedVideoEmbed(watchUrl);
           return offer ? (
-            <QrPanel key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} />
+            <div className="customer-live-offer-layout">
+              <section className="customer-live-video" aria-label="Promotion video">
+                {embedUrl ? <iframe className="customer-live-video-frame" src={embedUrl} title={`${offer.business.displayName} Promotion video`}
+                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
+                  : <div className="customer-live-video-frame"><Icon name="video" size={42} /></div>}
+                {watchUrl ? <a className="button secondary" href={watchUrl} target="_blank" rel="noopener noreferrer">Watch Video</a>
+                  : <p className="muted">Video unavailable.</p>}
+              </section>
+              <QrPanel key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} />
+            </div>
           ) : (
             <Section title="Offer unavailable">
               <Empty
@@ -600,8 +604,8 @@ export function CustomerTransactions() {
 
 const cashbackStatusLabel = (status: CashbackSummary["status"]) => {
   if (status === "PayoutPrepared") return "Payout prepared";
-  if (status === "Eligible") return "Eligible to cash out";
-  return "Below minimum cash-out";
+  if (status === "Eligible") return "Ready to cash out";
+  return "Building cashback";
 };
 
 export function CustomerCashback() {
@@ -618,24 +622,24 @@ export function CustomerCashback() {
             <>
               <section className="customer-cashback-summary" aria-label="Cashback summary">
                 <div className="customer-cashback-available">
-                  <span>Available Cashback</span>
-                  <strong>{amount(available)}</strong>
+                  <span>Cashback</span>
+                  <strong>{amount(available)} ETB</strong>
                   <small>{cashbackStatusLabel(summary.status)}</small>
                 </div>
                 <div className="customer-cashback-progress">
                   <div className="customer-cashback-threshold">
-                    <span>Minimum cash-out</span>
-                    <strong>{amount(threshold)}</strong>
+                    <span>Cash out at</span>
+                    <strong>{amount(threshold)} ETB</strong>
                   </div>
                   <div className="customer-cashback-track" role="progressbar" aria-label="Progress toward minimum cash-out" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
                     <span style={{ width: `${progress}%` }} />
                   </div>
-                  <p>{summary.eligible ? "You’ve reached the current minimum." : `${amount(summary.remainingToCashOut.amount)} remaining to cash out.`}</p>
+                  <p>{summary.eligible ? "Ready to cash out" : `${amount(summary.remainingToCashOut.amount)} ETB to cash out`}</p>
                 </div>
               </section>
               <section className="customer-payout-history" aria-labelledby="customer-payout-title">
                 <div className="customer-ledger-section-heading">
-                  <div><p className="eyebrow">Authoritative payout records</p><h2 id="customer-payout-title">Payout history</h2></div>
+                  <div><h2 id="customer-payout-title">Payout history</h2></div>
                 </div>
                 {summary.payoutHistory.length ? summary.payoutHistory.map((payout, index) => (
                   <article className="customer-payout-row" key={`${payout.eligibleAtUtc}-${index}`}>

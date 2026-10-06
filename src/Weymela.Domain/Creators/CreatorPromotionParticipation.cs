@@ -9,6 +9,8 @@ public sealed class CreatorPromotionParticipation
     public Guid PromotionId { get; private set; }
     public Guid CreatorId { get; private set; }
     public Guid CreatorAllocationId { get; private set; }
+    public Guid? ApprovedContentSubmissionId { get; private set; }
+    public Guid? CreatorSocialProfileId { get; private set; }
     public string Provider { get; private set; }
     public string ExternalContentId { get; private set; }
     public long BaselineViews { get; private set; }
@@ -26,12 +28,20 @@ public sealed class CreatorPromotionParticipation
 
     public CreatorPromotionParticipation(Guid promotionId, Guid creatorId, Guid allocationId, string provider, string contentId,
         long baselineViews, DateTime wentLiveAtUtc, DateTime verifiedAtUtc)
+        : this(promotionId, creatorId, allocationId, provider, contentId, baselineViews,
+            wentLiveAtUtc, verifiedAtUtc, null, null) { }
+
+    public CreatorPromotionParticipation(Guid promotionId, Guid creatorId, Guid allocationId, string provider, string contentId,
+        long baselineViews, DateTime wentLiveAtUtc, DateTime verifiedAtUtc,
+        Guid? approvedContentSubmissionId, Guid? creatorSocialProfileId)
     {
         if (baselineViews < 0 || string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(contentId))
             throw new ArgumentException("A verified content baseline is required.");
         PromotionId = promotionId; CreatorId = creatorId; CreatorAllocationId = allocationId;
         Provider = provider; ExternalContentId = contentId; BaselineViews = baselineViews; LatestVerifiedViews = baselineViews;
         WentLiveAtUtc = wentLiveAtUtc; LatestVerifiedAtUtc = verifiedAtUtc;
+        ApprovedContentSubmissionId = approvedContentSubmissionId;
+        CreatorSocialProfileId = creatorSocialProfileId;
     }
 
     public DateTime ExpiresAtUtc(int promotionLiveDurationDays)

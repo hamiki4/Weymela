@@ -15,6 +15,18 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await page.route("**/api/business/ugc", route => route.fulfill({ json: [opportunity] }));
     await page.route("**/api/creator/ugc", route => route.fulfill({ json: [opportunity] }));
+    await page.route(`**/api/business/ugc/${opportunity.id}`, route => route.fulfill({ json: {
+      opportunity,
+      instructions: "",
+      resources: [],
+      productProvided: false,
+      creatorMustPurchase: true,
+      usageRights: null,
+      currentRevision: 1,
+      requests: [],
+      assignments: [],
+      revisions: [],
+    } }));
     await page.route(`**/api/creator/ugc/${opportunity.id}`, route => route.fulfill({ json: {
       opportunity,
       instructions: "",
@@ -33,15 +45,15 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await expect(page.getByText("Product arrangement")).toBeVisible();
     await expect(page.getByRole("radio", { name: /Product provided by Business/ })).not.toBeChecked();
     await expect(page.getByRole("radio", { name: /Creator purchases product/ })).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "Publish Promotion" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Save Draft" })).toBeDisabled();
     await page.getByRole("radio", { name: /Creator purchases product/ }).check();
     await expect(page.getByText("Creator buys before creating content")).toBeVisible();
     await layout(page);
     if (width === 390) await screenshot(page, "390-business-ugc-arrangement");
     await open(page, "/business/campaigns");
     const businessCard = page.locator(".data-card").filter({ hasText: opportunity.title });
-    await businessCard.getByRole("button", { name: "Manage" }).click();
-    await expect(businessCard.getByText(/Product arrangement:.*Creator purchases product/)).toBeVisible();
+    await businessCard.getByRole("link", { name: "Manage" }).click();
+    await expect(page.getByText("Creator purchases", { exact: true })).toBeVisible();
     await layout(page);
 
     for (const [alias, path] of [["creator", "/creator/discover"], ["customer", "/customer/offers"],

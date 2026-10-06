@@ -12,6 +12,7 @@ import {
 } from "../features/business/BusinessPages";
 import { CreateCampaign } from "../features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
+import { BusinessUgcDetail } from "../features/business/UgcPages";
 import {
   CreatorEarnings,
   CreatorHowYouEarn,
@@ -37,6 +38,7 @@ import { AdminAccountCreate, AdminAccountDetail, AdminAccounts } from "../featur
 import { AdminMore } from "../features/admin/AdminMore";
 import { AdminFinancialSettings } from "../features/admin/FinancialSettings";
 import { AdminSocialProfileReview } from "../features/admin/SocialProfileReview";
+import { AdminPublicationReview } from "../features/admin/PublicationReview";
 import { AdminPayouts, AdminPlatformRevenue } from "../features/admin/Payouts";
 import { AdminReportsPage, AdminUgcPage, AdminWalletsPage, OperationsWalletsPage } from "../features/admin/AdminFinancePages";
 import {
@@ -140,6 +142,7 @@ export function App() {
           <Route path="/business/requests" element={<BusinessRequests />} />
           <Route path="/business/pricing" element={<BusinessPricingPage />} />
           <Route path="/business/ugc" element={<Navigate to="/business/campaigns" replace />} />
+          <Route path="/business/ugc/:id" element={<BusinessUgcDetail />} />
           <Route path="/business/ugc/new" element={<Navigate to="/business/campaigns/new?type=ugc" replace />} />
           <Route path="/business/cashiers" element={<BusinessCashiers />} />
         </Route>
@@ -176,6 +179,7 @@ export function App() {
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
           <Route path="/admin/social-profiles" element={<AdminSocialProfileReview />} />
+          <Route path="/admin/publications" element={<AdminPublicationReview />} />
         </Route>
         <Route element={<RoleGate roles={["OperationsAdmin"]} />}>
           <Route path="/admin/operations" element={<OperationsDashboard />} />

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
 using Weymela.Domain;
+using Weymela.Infrastructure.Finance;
 
 namespace Weymela.Infrastructure.Web;
 
@@ -96,30 +97,20 @@ public sealed partial class WorkspaceQueries
                 var live=await db.CreatorPromotionParticipations.AsNoTracking().SingleAsync(x=>x.CreatorAllocationId==a.Id,ct);
                 var profile=await directory.CreatorCardAsync(a.CreatorId,ct);
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
-                var content=PublicContentUrl(live.Provider,live.ExternalContentId);
+                var content=PublicContentLink.Create(live.Provider,live.ExternalContentId);
                 result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
                     new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location,offer.RemainingDays));
             }
             else
             {
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
-                var ugc=await db.UgcCustomerOffers.AsNoTracking().SingleAsync(x=>x.Id==offer.OfferId,ct);
-                var assignments=await (from assignment in db.UgcAssignments.AsNoTracking()
-                    join request in db.UgcCreatorRequests.AsNoTracking() on assignment.UgcCreatorRequestId equals request.Id
-                    join permission in db.CommercePermissions.AsNoTracking() on assignment.CreatorId equals permission.SubjectId
-                    where assignment.UgcOpportunityId==ugc.UgcOpportunityId
-                        && assignment.Status!=UgcAssignmentStatus.Rejected
-                        && request.Status==UgcRequestStatus.Approved
-                        && permission.Role==ActorRole.Creator && permission.IsActive
-                    select assignment).Distinct().ToListAsync(ct);
-                foreach(var assignment in assignments)
-                {
-                    var creator=await directory.CreatorAsync(assignment.CreatorId,ct);
-                    result.Add(new(offer.OfferId,offer.Source,offer.Offer,
-                        new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
-                        new(creator.DisplayName),offer.BenefitPercent,null,offer.Slogan,offer.Location,
-                        UgcAssignmentId:assignment.Id));
-                }
+                if (offer.Creator is null || offer.UgcAssignmentId is null) continue;
+                result.Add(new(offer.OfferId,offer.Source,offer.Offer,
+                    new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
+                    new(offer.Creator.DisplayName),offer.BenefitPercent,
+                    offer.Provider is null || offer.ExternalContentId is null ? null
+                        : PublicContentLink.Create(offer.Provider,offer.ExternalContentId),
+                    offer.Slogan,offer.Location,UgcAssignmentId:offer.UgcAssignmentId));
             }
         }
         return result;
@@ -130,11 +121,5 @@ public sealed partial class WorkspaceQueries
             ??throw new ApplicationFailure(FailureKind.NotFound,"Offer QR not found.");
         return qr.Status==OfferQrStatus.Used?"Used":Now>=qr.ExpiresAtUtc?"Expired":"Issued";
     }
-    internal static string? PublicContentUrl(string provider,string content) => provider switch
-    {
-        "TikTok" when content.All(char.IsAsciiDigit)=>"https://www.tiktok.com/@creator/video/"+content,
-        "YouTube" when content.All(x=>char.IsAsciiLetterOrDigit(x)||x is '-' or '_')=>"https://www.youtube.com/watch?v="+content,
-        "Instagram" when content.All(x=>char.IsAsciiLetterOrDigit(x)||x is '-' or '_')=>"https://www.instagram.com/p/"+content+"/",
-        _=>null
-    };
+    internal static string? PublicContentUrl(string provider,string content) => PublicContentLink.Create(provider,content);
 }

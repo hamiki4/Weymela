@@ -34,8 +34,8 @@ public static class ApiHost
         var development=options.DevelopmentIdentity;
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(productIntegration);
-        builder.WebHost.ConfigureKestrel(o=>{o.Limits.MaxRequestBodySize=RuntimeOptions.ReceiptRequestBytes;o.Limits.MaxRequestHeaderCount=40;o.Limits.MaxRequestHeadersTotalSize=16384;o.Limits.RequestHeadersTimeout=TimeSpan.FromSeconds(15);});
-        builder.Services.Configure<FormOptions>(o=>{o.MemoryBufferThreshold=RuntimeOptions.ReceiptRequestBytes;o.MultipartBodyLengthLimit=RuntimeOptions.ReceiptRequestBytes;o.ValueCountLimit=4;o.MultipartHeadersLengthLimit=1024;});
+        builder.WebHost.ConfigureKestrel(o=>{o.Limits.MaxRequestBodySize=RuntimeOptions.ReviewMediaRequestBytes;o.Limits.MaxRequestHeaderCount=40;o.Limits.MaxRequestHeadersTotalSize=16384;o.Limits.RequestHeadersTimeout=TimeSpan.FromSeconds(15);});
+        builder.Services.Configure<FormOptions>(o=>{o.MemoryBufferThreshold=64*1024;o.MultipartBodyLengthLimit=RuntimeOptions.ReviewMediaRequestBytes;o.ValueCountLimit=4;o.MultipartHeadersLengthLimit=1024;});
         builder.Logging.AddFilter("Microsoft.AspNetCore",LogLevel.Error).AddFilter("Microsoft.EntityFrameworkCore",LogLevel.Error);
         builder.Logging.AddJsonConsole(o=>{o.IncludeScopes=true;o.TimestampFormat="yyyy-MM-ddTHH:mm:ss.fffZ";o.UseUtcTimestamp=true;});
         builder.Services.ConfigureHttpJsonOptions(o=>{o.SerializerOptions.UnmappedMemberHandling=JsonUnmappedMemberHandling.Disallow;o.SerializerOptions.MaxDepth=16;});
@@ -47,9 +47,12 @@ public static class ApiHost
         builder.Services.AddHostedService<AccountDeletionBackgroundService>();
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();builder.Services.AddScoped<CreatorSocialProfileLinks>();builder.Services.AddScoped<AdminSocialProfileReviewService>();
         builder.Services.AddScoped<UgcService>();
+        builder.Services.AddScoped<CreatorPublicationService>();
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddSingleton<PrivateReceiptStore>();
         builder.Services.AddSingleton<CreatorPhotoStore>();builder.Services.AddScoped<CreatorPhotoService>();
+        builder.Services.AddSingleton<PrivateReviewMediaStore>();
+        builder.Services.AddScoped<ReviewMediaAccessService>();
         builder.Services.AddScoped<DeviceEnrollmentService>();builder.Services.AddScoped<DeviceSessionService>();builder.Services.AddScoped<DeviceAccessService>();builder.Services.AddScoped<DevicePinRecoveryService>();
         builder.Services.AddScoped<ProductIntegrationService>();
         builder.Services.AddScoped<AdminAccountService>();
@@ -127,7 +130,7 @@ public static class ApiHost
         });
         app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapCreatorPhotoEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapCreatorPhotoEndpoints();app.MapReviewMediaEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

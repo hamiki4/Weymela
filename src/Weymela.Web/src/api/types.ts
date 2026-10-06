@@ -316,6 +316,15 @@ export interface CreatorCampaign {
   wentLiveAtUtc?: string | null;
   expiresAtUtc?: string | null;
   remainingDays?: number | null;
+  description?: string | null;
+  requirements?: string | null;
+  location?: string | null;
+  contentDueAtUtc?: string | null;
+  selectedPlatform?: string | null;
+  selectedSocialProfileUrl?: string | null;
+  reviewMediaUrl?: string | null;
+  publication?: PublicationStatus | null;
+  selectedSocialProfileId?: string | null;
 }
 export interface CreatorRequest {
   id: string;
@@ -330,13 +339,41 @@ export interface PromotionContentReviewCard {
   submissionId: string;
   creator: string;
   promotion: string;
-  provider: string;
-  contentReference: string;
+  provider: string | null;
+  contentReference: string | null;
   revisionNumber: number;
   submittedAtUtc: string;
   reviewStatus: string;
   feedback: string | null;
   reviewedAtUtc: string | null;
+  reviewMediaUrl?: string | null;
+  creatorAllocationId?: string | null;
+  promotionId?: string | null;
+}
+export interface PublicationStatus {
+  id: string;
+  provider: string;
+  externalContentId: string;
+  status: string;
+  verificationLabel: string;
+  requestedAtUtc: string;
+  verifiedAtUtc: string | null;
+  wentLiveAtUtc: string | null;
+  watchUrl: string | null;
+}
+export interface AdminPublicationReview {
+  id: string;
+  creator: string;
+  business: string;
+  work: string;
+  workType: string;
+  provider: string;
+  externalContentId: string;
+  socialProfileUrl: string;
+  status: string;
+  requestedAtUtc: string;
+  watchUrl: string;
+  wentLiveAtUtc?: string | null;
 }
 export interface Payout {
   id: string;
@@ -593,6 +630,13 @@ export interface UgcAssignment {
   submissionUrl: string | null;
   productProvided: boolean;
   creatorMustPurchase: boolean;
+  contentRevisionNumber?: number | null;
+  reviewMediaUrl?: string | null;
+  publication?: PublicationStatus | null;
+  selectedPlatform?: string | null;
+  selectedSocialProfileUrl?: string | null;
+  selectedSocialProfileId?: string | null;
+  reviewMediaContentType?: string | null;
 }
 export interface UgcRequest {
   id: string;
@@ -603,6 +647,7 @@ export interface UgcRequest {
   status: string;
   requestedAtUtc: string;
   rejectionReason: string | null;
+  socialProfile?: { id: string; platform: string; profileUrl: string; selfReportedAudience: number; verificationStatus: string; verifiedAudience: number | null; audienceVerificationSource?: string } | null;
 }
 export interface UgcDetail {
   opportunity: UgcCard;

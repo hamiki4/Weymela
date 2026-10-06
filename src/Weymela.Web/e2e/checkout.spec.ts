@@ -1,16 +1,19 @@
 import { test, expect } from "@playwright/test";
 import QRCode from "qrcode";
-import { login, open, screenshot } from "./helpers";
+import { createPublishedUgc, installQrCamera, login, open, scanQr, screenshot } from "./helpers";
 
 test("real QR rejects wrong Business then confirms the same offer at its Business", async ({
   page,
   context,
 }) => {
+  const offerTitle = `QR ownership offer ${Date.now()}`;
+  await createPublishedUgc(context, offerTitle, "creator");
   await login(context, "customer");
   await open(page, "/customer/offers");
   await page
+    .locator("article.customer-promotion-card")
+    .filter({ hasText: offerTitle })
     .getByRole("link", { name: "Get Offer", exact: true })
-    .first()
     .click();
   const issuing = page.waitForResponse(
     (r) => r.url().endsWith("/qr") && r.request().method() === "POST",
@@ -21,11 +24,10 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
     page.getByRole("img", { name: "Offer QR for the cashier" }),
   ).toBeVisible();
   await screenshot(page, "checkout-customer-issued");
+  await installQrCamera(context, qr.token);
   await login(context, "other-cashier");
   await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve QR" }).click();
+  await scanQr(page);
   await expect(page.getByRole("alert")).toHaveText(
     "This QR belongs to another business",
   );
@@ -34,9 +36,7 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   ).toHaveCount(0);
   await login(context, "cashier");
   await open(page, "/checkout");
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await page.getByLabel("QR code", { exact: true }).fill(qr.token);
-  await page.getByRole("button", { name: "Resolve QR" }).click();
+  await scanQr(page);
   await expect(
     page.getByLabel("Total Purchase Amount", { exact: true }),
   ).toBeVisible();
@@ -76,11 +76,14 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
     }
   });
 
+  const offerTitle = `QR camera offer ${Date.now()}`;
+  await createPublishedUgc(context, offerTitle, "other-creator");
   await login(context, "customer");
   await open(page, "/customer/offers");
   await page
+    .locator("article.customer-promotion-card")
+    .filter({ hasText: offerTitle })
     .getByRole("link", { name: "Get Offer", exact: true })
-    .first()
     .click();
   const issuing = page.waitForResponse(
     (response) =>
@@ -396,8 +399,10 @@ test("camera permission failure has a usable alternative", async ({
   await open(page, "/checkout");
   await page.getByRole("button", { name: "Scan QR", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText(
-    "Camera permission was denied",
+    "Camera unavailable. Allow camera access and try again, or use manual checkout.",
   );
-  await page.getByText("Enter an opaque QR code", { exact: true }).click();
-  await expect(page.getByLabel("QR code", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Enter Manually", exact: true }).click();
+  await expect(page.getByLabel("Creator ID", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Customer phone", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("QR code", { exact: true })).toHaveCount(0);
 });

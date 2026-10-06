@@ -94,7 +94,8 @@ test("Customer mobile Home shows real account information and useful offer links
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "customer");
   await open(page, "/customer/offers");
-  await expect(page.getByRole("link", { name: /Available cashback/i })).toHaveAttribute("href", "/customer/cashback");
+  await expect(page.getByRole("region", { name: "Your account summary" })
+    .getByRole("link", { name: /^Cashback/i })).toHaveAttribute("href", "/customer/cashback");
   const nav = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(nav.getByRole("link", { name: "Cashback" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Transactions" })).toBeVisible();
@@ -183,13 +184,13 @@ test("Creator visual review captures Discover and compact work states", async ({
 
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/creator/discover");
-  await expect(page.getByRole("heading", { name: visualUgc.title })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Opportunities", exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "creator-discover-390");
 
   await page.setViewportSize({ width: 1366, height: 768 });
   await open(page, "/creator/discover");
-  await expect(page.getByRole("heading", { name: visualUgc.title })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Opportunities", exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "creator-discover-1366");
 

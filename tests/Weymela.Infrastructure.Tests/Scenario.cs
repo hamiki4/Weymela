@@ -25,7 +25,10 @@ internal sealed record Scenario(TestDatabase Database, Actor Business, Guid Prom
             Price(PromotionType.ViewOnly, versionId) with { ViewsPerReward = viewsPerReward },
             Price(PromotionType.ViewPlusCommission, versionId) with { ViewsPerReward = viewsPerReward }, new Money(creatorThreshold), new Money(customerThreshold));
         db.FinancialConfigurationVersions.Add(version);
-        var p = new Promotion(business.BusinessId.Value, "Campaign", "Brief", type, new Money(budget), new(null, null, "ET", "Content"), Now, Now.AddDays(30), (type == PromotionType.ViewOnly ? version.ViewOnly : version.ViewPlusCommission) with { }, Now, version.PromotionLiveDurationDays);
+        var p = new Promotion(business.BusinessId.Value, "Campaign", "Brief", type, new Money(budget),
+            new(null, null, "ET", "Content"), Now, Now.AddDays(30),
+            (type == PromotionType.ViewOnly ? version.ViewOnly : version.ViewPlusCommission) with { }, Now,
+            null, null, null, [(CreatorPlatform.TikTok, 100, (long?)null)], version.PromotionLiveDurationDays);
         db.Promotions.Add(p);
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         var commands = new FinancialCommands(db);
@@ -40,7 +43,16 @@ internal sealed record Scenario(TestDatabase Database, Actor Business, Guid Prom
         var p = await db.Promotions.Include(x => x.Allocations).SingleAsync(x => x.Id == PromotionId);
         if (p.Status == PromotionStatus.Funded) p.Publish(Now, Guid.NewGuid());
         var creator = Guid.NewGuid();
-        var application = new CreatorApplication(p.Id, creator, "Join", null, p, Now, Guid.NewGuid());
+        var profile = new CreatorSocialProfileRecord
+        {
+            CreatorId = creator, Platform = CreatorPlatform.TikTok,
+            ProfileUrl = $"https://www.tiktok.com/@test_{creator:N}", SelfReportedAudience = 10_000,
+            VerificationStatus = "SelfReported", AudienceVerificationSource = "SelfReported",
+            CreatedAtUtc = Now, UpdatedAtUtc = Now
+        };
+        db.CreatorSocialProfiles.Add(profile);
+        var application = new CreatorApplication(p.Id, creator, profile.Id, CreatorPlatform.TikTok,
+            "Join", null, p, Now, Guid.NewGuid());
         application.Approve(Business.UserId, Now); db.CreatorApplications.Add(application);
         await db.SaveChangesAsync();
         return creator;

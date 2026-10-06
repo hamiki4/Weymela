@@ -37,7 +37,6 @@ import {
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 import { DepositSubmission, type DepositRequest } from "./DepositSubmission";
-import { PromotionContentReviewQueue } from "./PromotionContentReviewQueue";
 import { BusinessUgcCard } from "./UgcPages";
 
 export function WalletMetrics({ wallet }: { wallet: Wallet }) {
@@ -122,10 +121,6 @@ export function BusinessDashboard() {
               <ActionLink to="/business/pricing" secondary icon="settings">Pricing</ActionLink>
             </div>
           </Section>
-          <Link className="business-home-wallet-history" to="/business/wallet">
-            <span>Wallet history</span>
-            <Icon name="arrow" size={17} />
-          </Link>
         </div>
       )}
     </Resource>
@@ -247,10 +242,7 @@ export function BusinessWallet() {
                       <span><strong>{r.label}</strong><small>{date(r.atUtc)}</small></span>
                       <strong>{amount(r.amount)} ETB</strong>
                     </summary>
-                    <div className="wallet-history-detail">
-                      {r.reason && <p>{r.reason}</p>}
-                      <small>Reference: <code>{r.reference}</code></small>
-                    </div>
+                    {r.reason && <div className="wallet-history-detail"><p>{r.reason}</p></div>}
                   </details>
                 )}
                 empty={
@@ -533,8 +525,8 @@ export function BusinessCampaigns() {
       <Resource resource={campaigns}>
         {(campaignRows) => <Resource resource={ugc}>
           {(ugcRows) => {
-            const visibleCampaigns = campaignRows.filter((row) => row.status !== "Draft" && (!activeOnly || ["Active", "Published"].includes(row.status)));
-            const visibleUgc = ugcRows.filter((item) => item.status !== "Draft" && (!activeOnly || item.status === "Open"));
+            const visibleCampaigns = campaignRows.filter((row) => !activeOnly || ["Active", "Published"].includes(row.status));
+            const visibleUgc = ugcRows.filter((item) => !activeOnly || item.status === "Open");
             const hasPromotions = visibleCampaigns.length > 0 || visibleUgc.length > 0;
             return <Section title={activeOnly ? "Active Promotions" : "Promotions"} action={activeOnly ? <Link className="text-link" to="/business/campaigns">Show all</Link> : <Currency />}>
               {hasPromotions ? <div className="card-stack business-promotion-list">
@@ -546,7 +538,6 @@ export function BusinessCampaigns() {
         </Resource>}
       </Resource>
 
-      <PromotionContentReviewQueue />
     </>
   );
 }

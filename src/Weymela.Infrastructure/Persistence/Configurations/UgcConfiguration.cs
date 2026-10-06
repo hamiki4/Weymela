@@ -132,8 +132,15 @@ internal sealed class UgcSubmissionConfiguration : IEntityTypeConfiguration<UgcS
 {
     public void Configure(EntityTypeBuilder<UgcSubmission> b)
     {
-        b.ToTable("UgcSubmissions"); Mapping.Scalars(b); b.HasKey(x => x.Id);
+        b.ToTable("UgcSubmissions", t =>
+        {
+            t.HasCheckConstraint("CK_UgcSubmission_ContentRevision", "\"ContentRevisionNumber\" > 0");
+            t.HasCheckConstraint("CK_UgcSubmission_Source", "(\"ReviewMediaAssetId\" IS NOT NULL AND \"SubmissionUrl\" IS NULL) OR (\"ReviewMediaAssetId\" IS NULL AND length(trim(\"SubmissionUrl\")) > 0)");
+        }); Mapping.Scalars(b); b.HasKey(x => x.Id);
+        b.Property(x => x.SubmissionUrl).HasMaxLength(2048);
         b.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<PrivateReviewMediaAsset>().WithOne().HasForeignKey<UgcSubmission>(x => x.ReviewMediaAssetId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.UgcAssignmentId, x.ContentRevisionNumber }).IsUnique();
         b.HasIndex(x => new { x.UgcAssignmentId, x.SubmittedAtUtc });
     }
 }

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { layout, login, open, screenshot } from "./helpers";
+import { layout, login, open, saveFundPostAndOpenPromotion, screenshot } from "./helpers";
 
 const viewports = [
   { width: 320, height: 800 },
@@ -16,10 +16,10 @@ const viewports = [
 
 async function assertBusinessContentAboveMobileNavigation(page: Page, path: string) {
   const selector = path === "/business"
-    ? ".business-home-wallet-history"
+    ? ".business-home-tools"
     : path === "/business/wallet"
       ? ".business-wallet-history"
-      : ".business-content-review";
+      : ".business-promotion-list";
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const bounds = await page.evaluate((targetSelector) => {
     const target = document.querySelector<HTMLElement>(targetSelector);
@@ -66,8 +66,7 @@ for (const viewport of viewports)
       await page.getByLabel("Region", { exact: true }).fill("Addis Ababa");
       await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
       await page.getByLabel("Promotion budget", { exact: true }).fill("1000");
-      await page.getByRole("button", { name: "Publish Promotion" }).click();
-      await expect(page).toHaveURL(/\/business\/campaigns\/[0-9a-f-]{36}$/i);
+      await saveFundPostAndOpenPromotion(page);
     }
     const screens: [string, string[]][] = [
       [
@@ -199,8 +198,9 @@ for (const viewport of viewports)
             await screenshot(page, `${viewport.width}-business-promotion-creators`);
           await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
           await page.getByLabel("Promotion budget").fill(String(available + 1000));
-          await expect(page.getByText("1,000 ETB more", { exact: true })).toBeVisible();
-          await expect(page.getByRole("link", { name: "Add Funds" })).toBeVisible();
+          const shortfall = page.locator(".notice").filter({ hasText: "before posting it to Creators" });
+          await expect(shortfall).toContainText("1,000 ETB");
+          await expect(shortfall.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-business-promotion-shortfall`);
         }
@@ -213,8 +213,9 @@ for (const viewport of viewports)
           const available = (await (await context.request.get("/api/business/wallet")).json() as { available: number }).available;
           await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
           await page.getByLabel("Creator payment (ETB)").fill(String(available + 1000));
-          await expect(page.getByRole("alert")).toContainText("You need 1,000 ETB more.");
-          await expect(page.getByRole("link", { name: "Add Funds" })).toBeVisible();
+          const ugcShortfall = page.locator(".notice").filter({ hasText: "You need 1,000 ETB more." });
+          await expect(ugcShortfall).toBeVisible();
+          await expect(ugcShortfall.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-business-ugc-shortfall`);
         }
@@ -375,7 +376,7 @@ test("stable buttons and mobile keyboard navigation", async ({
   ).toBeVisible();
 });
 
-test("waiting update stays compact, safe and dismissible across mobile widths", async ({ page, context }) => {
+test("waiting service-worker update remains in the background across mobile widths", async ({ page, context }) => {
   await login(context, "business");
   await open(page, "/business");
   await page.evaluate(() => {
@@ -385,27 +386,17 @@ test("waiting update stays compact, safe and dismissible across mobile widths", 
       detail: { postMessage: () => { scope.testUpdateActivations = (scope.testUpdateActivations ?? 0) + 1; } },
     }));
   });
-  const notice = page.getByRole("status", { name: "Update available" });
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(notice).toBeVisible();
-    await expect(notice.getByRole("button", { name: "Reload" })).toBeVisible();
+    await expect(page.getByRole("status", { name: "Update available" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Reload", exact: true })).toHaveCount(0);
     await layout(page);
-    const bounds = await notice.boundingBox();
-    const nav = await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox();
-    expect(bounds).not.toBeNull();
-    expect(nav).not.toBeNull();
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
-    expect(bounds!.y + bounds!.height).toBeLessThan(nav!.y);
-    if (width === 390) await screenshot(page, "390-business-update-notice");
   }
   expect(await page.evaluate(() => (window as Window & { testUpdateActivations?: number }).testUpdateActivations)).toBe(0);
   await page.getByRole("button", { name: "Open Settings" }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await notice.getByRole("button", { name: "Dismiss update notice" }).click();
-  await expect(notice).not.toBeVisible();
   await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Promotions" }).click();
   await expect(page).toHaveURL(/\/business\/campaigns$/);
-  await expect(notice).not.toBeVisible();
+  await expect(page.getByRole("status", { name: "Update available" })).toHaveCount(0);
 });

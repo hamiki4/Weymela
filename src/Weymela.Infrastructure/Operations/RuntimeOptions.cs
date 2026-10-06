@@ -31,6 +31,7 @@ public sealed class RuntimeOptions
     public string DepositMode { get; init; } = "Disabled";
     public string ReceiptDirectory { get; init; } = "";
     public string CreatorPhotoDirectory { get; init; } = "";
+    public string ReviewMediaDirectory { get; init; } = "";
     public string SocialMode { get; init; } = "Disabled";
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
@@ -46,6 +47,9 @@ public sealed class RuntimeOptions
     public const int RequestBytes = 32 * 1024;
     public const int ReceiptBytes = 4 * 1024 * 1024;
     public const int ReceiptRequestBytes = ReceiptBytes + RequestBytes;
+    public const int ReviewImageBytes = 10 * 1024 * 1024;
+    public const int ReviewMediaBytes = 100 * 1024 * 1024;
+    public const int ReviewMediaRequestBytes = ReviewMediaBytes + RequestBytes;
 
     public static RuntimeOptions Load(IConfiguration config, string environment, bool worker = false)
     {
@@ -154,6 +158,19 @@ public sealed class RuntimeOptions
                 Require(File.GetUnixFileMode(creatorPhotoDirectory) == (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute),
                     "The private Creator photo directory must have mode 0700.");
         }
+        var reviewMediaDirectory = config["V3:ReviewMedia:Directory"] ?? "";
+        if (worker)
+            Require(string.IsNullOrEmpty(reviewMediaDirectory), "Worker cannot configure private review media storage.");
+        else if (!dev || !string.IsNullOrEmpty(reviewMediaDirectory))
+        {
+            Require(Path.IsPathFullyQualified(reviewMediaDirectory) && Directory.Exists(reviewMediaDirectory), "A private durable review media directory is required for the API.");
+            var directory = new DirectoryInfo(reviewMediaDirectory);
+            Require(directory.LinkTarget is null && reviewMediaDirectory != receiptDirectory
+                && reviewMediaDirectory != creatorPhotoDirectory, "Review media requires a separate private directory.");
+            if (OperatingSystem.IsLinux())
+                Require(File.GetUnixFileMode(reviewMediaDirectory) == (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute),
+                    "The private review media directory must have mode 0700.");
+        }
         var social = config["V3:Social:Mode"] ?? "Disabled";
         Require(social == "Disabled" || dev && social == "Test", "Live social providers require an approved adapter; test providers cannot run outside Development.");
         Require(!config.GetValue<bool>("V3:Push:Enabled"), "Push is not connected; in-app notifications do not require push.");
@@ -193,7 +210,7 @@ public sealed class RuntimeOptions
             ResendApiKey = resendApiKey, ResendFromAddress = resendFromAddress, ResendFromName = resendFromName,
             FirebaseAdminCredentialsPath = firebaseAdminCredentials,
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
-            CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, CreatorPhotoDirectory = creatorPhotoDirectory, SocialMode = social,
+            CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, CreatorPhotoDirectory = creatorPhotoDirectory, ReviewMediaDirectory = reviewMediaDirectory, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
             FinancialWritesEnabled = financialWrites, PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies

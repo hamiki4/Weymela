@@ -37,7 +37,10 @@ function sessionResponses(role: Role) {
     if (input === "/api/customer/offers" || input === "/api/customer/transactions" || input === "/api/checkout/recent"
         || input === "/api/creator/campaigns" || input === "/api/creator/discover"
         || input === "/api/creator/ugc") return Promise.resolve(Response.json([]));
-    if (input === "/api/customer/cashback") return Promise.resolve(Response.json({ availableCashback: { amount: 0 }, status: "BelowMinimum" }));
+    if (input === "/api/customer/cashback") return Promise.resolve(Response.json({
+      availableCashback: { amount: 0 }, minimumCashOut: { amount: 4000 },
+      remainingToCashOut: { amount: 4000 }, eligible: false, status: "BelowThreshold", payoutHistory: [],
+    }));
     if (input === "/api/creator/home") return Promise.resolve(Response.json({ creator: { displayName: "Creator" },
       requests: 0, activeCampaigns: 0, earnings: { availableEarnings: 0, history: [], payoutHistory: [] } }));
     if (input === "/api/notifications") return Promise.resolve(Response.json({ items: [], unreadCount: 0 }));
@@ -170,7 +173,10 @@ describe("shared app navigation", () => {
       if (input === "/api/session") return Promise.resolve(Response.json(customer));
       if (input === "/api/device/enrollment") return Promise.resolve(Response.json({ state: "Enrolled", expiresAtUtc: null }));
       if (input === "/api/customer/offers") return Promise.resolve(Response.json([]));
-      if (input === "/api/customer/cashback") return Promise.resolve(Response.json({ availableCashback: { amount: 0 }, status: "BelowMinimum" }));
+      if (input === "/api/customer/cashback") return Promise.resolve(Response.json({
+        availableCashback: { amount: 0 }, minimumCashOut: { amount: 4000 },
+        remainingToCashOut: { amount: 4000 }, eligible: false, status: "BelowThreshold", payoutHistory: [],
+      }));
       if (input === "/api/customer/transactions") return Promise.resolve(Response.json([]));
       if (input === "/api/auth/mode") return Promise.resolve(Response.json({ development: true, personas: [] }));
       return new Promise<Response>(() => {});

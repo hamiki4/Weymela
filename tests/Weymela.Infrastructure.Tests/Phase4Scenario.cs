@@ -11,6 +11,7 @@ namespace Weymela.Infrastructure.Tests;
 internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Customer, Actor Cashier, Guid AllocationId, Guid ParticipationId,
     TestClock Clock, TestViews Provider)
 {
+    internal const string TikTokContentId = "7412345678901234567";
     public TestDatabase Database => Seed.Database;
     public static Actor Admin => new(Guid.Parse("11111111-1111-1111-1111-111111111111"), ActorRole.PlatformAdmin);
     public VerifiedViewService Views(WeymelaDbContext db) => new(db, Provider, new CommerceAccessPolicy(db), Clock);
@@ -46,11 +47,12 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
         if (goLive)
         {
             var review = new CreatorPromotionContentService(db,new CommerceAccessPolicy(db),new TestDirectory(),clock);
-            await review.SubmitAsync(creator,allocationId,new ContentInput("TikTok","content-1"),"submit-content",default);
+            await review.SubmitAsync(creator, allocationId,
+                new ContentInput("TikTok", TikTokContentId), "submit-content", default);
             var submitted=await db.CreatorPromotionContentSubmissions.SingleAsync();
             await review.ReviewAsync(seed.Business,submitted.Id,new PromotionContentReviewInput("approve",null),"approve-content",default);
             var participation = await new VerifiedViewService(db, provider, new CommerceAccessPolicy(db), clock)
-                .GoLiveAsync(new(creator, allocationId, "TikTok", "content-1", "go-live"));
+                .GoLiveAsync(new(creator, allocationId, "TikTok", TikTokContentId, "go-live"));
             return new(seed, creator, customer, cashier, allocationId, participation, clock, provider);
         }
         return new(seed, creator, customer, cashier, allocationId, Guid.Empty, clock, provider);

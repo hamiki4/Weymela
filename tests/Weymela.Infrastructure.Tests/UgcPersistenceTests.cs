@@ -108,6 +108,44 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Delivery_only_ugc_never_creates_a_customer_offer_or_qr()
+    {
+        var state = await Setup();
+        var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        await using var db = state.Database.Open();
+        db.CommercePermissions.Add(new CommercePermission(customer.UserId, ActorRole.Customer,
+            customer.CustomerId!.Value, null, true, false));
+        await db.SaveChangesAsync();
+
+        var ugc = new UgcService(db, new FixedTime(Now));
+        var opportunityId = await ugc.CreateAsync(state.Business, Input() with
+        {
+            PlatformRequirements = [],
+            PlatformCapacities = [],
+            CustomerOfferEnabled = true,
+            CustomerDiscountPercent = 5m,
+            CustomerOfferFundedAllocation = 500m,
+            CustomerOfferStartsAtUtc = Now,
+            CustomerOfferEndsAtUtc = Now.AddDays(7)
+        }, "delivery-only-customer-hidden", default);
+        await ugc.PublishAsync(state.Business, opportunityId, 0, "delivery-only-customer-hidden-publish", default);
+        var requestId = await ugc.RequestAsync(state.Creator, opportunityId, "delivery-only-customer-hidden-request", default);
+        var assignmentId = await ugc.ReviewRequestAsync(state.Business, requestId, true, null,
+            "delivery-only-customer-hidden-approve", default);
+        var offerId = await db.UgcCustomerOffers
+            .Where(row => row.UgcOpportunityId == opportunityId)
+            .Select(row => row.Id)
+            .SingleAsync();
+
+        var cards = await new WorkspaceQueries(db, new PersistentWorkspaceDirectory(db), new FixedTime(Now))
+            .OffersAsync(customer, default);
+        Assert.DoesNotContain(cards, card => card.UgcAssignmentId == assignmentId);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new CheckoutService(db,
+            new CommerceAccessPolicy(db), new FixedTime(Now)).IssueAsync(
+            new(customer, offerId, "delivery-only-customer-hidden-qr"), default));
+    }
+
+    [Fact]
     public async Task Capacity_migration_preserves_legacy_binding_and_database_constraints()
     {
         var state = await Setup();
@@ -632,7 +670,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Customer_discovery_returns_only_the_safe_customer_offer_and_never_the_ugc_job()
+    public async Task UGC_customer_discovery_and_qr_wait_for_creator_publication()
     {
         var state = await Setup();
         var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
@@ -663,18 +701,14 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
 
         var cards = await new WorkspaceQueries(db, new PersistentWorkspaceDirectory(db), new FixedTime(Now))
             .OffersAsync(customer, default);
-
-        var card = Assert.Single(cards);
-        Assert.Equal("UGC_CUSTOMER_OFFER", card.Source);
-        Assert.Equal(assignmentId, card.UgcAssignmentId);
-        Assert.Equal("Save on your next visit", card.Offer);
-        Assert.Equal("Bella Beauty", card.Business.DisplayName);
-        Assert.Equal(5m, card.BenefitPercent);
-        Assert.NotNull(card.Creator);
-        Assert.Null(card.WatchUrl);
-        Assert.Equal(9.01m, card.Business.Latitude);
-        Assert.Equal(38.72m, card.Business.Longitude);
-        Assert.DoesNotContain("Internal", card.Offer, StringComparison.Ordinal);
+        Assert.DoesNotContain(cards, card => card.UgcAssignmentId == assignmentId);
+        var offerId = await db.UgcCustomerOffers
+            .Where(row => row.UgcOpportunityId == visible)
+            .Select(row => row.Id)
+            .SingleAsync();
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new CheckoutService(db,
+            new CommerceAccessPolicy(db), new FixedTime(Now)).IssueAsync(
+            new(customer, offerId, "ugc-publication-required-qr"), default));
     }
 
     [Theory]

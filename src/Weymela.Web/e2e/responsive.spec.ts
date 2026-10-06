@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 
 const viewports = [
@@ -13,6 +13,27 @@ const viewports = [
   { width: 1440, height: 900 },
   { width: 1920, height: 1080 },
 ];
+
+async function assertBusinessContentAboveMobileNavigation(page: Page, path: string) {
+  const selector = path === "/business"
+    ? ".business-home-wallet-history"
+    : path === "/business/wallet"
+      ? ".business-wallet-history"
+      : ".business-content-review";
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const bounds = await page.evaluate((targetSelector) => {
+    const target = document.querySelector<HTMLElement>(targetSelector);
+    const navigation = document.querySelector<HTMLElement>(".mobile-role-nav");
+    if (!target || !navigation) return null;
+    const targetBounds = target.getBoundingClientRect();
+    const navigationBounds = navigation.getBoundingClientRect();
+    return { targetBottom: targetBounds.bottom, navigationTop: navigationBounds.top };
+  }, selector);
+  if (!bounds) throw new Error(`Business mobile clearance target missing for ${path}.`);
+  expect(bounds.targetBottom, `${path} content must clear fixed navigation`).toBeLessThanOrEqual(bounds.navigationTop + 1);
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
 for (const viewport of viewports)
   test(`rendered role workspaces at ${viewport.width}x${viewport.height}`, async ({
     page,
@@ -131,6 +152,9 @@ for (const viewport of viewports)
             }),
           ).toHaveCount(0);
           await expect(page.locator("main")).not.toContainText("Allocation");
+          if (viewport.width <= 430 && ["/business", "/business/campaigns", "/business/wallet"].includes(path)) {
+            await assertBusinessContentAboveMobileNavigation(page, path);
+          }
         }
         if (path.endsWith("/pricing")) {
           await expect(

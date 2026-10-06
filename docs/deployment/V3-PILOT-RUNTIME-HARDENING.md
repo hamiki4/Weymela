@@ -98,5 +98,7 @@ mounts, and persistence privately.
 
 The API alone receives the Firebase Admin JSON, cookie PFX, and writable persistent
 key directory. Worker and Web receive none of them. The API environment must retain
-`V3__FinancialWritesEnabled=false` by default; assembler, runtime loader, Compose preflight,
-and tests permit only a matching bounded Pilot test window after separate authorization.
+`V3__FinancialWritesEnabled=false` and `V3__PilotFinancialWritesMode=Disabled` by default.
+The assembler, runtime loader, Compose preflight and tests permit only matching API/Worker
+`Timed` windows or explicit durable `Uat` mode; both remain Pilot-only and require manual
+deposit approval.

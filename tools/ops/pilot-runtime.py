@@ -40,6 +40,7 @@ BASE_KEYS = (
     'V3__Security__CameraPolicy',
     'V3__Security__TlsEdgeConfirmed',
     'V3__FinancialWritesEnabled',
+    'V3__PilotFinancialWritesMode',
     'V3__PilotFinancialWritesUntilUtc',
     'V3__Deposits__Mode',
     'V3__Social__Mode',
@@ -203,19 +204,26 @@ def validate_complete(values: dict[str, str]) -> None:
     for key, expected_value in expected.items():
         _require_exact(values, key, expected_value)
     financial = values['V3__FinancialWritesEnabled']
+    financial_mode = values['V3__PilotFinancialWritesMode']
     until = values['V3__PilotFinancialWritesUntilUtc']
     if financial == 'false':
+        _require_exact(values, 'V3__PilotFinancialWritesMode', 'Disabled')
         _require_exact(values, 'V3__PilotFinancialWritesUntilUtc', 'disabled')
     elif financial == 'true':
-        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', until):
-            raise ContractError('V3__PilotFinancialWritesUntilUtc: valid UTC end required.')
-        try:
-            end = datetime.strptime(until, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-        except ValueError as error:
-            raise ContractError('V3__PilotFinancialWritesUntilUtc: valid UTC end required.') from error
-        now = datetime.now(timezone.utc)
-        if not now < end <= now + timedelta(hours=4):
-            raise ContractError('V3__PilotFinancialWritesUntilUtc: window must end within four hours.')
+        if financial_mode == 'Timed':
+            if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', until):
+                raise ContractError('V3__PilotFinancialWritesUntilUtc: valid UTC end required in Timed mode.')
+            try:
+                end = datetime.strptime(until, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            except ValueError as error:
+                raise ContractError('V3__PilotFinancialWritesUntilUtc: valid UTC end required in Timed mode.') from error
+            now = datetime.now(timezone.utc)
+            if not now < end <= now + timedelta(hours=4):
+                raise ContractError('V3__PilotFinancialWritesUntilUtc: window must end within four hours.')
+        elif financial_mode == 'Uat':
+            _require_exact(values, 'V3__PilotFinancialWritesUntilUtc', 'disabled')
+        else:
+            raise ContractError('V3__PilotFinancialWritesMode: enabled writes require Timed or Uat.')
     else:
         raise ContractError('V3__FinancialWritesEnabled: explicit boolean required.')
     _validate_connection_string(values['ConnectionStrings__WeymelaV3'])
@@ -242,6 +250,7 @@ def assemble(base_path: pathlib.Path, auth_path: pathlib.Path) -> dict[str, str]
     if base['V3__Auth__FirebaseProjectId'] != auth['V3__Auth__FirebaseProjectId']:
         raise ContractError('V3__Auth__FirebaseProjectId differs between operational and authentication inputs.')
     complete = {**base, **auth}
+    complete.setdefault('V3__PilotFinancialWritesMode', 'Disabled')
     complete.setdefault('V3__PilotFinancialWritesUntilUtc', 'disabled')
     validate_complete(complete)
     return complete

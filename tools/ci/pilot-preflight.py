@@ -64,17 +64,23 @@ def _key_directory_source(service):
             return pathlib.Path(item.get('source', ''))
     return None
 
-def _pilot_financial_window(services):
+def _pilot_financial_configuration(services):
     api = services['api'].get('environment', {})
     worker = services['worker'].get('environment', {})
     state = api.get('V3__FinancialWritesEnabled')
+    mode = api.get('V3__PilotFinancialWritesMode', 'Disabled')
     until = api.get('V3__PilotFinancialWritesUntilUtc', 'disabled')
     if (state not in ('true', 'false') or worker.get('V3__FinancialWritesEnabled') != state
+            or worker.get('V3__PilotFinancialWritesMode', 'Disabled') != mode
             or worker.get('V3__PilotFinancialWritesUntilUtc', 'disabled') != until):
         return False
     if state == 'false':
-        return until == 'disabled'
+        return mode == 'Disabled' and until == 'disabled'
     if api.get('V3__Deposits__Mode') != 'ManualApproval':
+        return False
+    if mode == 'Uat':
+        return until == 'disabled'
+    if mode != 'Timed':
         return False
     if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', until):
         return False
@@ -112,8 +118,8 @@ def validate(config, manifest):
             environment = service.get('environment', {})
             if environment.get('V3__EnableDevelopmentIdentity') != 'false':
                 errors.append(f'{part}: Development identity must stay disabled.')
-    if not _pilot_financial_window(config['services']):
-        errors.append('api/worker: financial writes require matching default-off or bounded Pilot test-window configuration.')
+    if not _pilot_financial_configuration(config['services']):
+        errors.append('api/worker: financial writes require matching default-off, Timed, or Pilot Uat configuration.')
     api = config['services']['api']
     api_environment = api.get('environment', {})
     required_api = {

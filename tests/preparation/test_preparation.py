@@ -119,7 +119,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('fresh protected PostgreSQL, receipt, Creator-photo and private-review-media backups', policy)
         self.assertIn('packaged baseline-28 verifier against the installed grants', policy)
         self.assertIn('packaged target verifier after those grants are installed', policy)
-        self.assertIn('Financial functionality remains enabled only through the existing bounded Pilot authorization controls', policy)
+        self.assertIn('explicit durable Pilot `Uat` authorization', policy)
 
     def test_ci_does_not_upload_browser_identity_control(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text()
@@ -312,6 +312,7 @@ class ComposeIsolationTests(unittest.TestCase):
         for suffix in ('api', 'worker'):
             env = self.config['services'][suffix]['environment']
             self.assertEqual(env['V3__FinancialWritesEnabled'], 'false')
+            self.assertEqual(env['V3__PilotFinancialWritesMode'], 'Disabled')
             self.assertEqual(env['V3__EnableDevelopmentIdentity'], 'false')
 
     def test_every_service_has_health_resource_and_log_limits(self):
@@ -416,12 +417,26 @@ class ComposeIsolationTests(unittest.TestCase):
         end = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         for part in ('api', 'worker'):
             config['services'][part]['environment']['V3__FinancialWritesEnabled'] = 'true'
+            config['services'][part]['environment']['V3__PilotFinancialWritesMode'] = 'Timed'
             config['services'][part]['environment']['V3__PilotFinancialWritesUntilUtc'] = end
         self.assertEqual(preflight.validate(config, self.manifest()), [])
         config['services']['worker']['environment']['V3__PilotFinancialWritesUntilUtc'] = 'disabled'
         self.assertTrue(preflight.validate(config, self.manifest()))
         config['services']['worker']['environment']['V3__PilotFinancialWritesUntilUtc'] = end
         config['services']['api']['environment']['V3__Deposits__Mode'] = 'Disabled'
+        self.assertTrue(preflight.validate(config, self.manifest()))
+
+    def test_preflight_accepts_only_matching_pilot_uat_financial_mode(self):
+        config = copy.deepcopy(self.config)
+        for part in ('api', 'worker'):
+            config['services'][part]['environment']['V3__FinancialWritesEnabled'] = 'true'
+            config['services'][part]['environment']['V3__PilotFinancialWritesMode'] = 'Uat'
+            config['services'][part]['environment']['V3__PilotFinancialWritesUntilUtc'] = 'disabled'
+        self.assertEqual(preflight.validate(config, self.manifest()), [])
+        config['services']['worker']['environment']['V3__PilotFinancialWritesMode'] = 'Disabled'
+        self.assertTrue(preflight.validate(config, self.manifest()))
+        config['services']['worker']['environment']['V3__PilotFinancialWritesMode'] = 'Uat'
+        config['services']['api']['environment']['V3__PilotFinancialWritesUntilUtc'] = '2099-01-01T00:00:00Z'
         self.assertTrue(preflight.validate(config, self.manifest()))
 
     def test_preflight_rejects_missing_or_public_receipt_mount(self):

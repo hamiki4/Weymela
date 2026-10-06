@@ -97,6 +97,7 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
         rendered = runtime.parse_env(self.base, runtime.OUTPUT_KEYS, 'assembled fixture')
         self.assertEqual(set(rendered), set(runtime.OUTPUT_KEYS))
         self.assertEqual(rendered['V3__FinancialWritesEnabled'], 'false')
+        self.assertEqual(rendered['V3__PilotFinancialWritesMode'], 'Disabled')
 
     def test_atomic_output_rejects_unsafe_existing_file_or_parent(self):
         values = runtime.assemble(self.base, self.auth)
@@ -146,6 +147,7 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
     def test_bounded_pilot_financial_window_is_explicit_and_expires(self):
         self.base_values['V3__FinancialWritesEnabled'] = 'true'
         self.assert_invalid()
+        self.base_values['V3__PilotFinancialWritesMode'] = 'Timed'
         self.base_values['V3__PilotFinancialWritesUntilUtc'] = (
             datetime.now(timezone.utc) + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         self.write_inputs()
@@ -155,6 +157,20 @@ class PilotRuntimeAssemblerTests(unittest.TestCase):
             self.base_values['V3__PilotFinancialWritesUntilUtc'] = (
                 datetime.now(timezone.utc) + delta).strftime('%Y-%m-%dT%H:%M:%SZ')
             self.assert_invalid()
+
+    def test_uat_pilot_financial_mode_is_explicit_durable_and_fail_closed(self):
+        self.base_values['V3__FinancialWritesEnabled'] = 'true'
+        self.base_values['V3__PilotFinancialWritesMode'] = 'Uat'
+        self.base_values['V3__PilotFinancialWritesUntilUtc'] = 'disabled'
+        self.write_inputs()
+        values = runtime.assemble(self.base, self.auth)
+        self.assertEqual(values['V3__PilotFinancialWritesMode'], 'Uat')
+        self.base_values['V3__PilotFinancialWritesUntilUtc'] = (
+            datetime.now(timezone.utc) + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.assert_invalid()
+        self.base_values['V3__PilotFinancialWritesUntilUtc'] = 'disabled'
+        self.base_values['V3__PilotFinancialWritesMode'] = 'Unknown'
+        self.assert_invalid()
 
     def test_shell_like_or_malformed_input_is_rejected_as_data(self):
         for injected in ('$(id)', '`id`', '${HOME}', 'value\\command'):

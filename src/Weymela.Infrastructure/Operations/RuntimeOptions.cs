@@ -35,9 +35,12 @@ public sealed class RuntimeOptions
     public string SocialMode { get; init; } = "Disabled";
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
+    public string PilotFinancialWritesMode { get; init; } = "Disabled";
     public DateTime? PilotFinancialWritesUntilUtc { get; init; }
     public bool FinancialWritesActive(DateTime nowUtc) => FinancialWritesEnabled
-        && (PilotFinancialWritesUntilUtc is null || nowUtc < PilotFinancialWritesUntilUtc.Value);
+        && (Development || EnvironmentName == "Pilot"
+            && (PilotFinancialWritesMode == "Uat" || PilotFinancialWritesMode == "Timed"
+                && PilotFinancialWritesUntilUtc is not null && nowUtc < PilotFinancialWritesUntilUtc.Value));
     public int WorkerBatchSize { get; init; } = 20;
     public int RecipientBatchSize { get; init; } = 100;
     public int WorkerIntervalSeconds { get; init; } = 5;
@@ -181,21 +184,36 @@ public sealed class RuntimeOptions
         var financialSetting = config["V3:FinancialWritesEnabled"] ?? (dev ? "true" : "false");
         Require(financialSetting is "true" or "false", "Financial writes require an explicit boolean setting.");
         var financialWrites = financialSetting == "true";
+        var pilotFinancialWritesMode = config["V3:PilotFinancialWritesMode"] ?? "Disabled";
+        Require(pilotFinancialWritesMode is "Disabled" or "Timed" or "Uat",
+            "Pilot financial writes mode must be Disabled, Timed or Uat.");
         var untilSetting = config["V3:PilotFinancialWritesUntilUtc"];
         DateTime? pilotFinancialWritesUntilUtc = null;
         if (environment == "Pilot" && financialWrites)
         {
-            Require(DateTime.TryParseExact(untilSetting, "yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var until),
-                "Pilot financial writes require an explicit UTC test-window end.");
-            var now = DateTime.UtcNow;
-            Require(until > now && until <= now.AddHours(4), "Pilot financial test window must end within four hours.");
-            Require(worker || deposits == "ManualApproval", "Pilot financial testing requires manual deposit approval.");
-            pilotFinancialWritesUntilUtc = until;
+            Require(deposits == "ManualApproval", "Pilot financial writes require manual deposit approval.");
+            if (pilotFinancialWritesMode == "Timed")
+            {
+                Require(DateTime.TryParseExact(untilSetting, "yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var until),
+                    "Timed Pilot financial writes require an explicit UTC test-window end.");
+                var now = DateTime.UtcNow;
+                Require(until > now && until <= now.AddHours(4), "Pilot financial test window must end within four hours.");
+                pilotFinancialWritesUntilUtc = until;
+            }
+            else
+            {
+                Require(pilotFinancialWritesMode == "Uat",
+                    "Enabled Pilot financial writes require an explicit Timed or Uat mode.");
+                Require(string.IsNullOrEmpty(untilSetting) || untilSetting == "disabled",
+                    "Uat Pilot financial writes cannot configure a test-window end.");
+            }
         }
         else
         {
             Require(dev || !financialWrites, "Financial writes must remain disabled outside Pilot testing and Development.");
+            Require(pilotFinancialWritesMode == "Disabled",
+                "Pilot financial writes mode must remain Disabled unless Pilot financial writes are enabled.");
             Require(string.IsNullOrEmpty(untilSetting) || untilSetting == "disabled",
                 "A financial test-window end is only valid during an enabled Pilot window.");
         }
@@ -212,7 +230,8 @@ public sealed class RuntimeOptions
             CookieKeyDirectory = config["V3:Auth:CookieKeyDirectory"] ?? "", CookieCertificatePath = config["V3:Auth:CookieCertificatePath"] ?? "",
             CookieCertificatePassword = config["V3:Auth:CookieCertificatePassword"], DepositMode = deposits, ReceiptDirectory = receiptDirectory, CreatorPhotoDirectory = creatorPhotoDirectory, ReviewMediaDirectory = reviewMediaDirectory, SocialMode = social,
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
-            FinancialWritesEnabled = financialWrites, PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
+            FinancialWritesEnabled = financialWrites, PilotFinancialWritesMode = pilotFinancialWritesMode,
+            PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies
         };
     }

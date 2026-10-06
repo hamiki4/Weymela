@@ -93,6 +93,7 @@ public sealed class AdapterSecurityTests
             config["V3:Deposits:Mode"] = "ManualApproval";
             config["V3:Deposits:ReceiptDirectory"] = directory.FullName;
             config["V3:FinancialWritesEnabled"] = "true";
+            config["V3:PilotFinancialWritesMode"] = "Timed";
             config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
             var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
             Assert.True(options.FinancialWritesActive(DateTime.UtcNow));
@@ -101,6 +102,34 @@ public sealed class AdapterSecurityTests
             Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
                 new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
             config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            config["V3:Deposits:Mode"] = "Disabled";
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+        }
+        finally { directory.Delete(); }
+    }
+    [Fact] public void Pilot_uat_financial_mode_is_durable_explicit_and_requires_manual_approval()
+    {
+        var directory = Directory.CreateTempSubdirectory("v3-pilot-uat-receipts-");
+        try
+        {
+            if (OperatingSystem.IsLinux()) File.SetUnixFileMode(directory.FullName,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var config = Config();
+            config["V3:Deposits:Mode"] = "ManualApproval";
+            config["V3:Deposits:ReceiptDirectory"] = directory.FullName;
+            config["V3:FinancialWritesEnabled"] = "true";
+            config["V3:PilotFinancialWritesMode"] = "Uat";
+            config["V3:PilotFinancialWritesUntilUtc"] = "disabled";
+            var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
+            Assert.True(options.FinancialWritesActive(DateTime.MaxValue));
+            Assert.Equal("Uat", options.PilotFinancialWritesMode);
+            Assert.Null(options.PilotFinancialWritesUntilUtc);
+
+            config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+            config["V3:PilotFinancialWritesUntilUtc"] = "disabled";
             config["V3:Deposits:Mode"] = "Disabled";
             Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
                 new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
@@ -208,10 +237,23 @@ public sealed class AdapterSecurityTests
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production", worker: true));
+        config["V3:PilotFinancialWritesMode"] = "Uat";
+        config["V3:PilotFinancialWritesUntilUtc"] = "disabled";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production", worker: true));
         var services = new ServiceCollection();
         services.AddWeymelaPersistence(production.ConnectionString).AddPilotAuthenticationAdapters(production);
         Assert.Equal(typeof(DisabledEmailCodeDelivery), services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);
         Assert.Equal(typeof(DisabledFirebaseCustomTokenIssuer), services.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
+    }
+    [Fact] public void Financial_write_gate_fails_closed_for_manually_constructed_non_pilot_options()
+    {
+        Assert.False(new RuntimeOptions { EnvironmentName = "Production", FinancialWritesEnabled = true,
+            PilotFinancialWritesMode = "Uat" }.FinancialWritesActive(DateTime.UtcNow));
+        Assert.False(new RuntimeOptions { EnvironmentName = "Pilot", FinancialWritesEnabled = true,
+            PilotFinancialWritesMode = "Timed" }.FinancialWritesActive(DateTime.UtcNow));
     }
     [Theory]
     [InlineData("V3:Auth:Provider", "")][InlineData("V3:Auth:FirebaseProjectId", "")]

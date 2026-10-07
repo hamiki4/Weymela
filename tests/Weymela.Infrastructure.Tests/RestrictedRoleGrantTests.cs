@@ -326,6 +326,61 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         promotion = await db.Promotions.Include(x => x.Allocations)
             .SingleAsync(x => x.Id == promotion.Id);
         promotion.Activate(now.AddDays(-1), Guid.NewGuid());
+        var social = new CreatorSocialProfileRecord
+        {
+            CreatorId = creatorId,
+            Platform = CreatorPlatform.TikTok,
+            ProfileUrl = "https://www.tiktok.com/@restricted.worker",
+            SelfReportedAudience = 0,
+            VerificationStatus = "Verified",
+            AudienceVerificationSource = SocialAudienceEligibility.AdminVerified,
+            VerifiedAudience = 0,
+            CreatedAtUtc = now.AddDays(-2),
+            UpdatedAtUtc = now.AddDays(-2)
+        };
+        db.CreatorSocialProfiles.Add(social);
+        await db.SaveChangesAsync();
+
+        var creator = new Actor(creatorUserId, ActorRole.Creator, CreatorId: creatorId);
+        var ugcClock = new ManualClock(now.AddMinutes(-10));
+        var ugcService = new UgcService(db, ugcClock);
+        var ugcId = await ugcService.CreateAsync(business, new CreateUgcInput(
+            "Worker grant UGC", null, "Video", "Exercise restricted notification routing.",
+            null, null, now.AddDays(4), true, false, null, 300m, 1,
+            [new("TikTok", "Vertical video", 0)],
+            PlatformCapacities: [new("TikTok", 1)]), "restricted-worker-ugc-create", default);
+        await ugcService.PublishAsync(business, ugcId, 0, "restricted-worker-ugc-publish", default);
+        var requestId = await ugcService.RequestAsync(creator, ugcId,
+            "restricted-worker-ugc-request", default, "TikTok", social.Id);
+        var assignmentId = await ugcService.ReviewRequestAsync(business, requestId, true, null,
+            "restricted-worker-ugc-assign", default);
+        var ugcSubmissionId = await ugcService.SubmitAsync(creator, assignmentId,
+            new UgcSubmissionInput("https://www.tiktok.com/@restricted.worker/video/123"),
+            "restricted-worker-ugc-submit", default);
+        await ugcService.ReviewSubmissionAsync(business, assignmentId, "approve", null,
+            "restricted-worker-ugc-approve", default);
+
+        var promotionSubmission = new CreatorPromotionContentSubmission(allocationId, 1,
+            "TikTok", "restricted-worker-promotion-review", now.AddMinutes(-6));
+        db.CreatorPromotionContentSubmissions.Add(promotionSubmission);
+        await db.SaveChangesAsync();
+        promotionSubmission.Approve(business.UserId, now.AddMinutes(-5));
+        await db.SaveChangesAsync();
+        var promotionPublication = new CreatorPublicationVerification(creatorId, social.Id,
+            allocationId, null, promotionSubmission.Id, null, "TikTok",
+            "restricted-worker-promotion-publication", now.AddMinutes(-4));
+        var ugcPublication = new CreatorPublicationVerification(creatorId, social.Id,
+            null, assignmentId, null, ugcSubmissionId, "TikTok",
+            "restricted-worker-ugc-publication", now.AddMinutes(-4));
+        db.CreatorPublicationVerifications.AddRange(promotionPublication, ugcPublication);
+        await db.SaveChangesAsync();
+        promotionPublication.Verify(PublicationVerificationMethod.Manual,
+            "restricted-worker-promotion-evidence", 0, now.AddMinutes(-3), Guid.NewGuid());
+        ugcPublication.Verify(PublicationVerificationMethod.Manual,
+            "restricted-worker-ugc-evidence", null, now.AddMinutes(-3), Guid.NewGuid());
+        await db.SaveChangesAsync();
+        ugcPublication.GoLive(now.AddMinutes(-2));
+        await db.SaveChangesAsync();
         var participation = new CreatorPromotionParticipation(promotion.Id, creatorId,
             allocationId, "TikTok", "restricted-worker-content", 0,
             now.AddMinutes(-3), now.AddMinutes(-3));
@@ -333,6 +388,13 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         db.OfferQrSessions.Add(new OfferQrSession(Guid.NewGuid(), promotion.Id, creatorId,
             allocationId, businessId, new string('A', 64), now.AddHours(-1),
             "restricted-worker-qr"));
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            EventType = "PublicationVerified",
+            Payload = JsonSerializer.Serialize(new { CreatorId = creatorId,
+                PublicationId = promotionPublication.Id }),
+            OccurredAtUtc = now.AddMinutes(-4)
+        });
         db.OutboxMessages.Add(new OutboxMessage
         {
             EventType = "CreatorParticipationActivated",
@@ -343,6 +405,13 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         {
             EventType = "CreatorPayoutEligible",
             Payload = JsonSerializer.Serialize(new { BeneficiaryId = creatorId }),
+            OccurredAtUtc = now.AddMinutes(-2)
+        });
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            EventType = "UgcPublicationActivated",
+            Payload = JsonSerializer.Serialize(new { CreatorId = creatorId,
+                AssignmentId = assignmentId, PublicationId = ugcPublication.Id }),
             OccurredAtUtc = now.AddMinutes(-2)
         });
         db.OutboxMessages.Add(new OutboxMessage
@@ -361,7 +430,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             NextPushAtUtc = now.AddMinutes(-1)
         });
         await db.SaveChangesAsync();
-        return new(promotion.Id, allocationId, creatorId, creatorUserId, business.UserId);
+        return new(promotion.Id, allocationId, ugcId, creatorId, creatorUserId, business.UserId);
     }
 
     private static async Task ExerciseWorkerFlowsAsync(string connectionString, WorkerSeed seed)
@@ -394,6 +463,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var liveNotice = await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "CreatorParticipationActivated" && x.UserId == seed.BusinessUserId);
         Assert.Equal($"/business/campaigns/{seed.PromotionId}", liveNotice.Route);
+        var verifiedNotice = await db.InAppNotifications.SingleAsync(x =>
+            x.EventType == "PublicationVerified" && x.UserId == seed.CreatorUserId);
+        Assert.Equal($"/creator/promotions/{seed.AllocationId}", verifiedNotice.Route);
+        var ugcLiveNotice = await db.InAppNotifications.SingleAsync(x =>
+            x.EventType == "UgcPublicationActivated" && x.UserId == seed.BusinessUserId);
+        Assert.Equal($"/business/ugc/{seed.UgcOpportunityId}", ugcLiveNotice.Route);
     }
 
     private static async Task AssertApiDenialsAsync(
@@ -583,7 +658,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         foreach (var command in new[]
         {
             "SELECT * FROM v3.\"CreatorPromotionParticipations\"",
-            "SELECT \"ExternalContentId\" FROM v3.\"CreatorPromotionParticipations\""
+            "SELECT \"ExternalContentId\" FROM v3.\"CreatorPromotionParticipations\"",
+            "SELECT * FROM v3.\"CreatorPublicationVerifications\"",
+            "SELECT \"EvidenceReference\" FROM v3.\"CreatorPublicationVerifications\"",
+            "SELECT * FROM v3.\"UgcOpportunities\"",
+            "SELECT \"Title\" FROM v3.\"UgcOpportunities\"",
+            "SELECT \"RequiredFunding\" FROM v3.\"UgcOpportunities\""
         })
             await AssertInsufficientPrivilegeAsync(connectionString, command,
                 $"Worker role {workerRole} unexpectedly read private participation evidence");
@@ -1170,6 +1250,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
     private sealed record WorkerSeed(
         Guid PromotionId,
         Guid AllocationId,
+        Guid UgcOpportunityId,
         Guid CreatorId,
         Guid CreatorUserId,
         Guid BusinessUserId);

@@ -195,7 +195,10 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             case "PublicationVerified": case "PublicationVerificationFailed":
             {
                 var publicationId=Id("PublicationId");
-                var publication=await db.CreatorPublicationVerifications.AsNoTracking().SingleAsync(x=>x.Id==publicationId,ct);
+                var publication=await db.CreatorPublicationVerifications.AsNoTracking()
+                    .Where(x=>x.Id==publicationId)
+                    .Select(x=>new{x.CreatorId,x.CreatorAllocationId,x.UgcAssignmentId})
+                    .SingleAsync(ct);
                 Guid? promotionId=null;Guid? budgetId=publication.CreatorAllocationId;Guid? ugcId=null;
                 if(publication.CreatorAllocationId is {} allocationId)
                     promotionId=await db.CreatorAllocations.AsNoTracking().Where(x=>x.Id==allocationId).Select(x=>x.PromotionId).SingleAsync(ct);
@@ -221,10 +224,12 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             case "UgcPublicationActivated":
             {
                 var publicationId=Id("PublicationId");
-                var publication=await db.CreatorPublicationVerifications.AsNoTracking()
-                    .SingleAsync(x=>x.Id==publicationId,ct);
-                var assignment=await db.UgcAssignments.AsNoTracking().SingleAsync(x=>x.Id==publication.UgcAssignmentId,ct);
-                var opportunity=await db.UgcOpportunities.AsNoTracking().SingleAsync(x=>x.Id==assignment.UgcOpportunityId,ct);
+                var assignmentId=await db.CreatorPublicationVerifications.AsNoTracking()
+                    .Where(x=>x.Id==publicationId).Select(x=>x.UgcAssignmentId).SingleAsync(ct);
+                var opportunityId=await db.UgcAssignments.AsNoTracking()
+                    .Where(x=>x.Id==assignmentId).Select(x=>x.UgcOpportunityId).SingleAsync(ct);
+                var opportunity=await db.UgcOpportunities.AsNoTracking()
+                    .Where(x=>x.Id==opportunityId).Select(x=>new{x.Id,x.BusinessId}).SingleAsync(ct);
                 return Plan("Creator work is Live","The verified Creator publication is now live.",null,null,
                     new NotificationAudience(ActorRole.Business,opportunity.BusinessId)) with { UgcId=opportunity.Id };
             }

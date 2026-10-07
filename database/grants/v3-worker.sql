@@ -99,6 +99,13 @@ GRANT UPDATE ("Status", "Version") ON TABLE v3."OfferQrSessions" TO :"worker_rol
 -- provider/content evidence and all mutable financial state hidden from Worker.
 GRANT SELECT ("Id", "CreatorAllocationId")
     ON TABLE v3."CreatorPromotionParticipations" TO :"worker_role";
+-- Publication notifications route by immutable ownership/work identifiers only.
+-- Provider evidence, content identifiers, review state and financial UGC terms
+-- remain unavailable to Worker.
+GRANT SELECT ("Id", "CreatorId", "CreatorAllocationId", "UgcAssignmentId")
+    ON TABLE v3."CreatorPublicationVerifications" TO :"worker_role";
+GRANT SELECT ("Id", "BusinessId")
+    ON TABLE v3."UgcOpportunities" TO :"worker_role";
 GRANT SELECT ON TABLE
     v3."Promotions",
     v3."PricingSnapshots",

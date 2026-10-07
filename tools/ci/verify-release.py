@@ -64,7 +64,7 @@ def verify(root):
         '20261007041919_AlignFinancialUatFlows',
     ]
     expected_count = len(expected_order)
-    if (contracts.get('from') != {'sourceCommit':'7c70fc8f88a8e3b294ca5f8af466845da1c91151',
+    if (contracts.get('from') != {'sourceCommit':'1c552db44eb196603f56b623082b3cd629a46d91',
                                   'migrationCount':29, 'verifier':baseline}
             or contracts.get('to') != {'sourceCommit':manifest['commit'],
                                        'migrationCount':expected_count, 'scripts':current, 'verifier':verifier}
@@ -93,7 +93,7 @@ def verify(root):
     for name in artifact_names:
         if migration_files.get(name) != checksums['migrations/'+name]:
             raise ValueError('Grant/migration checksum binding mismatch')
-    if migration_files[baseline] != 'a688a6ce9bbd5cc9bd5fbf74ce80b13e869140810dabbe6bc9dbe8c8c613eb5a':
+    if migration_files[baseline] != 'd2d62970fe2e648ddd314d9a0245b23f0a87590357e1abfb78013dcc905e6366':
         raise ValueError('Baseline grant verifier digest mismatch')
     return {'commit': manifest['commit'], 'verifiedArtifacts': len(checksums), 'deploymentAuthorized': False}
 

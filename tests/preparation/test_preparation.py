@@ -564,7 +564,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             if name == baseline:
                 path.write_bytes(subprocess.check_output(['git', 'show',
-                    '7c70fc8f88a8e3b294ca5f8af466845da1c91151:database/grants/v3-verify.sql'], cwd=ROOT))
+                    '1c552db44eb196603f56b623082b3cd629a46d91:database/grants/v3-verify.sql'], cwd=ROOT))
             else:
                 path.write_text('-- inert grant fixture')
         order = [
@@ -600,7 +600,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             '20261007041919_AlignFinancialUatFlows']
         migration = {'commit':commit, 'migrationOrder':order,
                      'grantContracts':{
-                         'from':{'sourceCommit':'7c70fc8f88a8e3b294ca5f8af466845da1c91151',
+                         'from':{'sourceCommit':'1c552db44eb196603f56b623082b3cd629a46d91',
                                  'migrationCount':29,'verifier':baseline},
                          'to':{'sourceCommit':commit,'migrationCount':len(order),
                                'scripts':current,'verifier':verifier}},

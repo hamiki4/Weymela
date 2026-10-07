@@ -81,10 +81,11 @@ above 32 KiB reaches the API rather than the ordinary proxy limit, and oversized
 requests fail with a bounded JSON 413. Do not open the financial window until the
 restricted-role Admin Wallet/Reports checks also pass.
 
-Pilot has 29 migrations at deployed source
-`7c70fc8f88a8e3b294ca5f8af466845da1c91151`. For the financial-UAT release,
+Pilot has 29 migrations at deployed immutable release
+`1c552db44eb196603f56b623082b3cd629a46d91`. The later source-only notification
+grant commit was not deployed and therefore is not the live grant baseline. For the financial-UAT release,
 require that exact history and run the packaged baseline-29 verifier
-(SHA-256 `a688a6ce9bbd5cc9bd5fbf74ce80b13e869140810dabbe6bc9dbe8c8c613eb5a`)
+(SHA-256 `d2d62970fe2e648ddd314d9a0245b23f0a87590357e1abfb78013dcc905e6366`)
 before any change. Back up PostgreSQL and every private durable-media directory,
 rehearse on the restored isolated copy, and apply only
 `20261007041919_AlignFinancialUatFlows`. Install the packaged target grants,

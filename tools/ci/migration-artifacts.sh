@@ -9,9 +9,9 @@ dotnet ef migrations has-pending-model-changes --project src/Weymela.Infrastruct
 dotnet ef migrations bundle --project src/Weymela.Infrastructure --startup-project src/Weymela.Infrastructure --configuration Release --self-contained --target-runtime linux-x64 --output .artifacts/migrations/efbundle --force
 dotnet ef migrations script 0 --idempotent --project src/Weymela.Infrastructure --startup-project src/Weymela.Infrastructure --configuration Release --no-build --output .artifacts/migrations/v3-forward.sql
 mkdir -p .artifacts/migrations/grants/baseline-29 .artifacts/migrations/grants/current
-baseline_commit=7c70fc8f88a8e3b294ca5f8af466845da1c91151
+baseline_commit=1c552db44eb196603f56b623082b3cd629a46d91
 cp database/grants/baseline-29/v3-verify.sql .artifacts/migrations/grants/baseline-29/v3-verify.sql
-printf '%s  %s\n' a688a6ce9bbd5cc9bd5fbf74ce80b13e869140810dabbe6bc9dbe8c8c613eb5a .artifacts/migrations/grants/baseline-29/v3-verify.sql | sha256sum --check --status
+printf '%s  %s\n' d2d62970fe2e648ddd314d9a0245b23f0a87590357e1abfb78013dcc905e6366 .artifacts/migrations/grants/baseline-29/v3-verify.sql | sha256sum --check --status
 cp database/grants/v3-{api,worker,migrator,migrator-defaults,backup,verify}.sql .artifacts/migrations/grants/current/
 python3 - <<'PY'
 import hashlib,json,pathlib,re,subprocess
@@ -19,7 +19,7 @@ root=pathlib.Path('.artifacts/migrations')
 files=sorted(pathlib.Path('src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs'))
 ids=[x.stem for x in files if not x.name.endswith('.Designer.cs')]
 commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-baseline='7c70fc8f88a8e3b294ca5f8af466845da1c91151'
+baseline='1c552db44eb196603f56b623082b3cd629a46d91'
 baseline_paths=subprocess.check_output(['git','ls-tree','-r','--name-only',baseline,'--',
     'src/Weymela.Infrastructure/Persistence/Migrations'],text=True).splitlines()
 baseline_ids=[pathlib.PurePosixPath(p).stem for p in baseline_paths

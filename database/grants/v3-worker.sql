@@ -95,6 +95,10 @@ GRANT UPDATE ("PushState", "PushAttempts", "NextPushAtUtc", "LastPushErrorCode",
     ON TABLE v3."InAppNotifications" TO :"worker_role";
 GRANT SELECT ON TABLE v3."OfferQrSessions" TO :"worker_role";
 GRANT UPDATE ("Status", "Version") ON TABLE v3."OfferQrSessions" TO :"worker_role";
+-- Live-participation notifications need only the immutable routing key. Keep
+-- provider/content evidence and all mutable financial state hidden from Worker.
+GRANT SELECT ("Id", "CreatorAllocationId")
+    ON TABLE v3."CreatorPromotionParticipations" TO :"worker_role";
 GRANT SELECT ON TABLE
     v3."Promotions",
     v3."PricingSnapshots",

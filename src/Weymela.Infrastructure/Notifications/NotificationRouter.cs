@@ -210,10 +210,10 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 // Participation is the live authority and is present in both
                 // legacy and publication-verified event envelopes.
                 var participationId=Id("ParticipationId");
-                var participation=await db.CreatorPromotionParticipations.AsNoTracking()
-                    .SingleAsync(x=>x.Id==participationId,ct);
+                var allocationId=await db.CreatorPromotionParticipations.AsNoTracking()
+                    .Where(x=>x.Id==participationId).Select(x=>x.CreatorAllocationId).SingleAsync(ct);
                 var allocation=await db.CreatorAllocations.AsNoTracking()
-                    .SingleAsync(x=>x.Id==participation.CreatorAllocationId,ct);
+                    .SingleAsync(x=>x.Id==allocationId,ct);
                 var promotion=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==allocation.PromotionId,ct);
                 return Plan("Creator work is Live","The verified Creator publication is now live.",promotion.Id,allocation.Id,
                     new NotificationAudience(ActorRole.Business,promotion.BusinessId));

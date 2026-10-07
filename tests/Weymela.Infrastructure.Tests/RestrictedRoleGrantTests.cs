@@ -326,9 +326,19 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         promotion = await db.Promotions.Include(x => x.Allocations)
             .SingleAsync(x => x.Id == promotion.Id);
         promotion.Activate(now.AddDays(-1), Guid.NewGuid());
+        var participation = new CreatorPromotionParticipation(promotion.Id, creatorId,
+            allocationId, "TikTok", "restricted-worker-content", 0,
+            now.AddMinutes(-3), now.AddMinutes(-3));
+        db.CreatorPromotionParticipations.Add(participation);
         db.OfferQrSessions.Add(new OfferQrSession(Guid.NewGuid(), promotion.Id, creatorId,
             allocationId, businessId, new string('A', 64), now.AddHours(-1),
             "restricted-worker-qr"));
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            EventType = "CreatorParticipationActivated",
+            Payload = JsonSerializer.Serialize(new { ParticipationId = participation.Id }),
+            OccurredAtUtc = now.AddMinutes(-3)
+        });
         db.OutboxMessages.Add(new OutboxMessage
         {
             EventType = "CreatorPayoutEligible",
@@ -381,6 +391,9 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var saleNotice = await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "BusinessPurchaseRecorded" && x.UserId == seed.BusinessUserId);
         Assert.Equal("/business/transactions", saleNotice.Route);
+        var liveNotice = await db.InAppNotifications.SingleAsync(x =>
+            x.EventType == "CreatorParticipationActivated" && x.UserId == seed.BusinessUserId);
+        Assert.Equal($"/business/campaigns/{seed.PromotionId}", liveNotice.Route);
     }
 
     private static async Task AssertApiDenialsAsync(
@@ -566,6 +579,14 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             await AssertInsufficientPrivilegeAsync(connectionString,
                 $"SELECT * FROM v3.{QuoteIdentifier(table)}",
                 $"Worker role {workerRole} unexpectedly read {table}");
+
+        foreach (var command in new[]
+        {
+            "SELECT * FROM v3.\"CreatorPromotionParticipations\"",
+            "SELECT \"ExternalContentId\" FROM v3.\"CreatorPromotionParticipations\""
+        })
+            await AssertInsufficientPrivilegeAsync(connectionString, command,
+                $"Worker role {workerRole} unexpectedly read private participation evidence");
 
         var commands = new[]
         {

@@ -130,7 +130,9 @@ INSERT INTO _v3_expected_select_columns VALUES
     ('api', 'v3', 'PromotionViewVerifications', 'PreviousVerifiedViews'),
     ('api', 'v3', 'PromotionViewVerifications', 'IsAnomaly'),
     ('api', 'v3', 'PromotionViewVerifications', 'IsBaseline'),
-    ('api', 'v3', 'PromotionViewVerifications', 'VerifiedAtUtc');
+    ('api', 'v3', 'PromotionViewVerifications', 'VerifiedAtUtc'),
+    ('worker', 'v3', 'CreatorPromotionParticipations', 'Id'),
+    ('worker', 'v3', 'CreatorPromotionParticipations', 'CreatorAllocationId');
 
 CREATE TEMP TABLE _v3_expected_update_columns (
     role_kind text NOT NULL,

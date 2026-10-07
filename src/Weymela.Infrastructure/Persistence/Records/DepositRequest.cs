@@ -12,6 +12,9 @@ public sealed class DepositRequest
     public string Provider { get; init; } = "";
     public string ExternalReference { get; init; } = "";
     public string? ProofReference { get; init; }
+    public Guid? ReceivingDestinationId { get; init; }
+    public string? DestinationNameSnapshot { get; init; }
+    public string? DestinationAccountSnapshot { get; init; }
     public DepositReviewStatus Status { get; set; } = DepositReviewStatus.Pending;
     public DateTime SubmittedAtUtc { get; init; }
     public DateTime? ReviewedAtUtc { get; set; }

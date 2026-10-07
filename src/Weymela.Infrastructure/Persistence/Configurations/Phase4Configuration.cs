@@ -47,7 +47,10 @@ internal static class Phase4Configuration
         Mapping.Version(qr);
         var payout = model.Entity<PayoutRecord>(); Mapping.Scalars(payout, "BeneficiaryId"); payout.HasKey(x => x.Id);
         payout.ToTable("PayoutRecords", t => t.HasCheckConstraint("CK_Payout_Amounts",
-            "\"Amount\" > 0 AND \"Amount\" = \"ThresholdUsed\" AND ((\"Beneficiary\"='Creator' AND \"CreatorId\" IS NOT NULL AND \"CustomerId\" IS NULL) OR (\"Beneficiary\"='Customer' AND \"CustomerId\" IS NOT NULL AND \"CreatorId\" IS NULL))"));
+            "\"Amount\" >= \"ThresholdUsed\" AND \"ThresholdUsed\" > 0 AND ((\"Beneficiary\"='Creator' AND \"CreatorId\" IS NOT NULL AND \"CustomerId\" IS NULL) OR (\"Beneficiary\"='Customer' AND \"CustomerId\" IS NOT NULL AND \"CreatorId\" IS NULL))"));
+        payout.Property(x => x.DestinationProvider).HasMaxLength(100);
+        payout.Property(x => x.ProtectedDestinationAccount).HasMaxLength(2048);
+        payout.Property(x => x.DestinationLegalName).HasMaxLength(120);
         payout.HasOne<CreatorEarningsAccount>().WithMany().HasForeignKey(x => x.CreatorId).OnDelete(DeleteBehavior.Restrict);
         payout.HasOne<CustomerCashbackAccount>().WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         payout.HasOne<FinancialConfigurationVersion>().WithMany().HasForeignKey(x => x.ConfigurationVersionId).OnDelete(DeleteBehavior.Restrict);
@@ -56,6 +59,22 @@ internal static class Phase4Configuration
         payout.HasIndex(x => x.CustomerId).IsUnique().HasFilter("\"Status\"='Eligible' AND \"CustomerId\" IS NOT NULL");
         payout.HasIndex(x => x.Reference).IsUnique().HasFilter("\"Reference\" IS NOT NULL");
         Mapping.Version(payout);
+        var destination = model.Entity<PayoutDestination>(); Mapping.Scalars(destination); destination.HasKey(x => x.Id);
+        destination.ToTable("PayoutDestinations", t => t.HasCheckConstraint("CK_PayoutDestination_Subject",
+            "\"SubjectId\" <> '00000000-0000-0000-0000-000000000000' AND char_length(btrim(\"Provider\")) > 0 AND char_length(\"AccountLast4\") BETWEEN 2 AND 4 AND char_length(btrim(\"LegalName\")) > 0"));
+        destination.Property(x => x.Provider).HasMaxLength(100); destination.Property(x => x.ProtectedAccount).HasMaxLength(2048);
+        destination.Property(x => x.AccountLast4).HasMaxLength(4); destination.Property(x => x.LegalName).HasMaxLength(120);
+        destination.HasIndex(x => new { x.Beneficiary, x.SubjectId }).IsUnique(); Mapping.Version(destination);
+
+        var receiving = model.Entity<PlatformReceivingDestination>(); Mapping.Scalars(receiving); receiving.HasKey(x => x.Id);
+        receiving.ToTable("PlatformReceivingDestinations", t => t.HasCheckConstraint("CK_ReceivingDestination_Values",
+            "char_length(btrim(\"Name\")) > 0 AND char_length(btrim(\"AccountReference\")) > 0 AND \"SortOrder\" >= 0"));
+        receiving.Property(x => x.Method).HasMaxLength(30); receiving.Property(x => x.Name).HasMaxLength(100);
+        receiving.Property(x => x.AccountReference).HasMaxLength(100); receiving.HasIndex(x => x.Name).IsUnique(); Mapping.Version(receiving);
+        receiving.HasData(
+            new PlatformReceivingDestination { Id = Guid.Parse("10000000-0000-0000-0000-000000000001"), Method = "Telebirr", Name = "Telebirr", AccountReference = "0911111111", IsActive = true, SortOrder = 1, UpdatedAtUtc = new DateTime(2026,10,7,0,0,0,DateTimeKind.Utc) },
+            new PlatformReceivingDestination { Id = Guid.Parse("10000000-0000-0000-0000-000000000002"), Method = "Bank", Name = "CBE", AccountReference = "1000000000", IsActive = true, SortOrder = 2, UpdatedAtUtc = new DateTime(2026,10,7,0,0,0,DateTimeKind.Utc) },
+            new PlatformReceivingDestination { Id = Guid.Parse("10000000-0000-0000-0000-000000000003"), Method = "Bank", Name = "Bank of Abyssinia", AccountReference = "123456789", IsActive = true, SortOrder = 3, UpdatedAtUtc = new DateTime(2026,10,7,0,0,0,DateTimeKind.Utc) });
         var permission = model.Entity<CommercePermission>(); Mapping.Scalars(permission); permission.ToTable("CommercePermissions");
         permission.HasKey(x => new { x.UserId, x.Role, x.SubjectId });
         permission.HasIndex(x => new { x.SubjectId, x.Role, x.IsActive });

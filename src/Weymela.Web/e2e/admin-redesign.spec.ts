@@ -31,7 +31,7 @@ test("Wallets, UGC and Reports use authoritative projections and keep period tot
   await expect(page.getByRole("heading", { name: "UGC funding and activity" })).toBeVisible();
   if (await page.locator(".admin-ugc-row").count())
     await expect(page.locator(".admin-ugc-row").first().getByText("Fixed Creator pay")).toBeVisible();
-  else await expect(page.getByRole("heading", { name: "No UGC promotions" })).toBeVisible();
+  else await expect(page.getByRole("heading", { name: "No matching UGC promotions" })).toBeVisible();
   await screenshot(page, "admin-redesign-desktop-ugc");
   await open(page, "/admin/reports");
   await expect(page.getByRole("heading", { name: "Platform summary" })).toBeVisible();

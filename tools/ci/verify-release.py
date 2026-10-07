@@ -26,7 +26,7 @@ def verify(root):
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
     migrations = manifest['migrations']
-    baseline = 'grants/baseline-28/v3-verify.sql'
+    baseline = 'grants/baseline-29/v3-verify.sql'
     current = [f'grants/current/v3-{name}.sql' for name in
                ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
     verifier = 'grants/current/v3-verify.sql'
@@ -61,10 +61,11 @@ def verify(root):
         '20260930210000_AddAgreementDeadlines',
         '20261001043831_AddAdminVerifiedAudienceAndEnforcement',
         '20261006050542_CompleteCreatorCollaborationWorkflow',
+        '20261007041919_AlignFinancialUatFlows',
     ]
     expected_count = len(expected_order)
-    if (contracts.get('from') != {'sourceCommit':'0c546ee17030e1cf44f1e6d667a02611c6fc0ac2',
-                                  'migrationCount':28, 'verifier':baseline}
+    if (contracts.get('from') != {'sourceCommit':'7c70fc8f88a8e3b294ca5f8af466845da1c91151',
+                                  'migrationCount':29, 'verifier':baseline}
             or contracts.get('to') != {'sourceCommit':manifest['commit'],
                                        'migrationCount':expected_count, 'scripts':current, 'verifier':verifier}
             or migrations.get('migrationOrder') != expected_order):
@@ -92,7 +93,7 @@ def verify(root):
     for name in artifact_names:
         if migration_files.get(name) != checksums['migrations/'+name]:
             raise ValueError('Grant/migration checksum binding mismatch')
-    if migration_files[baseline] != 'a5568f3a9f9a59b686b4c8b44df8bd3729256176cb2021324a54522991cfdf64':
+    if migration_files[baseline] != 'a688a6ce9bbd5cc9bd5fbf74ce80b13e869140810dabbe6bc9dbe8c8c613eb5a':
         raise ValueError('Baseline grant verifier digest mismatch')
     return {'commit': manifest['commit'], 'verifiedArtifacts': len(checksums), 'deploymentAuthorized': False}
 

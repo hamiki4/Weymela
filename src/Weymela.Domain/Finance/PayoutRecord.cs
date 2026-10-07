@@ -2,6 +2,7 @@ namespace Weymela.Domain;
 
 public enum PayoutBeneficiary { Creator, Customer }
 public enum PayoutStatus { Eligible, Paid }
+public enum PayoutDestinationMethod { Telebirr, Bank }
 
 public sealed class PayoutRecord
 {
@@ -19,15 +20,27 @@ public sealed class PayoutRecord
     public Guid? PaidBy { get; private set; }
     public string? Reference { get; private set; }
     public Guid? JournalId { get; private set; }
+    public PayoutDestinationMethod? DestinationMethod { get; private set; }
+    public string? DestinationProvider { get; private set; }
+    public string? ProtectedDestinationAccount { get; private set; }
+    public string? DestinationLegalName { get; private set; }
     public PayoutStatus Status { get; private set; } = PayoutStatus.Eligible;
     public long Version { get; private set; }
-    public PayoutRecord(PayoutBeneficiary beneficiary, Guid subjectId, Money available, Money threshold, Guid version, DateTime eligibleAt)
+    public PayoutRecord(PayoutBeneficiary beneficiary, Guid subjectId, Money available, Money threshold, Money amount,
+        Guid version, DateTime eligibleAt, PayoutDestinationMethod destinationMethod, string destinationProvider,
+        string protectedDestinationAccount, string destinationLegalName)
     {
-        if (threshold.Amount <= 0 || available.Currency != threshold.Currency || available.Amount < threshold.Amount)
+        if (threshold.Amount <= 0 || available.Currency != threshold.Currency || amount.Currency != threshold.Currency
+            || amount.Amount < threshold.Amount || amount.Amount > available.Amount)
             throw new InvalidOperationException("Payout threshold has not been reached.");
+        if (string.IsNullOrWhiteSpace(destinationProvider) || string.IsNullOrWhiteSpace(protectedDestinationAccount)
+            || string.IsNullOrWhiteSpace(destinationLegalName))
+            throw new InvalidOperationException("A payout destination is required.");
         Beneficiary = beneficiary;
         if (beneficiary == PayoutBeneficiary.Creator) CreatorId = subjectId; else CustomerId = subjectId;
-        Amount = threshold; ThresholdUsed = threshold; ConfigurationVersionId = version; EligibleAtUtc = eligibleAt;
+        Amount = amount; ThresholdUsed = threshold; ConfigurationVersionId = version; EligibleAtUtc = eligibleAt;
+        DestinationMethod = destinationMethod; DestinationProvider = destinationProvider.Trim();
+        ProtectedDestinationAccount = protectedDestinationAccount; DestinationLegalName = destinationLegalName.Trim();
     }
     public void MarkPaid(Guid admin, string reference, Guid journal, DateTime at)
     {

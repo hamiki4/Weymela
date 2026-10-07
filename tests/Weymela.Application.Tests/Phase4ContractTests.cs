@@ -19,7 +19,7 @@ public sealed class Phase4ContractTests
     [Fact] public void Customer_projection_cannot_expose_budgets_commission_or_platform_revenue()
     {
         var names=typeof(CustomerOffer).GetProperties().Select(x=>x.Name).ToArray();
-        Assert.Equal(new[]{"OfferId","Source","Offer","Business","Creator","BenefitPercent","Slogan","Location","WentLiveAtUtc","ExpiresAtUtc","RemainingDays","UgcAssignmentId","Provider","ExternalContentId","CashbackPercent"},names);
+        Assert.Equal(new[]{"OfferId","Source","Offer","Business","Creator","BenefitPercent","Slogan","Location","WentLiveAtUtc","ExpiresAtUtc","RemainingDays","UgcAssignmentId","Provider","ExternalContentId","BenefitMode","CashbackPercent"},names);
         Assert.DoesNotContain(names,x=>x.Contains("Budget")||x.Contains("Commission")||x.Contains("Revenue")||x.Contains("Feedback"));
     }
     [Fact] public void Customer_history_projection_contains_only_customer_relevant_purchase_and_cashback()

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Transactions;
@@ -26,6 +27,14 @@ public static class DevelopmentWorkspaceSeed
         }
         db.AdminGrants.Add(new AdminGrantRecord { UserId=admin.UserId, Role=ActorRole.PlatformAdmin,
             DisplayName=directory.Get("admin").Name, GrantedByUserId=admin.UserId, GrantedAtUtc=now });
+        foreach(var (alias,phone) in new[]{
+            ("creator","+251911000004"),("other-creator","+251911000005")})
+        {
+            var userId=directory.Get(alias).Actor.UserId;
+            db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=userId,Kind="Phone",
+                IdentifierHash=EmailAuthService.HashIdentifier(phone),DeliveryAddress=phone,
+                IsVerified=true,CreatedAtUtc=now });
+        }
         var config=Guid.NewGuid();var version=Guid.NewGuid();db.FinancialConfigurations.Add(new(config,"PlatformPricing"));
         db.FinancialConfigurationVersions.Add(new(version,config,1,admin.UserId,now.AddDays(-1),
             new(PromotionType.ViewOnly,3000,new Money(300),new Money(200),new Money(100),3m,4m,3m,now.AddDays(-1),version),

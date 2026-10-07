@@ -68,7 +68,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 {
                     var media=context.Request.ContentType?.Split(';')[0].Trim();
                     if(fileUpload?media!="multipart/form-data":media!="application/json")
-                    {await Error(context,415,"UnsupportedContentType",reviewUpload?"Choose a supported private review file.":fileUpload?"Choose a JPEG or PNG image.":"Use a JSON request.");return;}
+                    {await Error(context,415,"UnsupportedContentType",reviewUpload?"Choose a supported private review file.":receiptUpload?"Choose a JPEG, PNG, or PDF receipt.":fileUpload?"Choose a JPEG or PNG image.":"Use a JSON request.");return;}
                 }
             }
         }

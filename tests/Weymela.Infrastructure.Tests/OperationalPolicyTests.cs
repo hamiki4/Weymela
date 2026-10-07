@@ -40,7 +40,7 @@ public sealed class OperationalPolicyTests(PostgresFixture fixture)
     [Fact] public async Task Payout_eligibility_and_paid_events_target_only_the_beneficiary_and_reconcile_after_settlement()
     {
         var s=await Phase4Scenario.Create(fixture,threshold:20); await s.Refresh(3000); await s.Redeem(await s.Issue()); await using var db=s.Database.Open();
-        var payout=await s.Payouts(db).PrepareAsync(s.Creator,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value,"prepare");
+        var payout=await s.Payouts(db).PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value,new Money(20),"prepare");
         await s.Payouts(db).MarkPaidAsync(Phase4Scenario.Admin,payout,"confirmed","paid");
         await s.Payouts(db).SettlePlatformAsync(Phase4Scenario.Admin,new Money(30),"settled","settle");
         var worker=new OutboxProcessor(db,new RuntimeOptions { WorkerBatchSize=50 },new DisabledPushProvider(),s.Clock);

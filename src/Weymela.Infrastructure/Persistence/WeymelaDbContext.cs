@@ -54,6 +54,8 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<ViewRewardReceipt> ViewRewardReceipts => Set<ViewRewardReceipt>();
     public DbSet<OfferQrSession> OfferQrSessions => Set<OfferQrSession>();
     public DbSet<PayoutRecord> PayoutRecords => Set<PayoutRecord>();
+    public DbSet<PayoutDestination> PayoutDestinations => Set<PayoutDestination>();
+    public DbSet<PlatformReceivingDestination> PlatformReceivingDestinations => Set<PlatformReceivingDestination>();
     public DbSet<CommercePermission> CommercePermissions => Set<CommercePermission>();
     public DbSet<CashierPreauthorization> CashierPreauthorizations => Set<CashierPreauthorization>();
     public DbSet<IdentityBinding> IdentityBindings => Set<IdentityBinding>();

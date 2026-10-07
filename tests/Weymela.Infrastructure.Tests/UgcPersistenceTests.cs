@@ -375,7 +375,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Ugc_customer_offer_sale_uses_separate_fund_discount_and_platform_fee_with_zero_creator_share()
+    public async Task Ugc_customer_offer_sale_uses_separate_cashback_fund_and_platform_fee_with_zero_creator_share()
     {
         var state = await Setup();
         var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
@@ -417,9 +417,11 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
                 .RedeemAsync(new(cashier, qr.Token!, new Money(1000), "offer-sale"), default);
             Assert.Equal(result.SaleId, replay.SaleId);
             Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "BusinessPurchaseRecorded").ToListAsync());
+            Assert.Single(await db.OutboxMessages.Where(x => x.EventType == nameof(CustomerCashbackEarned)).ToListAsync());
         }
-        Assert.Equal("UGC_CUSTOMER_OFFER", result.Source); Assert.Equal(950m, result.CustomerPays!.Value.Amount);
+        Assert.Equal("UGC_CUSTOMER_OFFER", result.Source); Assert.Equal(1000m, result.CustomerPays!.Value.Amount);
         Assert.Equal(50m, result.CustomerDiscount!.Value.Amount); Assert.Equal(80m, result.TotalBusinessCharge.Amount);
+        Assert.Equal(nameof(CustomerBenefitMode.Cashback), result.BenefitMode);
 
         await using var verify = state.Database.Open();
         var sale = await verify.UgcCustomerOfferSales.SingleAsync();
@@ -428,12 +430,15 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(50m, sale.CustomerDiscountAmount.Amount); Assert.Equal(30m, sale.PlatformRevenueAmount.Amount);
         Assert.Single(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.Ugc).ToListAsync());
         Assert.Empty(await verify.CreatorEarningEntries.Where(x => x.Source == EarningSource.SaleCommission).ToListAsync());
-        Assert.Empty(await verify.CustomerCashbackEntries.ToListAsync());
+        var cashback = Assert.Single(await verify.CustomerCashbackEntries.ToListAsync());
+        Assert.Equal(sale.Id, cashback.UgcCustomerOfferSaleId);
+        Assert.Equal(50m, cashback.Amount.Amount);
+        Assert.Equal(50m, (await verify.CustomerCashbackAccounts.SingleAsync()).AvailableCashback.Amount);
         Assert.Single(await verify.PlatformRevenueEntries.Where(x => x.Source == PlatformRevenueSource.UgcCustomerOfferSaleFee).ToListAsync());
         Assert.Equal(5520m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
         // Content approval has already consumed the fixed 500 ETB Creator
         // production payment. The sale consumes only its separate 80 ETB
-        // Customer discount/platform funding and never adds Creator commission.
+        // Customer cashback/platform funding and never adds Creator commission.
         Assert.Equal(6520m, (await verify.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
         Assert.Equal(OfferQrStatus.Used, (await verify.OfferQrSessions.SingleAsync()).Status);
         var workspace = new WorkspaceQueries(verify, new PersistentWorkspaceDirectory(verify), new FixedTime(Now));
@@ -470,15 +475,17 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal("Bella Beauty", transaction.Business);
         Assert.Null(transaction.Creator);
         Assert.Equal(1000m, transaction.PurchaseAmount.Amount);
-        Assert.Equal(950m, transaction.CustomerPaidAmount!.Value.Amount);
-        Assert.Equal(50m, transaction.DiscountReceived!.Value.Amount);
-        Assert.Null(transaction.CashbackEarned);
+        Assert.Equal(1000m, transaction.CustomerPaidAmount!.Value.Amount);
+        Assert.Null(transaction.DiscountReceived);
+        Assert.Equal(50m, transaction.CashbackEarned!.Value.Amount);
         Assert.Empty(await queries.CustomerTransactionsAsync(otherCustomer, default));
         var json = JsonSerializer.Serialize(transaction);
         foreach (var internalField in new[] { "CreatorId", "BusinessId", "CreatorAllocationId", "Commission", "Platform", "JournalId", "CorrelationId", "IdempotencyKey" })
             Assert.DoesNotContain(internalField, json);
         await DrainNotifications(state.Database);
-        Assert.Single(await verify.InAppNotifications.Where(x => x.EventType == "SaleCompleted" && x.UserId == customer.UserId).ToListAsync());
+        var customerNotice = Assert.Single(await verify.InAppNotifications.Where(x =>
+            x.EventType == nameof(CustomerCashbackEarned) && x.UserId == customer.UserId).ToListAsync());
+        Assert.Contains("50 ETB cashback", customerNotice.Message);
         var businessNotice = Assert.Single(await verify.InAppNotifications.Where(x =>
             x.EventType == "BusinessPurchaseRecorded" && x.UserId == state.Business.UserId).ToListAsync());
         Assert.Equal("/business/transactions", businessNotice.Route);
@@ -892,7 +899,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             db.CommercePermissions.Add(new(admin.UserId, admin.Role, admin.UserId, null, true, false));
             await db.SaveChangesAsync();
             var pending = await new DepositService(db, new ManualApprovalDepositProvider(), new FixedTime(Now))
-                .SubmitAsync(state.Business, new(10000m, "UGC-BANK-RECEIPT", "r_opaque-test-proof"), "ugc-receipt-submit", default);
+                .SubmitAsync(state.Business, new(10000m, "UGC-BANK-RECEIPT", "r_opaque-test-proof", Guid.Parse("10000000-0000-0000-0000-000000000002")), "ugc-receipt-submit", default);
             depositId = pending.Id;
             Assert.Equal("Pending", pending.Status);
             Assert.Equal(0m, (await db.BusinessWallets.SingleAsync()).AvailableBalance.Amount);

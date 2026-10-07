@@ -1,4 +1,5 @@
 using Weymela.Application.Web;
+using Weymela.Application.Operations;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Web;
@@ -27,6 +28,8 @@ internal static class CreatorEndpoints
         g.MapGet("/discover/{id:guid}",(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.OpportunityAsync(EndpointSupport.Actor(c),id,ct));
         g.MapGet("/campaigns",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.CreatorCampaignsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/earnings",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.EarningsAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/payout-destination",(HttpContext c,PayoutDestinationService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
+        g.MapPost("/payout-destination",(PayoutDestinationInput input,HttpContext c,PayoutDestinationService service,CancellationToken ct)=>service.UpdateAsync(EndpointSupport.Actor(c),input,ct));
         g.MapPost("/campaigns/{id:guid}/join",async(Guid id,JoinInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.JoinAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/promotions/{id:guid}/request",async(Guid id,JoinInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
@@ -54,8 +57,6 @@ internal static class CreatorEndpoints
             EndpointSupport.Id(await service.GoLivePromotionAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct)));
         g.MapPost("/participations/{id:guid}/refresh",(Guid id,HttpContext c,VerifiedViewService service,CancellationToken ct)=>
             service.RefreshAsync(new(EndpointSupport.Actor(c),id,EndpointSupport.Key(c)),ct));
-        g.MapPost("/payouts/request",async(HttpContext c,PayoutService service,CancellationToken ct)=>
-        {var a=EndpointSupport.Actor(c);return EndpointSupport.Id(await service.PrepareAsync(a,PayoutBeneficiary.Creator,a.CreatorId!.Value,EndpointSupport.Key(c),ct));});
         g.MapGet("/ugc",(HttpContext c,UgcService service,CancellationToken ct)=>service.DiscoverAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc/requests",(HttpContext c,UgcService service,CancellationToken ct)=>service.CreatorRequestsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc/assignments",(HttpContext c,UgcService service,CancellationToken ct)=>service.CreatorAssignmentsAsync(EndpointSupport.Actor(c),ct));

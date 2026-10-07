@@ -316,6 +316,7 @@ export interface CreatorCampaign {
   wentLiveAtUtc?: string | null;
   expiresAtUtc?: string | null;
   remainingDays?: number | null;
+  benefitMode?: "Cashback" | "LegacyDiscount" | string;
   description?: string | null;
   requirements?: string | null;
   location?: string | null;
@@ -420,7 +421,7 @@ export interface AdminHome {
   activity: Activity[];
 }
 export interface AdminWallets {
-  businesses: { businessId: string; business: string; totalBalance: number; available: number; reserved: number; pendingDeposit: number; viewOnlyCount: number; viewSaleCount: number; status: string }[];
+  businesses: { businessId: string; business: string; totalBalance: number; available: number; reserved: number; pendingDeposit: number; viewOnlyCount: number; viewSaleCount: number; status: string; lastDepositVia: string | null }[];
   promotions: { id: string; business: string; title: string; type: string; budget: number; used: number; remaining: number; verifiedViews: number; verifiedSales: number; status: string }[];
 }
 export interface AdminUgcFinance { id: string; business: string; title: string; type: string; budget: number; creatorPayment: number; customerDiscountPercent: number | null; creatorUsed: number; offerUsed: number; discountUsed: number; remaining: number; qualifyingSales: number; status: string; }
@@ -564,6 +565,15 @@ export interface UgcSettings {
   minimumUgcBudget: number | null;
   customerOfferPlatformSalePercent: number | null;
 }
+export interface ReceivingDestination {
+  id: string;
+  method: "Telebirr" | "Bank";
+  name: string;
+  accountReference: string;
+  isActive: boolean;
+  sortOrder: number;
+  version: number;
+}
 export interface UgcPlatformRequirement {
   platform: string;
   format: string;
@@ -670,7 +680,11 @@ export interface QueueRow {
   payAmount: number;
   eligibleSinceUtc: string | null;
   status: string;
+  method: string | null;
+  provider: string | null;
+  account: string | null;
 }
+export interface PayoutDestination { method: "Telebirr" | "Bank" | string; provider: string; account: string; legalName: string; updatedAtUtc: string | null; isMasked: boolean; isConfigured: boolean }
 export interface PayoutWorkspace {
   creators: QueueRow[];
   customers: QueueRow[];
@@ -730,6 +744,7 @@ export interface Offer {
   slogan: string | null;
   location: string | null;
   remainingDays?: number | null;
+  benefitMode?: "Cashback" | "LegacyDiscount" | string;
 }
 export interface CustomerTransaction {
   source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;
@@ -770,12 +785,17 @@ export interface CheckoutOffer {
   expiresAtUtc: string;
   source: string;
   customerDiscountPercent: number | null;
+  benefitMode: "Cashback" | "LegacyDiscount" | string;
 }
 export interface SaleResult {
   saleId: string;
   purchaseAmount: Money;
   totalBusinessCharge: Money;
   createdAtUtc: string;
+  customerPays?: Money | null;
+  customerDiscount?: Money | null;
+  source?: string;
+  benefitMode?: "Cashback" | "LegacyDiscount" | string;
 }
 export interface Cashier {
   id: string;
@@ -797,6 +817,7 @@ export interface ManualCheckoutChoice {
   source: "VIEW_AND_SALE_PROMOTION" | "UGC_CUSTOMER_OFFER" | string;
   label: string;
   benefitPercent: number | null;
+  benefitMode: "Cashback" | "LegacyDiscount" | string;
 }
 export interface ManualCheckoutResolution {
   offers: ManualCheckoutChoice[];
@@ -816,4 +837,5 @@ export interface CheckoutSaleRow {
   status: string;
   creatorNumber?: number | null;
   creatorEarning?: number | null;
+  benefitMode: "Cashback" | "LegacyDiscount" | string;
 }

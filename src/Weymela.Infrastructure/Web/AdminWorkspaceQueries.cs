@@ -186,6 +186,7 @@ public sealed partial class WorkspaceQueries
     {
         var version=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
         var records=await db.PayoutRecords.AsNoTracking().ToListAsync(ct);var creators=new List<PayoutQueueRow>();var customers=new List<PayoutQueueRow>();
+        var destinations=await db.PayoutDestinations.AsNoTracking().ToDictionaryAsync(x=>(x.Beneficiary,x.SubjectId),ct);
         var history=new List<PayoutItem>();
         foreach(var a in await db.CreatorEarningsAccounts.AsNoTracking().ToListAsync(ct))
         {
@@ -193,15 +194,27 @@ public sealed partial class WorkspaceQueries
             if(a.AvailableEarnings.Amount<version.CreatorPayoutThreshold.Amount&&pending is null)continue;
             var name=(await directory.CreatorCardAsync(a.CreatorId,ct)).DisplayName;
             var since=await EligibleSince(PayoutBeneficiary.Creator,a.CreatorId,version.CreatorPayoutThreshold.Amount,version.EffectiveFromUtc,ct);
+            destinations.TryGetValue((PayoutBeneficiary.Creator,a.CreatorId),out var destination);
+            var method=pending?.DestinationMethod?.ToString()??destination?.Method.ToString();
+            var provider=pending?.DestinationProvider??destination?.Provider;
+            var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
+            var account=protectedAccount is null||payoutProtector is null?null:payoutProtector.Unprotect(protectedAccount);
             creators.Add(new(a.CreatorId,pending?.Id,name,a.AvailableEarnings.Amount,pending?.ThresholdUsed.Amount??version.CreatorPayoutThreshold.Amount,
-                pending?.Amount.Amount??version.CreatorPayoutThreshold.Amount,pending?.EligibleAtUtc??since,pending is null?"Eligible":"Ready"));
+                pending?.Amount.Amount??version.CreatorPayoutThreshold.Amount,pending?.EligibleAtUtc??since,
+                method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
         foreach(var a in await db.CustomerCashbackAccounts.AsNoTracking().ToListAsync(ct))
         {
             var pending=records.SingleOrDefault(x=>x.CustomerId==a.CustomerId&&x.Status==PayoutStatus.Eligible);
             if(a.AvailableCashback.Amount<version.CustomerPayoutThreshold.Amount&&pending is null)continue;
+            destinations.TryGetValue((PayoutBeneficiary.Customer,a.CustomerId),out var destination);
+            var method=pending?.DestinationMethod?.ToString()??destination?.Method.ToString();
+            var provider=pending?.DestinationProvider??destination?.Provider;
+            var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
+            var account=protectedAccount is null||payoutProtector is null?null:payoutProtector.Unprotect(protectedAccount);
             customers.Add(new(a.CustomerId,pending?.Id,await CustomerLabel(a.CustomerId,ct),a.AvailableCashback.Amount,pending?.ThresholdUsed.Amount??version.CustomerPayoutThreshold.Amount,
-                pending?.Amount.Amount??version.CustomerPayoutThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,version.CustomerPayoutThreshold.Amount,version.EffectiveFromUtc,ct),pending is null?"Eligible":"Ready"));
+                pending?.Amount.Amount??version.CustomerPayoutThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,version.CustomerPayoutThreshold.Amount,version.EffectiveFromUtc,ct),
+                method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
         foreach(var p in records.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc))history.Add(new(p.Id,p.Beneficiary.ToString(),p.CreatorId is {} creator?(await directory.CreatorCardAsync(creator,ct)).DisplayName:await CustomerLabel(p.CustomerId!.Value,ct),p.Amount.Amount,p.ThresholdUsed.Amount,p.Status.ToString(),p.EligibleAtUtc,p.PaidAtUtc,p.Reference));
         return (creators, customers, history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ToArray());

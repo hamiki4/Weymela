@@ -129,13 +129,17 @@ export function postForm<T = { id: string }>(path: string, data: FormData, key: 
   return request<T>(path, { method: "POST", headers: { "Idempotency-Key": key, "X-Weymela-Activity": "1" }, body: data });
 }
 export async function privateImage(path: string, signal: AbortSignal): Promise<string> {
+  return (await privateAsset(path, signal)).url;
+}
+export async function privateAsset(path: string, signal: AbortSignal): Promise<{ url: string; contentType: string }> {
   const response = await fetch(`/api${path}`, {
     credentials: "same-origin", cache: "no-store", signal,
     headers: { "X-Weymela-Request": "1", ...(window.sessionStorage.getItem("weymela.profile-key")
       ? { "X-Weymela-Profile": window.sessionStorage.getItem("weymela.profile-key")! } : {}) },
   });
   if (!response.ok) throw new Error("The receipt is unavailable.");
-  return URL.createObjectURL(await response.blob());
+  const blob = await response.blob();
+  return { url: URL.createObjectURL(blob), contentType: blob.type };
 }
 export function useResource<T>(path: string) {
   const [saved, setData] = useState<{ path: string; value: T; generation: number } | null>(() => cachedResource<T>(path));

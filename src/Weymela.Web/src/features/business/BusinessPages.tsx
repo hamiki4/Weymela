@@ -341,7 +341,7 @@ export function BusinessPricingPage() {
                     <div className="pricing-card-heading"><span className="pricing-card-kicker">UGC customer offer</span><h3>UGC + Sale</h3></div>
                     <dl className="pricing-card-details">
                       <div><dt>Creator payment</dt><dd>You choose the UGC budget.</dd></div>
-                      <div><dt>Customer offer</dt><dd>You choose the discount % and discount budget.</dd></div>
+                      <div><dt>Customer offer</dt><dd>You choose the cashback % and cashback budget.</dd></div>
                       <div><dt>Weymela transaction fee</dt><dd>{ugcPricing.customerOfferPlatformSalePercent === null ? "Not available" : `${amount(ugcPricing.customerOfferPlatformSalePercent)}% per eligible purchase`}</dd></div>
                     </dl>
                   </article>

@@ -103,10 +103,10 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
         {
             if (!opportunities.TryGetValue(offer.UgcOpportunityId, out var ugc)) continue;
             foreach (var live in await eligibility.EligibleUgcAsync(offer, ct))
-                result.Add(new(offer.Id,"UGC_CUSTOMER_OFFER",offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off",
+                result.Add(new(offer.Id,"UGC_CUSTOMER_OFFER",offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% {(offer.BenefitMode == CustomerBenefitMode.Cashback ? "cashback" : "off")}",
                     await directory.BusinessAsync(offer.BusinessId,ct),await directory.CreatorAsync(live.Assignment.CreatorId,ct),offer.CustomerDiscountPercent,
                     offer.CustomerFacingSlogan,ugc.Location,UgcAssignmentId:live.Assignment.Id,
-                    Provider:live.Publication.Provider,ExternalContentId:live.Publication.ExternalContentId));
+                    Provider:live.Publication.Provider,ExternalContentId:live.Publication.ExternalContentId,BenefitMode:offer.BenefitMode.ToString()));
         }
         return result;
     }
@@ -135,10 +135,12 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
         {
             if (!offers.TryGetValue(sale.UgcCustomerOfferId, out var offer)) continue;
             var business = await directory.BusinessAsync(sale.BusinessId, ct);
-            var label = offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off";
-            result.Add(new("UGC_CUSTOMER_OFFER", label, business.DisplayName, null,
-                sale.PurchaseAmount, sale.CustomerPaysAmount, null, sale.CustomerDiscountAmount,
-                sale.CreatedAtUtc));
+            var label = offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% cashback";
+            result.Add(sale.BenefitMode == CustomerBenefitMode.Cashback
+                ? new("UGC_CUSTOMER_OFFER", label, business.DisplayName, null, sale.PurchaseAmount,
+                    sale.PurchaseAmount, sale.CustomerDiscountAmount, null, sale.CreatedAtUtc)
+                : new("UGC_CUSTOMER_OFFER", label, business.DisplayName, null, sale.PurchaseAmount,
+                    sale.CustomerPaysAmount, null, sale.CustomerDiscountAmount, sale.CreatedAtUtc));
         }
 
         return result.OrderByDescending(x => x.PurchasedAtUtc).ToArray();

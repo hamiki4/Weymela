@@ -81,13 +81,13 @@ above 32 KiB reaches the API rather than the ordinary proxy limit, and oversized
 requests fail with a bounded JSON 413. Do not open the financial window until the
 restricted-role Admin Wallet/Reports checks also pass.
 
-Pilot has 28 migrations at deployed source
-`0c546ee17030e1cf44f1e6d667a02611c6fc0ac2`. For the collaboration-workflow
-release, require that exact history and run the packaged baseline-28 verifier
-(SHA-256 `a5568f3a9f9a59b686b4c8b44df8bd3729256176cb2021324a54522991cfdf64`)
+Pilot has 29 migrations at deployed source
+`7c70fc8f88a8e3b294ca5f8af466845da1c91151`. For the financial-UAT release,
+require that exact history and run the packaged baseline-29 verifier
+(SHA-256 `a688a6ce9bbd5cc9bd5fbf74ce80b13e869140810dabbe6bc9dbe8c8c613eb5a`)
 before any change. Back up PostgreSQL and every private durable-media directory,
 rehearse on the restored isolated copy, and apply only
-`20261006050542_CompleteCreatorCollaborationWorkflow`. Install the packaged target
-grants, require all 29 exact migrations, and run only the packaged target verifier
-before starting the new images. Never substitute a verifier from a mutable
-checkout or reapply an installed migration.
+`20261007041919_AlignFinancialUatFlows`. Install the packaged target grants,
+require all 30 exact migrations, and run only the packaged target verifier before
+starting the new images. Never substitute a verifier from a mutable checkout or
+reapply an installed migration.

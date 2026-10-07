@@ -12,6 +12,7 @@ public sealed class PrivateReceiptStore(RuntimeOptions options)
 {
     public const string Jpeg = "image/jpeg";
     public const string Png = "image/png";
+    public const string Pdf = "application/pdf";
 
     public async Task<string> SaveAsync(Guid businessId, string requestKey, IFormFile receipt, CancellationToken ct)
     {
@@ -19,15 +20,15 @@ public sealed class PrivateReceiptStore(RuntimeOptions options)
             throw new ApplicationFailure(FailureKind.Validation, "Receipt deposits are unavailable.");
         if (receipt.Length is < 1 or > RuntimeOptions.ReceiptBytes)
             throw new ApplicationFailure(FailureKind.Validation, "Receipt must be 4 MB or smaller.");
-        if (receipt.ContentType is not (Jpeg or Png))
-            throw new ApplicationFailure(FailureKind.Validation, "Choose a JPEG or PNG receipt.");
+        if (receipt.ContentType is not (Jpeg or Png or Pdf))
+            throw new ApplicationFailure(FailureKind.Validation, "Choose a JPEG, PNG, or PDF receipt.");
 
         await using var source = receipt.OpenReadStream();
         using var buffer = new MemoryStream((int)receipt.Length);
         await source.CopyToAsync(buffer, ct);
         var bytes = buffer.ToArray();
-        if (bytes.Length != receipt.Length || !ValidImage(bytes, receipt.ContentType))
-            throw new ApplicationFailure(FailureKind.Validation, "The receipt image is invalid. Choose a JPEG or PNG image.");
+        if (bytes.Length != receipt.Length || !ValidReceipt(bytes, receipt.ContentType))
+            throw new ApplicationFailure(FailureKind.Validation, "The receipt is invalid. Choose a JPEG, PNG, or safe PDF file.");
 
         var digest = SHA256.HashData(bytes);
         var identity = Encoding.UTF8.GetBytes($"{businessId:N}:{requestKey}:{Convert.ToHexString(digest)}");
@@ -64,7 +65,7 @@ public sealed class PrivateReceiptStore(RuntimeOptions options)
         if (file.Length is < 1 or > RuntimeOptions.ReceiptBytes || file.LinkTarget is not null)
             throw new ApplicationFailure(FailureKind.NotFound, "Receipt not found.");
         var bytes = await File.ReadAllBytesAsync(path, ct);
-        var contentType = ValidImage(bytes, Jpeg) ? Jpeg : ValidImage(bytes, Png) ? Png : null;
+        var contentType = ValidImage(bytes, Jpeg) ? Jpeg : ValidImage(bytes, Png) ? Png : ValidPdf(bytes) ? Pdf : null;
         if (contentType is null) throw new ApplicationFailure(FailureKind.NotFound, "Receipt not found.");
         return (bytes, contentType);
     }
@@ -128,6 +129,23 @@ public sealed class PrivateReceiptStore(RuntimeOptions options)
             cursor += length;
         }
         return false;
+    }
+
+    public static bool ValidReceipt(ReadOnlySpan<byte> bytes, string contentType) =>
+        contentType == Pdf ? ValidPdf(bytes) : ValidImage(bytes, contentType);
+
+    public static bool ValidPdf(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 32 || !bytes.StartsWith("%PDF-"u8)) return false;
+        var end = bytes.Length;
+        while (end > 0 && bytes[end - 1] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n') end--;
+        if (end < 5 || !bytes[..end].EndsWith("%%EOF"u8)) return false;
+        // Receipt PDFs are intentionally passive. Reject active, embedded, or
+        // remote actions before the authorized Admin viewer receives the file.
+        var text = Encoding.Latin1.GetString(bytes);
+        foreach (var token in new[] { "/JavaScript", "/JS", "/Launch", "/EmbeddedFile", "/OpenAction", "/AA", "/SubmitForm", "/GoToR", "/RichMedia", "/XFA" })
+            if (text.Contains(token, StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
     }
 
     private static bool ValidDimensions(uint width, uint height) => width is >= 1 and <= 12000

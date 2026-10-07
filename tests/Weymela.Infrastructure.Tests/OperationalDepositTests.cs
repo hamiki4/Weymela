@@ -13,6 +13,7 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class OperationalDepositTests(PostgresFixture fixture)
 {
+    private static readonly Guid Destination = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Actor Admin = Phase4Scenario.Admin;
     private async Task<Scenario> Setup()
     {
@@ -23,7 +24,7 @@ public sealed class OperationalDepositTests(PostgresFixture fixture)
     }
     private static DepositService Service(WeymelaDbContext db) => new(db, new ManualApprovalDepositProvider(), new TestClock());
     private static Task<DepositReceipt> Submit(WeymelaDbContext db, Scenario s, decimal amount = 17.23m, string key = "submit", string reference = "payment-1") =>
-        Service(db).SubmitAsync(s.Business, new(amount, reference, "proof-reference"), key, default);
+        Service(db).SubmitAsync(s.Business, new(amount, reference, "proof-reference", Destination), key, default);
     private static Task<Guid> Review(WeymelaDbContext db, Guid id, bool approved = true, string key = "review") =>
         new FinancialCommands(db, new TestClock()).ReviewDepositAsync(Admin, id, new(approved, 0, "BANK-CONFIRMED-1"), key);
 
@@ -90,7 +91,7 @@ public sealed class OperationalDepositTests(PostgresFixture fixture)
     [Fact] public async Task Disabled_provider_cannot_fake_live_funding()
     {
         var s = await Setup(); await using var db = s.Database.Open();
-        await Assert.ThrowsAsync<ApplicationFailure>(() => new DepositService(db, new DisabledDepositProvider(), new TestClock()).SubmitAsync(s.Business, new(17.23m, "ref", null), "key", default));
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new DepositService(db, new DisabledDepositProvider(), new TestClock()).SubmitAsync(s.Business, new(17.23m, "ref", null, Destination), "key", default));
         Assert.Empty(await db.DepositRequests.ToListAsync());
     }
     [Fact] public async Task Reviewed_deposit_history_cannot_be_deleted_or_rewritten()

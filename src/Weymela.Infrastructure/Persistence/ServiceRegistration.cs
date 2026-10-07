@@ -8,6 +8,7 @@ using Weymela.Infrastructure.Persistence.Outbox;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Deposits;
 
 namespace Weymela.Infrastructure.Persistence;
 
@@ -36,6 +37,8 @@ public static class ServiceRegistration
         services.AddScoped<ICommerceAccessPolicy, CommerceAccessPolicy>();
         services.AddScoped<CheckoutService>();
         services.AddScoped<PayoutService>();
+        services.AddScoped<PayoutDestinationService>();
+        services.AddScoped<ReceivingDestinationService>();
         services.AddScoped<VerifiedViewService>();
         services.AddScoped<CreatorPromotionContentService>();
         services.AddScoped<FinancialQueries>();

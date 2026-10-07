@@ -10,6 +10,9 @@ public sealed class Phase4FinanceTests
     private static PricingSnapshot Price => new(PromotionType.ViewPlusCommission,3000,new Money(300),new Money(200),new Money(100),4.5m,2,3.5m,Now,Guid.NewGuid());
     private static CreatorPromotionParticipation Participation() => new(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),"Fake","content",1000,Now);
     private static OfferQrSession Qr() => new(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),new string('A',64),Now,"key");
+    private static PayoutRecord Payout(PayoutBeneficiary beneficiary, decimal available, decimal threshold, decimal amount) =>
+        new(beneficiary,Guid.NewGuid(),new Money(available),new Money(threshold),new Money(amount),Guid.NewGuid(),Now,
+            PayoutDestinationMethod.Telebirr,"Telebirr","protected-account","Legal Name");
 
     [Fact] public void Baseline_views_are_not_campaign_views() { var p=Participation();Assert.Equal(0,p.CampaignVerifiedViews);Assert.Equal(1000,p.BaselineViews); }
     [Fact] public void Only_complete_unpaid_blocks_are_eligible() { var p=Participation();p.Observe(8400,Now);p.Reward(1,3000);Assert.Equal(1,p.CompleteUnpaidBlocks(3000));Assert.Equal(1400,p.CampaignVerifiedViews%3000); }
@@ -31,7 +34,7 @@ public sealed class Phase4FinanceTests
     [Fact] public void Wrong_business_attempt_does_not_consume_qr() { var qr=Qr();Assert.Throws<InvalidOperationException>(()=>qr.Use(Guid.NewGuid(),Guid.NewGuid(),Now));Assert.Equal(OfferQrStatus.Issued,qr.Status); }
     [Fact] public void Qr_cannot_be_consumed_twice() { var qr=Qr();var sale=Guid.NewGuid();qr.Use(sale,qr.BusinessId,Now);Assert.Throws<InvalidOperationException>(()=>qr.Use(Guid.NewGuid(),qr.BusinessId,Now));Assert.Equal(sale,qr.SaleId); }
     [Fact] public void Qr_rejects_non_hash_persistence_value() { Assert.Throws<ArgumentException>(()=>new OfferQrSession(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),"raw-token",Now,"key")); }
-    [Fact] public void Payout_records_exact_threshold_not_entire_available_balance() { var p=new PayoutRecord(PayoutBeneficiary.Creator,Guid.NewGuid(),new Money(5400),new Money(5000),Guid.NewGuid(),Now);Assert.Equal(5000,p.Amount.Amount);Assert.Equal(5000,p.ThresholdUsed.Amount); }
-    [Fact] public void Payout_cannot_be_prepared_below_threshold() { Assert.Throws<InvalidOperationException>(()=>new PayoutRecord(PayoutBeneficiary.Customer,Guid.NewGuid(),new Money(4999),new Money(5000),Guid.NewGuid(),Now)); }
-    [Fact] public void Payout_confirmation_requires_reference_and_is_one_time() { var p=new PayoutRecord(PayoutBeneficiary.Creator,Guid.NewGuid(),new Money(5400),new Money(5000),Guid.NewGuid(),Now);Assert.Throws<InvalidOperationException>(()=>p.MarkPaid(Guid.NewGuid(),"",Guid.NewGuid(),Now));p.MarkPaid(Guid.NewGuid(),"confirmed",Guid.NewGuid(),Now);Assert.Throws<InvalidOperationException>(()=>p.MarkPaid(Guid.NewGuid(),"again",Guid.NewGuid(),Now)); }
+    [Fact] public void Payout_records_admin_amount_and_effective_threshold_separately() { var p=Payout(PayoutBeneficiary.Creator,5400,5000,5200);Assert.Equal(5200,p.Amount.Amount);Assert.Equal(5000,p.ThresholdUsed.Amount); }
+    [Fact] public void Payout_cannot_be_prepared_below_threshold_or_above_available() { Assert.Throws<InvalidOperationException>(()=>Payout(PayoutBeneficiary.Customer,5400,5000,4999));Assert.Throws<InvalidOperationException>(()=>Payout(PayoutBeneficiary.Customer,5400,5000,5401)); }
+    [Fact] public void Payout_confirmation_requires_reference_and_is_one_time() { var p=Payout(PayoutBeneficiary.Creator,5400,5000,5000);Assert.Throws<InvalidOperationException>(()=>p.MarkPaid(Guid.NewGuid(),"",Guid.NewGuid(),Now));p.MarkPaid(Guid.NewGuid(),"confirmed",Guid.NewGuid(),Now);Assert.Throws<InvalidOperationException>(()=>p.MarkPaid(Guid.NewGuid(),"again",Guid.NewGuid(),Now)); }
 }

@@ -40,6 +40,7 @@ public static class ApiHost
         builder.Logging.AddJsonConsole(o=>{o.IncludeScopes=true;o.TimestampFormat="yyyy-MM-ddTHH:mm:ss.fffZ";o.UseUtcTimestamp=true;});
         builder.Services.ConfigureHttpJsonOptions(o=>{o.SerializerOptions.UnmappedMemberHandling=JsonUnmappedMemberHandling.Disallow;o.SerializerOptions.MaxDepth=16;});
         builder.Services.AddWeymelaPersistence(options.ConnectionString);
+        builder.Services.AddSingleton<IPayoutDestinationProtector, PayoutDestinationProtector>();
         builder.Services.AddPilotAuthenticationAdapters(options);
         builder.Services.TryAddSingleton<IAccountIdentityDeletionProvider,DisabledAccountIdentityDeletionProvider>();
         builder.Services.AddScoped<AccountDeletionService>();

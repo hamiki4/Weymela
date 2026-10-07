@@ -875,7 +875,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)
     {
         if (discount is null || fundedAllocation is null || starts is null || ends is null)
-            throw new ApplicationFailure(FailureKind.Validation, "Customer discount, funded allocation, start, and end are required when Customer Offer is ON.");
+            throw new ApplicationFailure(FailureKind.Validation, "Customer cashback, funded allocation, start, and end are required when Customer Offer is ON.");
         EnsureCustomerDiscount(discount);
         try
         {
@@ -888,7 +888,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     private static void EnsureCustomerDiscount(decimal? discount)
     {
         if (discount is null || discount <= 0 || discount > 100 || decimal.Round(discount.Value, 4) != discount.Value)
-            throw new ApplicationFailure(FailureKind.Validation, "Customer Discount must be a valid percentage between 0 and 100.");
+            throw new ApplicationFailure(FailureKind.Validation, "Customer benefit must be a valid percentage between 0 and 100.");
     }
     private static string[] ParseResources(string json)
     { try { return JsonSerializer.Deserialize<string[]>(json) ?? []; } catch (JsonException) { return []; } }

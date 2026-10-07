@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
 using Xunit;
 
@@ -75,6 +77,8 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
             await new EfUnitOfWork(db).ExecuteAsync(async ct=>
             {
                 var creatorId=Weymela.Infrastructure.Development.DevelopmentDirectory.Id(300);
+                db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=creatorId,Role=ActorRole.Creator,
+                    DisplayName="Bella",PublicId="CR-100",Region="Addis Ababa",Category="Food" });
                 var account=await db.CreatorEarningsAccounts.SingleAsync(x=>x.CreatorId==creatorId,ct);
                 var threshold=(await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).FirstAsync(ct)).CreatorPayoutThreshold.Amount;
                 var amount=threshold+125-account.AvailableEarnings.Amount;
@@ -87,11 +91,18 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
                 var entry=account.Entries.Last();db.CreatorEarningEntries.Add(entry);db.Entry(entry).Property("JournalId").CurrentValue=journal.Id;return true;
             });
         }
+        using(var own=await f.Login("creator"))
+        {
+            var destination=await own.PostJson("/api/creator/payout-destination",new{method="Telebirr",bankName=(string?)null,accountNumber=(string?)null});
+            Assert.Equal("Telebirr",destination["method"]!.GetValue<string>());
+        }
         using var c=await f.Login("admin");var queue=await c.GetJson("/api/admin/payouts");var creator=queue["creators"]![0]!;
-        var prepared=await c.PostJson($"/api/admin/payouts/Creator/{creator["subjectId"]!.GetValue<string>()}/prepare",new{});
+        Assert.Equal("Telebirr",creator["method"]!.GetValue<string>());Assert.False(string.IsNullOrWhiteSpace(creator["account"]!.GetValue<string>()));
+        var payoutAmount=creator["threshold"]!.GetValue<decimal>();
+        var prepared=await c.PostJson($"/api/admin/payouts/Creator/{creator["subjectId"]!.GetValue<string>()}/prepare",new{amount=payoutAmount});
         await c.PostJson($"/api/admin/payouts/{prepared["id"]!.GetValue<string>()}/paid",new{reference="test-payment-1"},"pay");
         await c.PostJson($"/api/admin/payouts/{prepared["id"]!.GetValue<string>()}/paid",new{reference="test-payment-1"},"pay");
-        using var own=await f.Login("creator");Assert.Equal(125,(await own.GetJson("/api/creator/earnings"))["availableEarnings"]!.GetValue<decimal>());
+        using var creatorClient=await f.Login("creator");Assert.Equal(125,(await creatorClient.GetJson("/api/creator/earnings"))["availableEarnings"]!.GetValue<decimal>());
         var unsettled=(await c.GetJson("/api/admin/platform"))["unsettled"]!["amount"]!.GetValue<decimal>();
         await c.PostJson("/api/admin/platform/settlements",new{amount=100,reference="test-settlement"});
         Assert.Equal(unsettled-100,(await c.GetJson("/api/admin/platform"))["unsettled"]!["amount"]!.GetValue<decimal>());

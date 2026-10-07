@@ -54,7 +54,7 @@ describe("Operational states", () => {
   });
   it("rejects receipts over 4 MiB before sending a request", async () => {
     const api = mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);
-    await userEvent.type(screen.getByLabelText("Amount"), "3000");
+    await userEvent.type(await screen.findByLabelText("Amount"), "3000");
     await userEvent.upload(screen.getByLabelText("Payment receipt"), new File([new Uint8Array(4 * 1024 * 1024 + 1)], "large.png", { type: "image/png" }));
     expect(await screen.findByText("Receipt must be 4 MB or smaller.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
@@ -77,6 +77,7 @@ describe("Operational states", () => {
     expect(await screen.findByText(/Your payment is waiting for approval/)).toBeVisible();
     expect(api.writes[0].body).toBeInstanceOf(FormData);
     expect(api.writes[0].body.get("amount")).toBe("17.23");
+    expect(api.writes[0].body.get("receivingDestinationId")).toBe("10000000-0000-0000-0000-000000000001");
     expect(api.writes[0].body.get("receipt")).toBeInstanceOf(File);
     expect(screen.queryByLabelText("Payment reference")).not.toBeInTheDocument();
   });

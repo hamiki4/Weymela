@@ -28,7 +28,7 @@ function CheckoutTransactionList({ rows }: { rows: CheckoutSaleRow[] }) {
       <span>Creator: {row.creator ?? "—"}{row.creatorNumber ? ` · #${row.creatorNumber}` : ""}</span>
       <span>Customer: {row.customerMasked}</span>
       {row.cashier && <span>Cashier: {row.cashier}</span>}
-      <span>{row.source === "UGC_CUSTOMER_OFFER" ? "Customer discount" : "Customer cashback"}: {amount(row.customerDiscount)} ETB</span>
+      <span>{row.benefitMode === "LegacyDiscount" ? "Customer discount" : "Customer cashback"}: {amount(row.customerDiscount)} ETB</span>
       {row.creatorEarning != null && <span>Creator earning: {amount(row.creatorEarning)} ETB</span>}
       <span>Business charge: {amount(row.businessCharge)} ETB</span>
     </div>
@@ -362,7 +362,7 @@ export function Checkout() {
                           {choice.label}
                           {choice.benefitPercent !== null
                             ? " · " + choice.benefitPercent + "% " +
-                              (choice.source === "UGC_CUSTOMER_OFFER" ? "off" : "cashback")
+                              (choice.benefitMode === "LegacyDiscount" ? "off" : "cashback")
                             : ""}
                         </span>
                       </label>

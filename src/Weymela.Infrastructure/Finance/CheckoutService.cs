@@ -104,9 +104,9 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             var offer = await db.UgcCustomerOffers.AsNoTracking().SingleAsync(x => x.Id == session.UgcCustomerOfferId, ct);
             await ValidateUgcOffer(offer, ct);
             var assignment = await EligibleUgcAssignment(offer, session.UgcAssignmentId ?? Guid.Empty, session.CreatorId, ct);
-            return new(session.Id, offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% off",
+            return new(session.Id, offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% {(offer.BenefitMode == CustomerBenefitMode.Cashback ? "cashback" : "off")}",
                 await directory.BusinessAsync(session.BusinessId, ct), await directory.CreatorAsync(assignment.CreatorId, ct), session.ExpiresAtUtc,
-                "UGC_CUSTOMER_OFFER", offer.CustomerDiscountPercent);
+                "UGC_CUSTOMER_OFFER", offer.CustomerDiscountPercent, offer.BenefitMode.ToString());
         }
         var p = await db.Promotions.AsNoTracking().SingleAsync(x => x.Id == session.PromotionId!.Value, ct);
         var a = await db.CreatorAllocations.AsNoTracking().SingleAsync(x => x.Id == session.CreatorAllocationId!.Value, ct);
@@ -175,7 +175,8 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         var journal = new FinancialJournal(Guid.NewGuid().ToString("N"), correlation, actor.UserId,
             JournalSourceType.UgcCustomerOfferSale, clock.GetUtcNow().UtcDateTime, key);
         journal.AddLine(JournalLineType.Debit, quote.FundConsumption, "UgcCustomerOfferReserve");
-        journal.AddLine(JournalLineType.Credit, quote.CustomerDiscount, "CustomerSaleDiscount");
+        journal.AddLine(JournalLineType.Credit, quote.CustomerDiscount,
+            offer.BenefitMode == CustomerBenefitMode.Cashback ? "CustomerCashbackPayable" : "CustomerSaleDiscount");
         if (quote.PlatformFee.Amount > 0) journal.AddLine(JournalLineType.Credit, quote.PlatformFee, "PlatformRevenue");
         journal.Post(); db.FinancialJournals.Add(journal);
         db.Entry(journal).Property("BusinessId").CurrentValue = offer.BusinessId;
@@ -188,6 +189,18 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
             "UgcCustomerOfferConsumed", journal.Id, clock.GetUtcNow().UtcDateTime, offer.UgcOpportunityId, offer.Id));
         db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, sale.Id, quote.FundConsumption,
             "Sale", journal.Id, clock.GetUtcNow().UtcDateTime));
+        var operation = new FinancialOperation(db);
+        if (offer.BenefitMode == CustomerBenefitMode.Cashback)
+        {
+            var account = await db.CustomerCashbackAccounts.SingleOrDefaultAsync(x => x.CustomerId == customerId, ct);
+            if (account is null) { account = new(customerId); db.CustomerCashbackAccounts.Add(account); }
+            var before = account.AvailableCashback;
+            account.EarnUgc(quote.CustomerDiscount, sale.Id, clock.GetUtcNow().UtcDateTime, correlation);
+            var entry = account.Entries.Last(); db.CustomerCashbackEntries.Add(entry); db.Entry(entry).Property("JournalId").CurrentValue = journal.Id;
+            await operation.EmitEligibility(PayoutBeneficiary.Customer, customerId, before, account.AvailableCashback, clock.GetUtcNow().UtcDateTime, ct);
+            operation.Event(nameof(CustomerCashbackEarned), new { CustomerId = customerId, UgcCustomerOfferSaleId = sale.Id,
+                PurchaseAmount = sale.PurchaseAmount, Amount = quote.CustomerDiscount, JournalId = journal.Id, CorrelationId = correlation }, clock.GetUtcNow().UtcDateTime);
+        }
         if (quote.PlatformFee.Amount > 0)
         {
             var revenue = new PlatformRevenueEntry(Guid.NewGuid(), null, PlatformRevenueSource.UgcCustomerOfferSaleFee,
@@ -200,7 +213,8 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         {
             SaleId = sale.Id, offer.BusinessId, CustomerId = customerId, UgcCustomerOfferId = offer.Id,
             UgcAssignmentId = assignment.Id,
-            PurchaseAmount = purchase.Amount, CustomerDiscount = quote.CustomerDiscount.Amount,
+            PurchaseAmount = purchase.Amount, CustomerCashback = offer.BenefitMode == CustomerBenefitMode.Cashback ? quote.CustomerDiscount.Amount : 0,
+            LegacyCustomerDiscount = offer.BenefitMode == CustomerBenefitMode.LegacyDiscount ? quote.CustomerDiscount.Amount : 0,
             CustomerPays = quote.CustomerPays.Amount, PlatformFee = quote.PlatformFee.Amount
         }), OccurredAtUtc = clock.GetUtcNow().UtcDateTime });
         db.OutboxMessages.Add(new() { EventType = "BusinessPurchaseRecorded",
@@ -282,7 +296,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
                     .RequireUgcAsync(offer, assignment.Id, creatorId, ct);
                 choices.Add(new(offer.Id, "UGC_CUSTOMER_OFFER",
                     offer.CustomerFacingSlogan ?? titles.GetValueOrDefault(offer.UgcOpportunityId, "Customer Offer"),
-                    offer.CustomerDiscountPercent));
+                    offer.CustomerDiscountPercent, offer.BenefitMode.ToString()));
             }
             catch (ApplicationFailure)
             {
@@ -437,7 +451,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         new(kind, message, inner, code);
     private static SaleResult Result(VerifiedSale sale) => new(sale.Id, sale.PurchaseAmount, sale.TotalPromotionCharge, sale.CreatedAtUtc);
     private static SaleResult Result(UgcCustomerOfferSale sale) => new(sale.Id, sale.PurchaseAmount,
-        sale.TotalOfferCharge, sale.CreatedAtUtc, sale.CustomerPaysAmount, sale.CustomerDiscountAmount, "UGC_CUSTOMER_OFFER");
+        sale.TotalOfferCharge, sale.CreatedAtUtc, sale.CustomerPaysAmount, sale.CustomerDiscountAmount, "UGC_CUSTOMER_OFFER", sale.BenefitMode.ToString());
     private static SensitiveQrToken NewToken() => new(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
         .TrimEnd('=').Replace('+', '-').Replace('/', '_'));
 }

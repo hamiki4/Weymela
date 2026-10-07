@@ -28,9 +28,9 @@ public sealed record IssueUgcCustomerOfferQrCommand(Actor Actor, Guid UgcCustome
 public sealed record IssuedOfferQr(Guid SessionId, DateTime ExpiresAtUtc, SensitiveQrToken? Token, bool Replayed);
 public sealed record RedeemOfferCommand(Actor Actor, SensitiveQrToken Token, Money PurchaseAmount, string IdempotencyKey);
 public sealed record SaleResult(Guid SaleId, Money PurchaseAmount, Money TotalBusinessCharge, DateTime CreatedAtUtc,
-    Money? CustomerPays = null, Money? CustomerDiscount = null, string Source = "VIEW_AND_SALE_PROMOTION");
+    Money? CustomerPays = null, Money? CustomerDiscount = null, string Source = "VIEW_AND_SALE_PROMOTION", string BenefitMode = "Cashback");
 public sealed record SafeCheckoutOffer(Guid SessionId, string Offer, PublicBusiness Business, PublicCreator? Creator,
-    DateTime ExpiresAtUtc, string Source = "VIEW_AND_SALE_PROMOTION", decimal? CustomerDiscountPercent = null);
+    DateTime ExpiresAtUtc, string Source = "VIEW_AND_SALE_PROMOTION", decimal? CustomerDiscountPercent = null, string BenefitMode = "Cashback");
 public sealed record PublicBusiness(Guid Id, string DisplayName);
 public sealed record PublicCreator(Guid Id, string PublicId, string DisplayName);
 public interface IPublicIdentityDirectory

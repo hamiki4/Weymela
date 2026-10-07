@@ -459,6 +459,7 @@
 .role-creator .creator-work-empty { display: grid; justify-items: start; gap: 12px; padding: 16px 0; }
 .role-creator .creator-work-empty h2 { margin: 0; font-size: 1rem; font-weight: 650; }
 .role-creator .creator-earnings-summary { max-width: 760px; }
+.payout-destination-form { width: min(100%, 760px); }
 .role-creator .payout-summary { background: var(--role-soft); }
 .role-creator .progress { background: #e9e1f8; color: var(--role-accent); }
 .role-creator .progress::-webkit-progress-bar { background: #e9e1f8; }

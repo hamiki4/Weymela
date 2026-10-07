@@ -1,6 +1,7 @@
 namespace Weymela.Domain;
 
 public enum UgcCustomerOfferStatus { Draft, Active, Exhausted, Cancelled }
+public enum CustomerBenefitMode { LegacyDiscount, Cashback }
 
 public sealed record UgcCustomerOfferPricingSnapshot(
     decimal PlatformSalePercent,
@@ -32,6 +33,7 @@ public sealed class UgcCustomerOffer
     public Money ReservedFunding { get; private set; }
     public Money UsedFunding { get; private set; }
     public Money RemainingFunding => FundedLimit.Subtract(UsedFunding);
+    public CustomerBenefitMode BenefitMode { get; private set; }
     public UgcCustomerOfferPricingSnapshot PricingSnapshot { get; }
     public UgcCustomerOfferStatus Status { get; private set; } = UgcCustomerOfferStatus.Draft;
     public DateTime CreatedAtUtc { get; }
@@ -40,12 +42,12 @@ public sealed class UgcCustomerOffer
 
     public UgcCustomerOffer(Guid ugcOpportunityId, Guid businessId, string? customerFacingSlogan,
         decimal customerDiscountPercent, DateTime startsAtUtc, DateTime endsAtUtc, Money fundedLimit,
-        UgcCustomerOfferPricingSnapshot pricing, DateTime now)
+        UgcCustomerOfferPricingSnapshot pricing, DateTime now, CustomerBenefitMode benefitMode = CustomerBenefitMode.Cashback)
     {
         if (ugcOpportunityId == Guid.Empty || businessId == Guid.Empty)
             throw new ArgumentException("UGC Customer Offer ownership is required.");
         if (customerDiscountPercent is <= 0 or > 100 || decimal.Round(customerDiscountPercent, 4) != customerDiscountPercent)
-            throw new ArgumentException("Customer discount must be between zero and 100 with no more than four decimal places.");
+            throw new ArgumentException("Customer benefit must be between zero and 100 with no more than four decimal places.");
         if (startsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc <= startsAtUtc)
             throw new ArgumentException("Customer Offer dates must be valid UTC dates.");
         if (fundedLimit.Amount <= 0 || !pricing.IsValid)
@@ -56,6 +58,7 @@ public sealed class UgcCustomerOffer
         StartsAtUtc = startsAtUtc; EndsAtUtc = endsAtUtc; FundedLimit = fundedLimit;
         ReservedFunding = Money.Zero(fundedLimit.Currency); UsedFunding = Money.Zero(fundedLimit.Currency);
         PricingSnapshot = pricing; CreatedAtUtc = now;
+        BenefitMode = benefitMode;
     }
 
     public void Publish(BusinessWallet wallet, DateTime now, Guid correlation)
@@ -71,7 +74,7 @@ public sealed class UgcCustomerOffer
     {
         Ensure(UgcCustomerOfferStatus.Draft);
         if (customerDiscountPercent is <= 0 or > 100 || decimal.Round(customerDiscountPercent, 4) != customerDiscountPercent)
-            throw new ArgumentException("Customer discount must be between zero and 100 with no more than four decimal places.");
+            throw new ArgumentException("Customer benefit must be between zero and 100 with no more than four decimal places.");
         if (startsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc <= startsAtUtc)
             throw new ArgumentException("Customer Offer dates must be valid UTC dates.");
         if (fundedLimit.Amount <= 0) throw new ArgumentException("Customer Offer funding is required.");
@@ -86,7 +89,7 @@ public sealed class UgcCustomerOffer
         Ensure(UgcCustomerOfferStatus.Draft, UgcCustomerOfferStatus.Active, UgcCustomerOfferStatus.Cancelled);
         if (UsedFunding.Amount > 0) throw new InvalidOperationException("Customer Offer terms are locked after use.");
         if (customerDiscountPercent is <= 0 or > 100 || decimal.Round(customerDiscountPercent, 4) != customerDiscountPercent)
-            throw new ArgumentException("Customer discount must be between zero and 100 with no more than four decimal places.");
+            throw new ArgumentException("Customer benefit must be between zero and 100 with no more than four decimal places.");
         if (startsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc <= startsAtUtc)
             throw new ArgumentException("Customer Offer dates must be valid UTC dates.");
         if (fundedLimit.Amount <= 0) throw new ArgumentException("Customer Offer funding is required.");
@@ -114,7 +117,7 @@ public sealed class UgcCustomerOffer
         var consumption = discount.Add(platformFee);
         if (discount.Amount <= 0 || consumption.Amount <= 0 || consumption.Amount > RemainingFunding.Amount)
             throw new InvalidOperationException("Offer no longer available.");
-        return new(purchase, discount, purchase.Subtract(discount), platformFee, consumption);
+        return new(purchase, discount, BenefitMode == CustomerBenefitMode.Cashback ? purchase : purchase.Subtract(discount), platformFee, consumption);
     }
 
     public void Consume(UgcCustomerOfferQuote quote, BusinessWallet wallet, DateTime now, Guid correlation)
@@ -165,6 +168,7 @@ public sealed class UgcCustomerOfferSale
     public Money CustomerPaysAmount { get; }
     public Money PlatformRevenueAmount { get; }
     public Money TotalOfferCharge { get; }
+    public CustomerBenefitMode BenefitMode { get; }
     public string QrTokenReference { get; }
     public string IdempotencyKey { get; }
     public DateTime CreatedAtUtc { get; }
@@ -175,7 +179,8 @@ public sealed class UgcCustomerOfferSale
         if (assignmentId == Guid.Empty || customerId == Guid.Empty || cashierId == Guid.Empty || string.IsNullOrWhiteSpace(qrReference)
             || string.IsNullOrWhiteSpace(idempotencyKey) || quote.PurchaseAmount.Amount <= 0
             || quote.CustomerDiscount.Amount <= 0 || quote.CustomerPays.Amount < 0
-            || quote.CustomerPays.Add(quote.CustomerDiscount) != quote.PurchaseAmount
+            || (offer.BenefitMode == CustomerBenefitMode.LegacyDiscount && quote.CustomerPays.Add(quote.CustomerDiscount) != quote.PurchaseAmount)
+            || (offer.BenefitMode == CustomerBenefitMode.Cashback && quote.CustomerPays != quote.PurchaseAmount)
             || quote.CustomerDiscount.Add(quote.PlatformFee) != quote.FundConsumption)
             throw new ArgumentException("UGC Customer Offer Sale amounts are invalid.");
         UgcCustomerOfferId = offer.Id; UgcOpportunityId = offer.UgcOpportunityId; UgcAssignmentId = assignmentId;
@@ -183,6 +188,7 @@ public sealed class UgcCustomerOfferSale
         PurchaseAmount = quote.PurchaseAmount; CustomerDiscountAmount = quote.CustomerDiscount;
         CustomerPaysAmount = quote.CustomerPays; PlatformRevenueAmount = quote.PlatformFee;
         TotalOfferCharge = quote.FundConsumption; QrTokenReference = qrReference;
+        BenefitMode = offer.BenefitMode;
         IdempotencyKey = idempotencyKey; CreatedAtUtc = now;
     }
 }

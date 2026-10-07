@@ -49,11 +49,13 @@ internal static class OperationalReadinessConfiguration
         });
         deposit.Property(x => x.Provider).HasMaxLength(40); deposit.Property(x => x.ExternalReference).HasMaxLength(120);
         deposit.Property(x => x.ProofReference).HasMaxLength(120); deposit.Property(x => x.ConfirmationReference).HasMaxLength(120);
+        deposit.Property(x => x.DestinationNameSnapshot).HasMaxLength(100); deposit.Property(x => x.DestinationAccountSnapshot).HasMaxLength(100);
         deposit.HasIndex(x => new { x.BusinessId, x.Provider, x.ExternalReference }).IsUnique();
         deposit.HasIndex(x => new { x.Provider, x.ConfirmationReference }).IsUnique().HasFilter("\"Status\"='Approved'");
         deposit.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
         deposit.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict); Mapping.Version(deposit);
         deposit.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.JournalId).OnDelete(DeleteBehavior.Restrict);
+        deposit.HasOne<PlatformReceivingDestination>().WithMany().HasForeignKey(x => x.ReceivingDestinationId).OnDelete(DeleteBehavior.Restrict);
 
         var notification = model.Entity<InAppNotification>(); Mapping.Scalars(notification); notification.HasKey(x => x.Id);
         notification.ToTable("InAppNotifications", t => t.HasCheckConstraint("CK_Notification_ReadTime", "\"ReadAtUtc\" IS NULL OR \"ReadAtUtc\" >= \"CreatedAtUtc\""));

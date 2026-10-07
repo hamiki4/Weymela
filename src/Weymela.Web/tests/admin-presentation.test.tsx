@@ -10,18 +10,18 @@ beforeEach(() => { vi.restoreAllMocks(); invalidateResourceCache(false); });
 function mount(element: React.ReactNode) { render(<MemoryRouter>{element}</MemoryRouter>); }
 
 describe("Platform Admin financial presentation", () => {
-  it("shows fixed UGC Creator pay separately from the Business customer discount", async () => {
+  it("shows fixed UGC Creator pay separately from the Business customer cashback", async () => {
     mockApi({ "/admin/ugc/finance": [
       { id: "one", business: "Abc Coffee", title: "UGC only", type: "UGC Only", budget: 220, creatorPayment: 200, customerDiscountPercent: null, creatorUsed: 0, offerUsed: 0, discountUsed: 0, remaining: 220, qualifyingSales: 0, status: "Open" },
-      { id: "two", business: "Abc Coffee", title: "UGC sale", type: "UGC + Discount Sale", budget: 720, creatorPayment: 200, customerDiscountPercent: 2, creatorUsed: 220, offerUsed: 25, discountUsed: 20, remaining: 475, qualifyingSales: 1, status: "InProgress" },
+      { id: "two", business: "Abc Coffee", title: "UGC sale", type: "UGC + Sale", budget: 720, creatorPayment: 200, customerDiscountPercent: 2, creatorUsed: 220, offerUsed: 25, discountUsed: 20, remaining: 475, qualifyingSales: 1, status: "InProgress" },
     ] });
     mount(<AdminUgcPage />);
     const rows = await screen.findAllByRole("listitem");
     expect(within(rows[0]).getByText("Fixed Creator pay")).toBeInTheDocument();
-    expect(within(rows[0]).queryByText("Customer discount")).not.toBeInTheDocument();
+    expect(within(rows[0]).queryByText("Customer cashback")).not.toBeInTheDocument();
     expect(within(rows[1]).getByText("Fixed Creator pay")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("Customer discount")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("Discount consumed")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Customer cashback")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Cashback funded")).toBeInTheDocument();
     expect(within(rows[1]).getByText("Qualifying sales")).toBeInTheDocument();
     expect(within(rows[1]).getByText("2%")).toBeInTheDocument();
     expect(within(rows[1]).getByText("20 Br")).toBeInTheDocument();
@@ -33,8 +33,8 @@ describe("Platform Admin financial presentation", () => {
       "/admin/deposit-requests": [],
     });
     mount(<AdminWalletsPage />);
-    await userEvent.click((await screen.findAllByRole("button", { name: "Add Funds" }))[0]);
-    const dialog = screen.getByRole("dialog", { name: /Add funds/ });
+    await userEvent.click((await screen.findAllByRole("button", { name: "Promotional Credit" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: /Promotional credit/ });
     await userEvent.type(within(dialog).getByLabelText("Amount (ETB)"), "500");
     await userEvent.type(within(dialog).getByLabelText("Reason"), "Launch support");
     await userEvent.click(within(dialog).getByRole("button", { name: "Add Promotional Funds" }));

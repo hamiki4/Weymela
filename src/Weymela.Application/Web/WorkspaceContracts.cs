@@ -93,7 +93,7 @@ public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCa
 public sealed record AdminHome(int Businesses, int Creators, int ActiveCampaigns, decimal CampaignSpend, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> Activity);
 public sealed record AdminBusinessWallet(Guid BusinessId, string Business, decimal TotalBalance, decimal Available,
-    decimal Reserved, decimal PendingDeposit, int ViewOnlyCount, int ViewSaleCount, string Status);
+    decimal Reserved, decimal PendingDeposit, int ViewOnlyCount, int ViewSaleCount, string Status, string? LastDepositVia = null);
 public sealed record AdminPromotionWallet(Guid Id, string Business, string Title, string Type, decimal Budget,
     decimal Used, decimal Remaining, long VerifiedViews, int VerifiedSales, string Status);
 public sealed record AdminWallets(IReadOnlyList<AdminBusinessWallet> Businesses, IReadOnlyList<AdminPromotionWallet> Promotions);
@@ -140,7 +140,7 @@ public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceIn
 public sealed record FinancialVersionInfo(Guid Id, int Version, DateTime EffectiveFromUtc, Guid ChangedBy, FinancialSettingsInput Settings);
 public sealed record FinancialSettingsWorkspace(FinancialSettingsInput Current, int Version, IReadOnlyList<FinancialVersionInfo> Versions);
 public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name, decimal Available, decimal Threshold, decimal PayAmount,
-    DateTime? EligibleSinceUtc, string Status);
+    DateTime? EligibleSinceUtc, string Status, string? Method = null, string? Provider = null, string? Account = null);
 public sealed record PayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers,
     decimal PlatformAccrued, decimal PlatformSettled, decimal PlatformUnsettled, IReadOnlyList<PayoutItem> History);
 public sealed record OperationsPayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators,
@@ -153,14 +153,14 @@ public sealed record CustomerOfferBusiness(string DisplayName, string? Direction
 public sealed record CustomerOfferCreator(string DisplayName);
 public sealed record CustomerOfferCard(Guid Id, string Source, string Offer, CustomerOfferBusiness Business,
     CustomerOfferCreator? Creator, decimal BenefitPercent, string? WatchUrl, string? Slogan = null, string? Location = null,
-    int? RemainingDays = null, Guid? UgcAssignmentId = null);
+    int? RemainingDays = null, Guid? UgcAssignmentId = null, string BenefitMode = "Cashback");
 public sealed record QrResponse(Guid Id, string? Token, DateTime ExpiresAtUtc, bool Replayed);
 public sealed record CheckoutOffer(Guid SessionId, string Offer, CustomerOfferBusiness Business, CustomerOfferCreator? Creator,
-    string Customer, DateTime ExpiresAtUtc, string Source, decimal? CustomerDiscountPercent);
+    string Customer, DateTime ExpiresAtUtc, string Source, decimal? CustomerDiscountPercent, string BenefitMode = "Cashback");
 public sealed record CheckoutSaleRow(Guid Id, string Offer, string Source, decimal PurchaseAmount,
     decimal CustomerDiscount, decimal CustomerPays, decimal BusinessCharge, DateTime CreatedAtUtc,
     string? Cashier = null, string? Creator = null, string CustomerMasked = "Customer", string Status = "Completed",
-    long? CreatorNumber = null, decimal? CreatorEarning = null);
+    long? CreatorNumber = null, decimal? CreatorEarning = null, string BenefitMode = "Cashback");
 
 public sealed record CashierView(Guid Id, string Name, string MaskedPhone, string Status,
     DateTime CreatedAtUtc, DateTime? ActivatedAtUtc);
@@ -169,7 +169,7 @@ public sealed record CashierActivationResult(FirebaseCustomTokenResult Token);
 public sealed record CreateCashierInput(string Name, string Phone);
 public sealed record CashierActivationInput(string Phone, string ActivationCode);
 public sealed record ManualCheckoutLookupInput(string CreatorId, string CustomerPhone, Guid? OfferId = null);
-public sealed record ManualCheckoutChoice(Guid Id, string Source, string Label, decimal? BenefitPercent);
+public sealed record ManualCheckoutChoice(Guid Id, string Source, string Label, decimal? BenefitPercent, string BenefitMode = "Cashback");
 public sealed record ManualCheckoutResolution(IReadOnlyList<ManualCheckoutChoice> Offers);
 public sealed record ManualCheckoutConfirmInput(string CreatorId, string CustomerPhone, Guid OfferId, decimal PurchaseAmount);
 
@@ -194,6 +194,7 @@ public sealed record PromotionContentReviewInput(string Action, string? Feedback
 public sealed record TokenInput(string Token);
 public sealed record CheckoutInput(string Token, decimal PurchaseAmount);
 public sealed record ConfirmPaymentInput(string Reference);
+public sealed record PayoutAmountInput(decimal Amount);
 public sealed record SettlementInput(decimal Amount, string Reference);
 
 public sealed record UgcPlatformRequirementInput(string Platform, string Format, long? MinimumAudience);

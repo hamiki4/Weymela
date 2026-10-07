@@ -129,12 +129,14 @@ export function AdminPayouts() {
     null,
   );
   const [reference, setReference] = useState("");
+  const [payAmount, setPayAmount] = useState("");
   const [confirmed, confirm] = useState(false);
   const action = useAction();
   const [message, setMessage] = useState("");
   const choose = (r: QueueRow) => {
     select({ row: r, kind: tab === "Creators" ? "Creator" : "Customer" });
     setReference("");
+    setPayAmount(String(r.payAmount));
     confirm(false);
   };
   return (
@@ -174,14 +176,16 @@ export function AdminPayouts() {
                       numeric: true,
                     },
                     {
-                      label: "Threshold",
-                      cell: (r) => amount(r.threshold),
-                      numeric: true,
+                      label: "Method",
+                      cell: (r) => r.method ?? "Not configured",
                     },
                     {
-                      label: "Pay Amount",
-                      cell: (r) => amount(r.payAmount),
-                      numeric: true,
+                      label: "Bank / Provider",
+                      cell: (r) => r.provider ?? "—",
+                    },
+                    {
+                      label: "Account / Phone",
+                      cell: (r) => r.account ?? "—",
                     },
                     {
                       label: "Eligible Since",
@@ -194,8 +198,8 @@ export function AdminPayouts() {
                     {
                       label: "Action",
                       cell: (r) => (
-                        <Button variant="secondary" onClick={() => choose(r)}>
-                          Mark Paid
+                        <Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>
+                          Pay
                         </Button>
                       ),
                     },
@@ -210,14 +214,14 @@ export function AdminPayouts() {
                         values={[
                           ["Available", r.available],
                           ["Threshold", r.threshold],
-                          ["Pay Amount", r.payAmount],
                         ]}
                       />
+                      <p className="fine-print">{r.method ?? "No payout destination"} · {r.provider ?? "—"} · {r.account ?? "—"}</p>
                       <p className="fine-print">
                         Eligible Since: {date(r.eligibleSinceUtc)}
                       </p>
-                      <Button variant="secondary" onClick={() => choose(r)}>
-                        Mark Paid
+                      <Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>
+                        Pay
                       </Button>
                     </>
                   )}
@@ -326,12 +330,11 @@ export function AdminPayouts() {
         }}
       >
         <p>
-          Pay Amount:{" "}
-          <strong>{amount(selected?.row.payAmount ?? 0)}</strong>
+          Available: <strong>{amount(selected?.row.available ?? 0)}</strong>
         </p>
         <p className="fine-print">
           This records an external payment; it does not send money. Only the
-          threshold amount is paid. The rest stays in the account.
+          confirmed amount is paid. The rest stays in the account.
         </p>
         <form
           onSubmit={(e) => {
@@ -342,7 +345,7 @@ export function AdminPayouts() {
                 payoutId = (
                   await post<{ id: string }>(
                     `/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`,
-                    {},
+                    { amount: Number(payAmount) },
                     `${key}:prepare`,
                   )
                 ).id;
@@ -360,6 +363,11 @@ export function AdminPayouts() {
           }}
         >
           <fieldset disabled={action.busy}>
+            <p><strong>{selected?.row.method}</strong> · {selected?.row.provider} · {selected?.row.account}</p>
+            <Field label="Amount to Pay">
+              <MoneyInput value={payAmount} min={selected?.row.threshold} max={selected?.row.available} disabled={!!selected?.row.payoutId} onChange={(e) => setPayAmount(e.target.value)} />
+            </Field>
+            <p className="fine-print">Remaining: {amount(Math.max((selected?.row.available ?? 0) - Number(payAmount || 0), 0))}</p>
             <Field label="Payment reference">
               <input
                 value={reference}
@@ -380,7 +388,7 @@ export function AdminPayouts() {
             {action.error && <Notice error>{action.error}</Notice>}
             <Button
               type="submit"
-              disabled={action.busy || !confirmed || !reference}
+              disabled={action.busy || !confirmed || !reference || !payAmount || Number(payAmount) < (selected?.row.threshold ?? 0) || Number(payAmount) > (selected?.row.available ?? 0)}
             >
               {action.busy ? "Recording…" : "Confirm Paid"}
             </Button>
@@ -396,12 +404,14 @@ export function OperationsPayouts() {
   const [tab, setTab] = useState("Creators");
   const [selected, select] = useState<{ kind: string; row: QueueRow } | null>(null);
   const [reference, setReference] = useState("");
+  const [payAmount, setPayAmount] = useState("");
   const [confirmed, confirm] = useState(false);
   const action = useAction();
   const [message, setMessage] = useState("");
   const choose = (row: QueueRow) => {
     select({ row, kind: tab === "Creators" ? "Creator" : "Customer" });
     setReference("");
+    setPayAmount(String(row.payAmount));
     confirm(false);
   };
   return <>
@@ -413,11 +423,12 @@ export function OperationsPayouts() {
         <DataTable rows={tab === "Creators" ? data.creators : data.customers} rowKey={(r) => r.subjectId} label={`${tab} payout queue`} columns={[
           { label: tab === "Creators" ? "Creator" : "Customer", cell: (r) => r.name },
           { label: "Available", cell: (r) => amount(r.available), numeric: true },
-          { label: "Threshold", cell: (r) => amount(r.threshold), numeric: true },
-          { label: "Pay Amount", cell: (r) => amount(r.payAmount), numeric: true },
+          { label: "Method", cell: (r) => r.method ?? "Not configured" },
+          { label: "Bank / Provider", cell: (r) => r.provider ?? "—" },
+          { label: "Account / Phone", cell: (r) => r.account ?? "—" },
           { label: "Status", cell: (r) => <Badge status={r.status} /> },
-          { label: "Action", cell: (r) => <Button variant="secondary" onClick={() => choose(r)}>Mark Paid</Button> },
-        ]} card={(r) => <><div className="card-head"><h3>{r.name}</h3><Badge status={r.status} /></div><FundsGrid values={[["Available", r.available], ["Threshold", r.threshold], ["Pay Amount", r.payAmount]]} /><Button variant="secondary" onClick={() => choose(r)}>Mark Paid</Button></>} empty={<Empty title="No eligible payouts right now" message="Payouts appear when an account reaches the effective threshold." icon="wallet" />} />
+          { label: "Action", cell: (r) => <Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>Pay</Button> },
+        ]} card={(r) => <><div className="card-head"><h3>{r.name}</h3><Badge status={r.status} /></div><FundsGrid values={[["Available", r.available], ["Threshold", r.threshold]]} /><p>{r.method ?? "No payout destination"} · {r.provider ?? "—"} · {r.account ?? "—"}</p><Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>Pay</Button></>} empty={<Empty title="No eligible payouts right now" message="Payouts appear when an account reaches the effective threshold." icon="wallet" />} />
       </Section>}
       {tab === "History" && <Section title="Payout history" action={<Currency />}><DataTable rows={data.history} rowKey={(r) => r.id} label="Operations payout history" columns={[
         { label: "Type", cell: (r) => r.kind }, { label: "Name", cell: (r) => r.name }, { label: "Amount", cell: (r) => amount(r.amount), numeric: true },
@@ -426,10 +437,11 @@ export function OperationsPayouts() {
       ]} card={(r) => <><div className="card-head"><strong>{r.name} · {r.kind}</strong><Badge status={r.status} /></div><p>{amount(r.amount)} · {date(r.paidAtUtc ?? r.eligibleAtUtc)}</p><p className="fine-print">{r.reference ?? "Awaiting confirmation"}</p></>} empty={<Empty title="No payout history" message="Recorded Creator and Customer payouts appear here." icon="document" />} /></Section>}
     </>}</Resource>
     <Dialog title={selected ? `Confirm payment to ${selected.row.name}` : "Confirm payment"} open={!!selected} onClose={() => { if (!action.busy) select(null); }}>
-      <p>Pay Amount: <strong>{amount(selected?.row.payAmount ?? 0)}</strong></p>
-      <p className="fine-print">This records an external payment; it does not send money. Only the server-authorized payout amount is paid.</p>
-      <form onSubmit={(e) => { e.preventDefault(); void action.run(async (key) => { let payoutId = selected!.row.payoutId; if (!payoutId) payoutId = (await post<{ id: string }>(`/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`, {}, `${key}:prepare`)).id; await post(`/admin/payouts/${payoutId}/paid`, { reference }, `${key}:paid`); select(null); setMessage("Payment confirmed. The remaining balance carries forward."); resource.reload(); }); }}>
-        <fieldset disabled={action.busy}><Field label="Payment reference"><input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={200} required /></Field><label className="check-line"><input type="checkbox" required checked={confirmed} onChange={(e) => confirm(e.target.checked)} /> I confirm this payment has been completed externally.</label>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !confirmed || !reference}>{action.busy ? "Recording…" : "Confirm Paid"}</Button></fieldset>
+      <p>Available: <strong>{amount(selected?.row.available ?? 0)}</strong></p>
+      <p>{selected?.row.method} · {selected?.row.provider} · {selected?.row.account}</p>
+      <p className="fine-print">This records an external payment; it does not send money.</p>
+      <form onSubmit={(e) => { e.preventDefault(); void action.run(async (key) => { let payoutId = selected!.row.payoutId; if (!payoutId) payoutId = (await post<{ id: string }>(`/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`, { amount: Number(payAmount) }, `${key}:prepare`)).id; await post(`/admin/payouts/${payoutId}/paid`, { reference }, `${key}:paid`); select(null); setMessage("Payment confirmed. The remaining balance carries forward."); resource.reload(); }); }}>
+        <fieldset disabled={action.busy}><Field label="Amount to Pay"><MoneyInput value={payAmount} min={selected?.row.threshold} max={selected?.row.available} disabled={!!selected?.row.payoutId} onChange={(e) => setPayAmount(e.target.value)} /></Field><p className="fine-print">Remaining: {amount(Math.max((selected?.row.available ?? 0) - Number(payAmount || 0), 0))}</p><Field label="Payment reference"><input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={200} required /></Field><label className="check-line"><input type="checkbox" required checked={confirmed} onChange={(e) => confirm(e.target.checked)} /> I confirm this payment has been completed externally.</label>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !confirmed || !reference || !payAmount || Number(payAmount) < (selected?.row.threshold ?? 0) || Number(payAmount) > (selected?.row.available ?? 0)}>{action.busy ? "Recording…" : "Confirm Paid"}</Button></fieldset>
       </form>
     </Dialog>
   </>;

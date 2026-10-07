@@ -99,7 +99,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
       <Link className="button secondary business-promotion-manage" to={`/business/ugc/${item.id}`}>Manage</Link>
       {manageOpen && <section className="business-promotion-management" aria-label={`${item.title} management`}>
         <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
-        {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer gets {amount(item.customerDiscountPercent)}% off.</p>}
+        {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer earns {amount(item.customerDiscountPercent)}% cashback.</p>}
         {item.status !== "Draft" && <>
         <Button variant="secondary" onClick={() => void editAction.run(async () => {
           const detail = await request<UgcDetail>(`/business/ugc/${item.id}`);
@@ -165,8 +165,8 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
               <ProductArrangementChoice value={editArrangement} onChange={setEditArrangement} name="edit-product-arrangement" />
               <fieldset className="field wide ugc-posting-choice"><legend>Posting</legend><label><input type="radio" name="edit-ugc-posting" checked={!editMustPost} onChange={() => setEditMustPost(false)} /> Deliver content only</label><label><input type="radio" name="edit-ugc-posting" checked={editMustPost} onChange={() => setEditMustPost(true)} /> Creator must post</label></fieldset>
               {editMustPost && <PlatformCapacityPicker value={editPlatforms} onChange={setEditPlatforms} />}
-              <label className="field wide"><span><input type="checkbox" checked={editOffer} onChange={event => setEditOffer(event.target.checked)} /> Customer discount sale</span></label>
-              {editOffer && <><Field label="Customer Discount %"><input type="number" min="0.01" max="100" step="0.0001" value={editDiscount} onChange={event => setEditDiscount(event.target.value)} required /></Field><Field label="Discount funding"><input type="number" min="0.01" step="0.01" value={editOfferBudget} onChange={event => setEditOfferBudget(event.target.value)} required /></Field></>}
+              <label className="field wide"><span><input type="checkbox" checked={editOffer} onChange={event => setEditOffer(event.target.checked)} /> Customer cashback sale</span></label>
+              {editOffer && <><Field label="Customer Cashback %"><input type="number" min="0.01" max="100" step="0.0001" value={editDiscount} onChange={event => setEditDiscount(event.target.value)} required /></Field><Field label="Cashback funding"><input type="number" min="0.01" step="0.01" value={editOfferBudget} onChange={event => setEditOfferBudget(event.target.value)} required /></Field></>}
             </>}
             <Field label="Slogan"><input value={editSlogan} onChange={event => setEditSlogan(event.target.value)} maxLength={160} /></Field>
             <Field label="Location"><input value={editLocation} onChange={event => setEditLocation(event.target.value)} maxLength={160} /></Field>
@@ -365,14 +365,14 @@ export function CreateBusinessUgcPage() {
                             checked={form.customerOffer}
                             onChange={(e) => set("customerOffer", e.target.checked)}
                           />{" "}
-                          Add Customer discount sale
+                          Add Customer cashback sale
                         </span>
                       </label>
                     )}
-                  {form.customerOffer && <><Field label="Customer discount %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer offer budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
+                  {form.customerOffer && <><Field label="Customer cashback %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer cashback budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
                   {form.mustPost && form.platforms.length === 0 && <Notice error>Choose at least one social platform.</Notice>}
-                  {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer discounts are unavailable for this Promotion right now.</Notice>}
-                  {form.customerOffer && discount > 100 && <Notice error>Discount must be between 0 and 100%.</Notice>}
+                  {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer cashback is unavailable for this Promotion right now.</Notice>}
+                  {form.customerOffer && discount > 100 && <Notice error>Cashback must be between 0 and 100%.</Notice>}
                   {!minimumBudgetMet && <Notice error>The Promotion budget is below the minimum required to publish.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}
                   <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save Draft"}</Button></div>

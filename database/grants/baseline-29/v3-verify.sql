@@ -72,8 +72,6 @@ VALUES
     ('api', 'v3', 'CashierPreauthorizations', true, true, true),
     ('api', 'v3', 'DepositRequests', true, true, true),
     ('api', 'v3', 'PayoutRecords', true, true, true),
-    ('api', 'v3', 'PayoutDestinations', true, true, true),
-    ('api', 'v3', 'PlatformReceivingDestinations', true, true, true),
     ('api', 'v3', 'PromotionPlatforms', true, true, true),
     ('api', 'v3', 'Promotions', true, true, true),
     ('api', 'v3', 'UgcAssignments', true, true, true),

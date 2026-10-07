@@ -200,6 +200,9 @@ export const queue = {
   payAmount: 5000,
   eligibleSinceUtc: "2026-09-11T12:00:00Z",
   status: "Eligible",
+  method: "Telebirr",
+  provider: "Telebirr",
+  account: "+251911223344",
 };
 export const payouts = {
   creators: [queue],
@@ -251,6 +254,13 @@ export const routes: Record<string, unknown> = {
   },
   "/business/ugc": [],
   "/business/wallet": wallet,
+  "/business/deposit-method": { mode: "ManualApproval" },
+  "/business/deposit-requests": [],
+  "/business/receiving-destinations": [
+    { id: "10000000-0000-0000-0000-000000000001", method: "Telebirr", name: "Telebirr", accountReference: "0911111111" },
+    { id: "10000000-0000-0000-0000-000000000002", method: "Bank", name: "CBE", accountReference: "1000000000" },
+    { id: "10000000-0000-0000-0000-000000000003", method: "Bank", name: "Bank of Abyssinia", accountReference: "123456789" },
+  ],
   "/legal/current": [
     { id: "business-agreement", type: "BusinessAgreement", version: "1", contentHash: "fixture", accepted: true },
     { id: "anti-circumvention", type: "AntiCircumventionAgreement", version: "1", contentHash: "fixture", accepted: true },
@@ -269,6 +279,7 @@ export const routes: Record<string, unknown> = {
   "/creator/ugc/requests": [],
   "/creator/campaigns": [active],
   "/creator/earnings": earnings,
+  "/creator/payout-destination": { method: "Telebirr", provider: "Telebirr", account: "+251911223344", legalName: "Bella", updatedAtUtc: "2026-09-11T12:00:00Z", isMasked: false, isConfigured: true },
   "/creator/requests": [],
   "/admin/home": {
     businesses: 1,
@@ -337,6 +348,11 @@ export const routes: Record<string, unknown> = {
       },
     ],
   },
+  "/admin/receiving-destinations": [
+    { id: "10000000-0000-0000-0000-000000000001", method: "Telebirr", name: "Telebirr", accountReference: "0911111111", isActive: true, sortOrder: 1, version: 0 },
+    { id: "10000000-0000-0000-0000-000000000002", method: "Bank", name: "CBE", accountReference: "1000000000", isActive: true, sortOrder: 2, version: 0 },
+    { id: "10000000-0000-0000-0000-000000000003", method: "Bank", name: "Bank of Abyssinia", accountReference: "123456789", isActive: true, sortOrder: 3, version: 0 },
+  ],
   "/admin/payouts": payouts,
   "/admin/platform": {
     accrued: { amount: 300 },
@@ -355,6 +371,7 @@ export const routes: Record<string, unknown> = {
     status: "BelowThreshold",
     payoutHistory: [],
   },
+  "/customer/payout-destination": { method: "Telebirr", provider: "Telebirr", account: "+251922334455", legalName: "Customer", updatedAtUtc: null, isMasked: false, isConfigured: false },
 };
 export function mockApi(overrides: Record<string, unknown> = {}) {
   const data = { ...routes, ...overrides };

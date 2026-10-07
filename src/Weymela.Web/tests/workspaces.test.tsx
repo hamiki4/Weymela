@@ -228,16 +228,16 @@ describe("Business workspace", () => {
     mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc");
 
     expect(await screen.findByText("UGC", { selector: ".promotion-selected-type strong" })).toBeVisible();
-    expect(screen.queryByLabelText("Customer discount %")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Customer offer budget")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Customer cashback %")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Customer cashback budget")).not.toBeInTheDocument();
   });
 
   it("opens UGC + Sales with Customer sale fields already enabled", async () => {
     mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc-sales");
 
     expect(await screen.findByText("UGC + Sales", { selector: ".promotion-selected-type strong" })).toBeVisible();
-    expect(screen.getByLabelText("Customer discount %")).toBeVisible();
-    expect(screen.getByLabelText("Customer offer budget")).toBeVisible();
+    expect(screen.getByLabelText("Customer cashback %")).toBeVisible();
+    expect(screen.getByLabelText("Customer cashback budget")).toBeVisible();
   });
 
   it("saves a private Promotion Draft without accepting platform rates", async () => {
@@ -285,10 +285,10 @@ describe("Business workspace", () => {
     await userEvent.type(await screen.findByLabelText("Creator payment (ETB)"), "500");
     await userEvent.clear(screen.getByLabelText("Creators needed"));
     await userEvent.type(screen.getByLabelText("Creators needed"), "3");
-    expect(screen.queryByText(/Funding Summary|Total funding|Customer discount funding|Need/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("checkbox", { name: "Add Customer discount sale" }));
-    await userEvent.type(screen.getByLabelText("Customer discount %"), "5");
-    await userEvent.type(screen.getByLabelText("Customer offer budget"), "200");
+    expect(screen.queryByText(/Funding Summary|Total funding|Customer cashback funding|Need/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Add Customer cashback sale" }));
+    await userEvent.type(screen.getByLabelText("Customer cashback %"), "5");
+    await userEvent.type(screen.getByLabelText("Customer cashback budget"), "200");
     expect(screen.queryByText(/10,000|Platform fee|Reserved/)).not.toBeInTheDocument();
   });
   it.each([
@@ -642,7 +642,7 @@ describe("Creator workspace", () => {
     mount(<CreatorDiscover />, "/creator/discover");
     expect(await screen.findByText("UGC + Sales")).toBeVisible();
     expect(screen.getByText("Creator payment 4,750 ETB")).toBeVisible();
-    expect(screen.getByText("Customer gets 3% off")).toBeVisible();
+    expect(screen.getByText("Customer earns 3% cashback")).toBeVisible();
     expect(screen.getByText("Product provided by Business")).toBeVisible();
     expect(screen.queryByText(/10,000|Platform fee|250/)).not.toBeInTheDocument();
   });
@@ -798,7 +798,7 @@ describe("Creator workspace", () => {
     expect(
       await screen.findByRole("region", { name: "Creator earning options" }),
     ).toBeVisible();
-    expect(screen.getAllByRole("article")).toHaveLength(4);
+    expect(screen.getAllByRole("article")).toHaveLength(3);
     expect(screen.getByText("Minimum to cash out: 5,000")).toBeVisible();
     expect(
       screen.queryByText(/Business Pays|Platform Keeps|Customer Cashback/),
@@ -806,11 +806,24 @@ describe("Creator workspace", () => {
   });
   it("shows friendly earning sources", async () => {
     mount(<CreatorEarnings />);
-    expect((await screen.findAllByText("Verified views")).length).toBeGreaterThan(
+    expect((await screen.findAllByText("Verified Views")).length).toBeGreaterThan(
       0,
     );
     expect(screen.queryByText("VIEW_REWARD")).not.toBeInTheDocument();
     expect(screen.queryByText("One balance.")).not.toBeInTheDocument();
+  });
+  it("uses the verified Weymela phone for Telebirr and accepts only Bank destination fields", async () => {
+    const api = mockCreatorApi();
+    mount(<CreatorEarnings />);
+    expect(await screen.findByLabelText("Verified Weymela phone")).toHaveValue("+251911223344");
+    expect(screen.getByLabelText("Verified Weymela phone")).toHaveAttribute("readonly");
+    expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Payout method"), "Bank");
+    await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
+    await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");
+    await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
+    await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
+      body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
   });
   it("shows Creator income from attributed entries without treating purchase totals as earnings", async () => {
     mockCreatorApi({ "/creator/earnings": { ...earnings, history: [
@@ -824,9 +837,9 @@ describe("Creator workspace", () => {
     const cards = rendered.container.querySelectorAll(".mobile-data .data-card");
     expect(cards).toHaveLength(2);
     expect(cards[0]).toHaveTextContent("Bella Restaurant");
-    expect(cards[0]).toHaveTextContent("View + Sale");
+    expect(cards[0]).toHaveTextContent("Sale Commission");
     expect(cards[0]).toHaveTextContent("+30 ETB");
-    expect(cards[1]).toHaveTextContent("UGC content");
+    expect(cards[1]).toHaveTextContent("UGC");
     expect(cards[1]).toHaveTextContent("+4,500 ETB");
     expect(rendered.container).not.toHaveTextContent("1,000 ETB");
   });
@@ -835,9 +848,8 @@ describe("Creator workspace", () => {
     expect(
       await screen.findByText("Eligible for payout · 5,000"),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Request Payout" }),
-    ).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Request Payout" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled();
   });
   it("shows amount remaining and disables payout below threshold", async () => {
     mockCreatorApi({
@@ -850,9 +862,7 @@ describe("Creator workspace", () => {
     });
     mount(<CreatorEarnings />);
     expect(await screen.findByText("Amount remaining: 4,600")).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Request Payout" }),
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Request Payout" })).not.toBeInTheDocument();
   });
 });
 
@@ -918,7 +928,7 @@ describe("Admin workspace", () => {
   it("requires explicit external payment confirmation", async () => {
     mount(<AdminPayouts />);
     await userEvent.click(
-      (await screen.findAllByRole("button", { name: "Mark Paid" }))[0],
+      (await screen.findAllByRole("button", { name: "Pay" }))[0],
     );
     expect(screen.getByRole("button", { name: "Confirm Paid" })).toBeDisabled();
     expect(
@@ -926,6 +936,21 @@ describe("Admin workspace", () => {
         "I confirm this payment has been completed externally.",
       ),
     ).not.toBeChecked();
+  });
+  it("submits the Admin-selected payout amount and previews the remaining balance", async () => {
+    const api = mockApi();
+    mount(<AdminPayouts />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Pay" }))[0]);
+    const amountInput = screen.getByLabelText("Amount to Pay");
+    await userEvent.clear(amountInput);
+    await userEvent.type(amountInput, "5200");
+    expect(screen.getByText("Remaining: 200")).toBeVisible();
+    await userEvent.type(screen.getByLabelText("Payment reference"), "uat-payment-5200");
+    await userEvent.click(screen.getByLabelText("I confirm this payment has been completed externally."));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm Paid" }));
+    await waitFor(() => expect(api.writes).toHaveLength(2));
+    expect(api.writes[0]).toMatchObject({ path: "/admin/payouts/Creator/creator/prepare", body: { amount: 5200 } });
+    expect(api.writes[1]).toMatchObject({ path: "/admin/payouts/saved/paid", body: { reference: "uat-payment-5200" } });
   });
   it("shows Business balances without a Business minimum", async () => {
     mount(<AdminBusinesses />);
@@ -957,7 +982,7 @@ describe("Accepted commerce compatibility", () => {
     mockApi({ "/customer/offers": [ugcCustomerOffer] });
     mount(<CustomerOffers />);
     expect(await screen.findByText("Save on your next visit")).toBeVisible();
-    expect(screen.getByText("5% off")).toBeVisible();
+    expect(screen.getByText("5% cashback")).toBeVisible();
     expect(screen.queryByText("Customer offer")).not.toBeInTheDocument();
     expect(screen.queryByText(/By /)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Watch Video" })).not.toBeInTheDocument();
@@ -1029,18 +1054,18 @@ describe("Accepted commerce compatibility", () => {
         {
           source: "UGC_CUSTOMER_OFFER", offer: "Save on your next visit", business: "Bella Beauty",
           creator: null, purchaseAmount: { amount: 1000, currency: "ETB" },
-          customerPaidAmount: { amount: 950, currency: "ETB" }, cashbackEarned: null,
-          discountReceived: { amount: 50, currency: "ETB" }, purchasedAtUtc: "2026-09-21T10:00:00Z",
+          customerPaidAmount: { amount: 1000, currency: "ETB" }, cashbackEarned: { amount: 50, currency: "ETB" },
+          discountReceived: null, purchasedAtUtc: "2026-09-21T10:00:00Z",
         },
       ],
     });
     const rendered = mount(<CustomerTransactions />);
-    expect(await screen.findByText("Cashback earned")).toBeVisible();
-    expect(screen.getByText("Promoted by Bella")).toBeVisible();
-    expect(screen.getByText("Original purchase")).toBeVisible();
-    expect(screen.getByText("Discount")).toBeVisible();
+    expect((await screen.findAllByText("Cashback Earned")).length).toBe(2);
+    expect(screen.queryByText("Promoted by Bella")).not.toBeInTheDocument();
+    expect(screen.queryByText("Original purchase")).not.toBeInTheDocument();
+    expect(screen.queryByText("Discount")).not.toBeInTheDocument();
     const cards = rendered.container.querySelectorAll(".customer-transaction-card");
-    expect(within(cards[1] as HTMLElement).getByText("Paid")).toBeVisible();
+    expect(within(cards[1] as HTMLElement).getByText("+50 ETB")).toBeVisible();
     expect(cards[0]).toHaveTextContent("Abc Coffee");
     expect(cards[1]).toHaveTextContent("Bella Beauty");
     expect(cards[1]).not.toHaveTextContent("Promoted by");

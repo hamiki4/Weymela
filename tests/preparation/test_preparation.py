@@ -93,7 +93,7 @@ class RepositoryGateTests(unittest.TestCase):
     def test_source_migration_order_includes_approved_creator_photo_reference(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))
-        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos', '20260930210000_AddAgreementDeadlines', '20261001043831_AddAdminVerifiedAudienceAndEnforcement', '20261006050542_CompleteCreatorCollaborationWorkflow'])
+        self.assertEqual(actual, ['20260911225904_InitialV3Schema', '20260911233032_AddViewRewardsQrAndPayouts', '20260912011149_AddOperationalSecurityAndNotifications', '20260913045523_AddAuthenticationRecovery', '20260913054814_AddRoleEnrollments', '20260913062900_AddPhoneLoginAliases', '20260914022116_AddDevicePinSessionFoundation', '20260916042557_AddPasswordCredentials', '20260916202055_AddCustomerProfiles', '20260917020034_AddProductHandoffTransactions', '20260917233008_AddBusinessLedPromotionAndUgc', '20260918144832_AddUgcCustomerOffers', '20260919120000_AddUgcCustomerDiscountLimit', '20260922004528_AddBusinessProfileCoordinates', '20260922161742_AddCreatorPromotionContentSubmissions', '20260922184111_AddPromotionLiveDurationSnapshots', '20260923025814_AddCashierPreauthorizationsAndBusinessOwnerCheckout', '20260924034537_AddAdminAccountAuthorityFoundation', '20260925010921_AddViewAsSupportSessions', '20260925203153_AddPlatformPromotionalFunding', '20260925212120_RetireSupportSessions', '20260928213157_AlignDepositReviewAuthority', '20260928230108_AddCreatorNumbers','20260929022846_BindUgcSaleAssignments', '20260929203557_AddUgcPlatformCapacities', '20260930031549_AddCreatorProfilePhotos', '20260930210000_AddAgreementDeadlines', '20261001043831_AddAdminVerifiedAudienceAndEnforcement', '20261006050542_CompleteCreatorCollaborationWorkflow', '20261007041919_AlignFinancialUatFlows'])
 
     def test_external_actions_are_pinned_and_no_production_deployment(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -117,7 +117,7 @@ class RepositoryGateTests(unittest.TestCase):
         self.assertIn('Main branch protection is not a prerequisite', policy)
         self.assertIn('Production retains its separate stricter authorization policy', policy)
         self.assertIn('fresh protected PostgreSQL, receipt, Creator-photo and private-review-media backups', policy)
-        self.assertIn('packaged baseline-28 verifier against the installed grants', policy)
+        self.assertIn('packaged baseline-29 verifier against the installed grants', policy)
         self.assertIn('packaged target verifier after those grants are installed', policy)
         self.assertIn('explicit durable Pilot `Uat` authorization', policy)
 
@@ -555,7 +555,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             (self.root/f"images/{image['component']}-image.json").write_text(json.dumps(image))
         (self.root/'migrations/efbundle').write_text('inert test artifact, not executable')
         (self.root/'migrations/v3-forward.sql').write_text('-- inert fixture')
-        baseline = 'grants/baseline-28/v3-verify.sql'
+        baseline = 'grants/baseline-29/v3-verify.sql'
         current = [f'grants/current/v3-{name}.sql' for name in
                    ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]
         verifier = 'grants/current/v3-verify.sql'
@@ -564,7 +564,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             if name == baseline:
                 path.write_bytes(subprocess.check_output(['git', 'show',
-                    '0c546ee17030e1cf44f1e6d667a02611c6fc0ac2:database/grants/v3-verify.sql'], cwd=ROOT))
+                    '7c70fc8f88a8e3b294ca5f8af466845da1c91151:database/grants/v3-verify.sql'], cwd=ROOT))
             else:
                 path.write_text('-- inert grant fixture')
         order = [
@@ -596,11 +596,12 @@ class ReleaseIntegrityTests(unittest.TestCase):
             '20260930031549_AddCreatorProfilePhotos',
             '20260930210000_AddAgreementDeadlines',
             '20261001043831_AddAdminVerifiedAudienceAndEnforcement',
-            '20261006050542_CompleteCreatorCollaborationWorkflow']
+            '20261006050542_CompleteCreatorCollaborationWorkflow',
+            '20261007041919_AlignFinancialUatFlows']
         migration = {'commit':commit, 'migrationOrder':order,
                      'grantContracts':{
-                         'from':{'sourceCommit':'0c546ee17030e1cf44f1e6d667a02611c6fc0ac2',
-                                 'migrationCount':28,'verifier':baseline},
+                         'from':{'sourceCommit':'7c70fc8f88a8e3b294ca5f8af466845da1c91151',
+                                 'migrationCount':29,'verifier':baseline},
                          'to':{'sourceCommit':commit,'migrationCount':len(order),
                                'scripts':current,'verifier':verifier}},
                      'files':{p.relative_to(self.root/'migrations').as_posix():hashlib.sha256(p.read_bytes()).hexdigest()

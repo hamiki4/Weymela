@@ -5,6 +5,7 @@ import type {
   SettingsWorkspace,
   UgcSettings,
   ViewPriceInput,
+  ReceivingDestination,
 } from "../../api/types";
 import {
   Button,
@@ -443,6 +444,37 @@ export function AdminFinancialSettings() {
           </>
         )}
       </Resource>
+      <ReceivingDestinations />
     </>
   );
+}
+
+function ReceivingDestinationRow({ row, reload }: { row: ReceivingDestination; reload: () => void }) {
+  const [draft, setDraft] = useState(row);
+  const action = useAction();
+  return <tr><td data-label="Active"><input type="checkbox" aria-label={`${row.name} active`} checked={draft.isActive}
+    onChange={event => setDraft({ ...draft, isActive: event.target.checked })} /></td>
+    <td data-label="Method"><select aria-label={`${row.name} method`} value={draft.method}
+      onChange={event => setDraft({ ...draft, method: event.target.value as ReceivingDestination["method"] })}><option>Telebirr</option><option>Bank</option></select></td>
+    <td data-label="Name"><input aria-label={`${row.name} name`} required maxLength={100} value={draft.name}
+      onChange={event => setDraft({ ...draft, name: event.target.value })} /></td>
+    <td data-label="Account / phone"><input aria-label={`${row.name} account`} required maxLength={100} value={draft.accountReference}
+      onChange={event => setDraft({ ...draft, accountReference: event.target.value })} /></td>
+    <td data-label="Order"><input aria-label={`${row.name} order`} type="number" min="0" step="1" value={draft.sortOrder}
+      onChange={event => setDraft({ ...draft, sortOrder: Number(event.target.value) })} /></td>
+    <td data-label="Action"><Button type="button" variant="secondary" disabled={action.busy || !draft.name.trim() || !draft.accountReference.trim()}
+      onClick={() => void action.run(async key => { await post(`/admin/receiving-destinations/${row.id}`, {
+        method: draft.method, name: draft.name.trim(), accountReference: draft.accountReference.trim(), isActive: draft.isActive,
+        sortOrder: draft.sortOrder, expectedVersion: row.version,
+      }, key); reload(); })}>{action.busy ? "Saving…" : "Save"}</Button>{action.error && <Notice error>{action.error}</Notice>}</td></tr>;
+}
+
+function ReceivingDestinations() {
+  const resource = useResource<ReceivingDestination[]>("/admin/receiving-destinations");
+  return <Section title="Business deposit destinations" description="Active destinations appear in Business Add Funds.">
+    <Resource resource={resource}>{rows => <table className="settings-table"><caption className="sr-only">Business deposit destinations</caption>
+      <thead><tr><th scope="col">Active</th><th scope="col">Method</th><th scope="col">Name</th><th scope="col">Account / phone</th><th scope="col">Order</th><th scope="col">Action</th></tr></thead>
+      <tbody>{rows.map(row => <ReceivingDestinationRow key={`${row.id}-${row.version}`} row={row} reload={resource.reload} />)}</tbody>
+    </table>}</Resource>
+  </Section>;
 }

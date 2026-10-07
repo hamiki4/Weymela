@@ -132,6 +132,7 @@
 }
 .admin-ugc-list { display: grid; }
 .admin-ugc-row { display: grid; gap: 8px; padding: 13px 0; border-bottom: 1px solid var(--admin-line); }
+.admin-ugc-search { width: min(100%, 620px); }
 .admin-ugc-row:last-child { border-bottom: 0; }
 .admin-ugc-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .admin-ugc-heading > div { display: grid; gap: 3px; min-width: 0; }

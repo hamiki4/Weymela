@@ -73,7 +73,7 @@ internal sealed class UgcCustomerOfferSaleConfiguration : IEntityTypeConfigurati
     public void Configure(EntityTypeBuilder<UgcCustomerOfferSale> b)
     {
         b.ToTable("UgcCustomerOfferSales", t => t.HasCheckConstraint("CK_UgcCustomerOfferSale_Amounts",
-            "\"PurchaseAmount\" > 0 AND \"CustomerDiscountAmount\" > 0 AND \"CustomerPaysAmount\" >= 0 AND \"PlatformRevenueAmount\" >= 0 AND \"CustomerPaysAmount\" + \"CustomerDiscountAmount\" = \"PurchaseAmount\" AND \"TotalOfferCharge\" = \"CustomerDiscountAmount\" + \"PlatformRevenueAmount\""));
+            "\"PurchaseAmount\" > 0 AND \"CustomerDiscountAmount\" > 0 AND \"CustomerPaysAmount\" >= 0 AND \"PlatformRevenueAmount\" >= 0 AND ((\"BenefitMode\"='LegacyDiscount' AND \"CustomerPaysAmount\" + \"CustomerDiscountAmount\" = \"PurchaseAmount\") OR (\"BenefitMode\"='Cashback' AND \"CustomerPaysAmount\" = \"PurchaseAmount\")) AND \"TotalOfferCharge\" = \"CustomerDiscountAmount\" + \"PlatformRevenueAmount\""));
         Mapping.Scalars(b); b.HasKey(x => x.Id);
         b.HasOne<UgcCustomerOffer>().WithMany().HasForeignKey(x => x.UgcCustomerOfferId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<UgcOpportunity>().WithMany().HasForeignKey(x => x.UgcOpportunityId).OnDelete(DeleteBehavior.Restrict);

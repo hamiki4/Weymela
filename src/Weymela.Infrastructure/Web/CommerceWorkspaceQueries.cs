@@ -70,7 +70,7 @@ public sealed partial class WorkspaceQueries
             x.UgcAssignmentId is { } assignmentId && assignmentCreators.TryGetValue(assignmentId,out var creatorId)
                 ? creatorNames.GetValueOrDefault(creatorId) : null,Masked(x.CustomerId),"Completed",
             actor.Role==ActorRole.Business && x.UgcAssignmentId is { } linkedId && assignmentCreators.TryGetValue(linkedId,out var linkedCreator)
-                ? creatorNumbers.GetValueOrDefault(linkedCreator) : null)));
+                ? creatorNumbers.GetValueOrDefault(linkedCreator) : null,null,x.BenefitMode.ToString())));
         return rows.OrderByDescending(x=>x.CreatedAtUtc).Take(limit).ToArray();
     }
 
@@ -84,7 +84,7 @@ public sealed partial class WorkspaceQueries
         var ugcSale=await db.UgcCustomerOfferSales.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==saleId&&x.BusinessId==actor.BusinessId,ct)
             ??throw new ApplicationFailure(FailureKind.NotFound,"Confirmed purchase not found.");
         return new(ugcSale.Id,ugcSale.PurchaseAmount,ugcSale.TotalOfferCharge,ugcSale.CreatedAtUtc,
-            ugcSale.CustomerPaysAmount,ugcSale.CustomerDiscountAmount,"UGC_CUSTOMER_OFFER");
+            ugcSale.CustomerPaysAmount,ugcSale.CustomerDiscountAmount,"UGC_CUSTOMER_OFFER",ugcSale.BenefitMode.ToString());
     }
     public async Task<IReadOnlyList<CustomerOfferCard>> OffersAsync(Actor actor,CancellationToken ct)
     {
@@ -110,7 +110,7 @@ public sealed partial class WorkspaceQueries
                     new(offer.Creator.DisplayName),offer.BenefitPercent,
                     offer.Provider is null || offer.ExternalContentId is null ? null
                         : PublicContentLink.Create(offer.Provider,offer.ExternalContentId),
-                    offer.Slogan,offer.Location,UgcAssignmentId:offer.UgcAssignmentId));
+                    offer.Slogan,offer.Location,UgcAssignmentId:offer.UgcAssignmentId,BenefitMode:offer.BenefitMode));
             }
         }
         return result;

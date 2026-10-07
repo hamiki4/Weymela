@@ -58,6 +58,8 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."OutboxMessages",
     v3."PasswordCredentials",
     v3."PayoutRecords",
+    v3."PayoutDestinations",
+    v3."PlatformReceivingDestinations",
     v3."PlatformPromotionalFundings",
     v3."PlatformRevenueEntries",
     v3."PlatformSettlements",
@@ -134,6 +136,8 @@ GRANT SELECT, INSERT, UPDATE ON TABLE
     v3."CreatorSocialProfiles",
     v3."DepositRequests",
     v3."PayoutRecords",
+    v3."PayoutDestinations",
+    v3."PlatformReceivingDestinations",
     v3."PromotionPlatforms",
     v3."Promotions",
     v3."UgcAssignments",
@@ -204,6 +208,7 @@ REVOKE EXECUTE ON FUNCTION v3.guard_qr_use() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_ugc_assignment_qr() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_sale_snapshot_amounts() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_payout_transition() FROM PUBLIC, :"api_role";
+REVOKE EXECUTE ON FUNCTION v3.guard_customer_benefit_mode() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_earned_account() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.check_payout_journal() FROM PUBLIC, :"api_role";
 REVOKE EXECUTE ON FUNCTION v3.guard_deposit_review() FROM PUBLIC, :"api_role";

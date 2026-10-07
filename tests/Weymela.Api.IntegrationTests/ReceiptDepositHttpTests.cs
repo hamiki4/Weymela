@@ -18,7 +18,19 @@ namespace Weymela.Api.IntegrationTests;
 [Collection("V3 HTTP PostgreSQL")]
 public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
 {
+    private static readonly Guid TelebirrDestination = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=");
+    private static readonly byte[] Pdf = System.Text.Encoding.ASCII.GetBytes("""
+        %PDF-1.4
+        1 0 obj
+        << /Type /Catalog >>
+        endobj
+        trailer
+        << /Root 1 0 R /Size 2 >>
+        startxref
+        9
+        %%EOF
+        """);
 
     // Valid PNG with a CRC-checked ancillary chunk; exact byte boundaries without large image dimensions.
     private static byte[] SizedPng(int size)
@@ -62,24 +74,78 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
         return (host, directory);
     }
     private static async Task<HttpResponseMessage> Submit(HttpClient client, decimal? amount = 10000m, byte[]? bytes = null,
-        string media = "image/png", string? key = null, bool attach = true)
+        string media = "image/png", string? key = null, bool attach = true, Guid? destinationId = null)
     {
         using var form = new MultipartFormDataContent();
         if (amount is not null) form.Add(new StringContent(amount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)), "amount");
+        form.Add(new StringContent((destinationId ?? TelebirrDestination).ToString("D")), "receivingDestinationId");
         if (attach)
         {
             var file = new ByteArrayContent(bytes ?? Png);
             file.Headers.ContentType = new MediaTypeHeaderValue(media);
-            form.Add(file, "receipt", "receipt.png");
+            form.Add(file, "receipt", media == "application/pdf" ? "receipt.pdf" : "receipt.png");
         }
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/business/deposit-requests") { Content = form };
         request.Headers.Add("Idempotency-Key", key ?? Guid.NewGuid().ToString("N"));
         return await client.SendAsync(request);
     }
+
+    [Theory]
+    [InlineData("10000000-0000-0000-0000-000000000001", "Telebirr", "0911111111")]
+    [InlineData("10000000-0000-0000-0000-000000000002", "CBE", "1000000000")]
+    [InlineData("10000000-0000-0000-0000-000000000003", "Bank of Abyssinia", "123456789")]
+    public async Task Submission_snapshots_each_configured_destination(string destinationId, string name, string account)
+    {
+        var (host, directory) = await Host(fixture);
+        try
+        {
+            await using (host)
+            {
+                using var business = await host.Login("business");
+                var before = await Available(host);
+                var response = await Submit(business, destinationId: Guid.Parse(destinationId));
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                var row = Assert.Single((await business.GetJson("/api/business/deposit-requests")).AsArray())!;
+                Assert.Equal("Pending", row["status"]!.GetValue<string>());
+                Assert.Equal(name, row["destinationName"]!.GetValue<string>());
+                Assert.Equal(account, row["destinationAccount"]!.GetValue<string>());
+                Assert.Equal(before, await Available(host));
+            }
+        }
+        finally { Directory.Delete(directory, true); }
+    }
     private static async Task<decimal> Available(ApiFixture host)
     {
         await using var db = host.Database.Open();
         return (await db.BusinessWallets.AsNoTracking().SingleAsync(x => x.BusinessId == Weymela.Infrastructure.Development.DevelopmentDirectory.Id(100))).AvailableBalance.Amount;
+    }
+
+    [Fact]
+    public async Task Business_sees_all_active_receiving_destinations_and_only_platform_admin_can_change_them()
+    {
+        var (host, directory) = await Host(fixture);
+        try
+        {
+            await using (host)
+            {
+                using var business = await host.Login("business");
+                using var admin = await host.Login("admin");
+                using var operations = await host.Login("operations-admin");
+                var rows = (await business.GetJson("/api/business/receiving-destinations")).AsArray();
+                Assert.Equal(new[] { "Telebirr", "CBE", "Bank of Abyssinia" }, rows.Select(x => x!["name"]!.GetValue<string>()));
+                Assert.Equal(new[] { "0911111111", "1000000000", "123456789" }, rows.Select(x => x!["accountReference"]!.GetValue<string>()));
+                Assert.Equal(HttpStatusCode.Forbidden, (await operations.GetAsync("/api/admin/receiving-destinations")).StatusCode);
+                var adminRows = (await admin.GetJson("/api/admin/receiving-destinations")).AsArray();
+                var cbe = adminRows.Single(x => x!["name"]!.GetValue<string>() == "CBE")!;
+                var update = new { method = "Bank", name = "CBE", accountReference = "1000000000", isActive = false,
+                    sortOrder = cbe["sortOrder"]!.GetValue<int>(), expectedVersion = cbe["version"]!.GetValue<long>() };
+                Assert.Equal(HttpStatusCode.Forbidden, (await operations.Post($"/api/admin/receiving-destinations/{cbe["id"]!.GetValue<Guid>()}", update)).StatusCode);
+                await admin.PostJson($"/api/admin/receiving-destinations/{cbe["id"]!.GetValue<Guid>()}", update);
+                rows = (await business.GetJson("/api/business/receiving-destinations")).AsArray();
+                Assert.DoesNotContain(rows, x => x!["name"]!.GetValue<string>() == "CBE");
+            }
+        }
+        finally { Directory.Delete(directory, true); }
     }
 
     [Fact]
@@ -93,6 +159,28 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
                 using var business = await host.Login("business");
                 Assert.Equal(HttpStatusCode.OK, (await Submit(business, bytes: CreatorPhotoHttpTests.Jpeg, media: "image/jpeg")).StatusCode);
                 Assert.Equal(HttpStatusCode.BadRequest, (await Submit(business, media: "image/jpeg")).StatusCode);
+            }
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public async Task Passive_pdf_receipt_is_accepted_and_active_pdf_is_rejected()
+    {
+        var (host, directory) = await Host(fixture);
+        try
+        {
+            await using (host)
+            {
+                using var business = await host.Login("business");
+                var accepted = await Submit(business, bytes: Pdf, media: "application/pdf");
+                Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+                var id = (await accepted.Content.ReadFromJsonAsync<JsonNode>())!["id"]!.GetValue<Guid>();
+                var receipt = await business.GetAsync($"/api/business/deposit-requests/{id}/receipt");
+                Assert.Equal("application/pdf", receipt.Content.Headers.ContentType?.MediaType);
+                Assert.Contains("sandbox", receipt.Headers.GetValues("Content-Security-Policy").Single());
+                var active = System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\n1 0 obj << /OpenAction 2 0 R >> endobj\n%%EOF");
+                Assert.Equal(HttpStatusCode.BadRequest, (await Submit(business, bytes: active, media: "application/pdf")).StatusCode);
             }
         }
         finally { Directory.Delete(directory, true); }
@@ -137,6 +225,8 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
                 Assert.Equal(before, await Available(host));
                 var own = await business.GetJson("/api/business/deposit-requests");
                 Assert.Equal("Pending", own[0]!["status"]!.GetValue<string>());
+                Assert.Equal("Telebirr", own[0]!["destinationName"]!.GetValue<string>());
+                Assert.Equal("0911111111", own[0]!["destinationAccount"]!.GetValue<string>());
                 Assert.DoesNotContain("proofReference", own.ToJsonString(), StringComparison.OrdinalIgnoreCase);
                 var pending = await admin.GetJson("/api/admin/deposit-requests");
                 Assert.Contains(pending.AsArray(), x => x!["id"]!.GetValue<Guid>() == id);

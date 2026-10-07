@@ -56,7 +56,7 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await expect(page).toHaveURL(/\/customer\/transactions$/);
   await open(page, "/customer/transactions");
   await expect(page.locator("main")).toContainText("Abc Coffee");
-  await expect(page.locator("main")).toContainText("Cashback earned");
+  await expect(page.locator("main")).toContainText("Cashback Earned");
   await open(page, "/customer/cashback");
   await expect(page.locator("main")).toContainText("Cashback");
   expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);

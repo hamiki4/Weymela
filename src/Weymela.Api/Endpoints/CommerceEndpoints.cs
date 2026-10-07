@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
+using Weymela.Application.Operations;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence;
@@ -17,6 +18,8 @@ internal static class CommerceEndpoints
         customer.MapGet("/transactions",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.CustomerTransactionsAsync(EndpointSupport.Actor(c),ct));
         customer.MapGet("/history",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.CustomerHistoryAsync(EndpointSupport.Actor(c),ct));
         customer.MapGet("/cashback",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.CustomerCashbackAsync(EndpointSupport.Actor(c),ct));
+        customer.MapGet("/payout-destination",(HttpContext c,PayoutDestinationService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
+        customer.MapPost("/payout-destination",(PayoutDestinationInput input,HttpContext c,PayoutDestinationService service,CancellationToken ct)=>service.UpdateAsync(EndpointSupport.Actor(c),input,ct));
         customer.MapPost("/offers/{id:guid}/qr",async(Guid id,HttpContext c,CheckoutService service,CancellationToken ct)=>
         {
             var qr=await service.IssueCustomerOfferAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct);
@@ -39,7 +42,7 @@ internal static class CommerceEndpoints
             return Results.Ok(new CheckoutOffer(offer.SessionId,offer.Offer,new(offer.Business.DisplayName,null),
                 offer.Creator is null?null:new CustomerOfferCreator(offer.Creator.DisplayName),
                 publicCustomer.DisplayName,offer.ExpiresAtUtc,
-                offer.Source,offer.CustomerDiscountPercent));
+                offer.Source,offer.CustomerDiscountPercent,offer.BenefitMode));
         });
         checkout.MapPost("/manual-resolve",async(ManualCheckoutLookupInput input,HttpContext c,CheckoutService service,CancellationToken ct)=>
             Results.Ok(await service.ResolveManualAsync(EndpointSupport.Actor(c),input,ct)));

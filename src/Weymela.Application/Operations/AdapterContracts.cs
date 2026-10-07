@@ -20,10 +20,13 @@ public interface ISocialVerificationAdapter
 }
 
 public enum DepositReviewStatus { Pending, Approved, Rejected }
-public sealed record DepositSubmission(decimal Amount, string ExternalReference, string? ProofReference);
+public sealed record DepositSubmission(decimal Amount, string ExternalReference, string? ProofReference, Guid? ReceivingDestinationId = null);
 public sealed record DepositReview(bool Approve, long ExpectedVersion, string ConfirmationReference);
-public sealed record DepositReceipt(Guid Id, decimal Amount, string Status, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc);
+public sealed record DepositReceipt(Guid Id, decimal Amount, string Status, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc,
+    Guid? ReceivingDestinationId = null, string? DestinationName = null, string? DestinationAccount = null);
 public sealed record DepositEvidence(string Provider, string ExternalReference, string? ProofReference, bool RequiresAdminApproval);
+public sealed record ReceivingDestinationView(Guid Id, string Method, string Name, string AccountReference, bool IsActive, int SortOrder, long Version);
+public sealed record ReceivingDestinationInput(string Method, string Name, string AccountReference, bool IsActive, int SortOrder, long ExpectedVersion);
 public interface IDepositProvider
 {
     string Name { get; }

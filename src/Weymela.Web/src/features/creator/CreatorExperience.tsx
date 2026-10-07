@@ -252,7 +252,7 @@ function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () =>
 
     {row.customerOfferEnabled && row.customerDiscountPercent != null &&
       <p className="creator-opportunity-meta">
-        Customer gets {amount(row.customerDiscountPercent)}% off
+        Customer earns {amount(row.customerDiscountPercent)}% cashback
       </p>
     }
 

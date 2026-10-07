@@ -35,7 +35,7 @@ export function CreateCampaign() {
 
             <Link className="promotion-type-card" to="/business/campaigns/new?type=ugc-sales">
               <strong>UGC + Sales</strong>
-              <span>Pay for content and offer customers a discount.</span>
+              <span>Pay for content and offer customers cashback.</span>
             </Link>
           </div>
         </Section>

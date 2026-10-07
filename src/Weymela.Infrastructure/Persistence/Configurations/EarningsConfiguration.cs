@@ -24,8 +24,11 @@ internal static class EarningsConfiguration
         customers.Property<uint>("xmin").IsRowVersion();
         customers.HasMany(x => x.Entries).WithOne().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         var cb = model.Entity<CustomerCashbackEntry>(); Mapping.Scalars(cb); cb.HasKey(x => x.Id);
-        cb.ToTable("CustomerCashbackEntries", t => t.HasCheckConstraint("CK_Cashback_PositiveSale", "\"Amount\" > 0 AND (\"Source\" <> 'VerifiedSale' OR \"VerifiedSaleId\" IS NOT NULL)"));
+        cb.ToTable("CustomerCashbackEntries", t => t.HasCheckConstraint("CK_Cashback_PositiveSale",
+            "\"Amount\" > 0 AND ((\"Source\"='VerifiedSale' AND \"VerifiedSaleId\" IS NOT NULL AND \"UgcCustomerOfferSaleId\" IS NULL) OR (\"Source\"='UgcCustomerOfferSale' AND \"UgcCustomerOfferSaleId\" IS NOT NULL AND \"VerifiedSaleId\" IS NULL) OR (\"Source\"='AuthorizedAdjustment' AND \"VerifiedSaleId\" IS NULL AND \"UgcCustomerOfferSaleId\" IS NULL))"));
         cb.HasOne<VerifiedSale>().WithMany().HasForeignKey(x => x.VerifiedSaleId).OnDelete(DeleteBehavior.Restrict);
+        cb.HasOne<UgcCustomerOfferSale>().WithMany().HasForeignKey(x => x.UgcCustomerOfferSaleId).OnDelete(DeleteBehavior.Restrict);
+        cb.HasIndex(x => x.UgcCustomerOfferSaleId).IsUnique().HasFilter("\"UgcCustomerOfferSaleId\" IS NOT NULL");
         JournalLink<CustomerCashbackEntry>(model);
 
         var revenue = model.Entity<PlatformRevenueEntry>(); Mapping.Scalars(revenue); revenue.HasKey(x => x.Id);

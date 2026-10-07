@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { post, privateImage, useAction, useResource } from "../../api/client";
+import { post, privateAsset, useAction, useResource } from "../../api/client";
 import type { AdminReport, AdminUgcFinance, AdminWallets } from "../../api/types";
 import { Badge, Button, DataTable, Dialog, Empty, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
 import { amount, count, date } from "../../ui/format";
 
-type Deposit = { id: string; businessId: string; business: string; amount: number; status: string; hasReceipt: boolean; submittedAtUtc: string; version: number };
+type Deposit = { id: string; businessId: string; business: string; amount: number; status: string; hasReceipt: boolean; submittedAtUtc: string; version: number; destinationNameSnapshot: string | null; destinationAccountSnapshot: string | null };
 const br = (value: number) => `${amount(value)} Br`;
 
 export function AdminWalletsPage() {
@@ -24,15 +24,16 @@ export function AdminWalletsPage() {
       { label: "Pending Deposit", cell: row => br(row.pendingDeposit), numeric: true },
       { label: "View Only", cell: row => count(row.viewOnlyCount) },
       { label: "View + Sale", cell: row => count(row.viewSaleCount) },
+      { label: "Last Deposit Via", cell: row => row.lastDepositVia ?? "—" },
       { label: "Status", cell: row => <Badge status={row.status} /> },
-      { label: "Actions", cell: row => <Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Add Funds</Button> },
-    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Total</dt><dd>{br(row.totalBalance)}</dd></div><div><dt>Available</dt><dd>{br(row.available)}</dd></div><div><dt>Reserved</dt><dd>{br(row.reserved)}</dd></div><div><dt>Pending deposit</dt><dd>{br(row.pendingDeposit)}</dd></div><div><dt>View Only</dt><dd>{count(row.viewOnlyCount)}</dd></div><div><dt>View + Sale</dt><dd>{count(row.viewSaleCount)}</dd></div></dl><div className="actions"><Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Add Funds</Button></div></div>} empty={<Empty title="No Business wallets" message="Business wallets appear after account activation." />} />}</Resource></Section>
+      { label: "Actions", cell: row => <Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Promotional Credit</Button> },
+    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Total</dt><dd>{br(row.totalBalance)}</dd></div><div><dt>Available</dt><dd>{br(row.available)}</dd></div><div><dt>Reserved</dt><dd>{br(row.reserved)}</dd></div><div><dt>Pending deposit</dt><dd>{br(row.pendingDeposit)}</dd></div><div><dt>View Only</dt><dd>{count(row.viewOnlyCount)}</dd></div><div><dt>View + Sale</dt><dd>{count(row.viewSaleCount)}</dd></div><div><dt>Last Deposit Via</dt><dd>{row.lastDepositVia ?? "—"}</dd></div></dl><div className="actions"><Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Promotional Credit</Button></div></div>} empty={<Empty title="No Business wallets" message="Business wallets appear after account activation." />} />}</Resource></Section>
     <Section title="Active View / Sale promotions"><Resource resource={wallets}>{data => <DataTable rows={data.promotions} rowKey={row => row.id} label="Active View and Sale promotions" columns={[
       { label: "Business", cell: row => row.business }, { label: "Promotion", cell: row => <strong>{row.title}</strong> }, { label: "Type", cell: row => row.type },
       { label: "Budget", cell: row => br(row.budget), numeric: true }, { label: "Used", cell: row => br(row.used), numeric: true }, { label: "Remaining", cell: row => br(row.remaining), numeric: true },
       { label: "Views / Sales", cell: row => row.type === "View Only" ? `${count(row.verifiedViews)} views` : `${count(row.verifiedViews)} views · ${count(row.verifiedSales)} sales` }, { label: "Status", cell: row => <Badge status={row.status} /> },
     ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.title}</strong><Badge status={row.status} /></div><small>{row.business} · {row.type}</small><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Remaining</dt><dd>{br(row.remaining)}</dd></div><div><dt>Verified views</dt><dd>{count(row.verifiedViews)}</dd></div>{row.type !== "View Only" && <div><dt>Sales</dt><dd>{count(row.verifiedSales)}</dd></div>}</dl></div>} empty={<Empty title="No active promotions" message="Active View and Sale promotions appear here." />} />}</Resource></Section>
-    <Dialog title={fund ? `Add funds · ${fund.name}` : "Add funds"} open={!!fund} onClose={() => { if (!action.busy) setFund(null); }}>
+    <Dialog title={fund ? `Promotional credit · ${fund.name}` : "Promotional credit"} open={!!fund} onClose={() => { if (!action.busy) setFund(null); }}>
       {fund && <form onSubmit={event => { event.preventDefault(); void action.run(async key => { await post(`/admin/accounts/businesses/${fund.id}/promotional-funding`, { amount: Number(fundAmount), reason: reason.trim() }, key); setMessage(`Promotional funding added for ${fund.name}.`); setFund(null); setFundAmount(""); setReason(""); wallets.reload(); }); }}><Field label="Amount (ETB)"><MoneyInput value={fundAmount} onChange={event => setFundAmount(event.target.value)} /></Field><Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !fundAmount || !reason.trim()}>{action.busy ? "Adding…" : "Add Promotional Funds"}</Button></form>}
     </Dialog>
   </div>;
@@ -44,16 +45,20 @@ export function OperationsWalletsPage() {
 
 function ReceiptReviewImage({ id }: { id: string }) {
   const [url, setUrl] = useState("");
+  const [contentType, setContentType] = useState("");
   const [error, setError] = useState(false);
   useEffect(() => {
     const abort = new AbortController(); let objectUrl = "";
-    void privateImage(`/admin/deposit-requests/${id}/receipt`, abort.signal)
-      .then(value => { objectUrl = value; if (!abort.signal.aborted) setUrl(value); })
+    void privateAsset(`/admin/deposit-requests/${id}/receipt`, abort.signal)
+      .then(value => { objectUrl = value.url; if (!abort.signal.aborted) { setUrl(value.url); setContentType(value.contentType); } })
       .catch(() => { if (!abort.signal.aborted) setError(true); });
     return () => { abort.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [id]);
   if (error) return <Notice error>The receipt is unavailable.</Notice>;
-  return url ? <img className="admin-receipt-image" src={url} alt="Payment receipt for verification" /> : <p>Loading receipt…</p>;
+  if (!url) return <p>Loading receipt…</p>;
+  return contentType === "application/pdf"
+    ? <object className="admin-receipt-image" data={url} type="application/pdf" aria-label="Payment receipt for verification"><a href={url} target="_blank" rel="noreferrer">Open receipt PDF</a></object>
+    : <img className="admin-receipt-image" src={url} alt="Payment receipt for verification" />;
 }
 
 function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
@@ -74,14 +79,15 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
   };
   return <Section title={`Deposit review · ${pending.length} pending`}>
     {message && <Notice>{message}</Notice>}
-    <Resource resource={deposits}>{() => pending.length ? <div className="admin-deposit-cards" role="list" aria-label="Pending deposits">{pending.map(row =>
-      <article key={row.id} role="listitem" className="admin-deposit-card"><div><strong>{row.business}</strong><strong>{br(row.amount)}</strong></div>
-        <small>{date(row.submittedAtUtc)} · Pending</small><div className="actions">
-          {row.hasReceipt && <Button variant="secondary" onClick={() => setSelected(row.id)}>Receipt</Button>}
-          <Button variant="secondary" onClick={() => setSelected(row.id)}>Review</Button>
-        </div></article>)}</div> : <Empty title="No pending deposits" message="There are no deposits awaiting review." />}</Resource>
+    <Resource resource={deposits}>{() => pending.length ? <DataTable rows={pending} rowKey={row => row.id} label="Pending deposits" columns={[
+      { label: "Business", cell: row => <strong>{row.business}</strong> }, { label: "Amount", cell: row => br(row.amount), numeric: true },
+      { label: "Deposited To", cell: row => row.destinationNameSnapshot ?? "Legacy" }, { label: "Weymela Destination", cell: row => row.destinationAccountSnapshot ?? "—" },
+      { label: "Receipt", cell: row => row.hasReceipt ? <Button variant="secondary" onClick={() => setSelected(row.id)}>View Receipt</Button> : "—" },
+      { label: "Submitted", cell: row => date(row.submittedAtUtc) }, { label: "Status", cell: row => <Badge status={row.status} /> },
+      { label: "Action", cell: row => <Button variant="secondary" onClick={() => setSelected(row.id)}>Review</Button> },
+    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><small>{row.destinationNameSnapshot ?? "Legacy"} · {row.destinationAccountSnapshot ?? "—"}</small><dl className="admin-mobile-facts"><div><dt>Amount</dt><dd>{br(row.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(row.submittedAtUtc)}</dd></div></dl><Button variant="secondary" onClick={() => setSelected(row.id)}>Review</Button></div>} empty={null} /> : <Empty title="No pending deposits" message="There are no deposits awaiting review." />}</Resource>
     <Dialog title={current ? `Review deposit · ${current.business}` : "Review deposit"} open={!!current} onClose={() => { if (!action.busy) { setSelected(null); setReference(""); } }}>
-      {current && <div className="admin-deposit-review"><dl className="admin-mobile-facts"><div><dt>Business</dt><dd>{current.business}</dd></div><div><dt>Amount</dt><dd>{br(current.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(current.submittedAtUtc)}</dd></div><div><dt>Status</dt><dd>Pending</dd></div></dl>
+      {current && <div className="admin-deposit-review"><dl className="admin-mobile-facts"><div><dt>Business</dt><dd>{current.business}</dd></div><div><dt>Amount</dt><dd>{br(current.amount)}</dd></div><div><dt>Deposited To</dt><dd>{current.destinationNameSnapshot ?? "Legacy request"}</dd></div><div><dt>Weymela Destination</dt><dd>{current.destinationAccountSnapshot ?? "—"}</dd></div><div><dt>Submitted</dt><dd>{date(current.submittedAtUtc)}</dd></div><div><dt>Status</dt><dd>Pending</dd></div></dl>
         {current.hasReceipt ? <ReceiptReviewImage id={current.id} /> : <Notice error>No receipt is attached to this earlier request.</Notice>}
         <Field label="Confirmation reference or reason code"><input required maxLength={120} pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value={reference} onChange={event => setReference(event.target.value)} /></Field>
         {action.error && <Notice error>{action.error}</Notice>}
@@ -93,7 +99,8 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
 
 export function AdminUgcPage() {
   const resource = useResource<AdminUgcFinance[]>("/admin/ugc/finance");
-  return <div className="admin-page"><PageHeader title="UGC" /><Section title="UGC funding and activity"><Resource resource={resource}>{rows => rows.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{rows.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer discount</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Discount consumed</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No UGC promotions" message="Business UGC promotions appear here." />}</Resource></Section></div>;
+  const [search, setSearch] = useState("");
+  return <div className="admin-page"><PageHeader title="UGC" /><Section title="UGC funding and activity"><div className="admin-ugc-search"><Field label="Search"><input placeholder="Search business or promotion..." value={search} onChange={event => setSearch(event.target.value)} /></Field></div><Resource resource={resource}>{rows => { const visible = rows.filter(row => `${row.business} ${row.title}`.toLowerCase().includes(search.trim().toLowerCase())); return visible.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{visible.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer cashback</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No matching UGC promotions" message="Business UGC promotions appear here." />; }}</Resource></Section></div>;
 }
 
 type Range = "Today" | "Week" | "Month" | "Year" | "Custom";
@@ -122,7 +129,7 @@ export function AdminReportsPage() {
         ["Creator payouts", report.activity.creatorPayouts], ["Customer payouts", report.activity.customerPayouts],
       ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{br(value as number)}</strong></div>)}</div></Section>
       <Section title="Promotion summary"><DataTable rows={report.promotions} rowKey={row => row.type} label="Promotion summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Verified views", cell: row => count(row.verifiedViews) }, { label: "Verified sales", cell: row => count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Views</dt><dd>{count(row.verifiedViews)}</dd></div><div><dt>Sales</dt><dd>{count(row.verifiedSales)}</dd></div></dl></div>} empty={<Empty title="No promotion activity" message="No promotion activity in this period." />} /></Section>
-      <Section title="UGC summary"><DataTable rows={report.ugc} rowKey={row => row.type} label="UGC summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Creator payments", cell: row => br(row.creatorPayments), numeric: true }, { label: "Customer discounts", cell: row => row.type === "UGC Only" ? "—" : br(row.customerDiscounts), numeric: true }, { label: "Qualifying sales", cell: row => row.type === "UGC Only" ? "—" : count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Creator payments</dt><dd>{br(row.creatorPayments)}</dd></div>{row.type !== "UGC Only" && <><div><dt>Customer discounts</dt><dd>{br(row.customerDiscounts)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.verifiedSales)}</dd></div></>}</dl></div>} empty={<Empty title="No UGC activity" message="No UGC activity in this period." />} /><p className="admin-period-label">UGC spend is funded consumption across Creator deliveries and Customer offers. Creator payments and Customer discounts are components shown separately.</p></Section>
+      <Section title="UGC summary"><DataTable rows={report.ugc} rowKey={row => row.type} label="UGC summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Creator payments", cell: row => br(row.creatorPayments), numeric: true }, { label: "Customer benefit", cell: row => row.type === "UGC Only" ? "—" : br(row.customerDiscounts), numeric: true }, { label: "Qualifying sales", cell: row => row.type === "UGC Only" ? "—" : count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Creator payments</dt><dd>{br(row.creatorPayments)}</dd></div>{row.type !== "UGC Only" && <><div><dt>Customer benefit</dt><dd>{br(row.customerDiscounts)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.verifiedSales)}</dd></div></>}</dl></div>} empty={<Empty title="No UGC activity" message="No UGC activity in this period." />} /><p className="admin-period-label">UGC spend is funded consumption across Creator deliveries and Customer offers. Creator payments and Customer benefits are shown separately.</p></Section>
       <Section title="Purchase transactions"><DataTable rows={report.purchases ?? []} rowKey={row => row.id} label="Purchase transactions" columns={[
         { label: "Date", cell: row => date(row.occurredAtUtc) },
         { label: "Business", cell: row => row.business },

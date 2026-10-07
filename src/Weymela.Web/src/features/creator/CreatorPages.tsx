@@ -1,12 +1,10 @@
-import { useState } from "react";
-import { post, useAction, useResource } from "../../api/client";
+import { useResource } from "../../api/client";
 import type {
   CreatorPricing,
   Earnings,
 } from "../../api/types";
 import {
   ActionLink,
-  Button,
   Currency,
   DataTable,
   Empty,
@@ -15,6 +13,7 @@ import {
   Resource,
   Section,
 } from "../../ui/components";
+import { PayoutDestinationForm } from "../PayoutDestinationForm";
 import {
   amount,
   count,
@@ -72,7 +71,6 @@ export function CreatorHowYouEarn() {
                 </article>
               ))}
               <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Earn the net amount shown on each UGC opportunity when your content is approved.</p></article>
-              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content and customer offer</span><h3>UGC + Sale</h3></div><p>Earn the net UGC content amount shown on the opportunity. Customer purchases do not add a Creator sale commission.</p></article>
             </div>
             <div className="threshold-note">
               <strong>
@@ -119,8 +117,6 @@ export function Eligibility({ data }: { data: Earnings }) {
 }
 export function CreatorEarnings() {
   const resource = useResource<Earnings>("/creator/earnings");
-  const action = useAction();
-  const [requested, setRequested] = useState(false);
   return (
     <>
       <PageHeader title="Earnings" compact action={<ActionLink to="/creator/pricing" secondary>How You Earn</ActionLink>} />
@@ -129,19 +125,8 @@ export function CreatorEarnings() {
           <>
             <Section title="Available Earnings" className="creator-earnings-summary">
                 <Eligibility data={data} />
-                <Button
-                  disabled={action.busy || data.amountNeeded > 0 || data.payoutHistory.some((r) => r.status === "Eligible")}
-                  onClick={() => void action.run(async (key) => {
-                    await post("/creator/payouts/request", {}, key);
-                    setRequested(true);
-                    resource.reload();
-                  })}
-                >
-                  {data.payoutHistory.some((r) => r.status === "Eligible") ? "Awaiting payment confirmation" : "Request Payout"}
-                </Button>
-                {requested && <Notice>Payout request recorded. Your balance changes only after payment is confirmed.</Notice>}
-                {action.error && <Notice error>{action.error}</Notice>}
             </Section>
+            <Section title="Payout Destination"><PayoutDestinationForm endpoint="/creator/payout-destination" /></Section>
             <Section title="Earning History" action={<Currency />}>
                 <DataTable
                   rows={data.history}
@@ -149,7 +134,7 @@ export function CreatorEarnings() {
                   label="Earning History"
                   columns={[
                     { label: "Business", cell: (r) => r.business ?? r.campaign },
-                    { label: "Source", cell: (r) => r.sourceType === "UGC" ? "UGC content" : r.source === "Sale Earnings" ? "View + Sale" : r.source === "View Earnings" ? "Verified views" : r.source },
+                    { label: "Earning Type", cell: (r) => r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source },
                     {
                       label: "Amount",
                       cell: (r) => `+${amount(r.amount)} ETB`,
@@ -164,7 +149,7 @@ export function CreatorEarnings() {
                         <strong>+{amount(r.amount)} ETB</strong>
                       </div>
                       <p className="fine-print">
-                        {r.sourceType === "UGC" ? "UGC content" : r.source === "Sale Earnings" ? "View + Sale" : r.source === "View Earnings" ? "Verified views" : r.source} · {dateTime(r.atUtc)} · {r.campaign}
+                        {r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source} · {dateTime(r.atUtc)} · {r.campaign}
                       </p>
                     </>
                   )}

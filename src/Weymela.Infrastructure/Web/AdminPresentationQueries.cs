@@ -20,12 +20,15 @@ public sealed partial class WorkspaceQueries
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Business && x.IsActive).Select(x => x.SubjectId).ToListAsync(ct);
         var active = permissions.ToHashSet();
+        var lastDepositVia = (await db.DepositRequests.AsNoTracking().Where(x => x.Status == DepositReviewStatus.Approved)
+            .OrderByDescending(x => x.ReviewedAtUtc).ToListAsync(ct)).GroupBy(x => x.BusinessId)
+            .ToDictionary(x => x.Key, x => x.First().DestinationNameSnapshot);
         var rows = wallets.Select(w => new AdminBusinessWallet(w.BusinessId, names.GetValueOrDefault(w.BusinessId, "Business"),
             w.TotalBalance.Amount, w.AvailableBalance.Amount, w.ReservedBalance.Amount,
             deposits.Where(x => x.BusinessId == w.BusinessId).Sum(x => x.Amount.Amount),
             promotions.Count(x => x.BusinessId == w.BusinessId && x.PromotionType == PromotionType.ViewOnly && x.Status == PromotionStatus.Active),
             promotions.Count(x => x.BusinessId == w.BusinessId && x.PromotionType == PromotionType.ViewPlusCommission && x.Status == PromotionStatus.Active),
-            active.Contains(w.BusinessId) ? "Active" : "Inactive")).OrderBy(x => x.Business).ToArray();
+            active.Contains(w.BusinessId) ? "Active" : "Inactive", lastDepositVia.GetValueOrDefault(w.BusinessId))).OrderBy(x => x.Business).ToArray();
         var current = promotions.Where(x => x.Status == PromotionStatus.Active).ToArray();
         var ids = current.Select(x => x.Id).ToArray();
         var views = await db.PromotionViewVerifications.AsNoTracking().Where(x => ids.Contains(x.PromotionId) && !x.IsAnomaly && !x.IsBaseline)
@@ -50,7 +53,7 @@ public sealed partial class WorkspaceQueries
         {
             offers.TryGetValue(x.Id, out var offer);
             return new AdminUgcFinance(x.Id, names.GetValueOrDefault(x.BusinessId, "Business"), x.Title,
-                offer is null ? "UGC Only" : "UGC + Discount Sale",
+                offer is null ? "UGC Only" : "UGC + Sale",
                 x.RequiredFunding.Amount + (offer?.FundedLimit.Amount ?? 0), x.CreatorPayment.Amount,
                 offer?.CustomerDiscountPercent, x.UsedFunding.Amount, offer?.UsedFunding.Amount ?? 0,
                 sales.Where(s => s.UgcOpportunityId == x.Id).Sum(s => s.CustomerDiscountAmount.Amount),
@@ -102,7 +105,7 @@ public sealed partial class WorkspaceQueries
             ugcEntries.Where(x => x.Movement == "Approved").Sum(x => x.Amount.Amount),
             offerEntries.Where(x => x.Movement == "Sale").Sum(x => x.Amount.Amount),
             earnings.Where(x => x.Source == EarningSource.Ugc).Sum(x => x.Amount.Amount), earnings.Sum(x => x.Amount.Amount),
-            cashback.Sum(x => x.Amount.Amount), ugcSales.Sum(x => x.CustomerDiscountAmount.Amount), revenue.Sum(x => x.Amount.Amount),
+            cashback.Sum(x => x.Amount.Amount), ugcSales.Where(x => x.BenefitMode == CustomerBenefitMode.LegacyDiscount).Sum(x => x.CustomerDiscountAmount.Amount), revenue.Sum(x => x.Amount.Amount),
             payouts.Where(x => x.Beneficiary == PayoutBeneficiary.Creator).Sum(x => x.Amount.Amount),
             payouts.Where(x => x.Beneficiary == PayoutBeneficiary.Customer).Sum(x => x.Amount.Amount),
             views.Sum(x => Math.Max(0, x.CurrentVerifiedViews - x.PreviousVerifiedViews)), sales.Count, ugcSales.Count);
@@ -120,7 +123,7 @@ public sealed partial class WorkspaceQueries
         {
             var ids = ugc.Where(x => offerIds.Contains(x.Id) == hasOffer).Select(x => x.Id).ToHashSet();
             var matchingOffers = offers.Where(x => ids.Contains(x.UgcOpportunityId)).Select(x => x.Id).ToHashSet();
-            return new AdminReportType(hasOffer ? "UGC + Discount Sale" : "UGC Only",
+            return new AdminReportType(hasOffer ? "UGC + Sale" : "UGC Only",
                 ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement == "Reserved").Sum(x => x.Amount.Amount)
                   + offerEntries.Where(x => matchingOffers.Contains(x.UgcCustomerOfferId) && x.Movement == "Reserved").Sum(x => x.Amount.Amount),
                 ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement == "Approved").Sum(x => x.Amount.Amount)

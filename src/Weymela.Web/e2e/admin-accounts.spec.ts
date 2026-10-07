@@ -138,8 +138,8 @@ test("Operations Admin cannot create accounts or enter Platform Admin account ar
 test("Platform Admin Wallets owns promotional funding", async ({ page, context }) => {
   await login(context, "admin");
   await open(page, "/admin/wallets");
-  await page.getByRole("button", { name: "Add Funds" }).first().click();
-  await expect(page.getByRole("dialog", { name: /Add funds/ })).toBeVisible();
+  await page.getByRole("button", { name: "Promotional Credit" }).first().click();
+  await expect(page.getByRole("dialog", { name: /Promotional credit/ })).toBeVisible();
   await expect(page.getByLabel("Amount (ETB)")).toBeVisible();
   await expect(page.getByLabel("Reason", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Promotional Funds" })).toBeDisabled();

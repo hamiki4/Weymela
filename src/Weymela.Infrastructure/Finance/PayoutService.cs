@@ -8,7 +8,7 @@ using Weymela.Infrastructure.Persistence.Transactions;
 
 namespace Weymela.Infrastructure.Finance;
 
-public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
+public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, PayoutDestinationService? destinations = null)
 {
     public async Task<PayoutEligibility> EligibilityAsync(Actor actor, PayoutBeneficiary kind, Guid subject, CancellationToken ct = default)
     {
@@ -21,23 +21,24 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
         return new(kind, subject, available, threshold, available.Amount >= threshold.Amount ? threshold : Money.Zero(), config.Id);
     }
 
-    public Task<Guid> PrepareAsync(Actor actor, PayoutBeneficiary kind, Guid subject, string key, CancellationToken ct = default) =>
+    public Task<Guid> PrepareAsync(Actor actor, PayoutBeneficiary kind, Guid subject, Money amount, string key, CancellationToken ct = default) =>
         new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
-            await DemandBeneficiaryAsync(actor, kind, subject, token);
-            var op = new FinancialOperation(db); var fp = RequestFingerprint.Create(kind.ToString(), subject.ToString());
+            DemandPayoutConfirmation(actor, kind);
+            var op = new FinancialOperation(db); var fp = RequestFingerprint.Create(kind.ToString(), subject.ToString(), RequestFingerprint.Amount(amount));
             var replay = await op.Replay(actor, "PreparePayout", key, fp, token);
             if (replay is not null) return Guid.Parse(replay);
             var pending = await db.PayoutRecords.SingleOrDefaultAsync(x => x.Beneficiary == kind && x.Status == PayoutStatus.Eligible &&
                 (x.CreatorId == subject || x.CustomerId == subject), token);
-            if (pending is not null)
-            {
-                op.Remember(actor, "PreparePayout", key, fp, pending.Id.ToString(), clock.GetUtcNow().UtcDateTime);
-                return pending.Id;
-            }
+            if (pending is not null) throw new ApplicationFailure(FailureKind.Validation, "That beneficiary already has a payout awaiting confirmation.");
             var eligible = await EligibilityAsync(actor, kind, subject, token);
             if (eligible.EligibleAmount.Amount == 0) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout threshold has not been reached.");
-            var record = new PayoutRecord(kind, subject, eligible.Available, eligible.Threshold, eligible.ConfigurationVersionId, clock.GetUtcNow().UtcDateTime);
+            if (amount.Amount < eligible.Threshold.Amount) throw new ApplicationFailure(FailureKind.Validation, "Payout amount is below the effective minimum.");
+            if (amount.Amount > eligible.Available.Amount) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds the current available balance.");
+            var destination = await (destinations ?? throw new InvalidOperationException("Payout destination service is unavailable."))
+                .RequiredAsync(kind, subject, token);
+            var record = new PayoutRecord(kind, subject, eligible.Available, eligible.Threshold, amount, eligible.ConfigurationVersionId,
+                clock.GetUtcNow().UtcDateTime, destination.Method, destination.Provider, destination.ProtectedAccount, destination.LegalName);
             db.PayoutRecords.Add(record);
             op.Remember(actor, "PreparePayout", key, fp, record.Id.ToString(), clock.GetUtcNow().UtcDateTime);
             op.Event("PayoutPrepared",
@@ -60,10 +61,22 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Payout not found.");
             DemandPayoutConfirmation(actor, payout.Beneficiary);
             if (payout.Status != PayoutStatus.Eligible) throw new ApplicationFailure(FailureKind.Validation, "Payout has already been paid.");
+            var configuration = await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime, token);
+            var threshold = payout.Beneficiary == PayoutBeneficiary.Creator ? configuration.CreatorPayoutThreshold : configuration.CustomerPayoutThreshold;
+            if (payout.Amount.Amount < threshold.Amount)
+                throw new ApplicationFailure(FailureKind.Validation, "Payout amount is below the effective minimum.");
             if (payout.Beneficiary == PayoutBeneficiary.Creator)
-                (await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == payout.CreatorId, token)).Pay(payout.Amount, clock.GetUtcNow().UtcDateTime, Guid.NewGuid());
+            {
+                var account = await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == payout.CreatorId, token);
+                if (account.AvailableEarnings.Amount < payout.Amount.Amount) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds the current available balance.");
+                account.Pay(payout.Amount, clock.GetUtcNow().UtcDateTime, Guid.NewGuid());
+            }
             else
-                (await db.CustomerCashbackAccounts.SingleAsync(x => x.CustomerId == payout.CustomerId, token)).Pay(payout.Amount);
+            {
+                var account = await db.CustomerCashbackAccounts.SingleAsync(x => x.CustomerId == payout.CustomerId, token);
+                if (account.AvailableCashback.Amount < payout.Amount.Amount) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds the current available balance.");
+                account.Pay(payout.Amount);
+            }
             var j = new FinancialJournal(Guid.NewGuid().ToString("N"), Guid.NewGuid(), actor.UserId, JournalSourceType.Payout, clock.GetUtcNow().UtcDateTime, key);
             j.AddLine(JournalLineType.Debit, payout.Amount, payout.Beneficiary == PayoutBeneficiary.Creator ? "CreatorPayable" : "CustomerCashbackPayable");
             j.AddLine(JournalLineType.Credit, payout.Amount, "CashClearing"); j.Post(); db.FinancialJournals.Add(j);

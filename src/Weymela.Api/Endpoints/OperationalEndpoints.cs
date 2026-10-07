@@ -73,6 +73,7 @@ internal static class OperationalEndpoints
             EndpointSupport.Id(await service.AcceptAsync(EndpointSupport.Actor(c),id,consent.ContentHash,consent.Confirmed,ct)));
         var business=app.MapGroup("/api/business").RequireAuthorization("Business").AddEndpointFilter<ValidatedInputFilter>();
         business.MapGet("/deposit-method",(RuntimeOptions options)=>Results.Ok(new{mode=options.DevelopmentIdentity?"Development":options.DepositMode}));
+        business.MapGet("/receiving-destinations",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.ActiveAsync(EndpointSupport.Actor(c),ct));
         business.MapGet("/deposit-requests",(HttpContext c,DepositService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
         business.MapPost("/deposit-requests",async(HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,DepositService service,CancellationToken ct)=>
         {
@@ -81,12 +82,15 @@ internal static class OperationalEndpoints
                 throw new ApplicationFailure(FailureKind.Forbidden,"Business access is required.");
             if(!c.Request.HasFormContentType) throw new ApplicationFailure(FailureKind.Validation,"Choose a payment receipt.");
             var form=await c.Request.ReadFormAsync(ct);
-            if(form.Count!=1||form["amount"].Count!=1||form.Files.Count!=1||form.Files[0].Name!="receipt"
-                ||!decimal.TryParse(form["amount"],NumberStyles.Number,CultureInfo.InvariantCulture,out var amount))
-                throw new ApplicationFailure(FailureKind.Validation,"Enter an amount and choose a payment receipt.");
+            if(form.Count!=2||form["amount"].Count!=1||form["receivingDestinationId"].Count!=1||form.Files.Count!=1||form.Files[0].Name!="receipt"
+                ||!decimal.TryParse(form["amount"],NumberStyles.Number,CultureInfo.InvariantCulture,out var amount)
+                ||!Guid.TryParse(form["receivingDestinationId"],out var receivingDestinationId))
+                throw new ApplicationFailure(FailureKind.Validation,"Choose a receiving destination, enter an amount, and choose a payment receipt.");
+            if(!await db.PlatformReceivingDestinations.AsNoTracking().AnyAsync(x=>x.Id==receivingDestinationId&&x.IsActive,ct))
+                throw new ApplicationFailure(FailureKind.Validation,"The selected receiving destination is not active.");
             var key=EndpointSupport.Key(c);
             var proof=await receipts.SaveAsync(actor.BusinessId.Value,key,form.Files[0],ct);
-            return await service.SubmitAsync(actor,new DepositSubmission(amount,"R"+proof,proof),key,ct);
+            return await service.SubmitAsync(actor,new DepositSubmission(amount,"R"+proof,proof,receivingDestinationId),key,ct);
         });
         business.MapGet("/deposit-requests/{id:guid}/receipt",async(Guid id,HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,CancellationToken ct)=>
         {
@@ -111,8 +115,12 @@ internal static class OperationalEndpoints
             var names=await db.PublicWorkspaceProfiles.AsNoTracking().Where(x=>x.Role==ActorRole.Business&&ids.Contains(x.SubjectId))
                 .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);
             return rows.Select(x=>new{x.Id,x.BusinessId,business=names.GetValueOrDefault(x.BusinessId,"Business"),amount=x.Amount.Amount,
-                status=x.Status.ToString(),hasReceipt=x.ProofReference!=null,x.SubmittedAtUtc,x.ReviewedAtUtc,x.Version});
+                status=x.Status.ToString(),hasReceipt=x.ProofReference!=null,x.DestinationNameSnapshot,x.DestinationAccountSnapshot,
+                x.ReceivingDestinationId,x.SubmittedAtUtc,x.ReviewedAtUtc,x.Version});
         });
+        admin.MapGet("/receiving-destinations",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.AdminAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
+        admin.MapPost("/receiving-destinations/{id:guid}",(Guid id,ReceivingDestinationInput input,HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>
+            service.UpdateAsync(EndpointSupport.Actor(c),id,input,ct)).RequireAuthorization("PlatformAdmin");
         admin.MapGet("/deposit-requests/{id:guid}/receipt",async(Guid id,HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
@@ -131,7 +139,9 @@ internal static class OperationalEndpoints
     {
         var (bytes,contentType)=await receipts.ReadAsync(proof,ct);
         context.Response.Headers.CacheControl="private,no-store";
-        context.Response.Headers.ContentDisposition="inline; filename=receipt."+(contentType==PrivateReceiptStore.Jpeg?"jpg":"png");
+        context.Response.Headers.ContentDisposition="inline; filename=receipt."+(contentType switch
+        { PrivateReceiptStore.Jpeg=>"jpg", PrivateReceiptStore.Png=>"png", _=>"pdf" });
+        if(contentType==PrivateReceiptStore.Pdf) context.Response.Headers.ContentSecurityPolicy="sandbox; default-src 'none'";
         return Results.File(bytes,contentType);
     }
 }

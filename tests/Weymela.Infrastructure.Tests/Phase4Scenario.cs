@@ -5,6 +5,8 @@ using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Application.Web;
 using Weymela.Infrastructure.Web;
+using Weymela.Application.Operations;
+using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Infrastructure.Tests;
 
@@ -16,7 +18,7 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
     public static Actor Admin => new(Guid.Parse("11111111-1111-1111-1111-111111111111"), ActorRole.PlatformAdmin);
     public VerifiedViewService Views(WeymelaDbContext db) => new(db, Provider, new CommerceAccessPolicy(db), Clock);
     public CheckoutService Checkout(WeymelaDbContext db) => new(db, new CommerceAccessPolicy(db), Clock);
-    public PayoutService Payouts(WeymelaDbContext db) => new(db, Clock);
+    public PayoutService Payouts(WeymelaDbContext db) => new(db, Clock, new PayoutDestinationService(db, TestPayoutProtector.Instance, Clock));
     public FinancialQueries Queries(WeymelaDbContext db) => new(db, new CommerceAccessPolicy(db), new TestDirectory(), Clock);
 
     public static async Task<Phase4Scenario> Create(PostgresFixture fixture, PromotionType type = PromotionType.ViewPlusCommission,
@@ -43,6 +45,9 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
             new(creator.UserId, ActorRole.Creator, creatorId, null, true, false),
             new(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
             new(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
+        db.PayoutDestinations.AddRange(
+            new PayoutDestination { Beneficiary=PayoutBeneficiary.Creator,SubjectId=creatorId,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("0911223344"),AccountLast4="3344",LegalName="Test Creator",UpdatedAtUtc=Scenario.Now },
+            new PayoutDestination { Beneficiary=PayoutBeneficiary.Customer,SubjectId=customer.CustomerId.Value,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("0922334455"),AccountLast4="4455",LegalName="Test Customer",UpdatedAtUtc=Scenario.Now });
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         if (goLive)
         {
@@ -80,6 +85,12 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
             CREATE TRIGGER test_failure BEFORE INSERT ON v3."OutboxMessages" FOR EACH ROW EXECUTE FUNCTION v3.test_outbox_failure();
             """);
     }
+}
+internal sealed class TestPayoutProtector : IPayoutDestinationProtector
+{
+    public static TestPayoutProtector Instance { get; } = new();
+    public string Protect(string value) => "protected:" + value;
+    public string Unprotect(string protectedValue) => protectedValue.StartsWith("protected:",StringComparison.Ordinal) ? protectedValue[10..] : throw new InvalidOperationException();
 }
 internal sealed class TestClock : TimeProvider
 {

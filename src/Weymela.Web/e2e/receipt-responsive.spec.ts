@@ -79,6 +79,59 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
   });
 }
 
+test("real Business deposits remain pending until Admin approval and rejection never credits", async ({ page, context }) => {
+  await page.route("**/api/session", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), developmentMode: false } });
+  });
+  await page.route("**/api/account/security", route => route.fulfill({ json: { passwordEnrolled: true, phoneEnrolled: true } }));
+  await page.route("**/api/business/deposit-method", route => route.fulfill({ json: { mode: "ManualApproval" } }));
+  await login(context, "business");
+  const before = await (await context.request.get("/api/business/wallet")).json() as { available: number };
+  await open(page, "/business/wallet");
+  await page.getByText("Open Add Funds", { exact: true }).click();
+
+  const submit = async (destination: string, value: string) => {
+    await page.getByLabel("Deposited to").selectOption({ label: destination });
+    await page.getByLabel("Amount", { exact: true }).fill(value);
+    await page.getByLabel("Payment receipt").setInputFiles({ name: `receipt-${value}.png`, mimeType: "image/png", buffer: png });
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Your payment is waiting for approval.")).toBeVisible();
+  };
+  await submit("CBE · 1000000000", "17.23");
+  await submit("Bank of Abyssinia · 123456789", "19.87");
+  expect((await (await context.request.get("/api/business/wallet")).json()).available).toBe(before.available);
+  const pending = await (await context.request.get("/api/business/deposit-requests")).json() as Array<{ id: string; amount: number; status: string; destinationName: string }>;
+  expect(pending.filter(row => row.status === "Pending" && [17.23, 19.87].includes(row.amount))).toHaveLength(2);
+
+  await login(context, "admin");
+  await open(page, "/admin/wallets");
+  const approveRow = page.getByRole("row").filter({ hasText: "17.23 Br" });
+  await expect(approveRow).toContainText("CBE");
+  await approveRow.getByRole("button", { name: "Review" }).click();
+  let dialog = page.getByRole("dialog", { name: /Review deposit/ });
+  await expect(dialog.getByAltText("Payment receipt for verification")).toBeVisible();
+  await dialog.getByLabel("Confirmation reference or reason code").fill("E2E-CBE-1723");
+  await dialog.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Deposit approved. The wallet balance has been credited.")).toBeVisible();
+
+  const rejectRow = page.getByRole("row").filter({ hasText: "19.87 Br" });
+  await expect(rejectRow).toContainText("Bank of Abyssinia");
+  await rejectRow.getByRole("button", { name: "Review" }).click();
+  dialog = page.getByRole("dialog", { name: /Review deposit/ });
+  await dialog.getByLabel("Confirmation reference or reason code").fill("E2E-REJECT-1987");
+  await dialog.getByRole("button", { name: "Reject" }).click();
+  await expect(page.getByText("Deposit rejected. The wallet balance has not changed.")).toBeVisible();
+  expect(await (await context.request.get("/api/admin/reconciliation")).json()).toEqual([]);
+
+  await login(context, "business");
+  const after = await (await context.request.get("/api/business/wallet")).json() as { available: number };
+  expect(after.available).toBeCloseTo(before.available + 17.23, 2);
+  const reviewed = await (await context.request.get("/api/business/deposit-requests")).json() as Array<{ amount: number; status: string }>;
+  expect(reviewed.find(row => row.amount === 17.23)?.status).toBe("Approved");
+  expect(reviewed.find(row => row.amount === 19.87)?.status).toBe("Rejected");
+});
+
 test("frozen receipt submission shows the typed pause without claiming a deposit", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("**/api/session", async route => {

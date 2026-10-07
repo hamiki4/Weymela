@@ -53,10 +53,10 @@ internal static class AdminEndpoints
             var actor=EndpointSupport.Actor(c);
             return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsPayoutsAsync(actor,ct)) : Results.Ok(await q.PayoutsAsync(actor,ct));
         });
-        g.MapPost("/payouts/{kind}/{subject:guid}/prepare",async(string kind,Guid subject,HttpContext c,PayoutService service,CancellationToken ct)=>
+        g.MapPost("/payouts/{kind}/{subject:guid}/prepare",async(string kind,Guid subject,PayoutAmountInput input,HttpContext c,PayoutService service,CancellationToken ct)=>
         {
             if(!Enum.TryParse<PayoutBeneficiary>(kind,true,out var beneficiary)||!Enum.IsDefined(beneficiary))return Results.BadRequest();
-            return EndpointSupport.Id(await service.PrepareAsync(EndpointSupport.Actor(c),beneficiary,subject,EndpointSupport.Key(c),ct));
+            return EndpointSupport.Id(await service.PrepareAsync(EndpointSupport.Actor(c),beneficiary,subject,new Money(input.Amount),EndpointSupport.Key(c),ct));
         });
         g.MapPost("/payouts/{id:guid}/paid",async(Guid id,ConfirmPaymentInput input,HttpContext c,PayoutService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.MarkPaidAsync(EndpointSupport.Actor(c),id,input.Reference,EndpointSupport.Key(c),ct)));

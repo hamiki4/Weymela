@@ -15,14 +15,15 @@ import {
 import { amount, dateTime, safeExternal } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { Coordinates, nearestOffers, offerDistanceKm, validCoordinates } from "./customerLocation";
+import { PayoutDestinationForm } from "../PayoutDestinationForm";
 
 type CustomerOffersProps = { discover?: boolean };
 
 const sourceFilterLabel = (source: string) =>
-  source === "UGC_CUSTOMER_OFFER" ? "Discount offers" : "Cashback offers";
+  source === "UGC_CUSTOMER_OFFER" ? "UGC + Sale offers" : "Cashback offers";
 
 const benefitLabel = (offer: Offer) =>
-  `${amount(offer.benefitPercent)}% ${offer.source === "UGC_CUSTOMER_OFFER" ? "off" : "cashback"}`;
+  `${amount(offer.benefitPercent)}% ${offer.benefitMode === "LegacyDiscount" ? "off" : "cashback"}`;
 
 const initial = (value: string) => value.trim().slice(0, 1).toUpperCase() || "W";
 
@@ -560,36 +561,20 @@ export function CustomerTransactions() {
       <Resource resource={resource}>
         {(rows) => rows.length ? (
           <section className="customer-ledger-list" aria-label="Customer transactions">
-            {rows.map((row, index) => {
-              const ugc = row.source === "UGC_CUSTOMER_OFFER";
-              return (
+            {rows.map((row, index) => (
                 <article className="customer-transaction-card" key={`${row.source}-${row.purchasedAtUtc}-${index}`}>
                   <header>
                     <div>
-                    <span className="customer-transaction-source">{ugc ? "UGC + Sale" : "View + Sale"}</span>
                       <h2>{row.business}</h2>
                     </div>
                     <time dateTime={row.purchasedAtUtc}>{dateTime(row.purchasedAtUtc)}</time>
                   </header>
-                  <p className="customer-transaction-offer">{row.offer}</p>
-                  {row.creator && <p className="customer-transaction-creator">Promoted by {row.creator}</p>}
                   <div className="customer-transaction-values">
-                    {ugc ? (
-                      <>
-                        <div><small>Original purchase</small><strong>{amount(row.purchaseAmount.amount)}</strong></div>
-                        <div><small>Discount</small><strong>{row.discountReceived ? `−${amount(row.discountReceived.amount)}` : "—"}</strong></div>
-                        <div><small>Paid</small><strong>{row.customerPaidAmount ? amount(row.customerPaidAmount.amount) : "—"}</strong></div>
-                      </>
-                    ) : (
-                      <>
-                        <div><small>Paid</small><strong>{amount(row.purchaseAmount.amount)}</strong></div>
-                        <div><small>Cashback earned</small><strong>{row.cashbackEarned ? `+${amount(row.cashbackEarned.amount)}` : "—"}</strong></div>
-                      </>
-                    )}
+                    <div><small>Total Purchase</small><strong>{amount(row.purchaseAmount.amount)} ETB</strong></div>
+                    <div><small>Cashback Earned</small><strong>{row.cashbackEarned ? `+${amount(row.cashbackEarned.amount)} ETB` : "—"}</strong></div>
                   </div>
                 </article>
-              );
-            })}
+              ))}
           </section>
         ) : (
           <Empty
@@ -637,6 +622,7 @@ export function CustomerCashback() {
                   <p>{summary.eligible ? "Ready to cash out" : `${amount(summary.remainingToCashOut.amount)} ETB to cash out`}</p>
                 </div>
               </section>
+              <section className="customer-payout-history"><div className="customer-ledger-section-heading"><div><h2>Payout destination</h2></div></div><PayoutDestinationForm endpoint="/customer/payout-destination" /></section>
               <section className="customer-payout-history" aria-labelledby="customer-payout-title">
                 <div className="customer-ledger-section-heading">
                   <div><h2 id="customer-payout-title">Payout history</h2></div>

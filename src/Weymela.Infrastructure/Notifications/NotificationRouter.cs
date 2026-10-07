@@ -70,8 +70,16 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                     $"Your {data.GetProperty("PurchaseAmount").GetProperty("Amount").GetDecimal():0.##} ETB purchase earned {data.GetProperty("Amount").GetProperty("Amount").GetDecimal():0.##} ETB cashback.",
                     null, null, new NotificationAudience(ActorRole.Customer, Id("CustomerId"))) with { WorkspacePath = "transactions" };
             case "SaleCompleted":
+                // New UGC sales emit the canonical CustomerCashbackEarned event.
+                // Keep SaleCompleted for downstream business processing without
+                // creating a second customer notification for the same benefit.
+                if (data.TryGetProperty("CustomerCashback", out var cashback) && cashback.GetDecimal() > 0)
+                    return null;
+                var discount = data.TryGetProperty("LegacyCustomerDiscount", out var legacyDiscount)
+                    ? legacyDiscount.GetDecimal()
+                    : data.GetProperty("CustomerDiscount").GetDecimal();
                 return Plan("Purchase discount recorded",
-                    $"Your {data.GetProperty("PurchaseAmount").GetDecimal():0.##} ETB purchase received a {data.GetProperty("CustomerDiscount").GetDecimal():0.##} ETB discount.",
+                    $"Your {data.GetProperty("PurchaseAmount").GetDecimal():0.##} ETB purchase received a {discount:0.##} ETB discount.",
                     null, null, new NotificationAudience(ActorRole.Customer, Id("CustomerId"))) with { WorkspacePath = "transactions" };
             case "VerifiedSaleRecorded": case "BusinessPurchaseRecorded":
             {

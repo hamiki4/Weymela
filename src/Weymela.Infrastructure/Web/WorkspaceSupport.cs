@@ -7,7 +7,8 @@ using Weymela.Infrastructure.Persistence;
 
 namespace Weymela.Infrastructure.Web;
 
-public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDirectory directory, TimeProvider clock)
+public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDirectory directory, TimeProvider clock,
+    Weymela.Application.Operations.IPayoutDestinationProtector? payoutProtector = null)
 {
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
     private CommerceAccessPolicy Access => new(db);

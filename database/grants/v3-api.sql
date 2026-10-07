@@ -179,6 +179,10 @@ GRANT SELECT ("PromotionId", "CurrentVerifiedViews", "PreviousVerifiedViews",
     "IsAnomaly", "IsBaseline", "VerifiedAtUtc")
 ON TABLE v3."PromotionViewVerifications" TO :"api_role";
 
+-- Creator Go Live and subsequent governed view refreshes append immutable
+-- verification observations. The API must never update or delete that evidence.
+GRANT INSERT ON TABLE v3."PromotionViewVerifications" TO :"api_role";
+
 GRANT SELECT ON TABLE
     v3."WorkerCheckpoints"
 TO :"api_role";

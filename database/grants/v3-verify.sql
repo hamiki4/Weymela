@@ -102,6 +102,7 @@ VALUES
     ('api', 'v3', 'UgcPlatformRequirements', true, true, false),
     ('api', 'v3', 'UgcReservations', true, true, false),
     ('api', 'v3', 'UgcRevisions', true, true, false),
+    ('api', 'v3', 'PromotionViewVerifications', false, true, false),
     ('worker', 'v3', 'WorkerCheckpoints', true, true, true),
     ('worker', 'v3', 'FinancialConfigurationVersions', true, false, false),
     ('worker', 'v3', 'OutboxMessages', true, true, true),

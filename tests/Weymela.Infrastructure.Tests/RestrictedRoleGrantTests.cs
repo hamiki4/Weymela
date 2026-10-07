@@ -93,6 +93,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var account = await ExerciseApiFlowsAsync(apiConnection, adminUserId);
         var workerSeed = await SeedWorkerFlowAsync(database, account.CreatorId, account.CreatorUserId);
         await ExerciseWorkerFlowsAsync(workerConnection, workerSeed);
+        await ExercisePromotionVerificationInsertUnderApiRoleAsync(apiConnection, workerSeed);
         await ExerciseAdminReportsUnderApiRoleAsync(apiConnection, adminUserId);
 
         await AssertApiDenialsAsync(apiConnection, workerConnection, apiRole, workerRole,
@@ -952,9 +953,20 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         await AssertInsufficientPrivilegeAsync(connection, "SELECT * FROM v3.\"PromotionViewVerifications\"", "API cannot read raw verification evidence");
         foreach (var statement in new[] { "SELECT \"ExternalContentId\" FROM v3.\"PromotionViewVerifications\"",
             "DELETE FROM v3.\"PromotionViewVerifications\" WHERE false",
-            "UPDATE v3.\"PromotionViewVerifications\" SET \"IsAnomaly\"=true WHERE false",
-            "INSERT INTO v3.\"PromotionViewVerifications\" DEFAULT VALUES" })
-            await AssertInsufficientPrivilegeAsync(connection, statement, "Verification access remains read-only and column-scoped");
+            "UPDATE v3.\"PromotionViewVerifications\" SET \"IsAnomaly\"=true WHERE false" })
+            await AssertInsufficientPrivilegeAsync(connection, statement,
+                "Verification access remains append-only with column-scoped reads");
+    }
+
+    private static async Task ExercisePromotionVerificationInsertUnderApiRoleAsync(
+        string connection, WorkerSeed seed)
+    {
+        await using var db = Open(connection);
+        db.PromotionViewVerifications.Add(new(
+            seed.PromotionId, seed.CreatorId, seed.AllocationId, "TikTok", "restricted-api-baseline",
+            0, 0, 0, Now, "restricted-role-evidence", "restricted-api-baseline", 0,
+            false, null, true));
+        await db.SaveChangesAsync();
     }
 
     private static async Task ExecuteScriptAsync(

@@ -100,7 +100,8 @@ GRANT SELECT, INSERT ON TABLE v3."IdentityBindings" TO :"api_role";
 GRANT UPDATE ("IsActive", "Version") ON TABLE v3."IdentityBindings" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."CommercePermissions" TO :"api_role";
 GRANT SELECT, INSERT ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";
-GRANT UPDATE ("CreatorPhotoKey") ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";
+GRANT UPDATE ("CreatorPhotoKey", "Region", "DirectionsUrl", "Latitude", "Longitude")
+ON TABLE v3."PublicWorkspaceProfiles" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."RoleEnrollments" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."BusinessWallets" TO :"api_role";
 GRANT SELECT, INSERT, UPDATE ON TABLE v3."CustomerCashbackAccounts" TO :"api_role";

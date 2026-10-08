@@ -90,7 +90,7 @@ test("Customer, Creator and Business use compact horizontal navigation on deskto
   }
 });
 
-test("Customer mobile Home shows real account information and useful offer links", async ({ page, context }) => {
+test("Customer Home, Discover and details keep Watch, Directions and Offer QR visible", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "customer");
   await open(page, "/customer/offers");
@@ -99,8 +99,25 @@ test("Customer mobile Home shows real account information and useful offer links
   const nav = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(nav.getByRole("link", { name: "Cashback" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Transactions" })).toBeVisible();
+  const homeCard = page.locator(".customer-promotion-card").first();
+  await expect(homeCard.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
+  await expect(homeCard.getByRole("link", { name: "Get Directions" })).toHaveAttribute("href", /^https:\/\/(?:www\.|maps\.)?google\.com\//);
+  const detailPath = await homeCard.getByRole("link", { name: "Get Offer QR" }).getAttribute("href");
+  expect(detailPath).toBeTruthy();
   await layout(page);
   await screenshot(page, "product-mobile-customer");
+
+  await open(page, "/customer/discover");
+  const discoverCard = page.locator(".customer-promotion-card").first();
+  await expect(discoverCard.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
+  await expect(discoverCard.getByRole("link", { name: "Get Directions" })).toBeVisible();
+  await expect(discoverCard.getByRole("link", { name: "Get Offer QR" })).toBeVisible();
+
+  await open(page, detailPath!);
+  await expect(page.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Get Directions" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Get Offer QR" })).toBeVisible();
+  await layout(page);
 });
 
 test("Creator Home keeps the next destination clear across mobile and desktop", async ({ page, context }) => {

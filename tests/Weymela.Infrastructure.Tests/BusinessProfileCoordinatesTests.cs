@@ -24,12 +24,16 @@ public sealed class BusinessProfileCoordinatesTests(PostgresFixture fixture)
         {
             SubjectId = businessId, Role = ActorRole.Business,
             DisplayName = "Public Business", PublicId = "BU-COORDS",
+            Region = "Bole Road, Addis Ababa",
+            DirectionsUrl = "https://maps.app.goo.gl/AbCd1234",
         });
         await db.SaveChangesAsync();
         var directory = new PersistentWorkspaceDirectory(db);
         var initiallyMissing = await directory.CustomerOfferBusinessAsync(businessId, default);
         Assert.Null(initiallyMissing.Latitude);
         Assert.Null(initiallyMissing.Longitude);
+        Assert.Equal("Bole Road, Addis Ababa", initiallyMissing.Address);
+        Assert.Equal("https://maps.app.goo.gl/AbCd1234", initiallyMissing.DirectionsUrl);
 
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE v3."PublicWorkspaceProfiles" SET "Latitude"={9.03m}, "Longitude"={38.74m}
@@ -44,6 +48,13 @@ public sealed class BusinessProfileCoordinatesTests(PostgresFixture fixture)
         Assert.DoesNotContain("BusinessId", json);
         Assert.DoesNotContain(businessId.ToString(), json);
     }
+
+    [Theory]
+    [InlineData("http://maps.google.com/place/test")]
+    [InlineData("https://example.com/maps")]
+    [InlineData("https://user@www.google.com/maps")]
+    public void Unsafe_direction_links_are_not_projected(string value)
+        => Assert.Null(PersistentWorkspaceDirectory.SafeDirectionsUrl(value));
 
     [Fact]
     public async Task View_and_sale_customer_offer_carries_business_coordinates_without_business_id()

@@ -32,6 +32,8 @@ describe("English and Amharic localization", () => {
     ["Confirm", "አረጋግጥ"],
     ["Cashback", "ተመላሽ ገንዘብ"],
     ["Earnings", "ገቢዎች"],
+    ["Business Location", "የንግድ አድራሻ"],
+    ["Get Directions", "አቅጣጫ ያግኙ"],
   ])("uses reviewed Amharic for %s", (english, amharic) => {
     expect(translateText(english, "am")).toBe(amharic);
   });

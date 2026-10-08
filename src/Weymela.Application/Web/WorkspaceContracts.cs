@@ -149,7 +149,7 @@ public sealed record OperationsUgcView(Guid Id, Guid BusinessId, string Business
     int CreatorsNeeded, int ApprovedCreators, DateTime DueDateUtc, string? Location, int CurrentRevision,
     string? CustomerOfferStatus = null);
 public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl,
-    decimal? Latitude = null, decimal? Longitude = null, string? Category = null);
+    decimal? Latitude = null, decimal? Longitude = null, string? Category = null, string? Address = null);
 public sealed record CustomerOfferCreator(string DisplayName);
 public sealed record CustomerOfferCard(Guid Id, string Source, string Offer, CustomerOfferBusiness Business,
     CustomerOfferCreator? Creator, decimal BenefitPercent, string? WatchUrl, string? Slogan = null, string? Location = null,

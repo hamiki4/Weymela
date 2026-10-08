@@ -584,7 +584,11 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
                 ("OutboxMessages", "LastError"), ("OutboxMessages", "NextAttemptAtUtc"),
                 ("OutboxMessages", "FailedAtUtc"), ("OutboxMessages", "FailureCount"),
                 ("IdentityBindings", "IsActive"), ("IdentityBindings", "Version"),
-                ("PublicWorkspaceProfiles", "CreatorPhotoKey") })
+                ("PublicWorkspaceProfiles", "CreatorPhotoKey"),
+                ("PublicWorkspaceProfiles", "Region"),
+                ("PublicWorkspaceProfiles", "DirectionsUrl"),
+                ("PublicWorkspaceProfiles", "Latitude"),
+                ("PublicWorkspaceProfiles", "Longitude") })
             {
                 await using var command = new NpgsqlCommand(
                     $"SELECT has_column_privilege({QuoteLiteral(apiRole)}, {QuoteLiteral($"v3.{QuoteIdentifier(table)}")}, {QuoteLiteral(column)}, 'UPDATE')",

@@ -16,6 +16,7 @@ import {
 import { amount, dateTime, safeExternal } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { Coordinates, nearestOffers, offerDistanceKm, validCoordinates } from "./customerLocation";
+import { offerDirectionsUrl } from "./customerDirections";
 import { PayoutDestinationForm } from "../PayoutDestinationForm";
 
 type CustomerOffersProps = { discover?: boolean };
@@ -114,7 +115,7 @@ function CustomerLocationCard({
 
 function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm: number | null }) {
   const watchUrl = safeExternal(offer.watchUrl);
-  const directionsUrl = safeExternal(offer.business.directionsUrl);
+  const directionsUrl = offerDirectionsUrl(offer);
   const headingId = `customer-offer-${offer.id}-${offer.ugcAssignmentId ?? "promotion"}`;
   const customerFacingTitle = offer.slogan?.trim() || offer.offer;
 
@@ -531,6 +532,7 @@ export function CustomerOfferQr() {
         {(rows) => {
           const offer = rows.find((row) => row.id === id && (row.ugcAssignmentId ?? null) === assignmentId);
           const watchUrl = offer ? safeExternal(offer.watchUrl) : null;
+          const directionsUrl = offer ? offerDirectionsUrl(offer) : undefined;
           const embedUrl = trustedVideoEmbed(watchUrl);
           return offer ? (
             <div className="customer-live-offer-layout">
@@ -538,8 +540,11 @@ export function CustomerOfferQr() {
                 {embedUrl ? <iframe className="customer-live-video-frame" src={embedUrl} title={`${offer.business.displayName} Promotion video`}
                   allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
                   : <div className="customer-live-video-frame"><Icon name="video" size={42} /></div>}
-                {watchUrl ? <a className="button secondary" href={watchUrl} target="_blank" rel="noopener noreferrer">Watch Promotion</a>
-                  : <p className="muted">Video unavailable.</p>}
+                <div className="customer-promotion-actions customer-detail-actions">
+                  {watchUrl ? <a className="button secondary" href={watchUrl} target="_blank" rel="noopener noreferrer"><Icon name="video" />Watch Promotion</a>
+                    : <p className="muted">Video unavailable.</p>}
+                  {directionsUrl && <a className="button secondary" href={directionsUrl} target="_blank" rel="noopener noreferrer"><Icon name="location" />Get Directions</a>}
+                </div>
               </section>
               <QrPanel key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} />
             </div>

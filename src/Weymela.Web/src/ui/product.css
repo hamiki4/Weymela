@@ -151,6 +151,12 @@
 .profile-info-row { display: grid; grid-template-columns: minmax(100px, 38%) minmax(0, 1fr); gap: 10px; padding: 11px 2px; border-bottom: 1px solid var(--product-line); font-size: .86rem; }
 .profile-info-row dt { color: #4b5563; }
 .profile-info-row dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #111827; font-weight: 600; }
+#business-location { scroll-margin-top: 18px; }
+.business-location-form { display: grid; gap: 12px; padding-top: 14px; }
+.business-location-form .field { margin: 0; }
+.business-location-form > .button { justify-self: start; }
+.business-location-coordinates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .business-location-coordinates { grid-template-columns: 1fr; } .business-location-form > .button { width: 100%; } }
 #social-profiles { scroll-margin-top: 18px; }
 .product-desktop-nav { display: none; }
 .role-business .business-create-action .button { min-height: 44px; padding: 9px 16px; border-radius: 10px; }
@@ -1183,6 +1189,13 @@ html[lang="am"] .settings-page-row strong, html[lang="am"] .account-role-copy, h
   border: 1px solid var(--product-line);
   border-radius: 14px;
   background: #fff;
+}
+
+.customer-detail-actions {
+  padding-top: 0;
+}
+.customer-detail-actions .button {
+  flex: 1 1 180px;
 }
 
 .customer-live-video-frame {

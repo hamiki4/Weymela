@@ -5,6 +5,7 @@ using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.Infrastructure.Deposits;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
@@ -15,6 +16,7 @@ namespace Weymela.Api.Endpoints;
 internal static class OperationalEndpoints
 {
     private sealed record LegalConsent(string ContentHash, bool Confirmed);
+    private sealed record BusinessLocationInput(string? Address, string? DirectionsUrl, decimal? Latitude, decimal? Longitude);
     public static void MapOperationalEndpoints(this WebApplication app)
     {
         app.MapGet("/health/live",()=>Results.Ok(new{status="live"})).AllowAnonymous();
@@ -54,7 +56,10 @@ internal static class OperationalEndpoints
                 phone = identifiers.FirstOrDefault(x => x.Kind == "Phone")?.DeliveryAddress,
                 status = "Active",
                 region = actor.Role == ActorRole.Business && !string.IsNullOrWhiteSpace(profile?.Region) ? profile.Region : fixtureRegion,
-                businessType = actor.Role == ActorRole.Business && !string.IsNullOrWhiteSpace(profile?.Category) ? profile.Category : null
+                businessType = actor.Role == ActorRole.Business && !string.IsNullOrWhiteSpace(profile?.Category) ? profile.Category : null,
+                directionsUrl = actor.Role == ActorRole.Business ? PersistentWorkspaceDirectory.SafeDirectionsUrl(profile?.DirectionsUrl) : null,
+                latitude = actor.Role == ActorRole.Business ? profile?.Latitude : null,
+                longitude = actor.Role == ActorRole.Business ? profile?.Longitude : null
             });
         });
         workspace.MapGet("/notifications",(HttpContext c,NotificationService service,CancellationToken ct)=>service.GetAsync(EndpointSupport.Actor(c),ct));
@@ -72,6 +77,44 @@ internal static class OperationalEndpoints
         workspace.MapPost("/legal/{id:guid}/accept",async(Guid id,LegalConsent consent,HttpContext c,LegalWorkspaceService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.AcceptAsync(EndpointSupport.Actor(c),id,consent.ContentHash,consent.Confirmed,ct)));
         var business=app.MapGroup("/api/business").RequireAuthorization("Business").AddEndpointFilter<ValidatedInputFilter>();
+        business.MapPost("/location", async (BusinessLocationInput input, HttpContext c, WeymelaDbContext db, TimeProvider clock, CancellationToken ct) =>
+        {
+            var actor = EndpointSupport.Actor(c);
+            if (actor.BusinessId is null || !await db.CommercePermissions.AsNoTracking().AnyAsync(x =>
+                    x.UserId == actor.UserId && x.Role == ActorRole.Business && x.SubjectId == actor.BusinessId && x.IsActive, ct))
+                throw new ApplicationFailure(FailureKind.Forbidden, "Business access is required.");
+            var address = string.IsNullOrWhiteSpace(input.Address) ? null : input.Address.Trim();
+            if (address is { Length: > 80 } || address?.Any(char.IsControl) == true)
+                throw new ApplicationFailure(FailureKind.Validation, "Keep the Business address within 80 characters.");
+            var requestedUrl = string.IsNullOrWhiteSpace(input.DirectionsUrl) ? null : input.DirectionsUrl.Trim();
+            var directionsUrl = PersistentWorkspaceDirectory.SafeDirectionsUrl(requestedUrl);
+            if (requestedUrl is not null && directionsUrl is null)
+                throw new ApplicationFailure(FailureKind.Validation, "Enter a valid HTTPS Google Maps link.");
+            if (input.Latitude.HasValue != input.Longitude.HasValue)
+                throw new ApplicationFailure(FailureKind.Validation, "Enter both latitude and longitude, or leave both blank.");
+            if (input.Latitude is < -90 or > 90 || input.Longitude is < -180 or > 180
+                || input.Latitude is { } latitude && decimal.Round(latitude, 6) != latitude
+                || input.Longitude is { } longitude && decimal.Round(longitude, 6) != longitude)
+                throw new ApplicationFailure(FailureKind.Validation, "Enter valid coordinates with no more than six decimal places.");
+            if (address is null && directionsUrl is null && input.Latitude is null)
+                throw new ApplicationFailure(FailureKind.Validation, "Add a Business address, a Google Maps link, or both coordinates.");
+
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            var updated = await db.PublicWorkspaceProfiles
+                .Where(x => x.SubjectId == actor.BusinessId && x.Role == ActorRole.Business)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.Region, address ?? "")
+                    .SetProperty(x => x.DirectionsUrl, directionsUrl)
+                    .SetProperty(x => x.Latitude, input.Latitude)
+                    .SetProperty(x => x.Longitude, input.Longitude), ct);
+            if (updated != 1) throw new ApplicationFailure(FailureKind.NotFound, "The Business profile is unavailable.");
+            db.AuditEvents.Add(new(Guid.NewGuid(), "BusinessLocationUpdated", actor.UserId, actor.BusinessId,
+                null, null, EndpointSupport.Correlation(c), clock.GetUtcNow().UtcDateTime,
+                "Business public directions updated."));
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return Results.Ok(new { address, directionsUrl, input.Latitude, input.Longitude });
+        });
         business.MapGet("/deposit-method",(RuntimeOptions options)=>Results.Ok(new{mode=options.DevelopmentIdentity?"Development":options.DepositMode}));
         business.MapGet("/receiving-destinations",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.ActiveAsync(EndpointSupport.Actor(c),ct));
         business.MapGet("/deposit-requests",(HttpContext c,DepositService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));

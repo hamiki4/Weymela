@@ -27,7 +27,7 @@ public sealed class DevelopmentDirectory : IWorkspaceDirectory
         ?new BusinessCard(id,"Abc Coffee","Addis Ababa","https://www.google.com/maps/search/?api=1&query=Addis+Ababa")
         :id==Id(200)?new BusinessCard(id,"Bole Studio","Addis Ababa","https://www.google.com/maps/search/?api=1&query=Bole+Addis+Ababa"):throw new ApplicationFailure(FailureKind.NotFound,"Business profile not found."));
     public async Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id,CancellationToken ct)
-    { var business=await BusinessCardAsync(id,ct); return new(business.DisplayName,business.DirectionsUrl); }
+    { var business=await BusinessCardAsync(id,ct); return new(business.DisplayName,business.DirectionsUrl,Address:business.Region); }
     public Task<CreatorCard> CreatorCardAsync(Guid id,CancellationToken ct)=>Task.FromResult(id==Id(300)
         ?new CreatorCard(id,"Bella","CR-100","Addis Ababa","Food",42000,186000,true,null)
         :id==Id(400)?new CreatorCard(id,"Elias","CR-200","Addis Ababa","Food",29000,121000,true,null)

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { postForm, request, useResource } from "../api/client";
+import { post, postForm, request, useResource } from "../api/client";
 import { CreatorProfile } from "../features/creator/CreatorProfile";
-import { Button, CreatorAvatar, Notice, PageHeader, Resource } from "../ui/components";
+import { Button, CreatorAvatar, Field, Notice, PageHeader, Resource } from "../ui/components";
 
 interface OwnProfile {
   role: "Customer" | "Creator" | "Business";
@@ -12,6 +12,9 @@ interface OwnProfile {
   status: string;
   businessType: string | null;
   region: string | null;
+  directionsUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
   creatorId: number | null;
   hasCreatorPhoto: boolean;
 }
@@ -39,6 +42,10 @@ export function ProfilePage() {
   const [success, setSuccess] = useState("");
   const [photoOverride, setPhotoOverride] = useState<boolean | null>(null);
   const [photoRevision, setPhotoRevision] = useState(0);
+  const [businessLocation, setBusinessLocation] = useState({ address: "", directionsUrl: "", latitude: "", longitude: "" });
+  const [locationBusy, setLocationBusy] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const [locationSuccess, setLocationSuccess] = useState("");
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const choosePhoto = (file?: File) => {
     setError(""); setSuccess(""); setSelected(null);
@@ -71,9 +78,43 @@ export function ProfilePage() {
   };
   const location = useLocation();
   useEffect(() => {
+    const data = profile.data;
+    if (data?.role !== "Business") return;
+    setBusinessLocation({
+      address: data.region ?? "",
+      directionsUrl: data.directionsUrl ?? "",
+      latitude: data.latitude?.toString() ?? "",
+      longitude: data.longitude?.toString() ?? "",
+    });
+  }, [profile.data]);
+  useEffect(() => {
     if (profile.data?.role === "Creator" && ["#social-profiles", "#social-accounts"].includes(location.hash))
       document.getElementById("social-profiles")?.scrollIntoView?.();
   }, [profile.data, location.hash]);
+  const saveBusinessLocation = async () => {
+    if (locationBusy) return;
+    const latitude = businessLocation.latitude.trim() ? Number(businessLocation.latitude) : null;
+    const longitude = businessLocation.longitude.trim() ? Number(businessLocation.longitude) : null;
+    if ((latitude !== null && !Number.isFinite(latitude)) || (longitude !== null && !Number.isFinite(longitude))) {
+      setLocationError("Enter valid coordinates, or leave both blank.");
+      return;
+    }
+    setLocationBusy(true); setLocationError(""); setLocationSuccess("");
+    try {
+      await post("/business/location", {
+        address: businessLocation.address.trim() || null,
+        directionsUrl: businessLocation.directionsUrl.trim() || null,
+        latitude,
+        longitude,
+      });
+      setLocationSuccess("Business location saved.");
+      profile.reload();
+    } catch (reason) {
+      setLocationError(reason instanceof Error ? reason.message : "Business location could not be saved.");
+    } finally {
+      setLocationBusy(false);
+    }
+  };
   return <div className="profile-page">
     <PageHeader title="Profile" compact />
     <Resource resource={profile}>{data => <>
@@ -95,7 +136,25 @@ export function ProfilePage() {
       {data.role === "Business" ? <>
         <InfoSection title="Business Information" rows={[["Business name", data.displayName], ["Business type", data.businessType], ["Account status", data.status]]} />
         <InfoSection title="Contact Information" rows={[["Email", data.email], ["Phone", data.phone]]} />
-        <InfoSection title="Address" rows={[["Region", data.region]]} />
+        <section className="profile-section" id="business-location">
+          <h2>Business Location</h2>
+          <p className="fine-print">Add a Business address, a Google Maps link, or both coordinates. Customers can open directions without sharing their location.</p>
+          <div className="business-location-form">
+            <Field label="Address or area"><input maxLength={80} value={businessLocation.address}
+              onChange={event => setBusinessLocation({ ...businessLocation, address: event.target.value })} /></Field>
+            <Field label="Google Maps link"><input type="url" maxLength={500} placeholder="https://maps.app.goo.gl/..." value={businessLocation.directionsUrl}
+              onChange={event => setBusinessLocation({ ...businessLocation, directionsUrl: event.target.value })} /></Field>
+            <div className="business-location-coordinates">
+              <Field label="Latitude"><input type="number" min="-90" max="90" step="0.000001" value={businessLocation.latitude}
+                onChange={event => setBusinessLocation({ ...businessLocation, latitude: event.target.value })} /></Field>
+              <Field label="Longitude"><input type="number" min="-180" max="180" step="0.000001" value={businessLocation.longitude}
+                onChange={event => setBusinessLocation({ ...businessLocation, longitude: event.target.value })} /></Field>
+            </div>
+            <Button disabled={locationBusy} onClick={() => void saveBusinessLocation()}>{locationBusy ? "Saving…" : "Save location"}</Button>
+            {locationError && <Notice error>{locationError}</Notice>}
+            {locationSuccess && <Notice>{locationSuccess}</Notice>}
+          </div>
+        </section>
       </> : <>
         <InfoSection title="Personal Information" rows={[["Email", data.email], ["Phone", data.phone], ["Account status", data.status]]} />
         {data.role === "Creator" && <div id="social-profiles"><CreatorProfile sectionOnly /></div>}

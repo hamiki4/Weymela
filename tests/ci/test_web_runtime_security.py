@@ -18,6 +18,8 @@ LIBEXPAT_SHA256 = '2e56946bc495cbed9eb1ad70859a79cba9db6420016453e065a0628848b32
 LIBEXPAT_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk'
 PCRE2_SHA256 = '2919897914820f42a17a8d7d37df310d2dfad1c82ebe5f539cc5c765f916752a'
 PCRE2_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/pcre2-10.49-r0.apk'
+TIFF_SHA256 = '757ce87ebe4923a6be9869d026e250958ca09696529c464781e8a91d2b81670b'
+TIFF_URL = 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/tiff-4.7.2-r0.apk'
 
 
 class CreatorPhotoCspTests(unittest.TestCase):
@@ -64,7 +66,7 @@ class ShellFixture(unittest.TestCase):
         self.calls_file = self.root / 'calls.jsonl'
         self.env = {**os.environ, 'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
                     'WEB_TEST_CALLS': str(self.calls_file), 'WEB_TEST_FAIL': '',
-                    'WEB_TEST_PACKAGE': 'libuuid-2.42.3-r1\nlibexpat-2.8.5-r0\npcre2-10.49-r0', 'WEB_TEST_EXISTING': '',
+                    'WEB_TEST_PACKAGE': 'libuuid-2.42.3-r1\nlibexpat-2.8.5-r0\npcre2-10.49-r0\ntiff-4.7.2-r0', 'WEB_TEST_EXISTING': '',
                     'GITHUB_ACTIONS': 'true', 'GITHUB_REF': 'refs/heads/main',
                     'GITHUB_SHA': 'a' * 40, 'GITHUB_REPOSITORY_OWNER': 'HamiKi4',
                     'GITHUB_REPOSITORY': 'hamiki4/WeymelaV3', 'GITHUB_RUN_ID': '456',
@@ -132,6 +134,7 @@ class RuntimePackagePatchTests(ShellFixture):
         self.assertEqual([call['tool'] for call in calls],
                          ['wget', 'sha256sum', 'apk', 'apk', 'rm',
                           'wget', 'sha256sum', 'apk', 'apk', 'rm',
+                          'wget', 'sha256sum', 'apk', 'apk', 'rm',
                           'wget', 'sha256sum', 'apk', 'apk', 'rm'])
         self.assertEqual(calls[0]['args'], ['-O', '/tmp/weymela-libuuid-2.42.3-r1.apk', APK_URL])
         self.assertEqual(calls[1]['args'], ['-c', '-'])
@@ -151,6 +154,11 @@ class RuntimePackagePatchTests(ShellFixture):
         self.assertEqual(calls[12]['args'], ['add', '--no-cache', '--no-network', '/tmp/weymela-pcre2-10.49-r0.apk'])
         self.assertEqual(calls[13]['args'], ['info', '--installed', 'pcre2=10.49-r0'])
         self.assertEqual(calls[14]['args'], ['/tmp/weymela-pcre2-10.49-r0.apk'])
+        self.assertEqual(calls[15]['args'], ['-O', '/tmp/weymela-tiff-4.7.2-r0.apk', TIFF_URL])
+        self.assertEqual(calls[16]['stdin'], TIFF_SHA256 + '  /tmp/weymela-tiff-4.7.2-r0.apk\n')
+        self.assertEqual(calls[17]['args'], ['add', '--no-cache', '--no-network', '/tmp/weymela-tiff-4.7.2-r0.apk'])
+        self.assertEqual(calls[18]['args'], ['info', '--installed', 'tiff=4.7.2-r0'])
+        self.assertEqual(calls[19]['args'], ['/tmp/weymela-tiff-4.7.2-r0.apk'])
 
     def test_download_failure_cannot_install_package(self):
         self.assertNotEqual(self.run_install('wget').returncode, 0)
@@ -258,6 +266,11 @@ class HostedRuntimeGateTests(ShellFixture):
 
     def test_vulnerable_libexpat_cannot_emit_successful_build_outputs(self):
         result = self.run_build(WEB_TEST_PACKAGE='libuuid-2.42.3-r1\nlibexpat-2.8.4-r0')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'output').exists())
+
+    def test_vulnerable_tiff_cannot_emit_successful_build_outputs(self):
+        result = self.run_build(WEB_TEST_PACKAGE='libuuid-2.42.3-r1\nlibexpat-2.8.5-r0\npcre2-10.49-r0\ntiff-4.7.1-r0')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / 'output').exists())
 

@@ -24,6 +24,8 @@ Transfers remain manual and external. The authorized processor must verify the r
 
 ## Release gates
 
+The initial merged release (`53c68e4`, run `37805610631`) passed every validation job but its Web image was blocked by HIGH `CVE-2026-4775` in Alpine `tiff 4.7.1-r0`. It was not deployed. The follow-up installs only the vendor-fixed, signed `tiff 4.7.2-r0` package, pinned to SHA-256 `757ce87ebe4923a6be9869d026e250958ca09696529c464781e8a91d2b81670b`, using the existing checksum/offline signature-verification pattern. Alpine's [security database](https://secdb.alpinelinux.org/v3.24/main.json) identifies this fixed version. The runtime version gate and regression test reject the vulnerable version; no scan exclusions or broad OS upgrades were introduced.
+
 Use the protected PR workflow, all required validation jobs, and the immutable main release manifest. Take a fresh paired Pilot database/private-media backup, rehearse restore in an isolated database, verify migrations/grants, and deploy only digest-pinned API/Web/Worker images. Preserve the current Pilot financial-write configuration. Verify reconciliation, health and authenticated mobile/desktop English/Amharic UI. Keep session material outside the repository and revoke temporary UAT sessions afterwards.
 
 Rollback uses the prior exact API/Web/Worker digests after compatibility checks. There is no database migration in this change. Never automatically restore a database over new financial activity; that requires separately approved recovery and reconciliation. Existing backups are server-local, not off-host disaster recovery.

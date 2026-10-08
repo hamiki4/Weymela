@@ -3,6 +3,7 @@ using Weymela.Application;
 using Weymela.Application.Web;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Persistence.Records;
 
 namespace Weymela.Infrastructure.Web;
 
@@ -50,9 +51,19 @@ public sealed partial class WorkspaceQueries
             ? maskedByUser.GetValueOrDefault(userId,"Customer") : "Customer";
         var promotionIds=promotionSales.Select(x=>x.PromotionId).Distinct().ToArray();
         var titles=await db.Promotions.AsNoTracking().Where(x=>promotionIds.Contains(x.Id)).ToDictionaryAsync(x=>x.Id,x=>x.Title,ct);
-        var promotionCashiers = await db.CashierPreauthorizations.AsNoTracking()
+        // Revoked preauthorizations are immutable audit history. A cashier can
+        // later be invited again with the same verified phone/user, so select
+        // one current label per user instead of assuming the history is unique.
+        var cashierHistory = await db.CashierPreauthorizations.AsNoTracking()
             .Where(x => x.BusinessId == actor.BusinessId && x.UserId != null)
-            .ToDictionaryAsync(x => x.UserId!.Value, x => x.DisplayName, ct);
+            .ToListAsync(ct);
+        var promotionCashiers = cashierHistory
+            .GroupBy(x => x.UserId!.Value)
+            .ToDictionary(x => x.Key, x => x
+                .OrderByDescending(y => y.Status == CashierPreauthorizationStatus.Active)
+                .ThenByDescending(y => y.ActivatedAtUtc)
+                .ThenByDescending(y => y.CreatedAtUtc)
+                .First().DisplayName);
         rows.AddRange(promotionSales.Select(x=>new CheckoutSaleRow(x.Id,titles.GetValueOrDefault(x.PromotionId,"View & Sale"),
             "VIEW_AND_SALE_PROMOTION",x.PurchaseAmount.Amount,x.CustomerCashbackAmount.Amount,x.PurchaseAmount.Amount,
             x.TotalPromotionCharge.Amount,x.CreatedAtUtc,promotionCashiers.GetValueOrDefault(x.CashierId),

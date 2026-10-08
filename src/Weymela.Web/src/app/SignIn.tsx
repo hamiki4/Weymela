@@ -3,9 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
 import type { Role, SessionProfile } from "../api/types";
 import { Button, Field, Notice, Resource } from "../ui/components";
+import { Icon } from "../ui/Icon";
 import { PasswordField } from "../ui/PasswordField";
 import { Brand } from "./Shell";
 import { SessionLoadFailure, useSession } from "./Session";
+import { CompactLanguageChoice } from "../localization/Language";
+import { readSignupDraft, saveSignupDraft, type PublicSignupDraft, type PublicSignupRole } from "./signupDraft";
 import {
   ProfileSelectionRequiredError,
   FirebaseWebAuthAdapter,
@@ -20,7 +23,9 @@ interface AuthMode {
 }
 type AuthView =
   | "landing"
-  | "create"
+  | "chooseRole"
+  | "registration"
+  | "verifySignup"
   | "signIn"
   | "existingSetup"
   | "forgotPassword";
@@ -48,6 +53,7 @@ function FirebaseSignIn({
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<SessionProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
+  const [signupRole, setSignupRole] = useState<PublicSignupRole | null>(() => readSignupDraft()?.role ?? null);
   const authBusy = busy || !adapter;
 
   useEffect(() => {
@@ -133,10 +139,22 @@ function FirebaseSignIn({
       await adapter.verifyEmailCode(email, purpose, code);
       await onSignedIn();
     });
+  const beginRegistration = (draft: PublicSignupDraft) =>
+    submit(async () => {
+      if (!adapter) throw new Error("Secure sign-in is unavailable right now.");
+      saveSignupDraft(draft);
+      setEmail(draft.email);
+      const delay = await adapter.startEmailCode(draft.email, "Signup");
+      setResendAfterSeconds(delay ?? 60);
+      setCode("");
+      setCodeSent(true);
+      setView("verifySignup");
+    });
 
   if (profiles.length > 1 && adapter)
     return (
       <div className="sign-in-secure" aria-live="polite">
+        <CompactLanguageChoice />
         {error ? <Notice error>{error}</Notice> : null}
         <h1>Choose a profile</h1>
         <p className="muted">Choose where you want to continue.</p>
@@ -174,6 +192,7 @@ function FirebaseSignIn({
 
   return (
     <div className="sign-in-secure" aria-live="polite">
+      <CompactLanguageChoice />
       {error ? <Notice error>{error}</Notice> : null}
       {notice ? <Notice>{notice}</Notice> : null}
       {!adapter && !error ? <Notice>Preparing secure sign-in…</Notice> : null}
@@ -184,11 +203,10 @@ function FirebaseSignIn({
           <div className="auth-primary-actions">
             <Button
               type="button"
-              icon="arrow"
               disabled={!adapter}
-              onClick={() => changeView("create")}
+              onClick={() => changeView("chooseRole")}
             >
-              Create account
+              Create Account
             </Button>
             <p>Already have an account?</p>
             <button
@@ -202,21 +220,30 @@ function FirebaseSignIn({
           </div>
         </section>
       ) : null}
-      {view === "create" ? (
+      {view === "chooseRole" ? (
+        <SignupRoleSelection onChoose={(role) => { setSignupRole(role); setView("registration"); }}
+          onSignIn={() => changeView("signIn")} onBack={() => changeView("landing")} />
+      ) : null}
+      {view === "registration" && signupRole ? (
+        <PublicRegistrationForm role={signupRole} busy={authBusy} onComplete={beginRegistration}
+          onBack={() => changeView("chooseRole")} />
+      ) : null}
+      {view === "verifySignup" ? (
         <EmailAccountFlow
-          title={codeSent ? "Check your email" : "Create your account"}
+          title="Verify your email"
           email={email}
           setEmail={setEmail}
           code={code}
           setCode={setCode}
           codeSent={codeSent}
-          verificationMessage="If this email is already registered, we've sent a code to help you sign in. Otherwise, use the verification code we sent."
+          verificationMessage={`Enter the five-digit code sent to ${email}.`}
           busy={authBusy}
           resendAfterSeconds={resendAfterSeconds}
           onContinue={() => startAccountEmail("Signup")}
           onResend={() => startAccountEmail("Signup")}
           onVerify={() => verifyAccountEmail("Signup")}
-          onBack={() => changeView("landing")}
+          onBack={() => { setCodeSent(false); setView("registration"); }}
+          backLabel="Edit details"
         />
       ) : null}
       {view === "existingSetup" ? (
@@ -327,6 +354,93 @@ function FirebaseSignIn({
   );
 }
 
+const signupChoices: { role: PublicSignupRole; title: string; amharic: string; description: string; icon: string; className: string }[] = [
+  { role: "Customer", title: "Customer", amharic: "ሸማች", description: "Shop and earn cashback on eligible purchases.", icon: "wallet", className: "signup-customer" },
+  { role: "Business", title: "Business Owner", amharic: "ንግድ ባለቤት", description: "Promote your business and reach more customers.", icon: "business", className: "signup-business" },
+  { role: "Creator", title: "Content Creator", amharic: "ይዘት ፈጣሪ", description: "Create promotional videos and earn money.", icon: "sparkle", className: "signup-creator" },
+];
+
+function SignupRoleSelection(props: { onChoose: (role: PublicSignupRole) => void; onSignIn: () => void; onBack: () => void }) {
+  return <section className="signup-role-step" aria-labelledby="signup-role-title">
+    <p className="eyebrow">Welcome to Weymela</p>
+    <h1 id="signup-role-title">How would you like to join?</h1>
+    <div className="signup-role-cards">
+      {signupChoices.map(choice => <button key={choice.role} type="button" className={`signup-role-card ${choice.className}`}
+        onClick={() => props.onChoose(choice.role)}>
+        <span className="signup-role-icon"><Icon name={choice.icon} /></span>
+        <span><strong>{choice.title} — <span lang="am">{choice.amharic}</span></strong><small>{choice.description}</small></span>
+      </button>)}
+    </div>
+    <p className="auth-existing-account">Already have an account? <button type="button" className="auth-secondary-action" onClick={props.onSignIn}>Sign In</button></p>
+    <button type="button" className="auth-secondary-action" onClick={props.onBack}>Back</button>
+  </section>;
+}
+
+function PublicRegistrationForm(props: {
+  role: PublicSignupRole;
+  busy: boolean;
+  onComplete: (draft: PublicSignupDraft) => void;
+  onBack: () => void;
+}) {
+  const saved = readSignupDraft();
+  const sameRole = saved?.role === props.role ? saved : null;
+  const [legalName, setLegalName] = useState(sameRole?.legalName ?? "");
+  const [email, setEmail] = useState(sameRole?.email ?? "");
+  const [phone, setPhone] = useState(sameRole?.phone ?? "");
+  const [businessName, setBusinessName] = useState(sameRole?.businessName ?? "");
+  const [businessType, setBusinessType] = useState(sameRole?.businessType ?? "");
+  const [socialPlatform, setSocialPlatform] = useState(sameRole?.socialPlatform ?? "TikTok");
+  const [socialProfileUrl, setSocialProfileUrl] = useState(sameRole?.socialProfileUrl ?? "");
+  const [followerCount, setFollowerCount] = useState(String(sameRole?.followerCount ?? 0));
+  const [subscriberCount, setSubscriberCount] = useState(String(sameRole?.subscriberCount ?? 0));
+  const [legalAccepted, setLegalAccepted] = useState(sameRole?.legalAccepted === true);
+  const title = props.role === "Business" ? "Business Owner registration"
+    : props.role === "Creator" ? "Content Creator registration" : "Customer registration";
+  return <section className={`public-registration signup-${props.role.toLowerCase()}`} aria-labelledby="public-registration-title">
+    <p className="eyebrow">Create Account</p>
+    <h1 id="public-registration-title">{title}</h1>
+    <form onSubmit={event => {
+      event.preventDefault();
+      const followers = Number(followerCount);
+      const subscribers = socialPlatform === "YouTube" ? Number(subscriberCount) : null;
+      props.onComplete({
+        version: 1,
+        idempotencyKey: sameRole?.idempotencyKey ?? crypto.randomUUID(),
+        role: props.role,
+        legalName: legalName.trim(), email: email.trim().toLowerCase(), phone: phone.trim(),
+        ...(props.role === "Business" ? { businessName: businessName.trim(), businessType: businessType.trim() } : {}),
+        ...(props.role === "Creator" ? { socialPlatform, socialProfileUrl: socialProfileUrl.trim(),
+          followerCount: followers, subscriberCount: subscribers } : {}),
+        legalAccepted: true,
+      });
+    }}>
+      <fieldset disabled={props.busy} className="public-registration-fields">
+        <Field label="Full legal name"><input required maxLength={120} autoComplete="name" value={legalName} onChange={event => setLegalName(event.target.value)} /></Field>
+        {props.role === "Business" && <>
+          <Field label="Business name"><input required maxLength={120} autoComplete="organization" value={businessName} onChange={event => setBusinessName(event.target.value)} /></Field>
+          <Field label="Business type"><input required maxLength={80} placeholder="For example: Restaurant" value={businessType} onChange={event => setBusinessType(event.target.value)} /></Field>
+        </>}
+        <Field label="Email address"><input required type="email" inputMode="email" autoComplete="email" maxLength={200} value={email} onChange={event => setEmail(event.target.value)} /></Field>
+        <Field label="Phone number"><input required type="tel" inputMode="tel" autoComplete="tel" maxLength={24}
+          pattern="[+0-9() -]{7,24}" value={phone} onChange={event => setPhone(event.target.value)} /></Field>
+        {props.role === "Creator" && <>
+          <Field label="Social platform"><select value={socialPlatform} onChange={event => setSocialPlatform(event.target.value)}>
+            <option>TikTok</option><option>YouTube</option><option>Instagram</option><option>Facebook</option>
+          </select></Field>
+          <Field label="Social-media profile link"><input required type="url" inputMode="url" autoComplete="url" maxLength={500} value={socialProfileUrl} onChange={event => setSocialProfileUrl(event.target.value)} /></Field>
+          <Field label="Follower count"><input required type="number" inputMode="numeric" min="0" max="9000000000000000" step="1" value={followerCount} onChange={event => setFollowerCount(event.target.value)} /></Field>
+          {socialPlatform === "YouTube" && <Field label="Subscriber count"><input required type="number" inputMode="numeric" min="0" max="9000000000000000" step="1" value={subscriberCount} onChange={event => setSubscriberCount(event.target.value)} /></Field>}
+        </>}
+        <label className="signup-legal-consent"><input required type="checkbox" checked={legalAccepted} onChange={event => setLegalAccepted(event.target.checked)} />
+          <span>I agree to Weymela&apos;s <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <div className="form-footer"><Button type="button" variant="secondary" onClick={props.onBack}>Back</Button>
+          <Button type="submit" disabled={props.busy || !legalAccepted}>{props.busy ? "Sending code…" : "Complete Registration"}</Button></div>
+      </fieldset>
+    </form>
+  </section>;
+}
+
 function PasswordRecovery(props: {
   adapter: FirebaseWebAuthAdapter | null;
   email: string;
@@ -412,8 +526,8 @@ function PasswordRecovery(props: {
                 autoComplete="one-time-code"
                 value={props.code}
                 onChange={(event) => props.setCode(event.target.value)}
-                pattern="[0-9]{6}"
-                maxLength={6}
+                pattern="[0-9]{5}"
+                maxLength={5}
                 required
                 autoFocus
               />
@@ -488,6 +602,7 @@ function EmailAccountFlow(props: {
   onResend: () => void;
   onVerify: () => void;
   onBack: () => void;
+  backLabel?: string;
 }) {
   return (
     <section aria-labelledby="email-account-title">
@@ -521,8 +636,8 @@ function EmailAccountFlow(props: {
                 autoComplete="one-time-code"
                 value={props.code}
                 onChange={(event) => props.setCode(event.target.value)}
-                pattern="[0-9]{6}"
-                maxLength={6}
+                pattern="[0-9]{5}"
+                maxLength={5}
                 required
                 autoFocus
               />
@@ -549,7 +664,7 @@ function EmailAccountFlow(props: {
         type="button"
         onClick={props.onBack}
       >
-        Back
+        {props.backLabel ?? "Back"}
       </button>
     </section>
   );

@@ -99,7 +99,7 @@ describe("V3 Firebase Web adapter", () => {
     await adapter.startEmailCode("owner@example.com", "Signup");
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(JSON.stringify({ customToken: "verified-signup-token" }), { status: 200 }));
-    await adapter.verifyEmailCode("owner@example.com", "Signup", "123456");
+    await adapter.verifyEmailCode("owner@example.com", "Signup", "12345");
     expect(signInWithCustomToken).toHaveBeenCalledWith(auth, "verified-signup-token");
     // The real UID/account invariant is covered by EmailAuthServiceTests and MultiRoleIdentityTests.
     expect(fetch).toHaveBeenLastCalledWith("/api/auth/firebase/session", expect.objectContaining({ method: "POST" }));
@@ -183,7 +183,7 @@ describe("V3 Firebase Web adapter", () => {
     expect(signInWithCustomToken).not.toHaveBeenCalled();
 
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(JSON.stringify({ customToken: "verified-signup-token" }), { status: 200 }));
-    await adapter.verifyEmailCode("owner@example.com", "Signup", "123456");
+    await adapter.verifyEmailCode("owner@example.com", "Signup", "12345");
     expect(signInWithCustomToken).toHaveBeenCalledWith(auth, "verified-signup-token");
   });
 
@@ -195,7 +195,7 @@ describe("V3 Firebase Web adapter", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed and non-six-digit email codes before network exchange", async () => {
+  it("rejects malformed and non-five-digit email codes before network exchange", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
     await expect(adapter.verifyEmailCode("owner@example.com", "Signup", "12")).rejects.toThrow("invalid or expired");
     expect(fetch).not.toHaveBeenCalled();
@@ -216,7 +216,7 @@ describe("V3 Firebase Web adapter", () => {
     (fetch as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce(new Response(JSON.stringify({ next: "PasswordReset", expiresAtUtc: "2026-09-16T12:10:00Z" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await expect(adapter.verifyPasswordRecovery("owner@example.com", "123456")).resolves.toBe("PasswordReset");
+    await expect(adapter.verifyPasswordRecovery("owner@example.com", "12345")).resolves.toBe("PasswordReset");
     await adapter.resetPassword("correct horse battery staple", "correct horse battery staple");
     expect(signInWithCustomToken).not.toHaveBeenCalled();
     expect(JSON.parse((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string))
@@ -233,7 +233,7 @@ describe("V3 Firebase Web adapter", () => {
       next: "AccountSetup", customToken: "same-account-token", expiresAtUtc: "2026-09-16T12:10:00Z",
     }), { status: 200 }));
 
-    await expect(adapter.verifyPasswordRecovery("owner@example.com", "123456")).resolves.toBe("AccountSetup");
+    await expect(adapter.verifyPasswordRecovery("owner@example.com", "12345")).resolves.toBe("AccountSetup");
     expect(signInWithCustomToken).toHaveBeenCalledWith(auth, "same-account-token");
   });
 

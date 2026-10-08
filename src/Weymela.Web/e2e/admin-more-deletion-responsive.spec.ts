@@ -28,7 +28,7 @@ test("Platform Admin role menu and identity deletion confirmation remain compact
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await open(page, "/admin/businesses");
-    const row = page.locator(".admin-mobile-row").first();
+    const row = page.locator(".admin-mobile-row:has(.admin-action-menu)").first();
     await expect(row).toBeVisible();
     await row.locator(".admin-action-menu summary").click();
     await expect(row.getByRole("menuitem", { name: "Delete Role" })).toBeVisible();

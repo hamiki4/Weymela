@@ -81,7 +81,7 @@ describe("server-authoritative device lock", () => {
     expect(screen.getByText(/If the account is eligible/)).toBeVisible();
   });
 
-  it("requires a six-digit code and matching masked five-digit PINs", async () => {
+  it("requires a five-digit email code and matching masked five-digit PINs", async () => {
     renderLock();
     await userEvent.click(screen.getByRole("button", { name: "Forgot PIN?" }));
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
@@ -92,7 +92,7 @@ describe("server-authoritative device lock", () => {
     expect(confirmation).toHaveLength(5);
     expect(newPin[0].type).toBe("password");
     expect(confirmation[0].type).toBe("password");
-    await userEvent.type(screen.getByLabelText("Verification code"), "246810");
+    await userEvent.type(screen.getByLabelText("Verification code"), "24681");
     await userEvent.type(newPin[0], "12345");
     await userEvent.type(confirmation[0], "54321");
     await userEvent.click(screen.getByRole("button", { name: "Recover device" }));
@@ -101,7 +101,7 @@ describe("server-authoritative device lock", () => {
     for (const input of confirmation) await userEvent.clear(input);
     await userEvent.type(confirmation[0], "12345");
     await userEvent.click(screen.getByRole("button", { name: "Recover device" }));
-    expect(mocks.completePinRecovery).toHaveBeenCalledWith("owner@example.test", "246810", "12345", "12345");
+    expect(mocks.completePinRecovery).toHaveBeenCalledWith("owner@example.test", "24681", "12345", "12345");
   });
 
   it("announces an invalid email code without falsely marking PIN cells invalid", async () => {
@@ -110,7 +110,7 @@ describe("server-authoritative device lock", () => {
     await userEvent.click(screen.getByRole("button", { name: "Forgot PIN?" }));
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.test");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await userEvent.type(screen.getByLabelText("Verification code"), "246810");
+    await userEvent.type(screen.getByLabelText("Verification code"), "24681");
     await userEvent.type(pinCells("New PIN")[0], "12345");
     await userEvent.type(pinCells("Confirm new PIN")[0], "12345");
     await userEvent.click(screen.getByRole("button", { name: "Recover device" }));

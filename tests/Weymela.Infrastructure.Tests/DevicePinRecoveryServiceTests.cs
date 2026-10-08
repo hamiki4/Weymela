@@ -17,7 +17,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
     private static readonly DateTime Now = new(2026, 9, 14, 18, 0, 0, DateTimeKind.Utc);
     private static readonly string PinPepper = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
     private static readonly string CodeKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-    private const string Code = "246810";
+    private const string Code = "24681";
     private const string OldPin = "01234";
     private const string NewPin = "56789";
 
@@ -187,7 +187,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
         var seeded = await SeedAsync(database);
         await using (var db = database.Open())
             await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db)
-                .CompleteAsync(Request(seeded) with { Code = "999999" }));
+                .CompleteAsync(Request(seeded) with { Code = "99999" }));
 
         await using var verify = database.Open();
         Assert.Equal(1, (await verify.EmailAuthChallenges.SingleAsync(x => x.Id == seeded.ChallengeId)).AttemptCount);
@@ -217,7 +217,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
         var seeded = await SeedAsync(database, challengeAttempts: 4);
         await using (var db = database.Open())
             await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db)
-                .CompleteAsync(Request(seeded) with { Code = "999999" }));
+                .CompleteAsync(Request(seeded) with { Code = "99999" }));
         await using (var db = database.Open())
             await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db)
                 .CompleteAsync(Request(seeded)));

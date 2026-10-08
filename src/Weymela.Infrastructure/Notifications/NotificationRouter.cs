@@ -146,9 +146,10 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             {
                 var enrollmentId=Id("Id");var enrollment=await db.RoleEnrollments.AsNoTracking().SingleAsync(x=>x.Id==enrollmentId,ct);
                 if(enrollment.RequestedRole is not (ActorRole.Creator or ActorRole.Business))return null;
-                return Plan("Profile awaiting review", $"A {enrollment.RequestedRole} application is waiting for review.",null,null,
+                return Plan(enrollment.RequestedRole == ActorRole.Business ? "New Business awaiting review" : "New Creator awaiting review",
+                    $"A {enrollment.RequestedRole} application is waiting for review.",null,null,
                     new NotificationAudience(ActorRole.PlatformAdmin),new NotificationAudience(ActorRole.OperationsAdmin))
-                    with { WorkspacePath="role-enrollments" };
+                    with { WorkspacePath=enrollment.RequestedRole == ActorRole.Business ? "businesses" : "creators" };
             }
             case "RoleEnrollmentApproved": case "RoleEnrollmentRejected":
             {
@@ -270,7 +271,8 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         v.ViewPlusCommission.CreatorCommissionPercent, v.CreatorPayoutThreshold });
     public static string Route(NotificationPlan plan, ActorRole role) => role switch
     {
-        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin => plan.WorkspacePath=="account-closure"?"/admin/accounts":plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} p ? $"/admin/campaigns/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
+        ActorRole.PlatformAdmin => plan.WorkspacePath=="account-closure"?"/admin/accounts":plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} p ? $"/admin/campaigns/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "creators" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
+        ActorRole.OperationsAdmin => plan.WorkspacePath=="account-closure"?"/admin/accounts":plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} op ? $"/admin/campaigns/{op}" : plan.WorkspacePath is "businesses" or "creators" ? "/admin/role-enrollments" : "/admin/" + (plan.WorkspacePath is "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
         ActorRole.Business => plan.WorkspacePath=="account-closure"?"/settings/delete-account":plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/business/transactions":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/campaigns/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),
         ActorRole.Creator => plan.WorkspacePath=="account-closure"?"/settings/delete-account":plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="earnings"?"/creator/earnings":plan.UgcId is {} cu ? $"/creator/ugc/{cu}" : plan.BudgetId is {} a ? $"/creator/promotions/{a}" : "/creator/" + (plan.WorkspacePath is "requests" or "payouts" ? plan.WorkspacePath : "discover"),
         ActorRole.Customer => plan.WorkspacePath=="account-closure"?"/settings/delete-account":plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/customer/transactions":"/customer/offers",

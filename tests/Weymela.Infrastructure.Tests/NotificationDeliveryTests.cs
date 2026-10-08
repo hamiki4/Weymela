@@ -71,7 +71,9 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
         for (var i = 0; i < 10; i++) if (await Processor(db, new TestClock()).ProcessAsync(default) == 0) break;
         var submissions = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync();
         Assert.Equal(8, submissions.Count);
-        Assert.All(submissions, x => Assert.Equal("/admin/role-enrollments", x.Route));
+        Assert.All(submissions.Where(x => x.Role == ActorRole.PlatformAdmin && x.Title.Contains("Business", StringComparison.Ordinal)), x => Assert.Equal("/admin/businesses", x.Route));
+        Assert.All(submissions.Where(x => x.Role == ActorRole.PlatformAdmin && x.Title.Contains("Creator", StringComparison.Ordinal)), x => Assert.Equal("/admin/creators", x.Route));
+        Assert.All(submissions.Where(x => x.Role == ActorRole.OperationsAdmin), x => Assert.Equal("/admin/role-enrollments", x.Route));
         Assert.Equal(4, submissions.Count(x => x.UserId == platform));
         Assert.Equal(4, submissions.Count(x => x.UserId == operations));
         var approved = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentApproved").ToListAsync();

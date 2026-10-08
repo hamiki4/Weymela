@@ -111,7 +111,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         var code = await StartAsync(current, delivery, seeded.Email, seeded.Email);
         var wrong = await current.Post("/api/device/pin-recovery/complete", new
         {
-            identifier = seeded.Email, code = "999999", newPin = NewPin, confirmPin = NewPin
+            identifier = seeded.Email, code = "99999", newPin = NewPin, confirmPin = NewPin
         }, "recover-wrong-code");
         Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
         Assert.Equal("InvalidCode", (await wrong.Content.ReadFromJsonAsync<JsonObject>())!["code"]!.GetValue<string>());

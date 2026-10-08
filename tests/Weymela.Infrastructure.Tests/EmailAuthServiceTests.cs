@@ -201,7 +201,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync(); await using var db = database.Open();
         var delivery = new TestDelivery(); var service = new EmailAuthService(db, delivery, new TestIssuer(), Options(), TimeProvider.System);
         await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
-        for (var i = 0; i < 5; i++) await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, "000000", default));
+        for (var i = 0; i < 5; i++) await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, "00000", default));
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[0].Code, default));
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
     }

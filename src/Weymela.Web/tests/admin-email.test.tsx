@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { invalidateResourceCache } from "../src/api/client";
 import { AdminAccountDetail, AdminAccounts } from "../src/features/admin/AdminAccounts";
@@ -56,5 +57,26 @@ describe("authorized Admin account email presentation", () => {
       version: 1, fullEmail: email }] });
     render(<MemoryRouter><AdminRoleEnrollments /></MemoryRouter>);
     expect(await screen.findByText(email)).toBeInTheDocument();
+  });
+
+  it("shows a compact Creator pending-review queue in the Creator section", async () => {
+    mockApi({
+      "/admin/accounts?role=Creator": [],
+      "/admin/role-enrollments": [{ id: "creator-review", role: "Creator", status: "Pending",
+        displayName: "Hana Bekele", legalName: "Hana Bekele", publicId: "CR-100",
+        submittedAtUtc: "2026-10-08T08:30:00Z", version: 1, fullEmail: email,
+        fullPhone: "+251911111111", socialProfiles: [{ platform: "YouTube",
+          profileUrl: "https://www.youtube.com/@hana", audienceCount: 1200,
+          followerCount: 800, subscriberCount: 1200 }] }],
+    });
+    render(<MemoryRouter><AdminAccounts area="Creator" /></MemoryRouter>);
+    expect(await screen.findByText("Pending Review (1)")).toBeVisible();
+    await userEvent.click(screen.getAllByRole("button", { name: "Review" })[0]);
+    expect(screen.getByText(email)).toBeVisible();
+    expect(screen.getByText("+251911111111")).toBeVisible();
+    expect(screen.getByText("Followers: 800")).toBeVisible();
+    expect(screen.getByText("Subscribers: 1,200")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeVisible();
   });
 });

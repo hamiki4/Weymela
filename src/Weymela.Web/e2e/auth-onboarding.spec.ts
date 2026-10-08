@@ -424,6 +424,78 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
 });
 
+test("Platform Admin reviews new Creator and Business registrations in their account sections", async ({ page, context }) => {
+  page.setDefaultTimeout(12000);
+  const account = await createVerifiedAccount(context);
+  await activateCustomer(context, account);
+
+  const creatorName = `Creator Review ${account.suffix}`;
+  const creatorApplication = await context.request.post("/api/onboarding/profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `public-creator-review-${account.suffix}` },
+    data: {
+      role: "Creator", displayName: creatorName, legalName: creatorName,
+      registeredPhone: account.phone, category: "Food", region: "Addis Ababa",
+      socialProfiles: [{ platform: "YouTube", profileUrl: `https://www.youtube.com/@creator${account.suffix.slice(-10)}`,
+        audienceCount: 1250, followerCount: 900, subscriberCount: 1250 }],
+    },
+  });
+  expect(creatorApplication.status()).toBe(200);
+  const creatorEnrollment = await creatorApplication.json() as { id: string };
+
+  await login(context, "admin");
+  await open(page, "/admin/creators");
+  await expect(page.getByRole("heading", { name: /Pending Review \(\d+\)/ })).toBeVisible();
+  const creatorRow = page.getByRole("row", { name: new RegExp(creatorName) });
+  await expect(creatorRow).toContainText("YouTube");
+  await creatorRow.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByText(account.email, { exact: true })).toBeVisible();
+  await expect(page.getByText(account.phone, { exact: true })).toBeVisible();
+  await expect(page.getByText("Followers: 900", { exact: true })).toBeVisible();
+  await expect(page.getByText("Subscribers: 1,250", { exact: true })).toBeVisible();
+  const approved = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === `/api/admin/role-enrollments/${creatorEnrollment.id}/review`);
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  expect((await approved).status()).toBe(200);
+  await expect(creatorRow).toHaveCount(0);
+
+  await establishFirebaseSession(context, account.token, "Customer");
+  const businessName = `Business Review ${account.suffix}`;
+  const businessApplication = await context.request.post("/api/onboarding/profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": `public-business-review-${account.suffix}` },
+    data: {
+      role: "Business", displayName: businessName, legalName: `Owner ${account.suffix}`,
+      registeredPhone: account.phone, category: "Restaurant", region: "Addis Ababa",
+    },
+  });
+  expect(businessApplication.status()).toBe(200);
+  const businessEnrollment = await businessApplication.json() as { id: string };
+
+  await login(context, "admin");
+  await open(page, "/admin/businesses");
+  const businessRow = page.getByRole("row", { name: new RegExp(businessName) });
+  await expect(businessRow).toContainText(`Owner ${account.suffix}`);
+  await businessRow.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByText("Restaurant", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await page.getByLabel("Rejection reason").fill("Controlled browser rejection");
+  const rejected = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === `/api/admin/role-enrollments/${businessEnrollment.id}/review`);
+  await page.getByRole("button", { name: "Confirm rejection" }).click();
+  expect((await rejected).status()).toBe(200);
+
+  await establishFirebaseSession(context, account.token, "Customer");
+  const session = await (await context.request.get("/api/session")).json() as SessionUser;
+  expect(session.profiles).toEqual(expect.arrayContaining([expect.objectContaining({ role: "Creator" })]));
+  expect(session.profiles).not.toEqual(expect.arrayContaining([expect.objectContaining({ role: "Business" })]));
+  const status = await (await context.request.get("/api/onboarding/status")).json() as {
+    profiles: { id: string; status: number; decisionReason: string | null }[];
+  };
+  expect(status.profiles).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: businessEnrollment.id, status: enrollmentStatuses.Rejected,
+      decisionReason: "Controlled browser rejection" }),
+  ]));
+});
+
 test("incomplete registration resumes the same identity at PIN setup without a request loop", async ({ browser }) => {
   const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
   const email = `resume-${suffix}@example.com`;

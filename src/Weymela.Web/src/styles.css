@@ -2680,6 +2680,79 @@ td .button {
   letter-spacing: -0.04em;
   margin-bottom: 18px;
 }
+.compact-language-choice {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: -6px 0 14px;
+  color: var(--muted);
+}
+.compact-language-choice button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.compact-language-choice button[aria-pressed="true"] {
+  background: #e8f4ea;
+  color: #14532d;
+}
+.compact-language-choice button:focus-visible,
+.signup-role-card:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.signup-role-step .eyebrow, .public-registration .eyebrow { margin-bottom: 6px; }
+.signup-role-cards { display: grid; gap: 12px; margin: 20px 0; }
+.signup-role-card {
+  --signup-accent: #166534;
+  --signup-soft: #eefaf1;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 94px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--signup-accent) 35%, #dfe7e2);
+  border-inline-start: 5px solid var(--signup-accent);
+  border-radius: 15px;
+  background: var(--signup-soft);
+  color: #17211a;
+  box-shadow: 0 8px 22px rgb(15 23 42 / 8%);
+  text-align: start;
+  cursor: pointer;
+}
+.signup-role-card:hover { border-color: var(--signup-accent); box-shadow: 0 10px 25px rgb(15 23 42 / 12%); }
+.signup-role-card.signup-business { --signup-accent: #1d4ed8; --signup-soft: #eff6ff; }
+.signup-role-card.signup-creator { --signup-accent: #6d28d9; --signup-soft: #f5f3ff; }
+.signup-role-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #fff; color: var(--signup-accent); box-shadow: 0 2px 7px rgb(15 23 42 / 10%); }
+.signup-role-card > span:last-child { display: grid; gap: 5px; }
+.signup-role-card strong { font-size: .98rem; line-height: 1.35; }
+.signup-role-card small { color: #45534a; font-size: .8rem; line-height: 1.45; }
+.auth-existing-account { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: .86rem; }
+.auth-existing-account .auth-secondary-action { padding-inline: 4px; }
+.public-registration-fields { grid-template-columns: 1fr; }
+.signup-legal-consent { display: flex; align-items: flex-start; gap: 10px; color: #374151; font-size: .8rem; line-height: 1.5; }
+.signup-legal-consent input { flex: none; width: 19px; height: 19px; margin-top: 1px; accent-color: #166534; }
+.signup-legal-consent a { color: #155e75; font-weight: 700; }
+.public-signup-status { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #f4f7ef; }
+.signup-status-card { width: min(100%, 480px); padding: 28px; border: 1px solid #b9d7c0; border-inline-start: 5px solid #166534; border-radius: 18px; background: #fff; box-shadow: 0 14px 38px rgb(15 23 42 / 10%); }
+.signup-status-business { border-color: #b8cdf8; border-inline-start-color: #1d4ed8; }
+.signup-status-creator { border-color: #d5c5f5; border-inline-start-color: #6d28d9; }
+.signup-status-card h1 { color: #17211a; font-size: clamp(1.65rem, 5vw, 2.15rem); }
+.signup-status-card .button { margin-top: 16px; }
+@media (min-width: 700px) {
+  .sign-in-form > div:has(.public-registration) { max-width: 620px; }
+  .signup-role-cards { grid-template-columns: 1fr; }
+  .public-registration-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .public-registration-fields .signup-legal-consent,
+  .public-registration-fields .form-footer { grid-column: 1 / -1; }
+}
 .pin-setup-page {
   min-height: 100dvh;
   display: grid;

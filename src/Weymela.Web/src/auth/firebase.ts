@@ -132,7 +132,7 @@ export class FirebaseWebAuthAdapter {
 
   async verifyEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment", code: string): Promise<void> {
     const normalized = normalizeEmail(identifier);
-    if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
+    if (!/^\d{5}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
     const response = await fetch("/api/auth/email/verify", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose, code: code.trim() }) });
     if (!response.ok) throw new Error("The code is invalid or expired.");
     const result = await response.json() as { customToken?: string };
@@ -159,7 +159,7 @@ export class FirebaseWebAuthAdapter {
 
   async verifyPasswordRecovery(email: string, code: string): Promise<PasswordRecoveryNextStep> {
     const normalized = normalizeEmail(email);
-    if (!/^\d{6}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
+    if (!/^\d{5}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
     const response = await fetch("/api/auth/password/recovery/verify", {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" },

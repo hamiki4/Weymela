@@ -45,8 +45,8 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
   const complete = async (event: FormEvent) => {
     event.preventDefault();
     if (completing.current) return;
-    if (!/^[0-9]{6}$/.test(code)) {
-      setError("Enter the six-digit email code.");
+    if (!/^[0-9]{5}$/.test(code)) {
+      setError("Enter the five-digit email code.");
       setPinError(null);
       return;
     }
@@ -129,9 +129,9 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
                   type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  pattern="[0-9]{6}"
+                  pattern="[0-9]{5}"
                   minLength={6}
-                  maxLength={6}
+                  maxLength={5}
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                   required

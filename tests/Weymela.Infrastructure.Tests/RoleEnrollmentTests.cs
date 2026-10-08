@@ -312,6 +312,69 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Verified_public_registration_preserves_role_details_and_creates_one_pending_review()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        const string email = "new-owner@example.test";
+        const string phone = "+251911111111";
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = user, Kind = "Email",
+            IdentifierHash = EmailAuthService.HashIdentifier(email), DeliveryAddress = email,
+            IsVerified = true, CreatedAtUtc = DateTime.UtcNow });
+        var legal = await SeedAccountLegalAsync(db);
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var request = new RoleEnrollmentRequest(ActorRole.Business, "ABC Trading", null, null,
+            "Retail", null, AccountLegal: legal, LegalName: "Abebe Kebede", RegisteredPhone: phone);
+
+        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
+            "public-business-registration", default);
+        var replay = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
+            "public-business-registration", default);
+
+        Assert.Equal(pending.Id, replay.Id);
+        Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
+        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
+        var registeredPhone = Assert.Single(await db.AuthIdentifiers.Where(x => x.UserId == user && x.Kind == "Phone").ToListAsync());
+        Assert.Equal(phone, registeredPhone.DeliveryAddress);
+        Assert.False(registeredPhone.IsVerified);
+        Assert.Single(await db.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Business
+            && x.Status == RoleEnrollmentStatus.Pending).ToListAsync());
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
+
+        var review = Assert.Single(await service.PendingAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
+        Assert.Equal("ABC Trading", review.DisplayName);
+        Assert.Equal("Abebe Kebede", review.LegalName);
+        Assert.Equal("Retail", review.Category);
+        Assert.Equal(email, review.FullEmail);
+        Assert.Equal(phone, review.FullPhone);
+    }
+
+    [Fact]
+    public async Task Creator_registration_preserves_follower_and_subscriber_counts_for_review()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid();
+        const string email = "new-creator@example.test";
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = user, Kind = "Email",
+            IdentifierHash = EmailAuthService.HashIdentifier(email), DeliveryAddress = email,
+            IsVerified = true, CreatedAtUtc = DateTime.UtcNow });
+        var legal = await SeedAccountLegalAsync(db);
+        var service = new RoleEnrollmentService(db, TimeProvider.System);
+        var request = new RoleEnrollmentRequest(ActorRole.Creator, "Hana Bekele", null, null, null, null,
+            AccountLegal: legal, SocialProfiles: [new("YouTube", "https://www.youtube.com/@hana", 0, 800, 1200)],
+            LegalName: "Hana Bekele", RegisteredPhone: "+251922222222");
+
+        await service.SubmitAsync(new Actor(user, ActorRole.Customer), request, "public-creator-registration", default);
+        var review = Assert.Single(await service.PendingAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
+        var social = Assert.Single(review.SocialProfiles!);
+        Assert.Equal(800, social.FollowerCount);
+        Assert.Equal(1200, social.SubscriberCount);
+        Assert.Equal(1200, social.AudienceCount);
+    }
+
+    [Fact]
     public async Task Business_approval_creates_new_scoped_business_and_is_idempotent()
     {
         var database = await fixture.CreateAsync();

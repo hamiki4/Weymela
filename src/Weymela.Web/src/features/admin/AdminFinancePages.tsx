@@ -14,7 +14,7 @@ export function AdminWalletsPage() {
   const [fundAmount, setFundAmount] = useState("");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
-  return <div className="admin-page"><PageHeader title="Wallets" />{message && <Notice>{message}</Notice>}
+  return <div className="admin-page"><PageHeader title="Wallets" compact />{message && <Notice>{message}</Notice>}
     <DepositReviewSection onReviewed={wallets.reload} />
     <Section title="Business wallets"><Resource resource={wallets}>{data => <DataTable rows={data.businesses} rowKey={row => row.businessId} label="Business wallets" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> },
@@ -40,7 +40,7 @@ export function AdminWalletsPage() {
 }
 
 export function OperationsWalletsPage() {
-  return <div className="admin-page"><PageHeader title="Wallets" /><DepositReviewSection /></div>;
+  return <div className="admin-page"><PageHeader title="Wallets" compact /><DepositReviewSection /></div>;
 }
 
 function ReceiptReviewImage({ id }: { id: string }) {
@@ -101,7 +101,7 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
 export function AdminUgcPage() {
   const resource = useResource<AdminUgcFinance[]>("/admin/ugc/finance");
   const [search, setSearch] = useState("");
-  return <div className="admin-page"><PageHeader title="UGC" /><Section title="UGC funding and activity"><div className="admin-ugc-search"><Field label="Search"><input placeholder="Search business or promotion..." value={search} onChange={event => setSearch(event.target.value)} /></Field></div><Resource resource={resource}>{rows => { const visible = rows.filter(row => `${row.business} ${row.title}`.toLowerCase().includes(search.trim().toLowerCase())); return visible.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{visible.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer cashback</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No matching UGC promotions" message="Business UGC promotions appear here." />; }}</Resource></Section></div>;
+  return <div className="admin-page"><PageHeader title="UGC" compact /><Section title="UGC funding and activity"><div className="admin-ugc-search"><Field label="Search"><input placeholder="Search business or promotion..." value={search} onChange={event => setSearch(event.target.value)} /></Field></div><Resource resource={resource}>{rows => { const visible = rows.filter(row => `${row.business} ${row.title}`.toLowerCase().includes(search.trim().toLowerCase())); return visible.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{visible.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer cashback</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No matching UGC promotions" message="Business UGC promotions appear here." />; }}</Resource></Section></div>;
 }
 
 type Range = "Today" | "Week" | "Month" | "Year" | "Custom";
@@ -120,7 +120,7 @@ export function AdminReportsPage() {
   const [applied, setApplied] = useState(() => dates("Month", new Date()));
   const resource = useResource<AdminReport>(`/admin/reports?from=${applied.from}&to=${applied.to}`);
   const choose = (value: Range) => { setRange(value); if (value !== "Custom") setApplied(dates(value, new Date())); };
-  return <div className="admin-page"><PageHeader title="Reports" /><div className="admin-report-controls"><div className="tabs" role="group" aria-label="Report period">{(["Today", "Week", "Month", "Year", "Custom"] as Range[]).map(value => <button key={value} type="button" aria-pressed={range === value} onClick={() => choose(value)}>{value}</button>)}</div>{range === "Custom" && <form className="actions" onSubmit={event => { event.preventDefault(); if (custom.from <= custom.to) setApplied(custom); }}><Field label="From"><input type="date" required value={custom.from} onChange={event => setCustom({ ...custom, from: event.target.value })} /></Field><Field label="To"><input type="date" required value={custom.to} min={custom.from} onChange={event => setCustom({ ...custom, to: event.target.value })} /></Field><Button type="submit">Apply</Button></form>}</div>
+  return <div className="admin-page"><PageHeader title="Reports" compact /><div className="admin-report-controls"><div className="tabs" role="group" aria-label="Report period">{(["Today", "Week", "Month", "Year", "Custom"] as Range[]).map(value => <button key={value} type="button" aria-pressed={range === value} onClick={() => choose(value)}>{value}</button>)}</div>{range === "Custom" && <form className="actions" onSubmit={event => { event.preventDefault(); if (custom.from <= custom.to) setApplied(custom); }}><Field label="From"><input type="date" required value={custom.from} onChange={event => setCustom({ ...custom, from: event.target.value })} /></Field><Field label="To"><input type="date" required value={custom.to} min={custom.from} onChange={event => setCustom({ ...custom, to: event.target.value })} /></Field><Button type="submit">Apply</Button></form>}</div>
     <Resource resource={resource}>{report => <><p className="admin-period-label">Activity {report.fromUtc.slice(0, 10)} – {new Date(new Date(report.toExclusiveUtc).getTime() - 86400000).toISOString().slice(0, 10)} · UTC</p>
       <Section title="Platform summary"><div className="admin-report-grid">{[
         ["Business deposits", report.activity.businessDeposits], ["Weymela promotional funding", report.activity.promotionalFunding],

@@ -38,9 +38,8 @@ export function CreatorActiveCampaigns() {
   return (
     <>
       <PageHeader
-        eyebrow="Your collaborations"
         title="My Promotions"
-        description="Your Promotion content, verified activity and Creator earnings—all in one place."
+        compact
       />
       <Resource resource={resource}>
         {(rows) =>

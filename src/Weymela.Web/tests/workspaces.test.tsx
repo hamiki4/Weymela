@@ -113,7 +113,7 @@ describe("Business workspace", () => {
     mount(<BusinessDashboard />);
     expect(
       await screen.findByRole("heading", { name: "Home" }),
-    ).toBeVisible();
+    ).toHaveClass("sr-only");
     expect(screen.getByText("10,000")).toBeVisible();
     expect(screen.getByText("4,000")).toBeVisible();
     expect(screen.getByText("Available")).toBeVisible();
@@ -134,7 +134,7 @@ describe("Business workspace", () => {
       confirmedSales: 1,
     } });
     mount(<BusinessDashboard />);
-    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Home" })).toHaveClass("sr-only");
     expect(screen.getByRole("link", { name: "Available funds, view wallet" })).toHaveAttribute("href", "/business/wallet");
     expect(screen.queryByRole("link", { name: "Wallet history" })).not.toBeInTheDocument();
     expect(screen.queryByText("Customer Offer funded")).not.toBeInTheDocument();
@@ -537,8 +537,8 @@ describe("Creator workspace", () => {
 
     mount(<CreatorDashboard />);
 
-    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
-    expect(screen.getByText("Bella")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Home" })).toHaveClass("sr-only");
+    expect(screen.queryByText("Bella")).not.toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Discover Promotions" })).toHaveAttribute(
       "href",
@@ -588,7 +588,7 @@ describe("Creator workspace", () => {
     mockCreatorApi({ "/creator/campaigns": [], "/creator/discover": [], "/creator/ugc": [] });
     mount(<CreatorDashboard />);
 
-    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Home" })).toHaveClass("sr-only");
     expect(screen.queryByText("Continue working")).not.toBeInTheDocument();
     expect(screen.queryByText("Coffee stories")).not.toBeInTheDocument();
     expect(screen.getByText("No new promotions right now.")).toBeVisible();

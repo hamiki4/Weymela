@@ -124,8 +124,8 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
   expect(session.profiles.map(profile => profile.role)).not.toContain("Business");
   await layout(page);
   await open(page, "/customer/offers");
-  await page.getByRole("button", { name: "Open Settings" }).click();
-  const switcher = page.getByRole("dialog", { name: "Settings" }).getByLabel("Switch profile");
+  await page.getByRole("link", { name: "Open Settings" }).click();
+  const switcher = page.locator("main .settings-page").getByLabel("Switch profile");
   await expect(switcher.locator("option")).toHaveCount(2);
   await expect(switcher.locator("option").filter({ hasText: "Creator" })).toHaveCount(1);
   await switcher.selectOption({ label: "Hana — Creator" });

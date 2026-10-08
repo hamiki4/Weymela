@@ -16,6 +16,8 @@ Eight stopped or orphaned Docker test resources were removed after confirming th
 
 The stale generated file `.artifacts/browser-host.json` was also removed after confirming that it had no live owner. It was ignored test-run metadata, not application data or release evidence.
 
+The final UI/account-closure verification used only fresh, disposable Testcontainers PostgreSQL databases and an isolated BrowserHost. Their containers and the generated BrowserHost control file were removed when the suites completed. No Pilot application row was classified as disposable, so this continuation performed no live-data deletion.
+
 ## Explicitly not removed or changed
 
 - No Weymela database row was deleted.
@@ -26,9 +28,9 @@ The stale generated file `.artifacts/browser-host.json` was also removed after c
 
 ## Post-cleanup verification
 
-- The full PostgreSQL integration suite passed 527/527, including financial journal, idempotency, authorization, and reconciliation coverage.
-- The HTTP/API integration suite passed 234/234.
-- Repository safety reported 585 source files and zero violations.
+- The full PostgreSQL integration suite passed 533/533, including financial journal, idempotency, account-closure concurrency, authorization, and reconciliation coverage.
+- The HTTP/API integration suite passed 239/239 in aggregate (238 in the full run plus the newly compiled session-reissue case).
+- Repository safety is rerun against the final candidate before commit; its result is recorded in the final readiness report.
 - Production remained outside the operation scope.
 
 The cleanup is complete. There are no identified application records that are both disposable and proven safe to delete, so no database cleanup was attempted.

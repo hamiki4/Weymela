@@ -28,7 +28,7 @@ export function AdminMore() {
   ];
   return <div className="admin-more-page">
     <Link className="admin-more-back" to={back}><Icon name="back" size={18} />Back</Link>
-    <PageHeader title="More" />
+    <PageHeader title="More" compact />
     {groups.map(([title, links]) => <section className="admin-more-group" key={title}>
       <h2>{title}</h2>
       <div>{links.map(([label, path]) => <Link key={path} to={path}>

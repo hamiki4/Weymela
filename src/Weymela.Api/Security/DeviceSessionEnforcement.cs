@@ -32,6 +32,7 @@ internal static class DeviceSessionRequestPolicy
     private static readonly HashSet<string> MeaningfulPosts = new(StringComparer.Ordinal)
     {
         "/api/session/switch-profile",
+        "/api/account/closure",
         "/api/integration/product/handoff",
         "/api/integration/product/legal-acceptance",
         "/api/onboarding/profile",

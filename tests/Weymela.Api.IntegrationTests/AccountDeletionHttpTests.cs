@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Weymela.Infrastructure.Development;
@@ -14,6 +15,104 @@ namespace Weymela.Api.IntegrationTests;
 [Collection("V3 HTTP PostgreSQL")]
 public sealed class AccountDeletionHttpTests(PostgresFixture postgres)
 {
+    [Fact]
+    public async Task Self_service_closes_only_owned_selected_role_and_keeps_current_session()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        using var customer = await fixture.Login("customer");
+        var userId = DevelopmentDirectory.Id(7); var creatorId = Guid.NewGuid();
+        await using (var db = fixture.Database.Open())
+        {
+            db.CommercePermissions.Add(new(userId, Weymela.Application.ActorRole.Creator, creatorId, null, true, false));
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = creatorId,
+                Role = Weymela.Application.ActorRole.Creator, PublicId = "CR-HTTP-CLOSE", DisplayName = "Disposable Creator" });
+            await db.SaveChangesAsync();
+        }
+
+        var overview = await customer.GetJson("/api/account/closure");
+        Assert.Equal(2, overview["roles"]!.AsArray().Count);
+        var result = await customer.PostJson("/api/account/closure",
+            new { role = "Creator", subjectId = creatorId, confirmation = "DELETE" }, "self-close-http");
+        Assert.Equal("Closed", result["status"]!.GetValue<string>());
+        Assert.Equal(1, result["remainingRoles"]!.GetValue<int>());
+        Assert.Equal(HttpStatusCode.OK, (await customer.GetAsync("/api/customer/offers")).StatusCode);
+
+        await using var verify = fixture.Database.Open();
+        Assert.False((await verify.CommercePermissions.SingleAsync(x => x.UserId == userId
+            && x.Role == Weymela.Application.ActorRole.Creator)).IsActive);
+        Assert.True((await verify.CommercePermissions.SingleAsync(x => x.UserId == userId
+            && x.Role == Weymela.Application.ActorRole.Customer)).IsActive);
+        Assert.Single(await verify.AccountRoleHistory.Where(x => x.TargetUserId == userId && x.Action == "Deleted").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Closing_the_current_role_reissues_the_session_for_a_remaining_role()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        using var cashier = await fixture.Login("cashier");
+        var userId = DevelopmentDirectory.Id(9); var businessId = DevelopmentDirectory.Id(100);
+        await using (var db = fixture.Database.Open())
+        {
+            var now = DateTime.UtcNow;
+            db.CommercePermissions.Add(new(userId, Weymela.Application.ActorRole.Business, businessId, businessId, true, true));
+            db.CashierPreauthorizations.Add(new(businessId, "Abc Checkout", "+251911000009",
+                "fixture-phone-hash", "fixture-code-hash", now.AddDays(1), now)
+            {
+                Status = CashierPreauthorizationStatus.Active,
+                ActivatedAtUtc = now,
+                UserId = userId
+            });
+            if (!await db.PublicWorkspaceProfiles.AnyAsync(x => x.SubjectId == businessId
+                && x.Role == Weymela.Application.ActorRole.Business))
+                db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = businessId,
+                    Role = Weymela.Application.ActorRole.Business, PublicId = "BUS-100", DisplayName = "Abc Coffee" });
+            await db.SaveChangesAsync();
+        }
+
+        var overview = await cashier.GetJson("/api/account/closure");
+        var current = overview["roles"]!.AsArray().Single(x => x!["role"]!.GetValue<string>() == "Cashier")!;
+        var response = await cashier.Post("/api/account/closure", new {
+            role = "Cashier", subjectId = current["subjectId"]!.GetValue<Guid>(), confirmation = "DELETE"
+        }, "close-current-role-http");
+        var result = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Closed", result["status"]!.GetValue<string>());
+        Assert.Equal("Business", result["nextRole"]!.GetValue<string>());
+        cashier.DefaultRequestHeaders.Remove("Cookie");
+        cashier.DefaultRequestHeaders.Add("Cookie", response.Headers.GetValues("Set-Cookie").Single().Split(';')[0]);
+        Assert.Equal(HttpStatusCode.OK, (await cashier.GetAsync("/api/business/wallet")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync("/api/customer/offers")).StatusCode);
+        var session = await cashier.GetJson("/api/session");
+        Assert.Equal("Business", session["role"]!.GetValue<string>());
+        await using var verify = fixture.Database.Open();
+        Assert.Equal(CashierPreauthorizationStatus.Revoked,
+            (await verify.CashierPreauthorizations.SingleAsync(x => x.UserId == userId)).Status);
+    }
+
+    [Fact]
+    public async Task Self_service_rejects_foreign_subject_and_last_role_fails_closed_without_provider()
+    {
+        await using var fixture = await ApiFixture.CreateAsync(postgres);
+        using var customer = await fixture.Login("customer");
+        using var anonymous = fixture.Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/account/closure")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await customer.Post("/api/account/closure",
+            new { role = "Customer", subjectId = Guid.NewGuid(), confirmation = "DELETE" })).StatusCode);
+
+        var overview = await customer.GetJson("/api/account/closure");
+        var own = overview["roles"]!.AsArray().Single()!;
+        Assert.Equal("ActionRequired", own["status"]!.GetValue<string>());
+        var pending = await customer.PostJson("/api/account/closure", new {
+            role = own["role"]!.GetValue<string>(), subjectId = own["subjectId"]!.GetValue<Guid>(), confirmation = "DELETE"
+        }, "last-role-provider-unavailable");
+        Assert.Equal("Pending", pending["status"]!.GetValue<string>());
+
+        await using var db = fixture.Database.Open();
+        Assert.True((await db.CommercePermissions.SingleAsync(x => x.UserId == DevelopmentDirectory.Id(7))).IsActive);
+        Assert.False(await db.OutboxMessages.AnyAsync(x => x.EventType == "AccountIdentityDeletion"));
+    }
+
     [Fact]
     public async Task Platform_role_deletion_denies_stale_business_and_cashier_sessions_without_removing_financial_history()
     {

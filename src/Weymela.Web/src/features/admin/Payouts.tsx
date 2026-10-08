@@ -142,9 +142,8 @@ export function AdminPayouts() {
   return (
     <>
       <PageHeader
-        eyebrow="Payouts & settlement"
         title="Payouts"
-        description="Threshold-based payouts. Confirm external payments here; remaining balances always carry forward."
+        compact
       />
       <Tabs
         label="Payout workspaces"
@@ -415,7 +414,7 @@ export function OperationsPayouts() {
     confirm(false);
   };
   return <>
-    <PageHeader eyebrow="Operations payouts" title="Payouts" description="Process legitimate Creator and Customer payouts. Platform settlement and financial oversight are not available in this workspace." />
+    <PageHeader title="Payouts" compact />
     <Tabs label="Payout workspaces" value={tab} onChange={setTab} items={["Creators", "Customers", "History"].map((value) => ({ value, label: value }))} />
     {message && <Notice>{message}</Notice>}
     <Resource resource={resource}>{(data) => <>

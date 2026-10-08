@@ -679,6 +679,11 @@ td .button {
   border-color: #eddcb2;
   color: #725214;
 }
+.badge.error {
+  background: #fff0ef;
+  border-color: #efc1bd;
+  color: #922d25;
+}
 .tag-row {
   display: flex;
   gap: 7px;

@@ -301,8 +301,9 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
   page.on("framenavigated", onNavigation);
   let stage = "selector-visible";
   try {
-    const settings = page.getByRole("dialog", { name: "Settings" });
-    if (!await settings.isVisible()) await page.getByRole("button", { name: "Open Settings" }).click();
+    if (new URL(page.url()).pathname !== "/settings") await page.getByRole("link", { name: "Open Settings" }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+    const settings = page.locator("main .settings-page");
     const select = settings.getByLabel("Switch profile", { exact: true });
     await expect(select).toBeVisible({ timeout: 5000 });
     const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value", { timeout: 3000 });
@@ -335,9 +336,9 @@ async function chooseProfile(page: import("@playwright/test").Page, label: "Cust
     stage = "workspace-settled";
     const destination = { Customer: /\/customer\/offers(?:[/?#]|$)/, Creator: /\/creator(?:[/?#]|$)/, Business: /\/business(?:[/?#]|$)/ }[label];
     await expect(page).toHaveURL(destination, { timeout: 7000 });
-    await expect(page.locator("main h1")).toBeVisible({ timeout: 5000 });
-    await expect(settings).not.toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole("button", { name: "Open Settings" })).toBeVisible();
+    await expect(page.locator("main")).toBeVisible({ timeout: 5000 });
+    await expect(settings).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByRole("link", { name: "Open Settings" })).toBeVisible();
     await expect(page).toHaveURL(destination);
     expect(paths, "A successful switch must never visit an unauthorized workspace").not.toContain("/unauthorized");
   } catch (error) {
@@ -765,28 +766,27 @@ test("public role shell keeps mobile navigation and profile actions tappable", a
   await expect(navigation.getByRole("button", { name: "More navigation", exact: true })).toHaveCount(0);
   await profileLink.click();
   await expect(page).toHaveURL(/\/profile$/);
-  await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Settings" })).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "Profile", exact: true })).toHaveClass(/sr-only/);
   await navigation.getByRole("link", { name: "Home", exact: true }).click();
   await expect(page).toHaveURL(/\/customer\/offers$/);
-  const settingsButton = page.getByRole("button", { name: "Open Settings" });
+  const settingsButton = page.getByRole("link", { name: "Open Settings" });
   await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
   const target = await settingsButton.boundingBox();
   expect(target?.height).toBeGreaterThanOrEqual(44);
   await settingsButton.click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+  const settings = page.locator("main .settings-page");
   await expect(settings.getByRole("link", { name: "Add Profile" })).toBeVisible();
   await expect(settings.getByLabel("Switch profile", { exact: true })).toBeVisible();
-  await expect(settings.getByRole("button", { name: "Notifications" })).toBeVisible();
-  await expect(settings.getByRole("button", { name: "Location" })).toBeVisible();
+  await expect(settings.getByRole("link", { name: "Help" })).toBeVisible();
+  await expect(settings.getByRole("link", { name: "Contact Us" })).toBeVisible();
+  await expect(settings.getByRole("link", { name: /Delete Account/ })).toBeVisible();
   await expect(settings.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
-  await expect(settings.getByRole("button", { name: "Close Settings", exact: true })).toBeVisible();
   const session = await (await context.request.get("/api/session")).json() as SessionUser;
   expect(await page.locator(".sidebar, .topbar, .account-sheet, .more-sheet, .mobile-role-nav").evaluateAll((elements, publicId) =>
     elements.some((element) => element.textContent?.includes(publicId)), session.publicId)).toBe(false);
-  await page.keyboard.press("Escape");
-  await expect(settings).not.toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/customer\/offers$/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
@@ -859,10 +859,10 @@ test("multi-role-switching", async ({ page, context }) => {
   await approveLatest(context, "Business", businessPublicId);
   await establishFirebaseSession(context, account.token, "Customer");
   await open(page, "/customer/offers");
-  await page.getByRole("button", { name: "Open Settings" }).click();
-  const select = page.getByRole("dialog", { name: "Settings" }).getByLabel("Switch profile", { exact: true });
+  await page.getByRole("link", { name: "Open Settings" }).click();
+  const select = page.locator("main .settings-page").getByLabel("Switch profile", { exact: true });
   await expect(select.locator("option")).toHaveCount(3);
-  await page.keyboard.press("Escape");
+  await page.goBack();
   const beforeSwitch = await context.request.get("/api/session");
   expect(beforeSwitch.status()).toBe(200);
   const approved = await beforeSwitch.json() as SessionUser;

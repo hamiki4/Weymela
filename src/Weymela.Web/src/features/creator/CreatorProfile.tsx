@@ -68,7 +68,7 @@ export function CreatorProfile({ sectionOnly = false }: { sectionOnly?: boolean 
   const { user } = useSession();
   const resource = useResource<SocialProfile[]>("/creator/social-accounts");
   return <>
-    {!sectionOnly && <PageHeader title="Creator Profile" eyebrow={user?.displayName} />}
+    {!sectionOnly && <PageHeader title="Creator Profile" compact />}
     <Section title="Social Profiles">
       <Resource resource={resource}>{profiles => <CreatorSocialProfilesEditor
         profiles={profiles}

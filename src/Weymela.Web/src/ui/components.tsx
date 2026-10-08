@@ -132,9 +132,16 @@ export function Currency() {
   return null;
 }
 export function Badge({ status, label }: { status: string; label?: string }) {
+  const tone = ["Active", "Approved", "Paid", "Eligible", "Ready", "Closed"].includes(status)
+    ? "positive"
+    : ["Rejected", "Inactive", "Error", "Failed"].includes(status)
+      ? "error"
+      : ["FundingRequired", "BudgetExhausted", "Pending", "PendingClosure", "ActionRequired"].includes(status)
+        ? "attention"
+        : "";
   return (
     <span
-      className={`badge ${["Active", "Approved", "Paid", "Eligible", "Ready"].includes(status) ? "positive" : ["FundingRequired", "BudgetExhausted", "Rejected", "Inactive"].includes(status) ? "attention" : ""}`}
+      className={`badge ${tone}`}
     >
       {label ?? statusLabel(status)}
     </span>

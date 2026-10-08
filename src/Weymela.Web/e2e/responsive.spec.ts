@@ -221,34 +221,30 @@ for (const viewport of viewports)
         }
       }
       if (viewport.width <= 430 && ["customer", "creator", "business", "cashier"].includes(role)) {
-        if (role === "cashier") {
-          await page.getByRole("button", { name: "Open account menu" }).click();
-          await expect(page.getByRole("dialog", { name: "Account menu" })).toBeVisible();
-          await screenshot(page, `${viewport.width}-${role}-account-menu`);
-          await page.keyboard.press("Escape");
-        } else {
-          await page.getByRole("button", { name: "Open Settings" }).click();
-          const settings = page.getByRole("dialog", { name: "Settings" });
-          await expect(settings.getByLabel("Switch profile")).toBeVisible();
-          await expect(settings.getByRole("button", { name: "Notifications" })).toBeVisible();
-          await expect(settings.getByRole("button", { name: "Location" })).toBeVisible();
-          if (role === "creator") await expect(settings.getByRole("link", { name: "Social Profiles" })).toBeVisible();
-          if (role === "business") await expect(settings.getByRole("link", { name: "Cashier Management" })).toBeVisible();
-          await layout(page);
-          await screenshot(page, `${viewport.width}-${role}-settings`);
-          await page.keyboard.press("Escape");
-          await expect(settings).not.toBeVisible();
-          await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Profile" }).click();
+        await page.getByRole("link", { name: "Open Settings" }).click();
+        await expect(page).toHaveURL(/\/settings$/);
+        const settings = page.locator("main .settings-page");
+        await expect(settings.getByLabel("Switch profile")).toBeVisible();
+        await expect(settings.getByRole("group", { name: "Language" })).toBeVisible();
+        await expect(settings.getByRole("link", { name: "Help" })).toBeVisible();
+        await expect(settings.getByRole("link", { name: "Contact Us" })).toBeVisible();
+        await expect(settings.getByRole("link", { name: /Delete Account/ })).toBeVisible();
+        if (role === "creator") await expect(settings.getByRole("link", { name: "Social Profiles" })).toBeVisible();
+        if (role === "business") await expect(settings.getByRole("link", { name: "Cashier Management" })).toBeVisible();
+        await layout(page);
+        await screenshot(page, `${viewport.width}-${role}-settings`);
+        if (role !== "cashier") {
+          await settings.getByRole("link", { name: "Profile", exact: true }).click();
           await expect(page).toHaveURL(/\/profile$/);
-          await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
+          await expect(page.getByRole("heading", { name: "Profile", exact: true })).toHaveClass(/sr-only/);
           if (role === "creator") await expect(page.getByRole("heading", { name: "Social Profiles" })).toBeVisible();
           if (role === "business") await expect(page.getByRole("heading", { name: "Business Information" })).toBeVisible();
           await layout(page);
           await screenshot(page, `${viewport.width}-${role}-profile`);
-          const navBounds = await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox();
-          expect(navBounds).not.toBeNull();
-          expect(navBounds!.y + navBounds!.height).toBeLessThanOrEqual(viewport.height + 1);
-        }
+        } else await open(page, "/checkout");
+        const navBounds = await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox();
+        expect(navBounds).not.toBeNull();
+        expect(navBounds!.y + navBounds!.height).toBeLessThanOrEqual(viewport.height + 1);
         const clippedLabels = await page.getByRole("navigation", { name: "Mobile navigation" }).locator(".mobile-role-link").evaluateAll(links => links.flatMap(link => {
           const label = link.querySelector("span");
           if (!label) return [];
@@ -361,19 +357,15 @@ test("stable buttons and mobile keyboard navigation", async ({
   await open(page, "/business");
   await page.keyboard.press("Tab");
   await expect(skip).toBeFocused();
-  await page.getByRole("button", { name: "Open Settings" }).click();
-  await expect(
-    page.getByRole("dialog", { name: "Settings" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("dialog", { name: "Settings" }),
-  ).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "Open Settings" })).toBeFocused();
+  const settingsLink = page.getByRole("link", { name: "Open Settings" });
+  await settingsLink.focus();
+  await expect(settingsLink).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(
-    page.getByRole("dialog", { name: "Settings" }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { name: "Settings" })).toHaveClass(/sr-only/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/business$/);
+  await expect(page.getByRole("link", { name: "Open Settings" })).toBeVisible();
 });
 
 test("waiting service-worker update remains in the background across mobile widths", async ({ page, context }) => {
@@ -393,9 +385,9 @@ test("waiting service-worker update remains in the background across mobile widt
     await layout(page);
   }
   expect(await page.evaluate(() => (window as Window & { testUpdateActivations?: number }).testUpdateActivations)).toBe(0);
-  await page.getByRole("button", { name: "Open Settings" }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Open Settings" }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goBack();
   await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Promotions" }).click();
   await expect(page).toHaveURL(/\/business\/campaigns$/);
   await expect(page.getByRole("status", { name: "Update available" })).toHaveCount(0);

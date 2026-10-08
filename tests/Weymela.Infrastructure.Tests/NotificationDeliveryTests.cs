@@ -21,6 +21,29 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
         await using var db = s.Database.Open(); for (var i = 0; i < 10; i++) if (await Processor(db, s.Clock, recipients: recipients).ProcessAsync(default) == 0) break;
     }
 
+    [Fact] public async Task Account_closure_notifications_reach_remaining_owner_roles_and_platform_admin_once()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var user = Guid.NewGuid(); var customer = Guid.NewGuid(); var creator = Guid.NewGuid(); var admin = Guid.NewGuid();
+        db.CommercePermissions.AddRange(
+            new(user, ActorRole.Customer, customer, null, true, false),
+            new(user, ActorRole.Creator, creator, null, true, false),
+            new(admin, ActorRole.PlatformAdmin, admin, null, true, false));
+        await db.SaveChangesAsync();
+        var service = new AccountDeletionService(db, new TestClock(), new TestIdentityDeletionProvider());
+        await service.CloseOwnRoleAsync(new(user, ActorRole.Creator, CreatorId: creator),
+            new("Creator", creator, "DELETE"), "notify-role-close", default);
+        for (var i = 0; i < 5 && await Processor(db, new TestClock()).ProcessAsync(default) > 0; i++) { }
+
+        var rows = await db.InAppNotifications.Where(x => x.EventType == "AccountRoleClosed").ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, x => x.UserId == user && x.Role == ActorRole.Customer
+            && x.Route == "/settings/delete-account");
+        Assert.Contains(rows, x => x.UserId == admin && x.Role == ActorRole.PlatformAdmin
+            && x.Route == "/admin/accounts");
+        Assert.DoesNotContain(rows, x => x.Role == ActorRole.Creator);
+    }
+
     [Fact] public async Task Profile_application_notifications_reach_both_admins_and_applicants_once_with_review_routes()
     {
         var database = await fixture.CreateAsync();
@@ -171,6 +194,11 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
     {
         public bool Enabled => true;
         public Task<PushDeliveryResult> SendAsync(PushNotification notification, CancellationToken ct) => Task.FromResult(new PushDeliveryResult(false, true, "provider-secret"));
+    }
+    private sealed class TestIdentityDeletionProvider : IAccountIdentityDeletionProvider
+    {
+        public bool Enabled => true;
+        public Task DeleteAsync(string projectId, string externalSubject, CancellationToken ct) => Task.CompletedTask;
     }
     [Fact] public async Task Notification_commit_failure_rolls_back_delivery_and_records_retry_without_losing_event()
     {

@@ -177,6 +177,34 @@ public sealed class Phase4CheckoutTests(PostgresFixture fixture)
         await Assert.ThrowsAsync<ApplicationFailure>(() => workspace.RecentSalesAsync(
             s.Seed.Business with { BusinessId = Guid.NewGuid() }, default));
     }
+    [Fact] public async Task Checkout_history_uses_active_cashier_when_revoked_audit_history_exists()
+    {
+        var s = await Phase4Scenario.Create(fixture);
+        await s.Redeem(await s.Issue());
+        await using var db = s.Database.Open();
+        db.CashierPreauthorizations.AddRange(
+            new CashierPreauthorization(s.Seed.Business.BusinessId!.Value, "Former Cashier", "+251911000001",
+                "former-phone-hash", "consumed", Scenario.Now.AddDays(-2), Scenario.Now.AddDays(-3))
+            {
+                Status = CashierPreauthorizationStatus.Revoked,
+                UserId = s.Cashier.UserId,
+                ActivatedAtUtc = Scenario.Now.AddDays(-3),
+                DisabledAtUtc = Scenario.Now.AddDays(-2)
+            },
+            new CashierPreauthorization(s.Seed.Business.BusinessId.Value, "Current Cashier", "+251911000001",
+                "current-phone-hash", "consumed", Scenario.Now, Scenario.Now.AddDays(-1))
+            {
+                Status = CashierPreauthorizationStatus.Active,
+                UserId = s.Cashier.UserId,
+                ActivatedAtUtc = Scenario.Now.AddDays(-1)
+            });
+        await db.SaveChangesAsync();
+
+        var transaction = Assert.Single(await new WorkspaceQueries(db, new TestDirectory(), s.Clock)
+            .RecentSalesAsync(s.Seed.Business, default));
+        Assert.Equal("Current Cashier", transaction.Cashier);
+        Assert.Equal(2, await db.CashierPreauthorizations.CountAsync(x => x.UserId == s.Cashier.UserId));
+    }
     [Fact] public async Task Exact_budget_boundary_can_be_spent_without_negative_balance()
     {
         var s = await Phase4Scenario.Create(fixture, allocation: 100); await s.Redeem(await s.Issue());

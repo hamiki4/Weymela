@@ -23,12 +23,17 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
         {
             var legalName = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == actor.Role && x.SubjectId == subject)
                 .Select(x => x.DisplayName).SingleAsync(ct);
-            return new("Telebirr", "Telebirr", await VerifiedPhone(actor.UserId, ct), legalName, null, false, false);
+            return new("Telebirr", "Telebirr", await VerifiedPhoneOrNull(actor.UserId, ct) ?? string.Empty, legalName, null, false, false);
         }
-        var account = row.Method == PayoutDestinationMethod.Telebirr
-            ? await VerifiedPhone(actor.UserId, ct)
-            : new string('•', Math.Max(4, 8 - row.AccountLast4.Length)) + row.AccountLast4;
-        return View(row, account, row.Method == PayoutDestinationMethod.Bank);
+        if (row.Method == PayoutDestinationMethod.Telebirr)
+        {
+            var phone = await VerifiedPhoneOrNull(actor.UserId, ct);
+            return phone is null
+                ? new("Telebirr", row.Provider, string.Empty, row.LegalName, row.UpdatedAtUtc, false, false)
+                : View(row, phone, false);
+        }
+        var account = new string('•', Math.Max(4, 8 - row.AccountLast4.Length)) + row.AccountLast4;
+        return View(row, account, true);
     }
 
     public Task<PayoutDestinationView> UpdateAsync(Actor actor, PayoutDestinationInput input, CancellationToken ct = default) =>
@@ -84,11 +89,14 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
     internal string Unprotect(string value) => protector.Unprotect(value);
 
     private async Task<string> VerifiedPhone(Guid userId, CancellationToken ct)
+        => await VerifiedPhoneOrNull(userId, ct)
+            ?? throw new ApplicationFailure(FailureKind.Validation, "A single verified Weymela phone number is required for Telebirr.");
+
+    private async Task<string?> VerifiedPhoneOrNull(Guid userId, CancellationToken ct)
     {
         var phones = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == userId && x.Kind == "Phone"
             && x.IsVerified && x.DeliveryAddress != null).Select(x => x.DeliveryAddress!).ToListAsync(ct);
-        if (phones.Count != 1) throw new ApplicationFailure(FailureKind.Validation, "A single verified Weymela phone number is required for Telebirr.");
-        return phones[0];
+        return phones.Count == 1 ? phones[0] : null;
     }
 
     private static PayoutDestinationView View(PayoutDestination row, string account, bool masked) =>

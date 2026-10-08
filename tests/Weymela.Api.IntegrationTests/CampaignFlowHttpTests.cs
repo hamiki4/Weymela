@@ -107,4 +107,27 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
         await c.PostJson("/api/admin/platform/settlements",new{amount=100,reference="test-settlement"});
         Assert.Equal(unsettled-100,(await c.GetJson("/api/admin/platform"))["unsettled"]!["amount"]!.GetValue<decimal>());
     }
+    [Fact] public async Task Creator_without_verified_phone_can_open_payout_settings_and_choose_bank()
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);
+        await using(var db=f.Database.Open())
+        {
+            var userId=Weymela.Infrastructure.Development.DevelopmentDirectory.Id(4);
+            var creatorId=Weymela.Infrastructure.Development.DevelopmentDirectory.Id(300);
+            db.AuthIdentifiers.RemoveRange(db.AuthIdentifiers.Where(x=>x.UserId==userId&&x.Kind=="Phone"));
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=creatorId,Role=ActorRole.Creator,
+                DisplayName="Creator Without Phone",PublicId="CR-BANK-ONLY" });
+            await db.SaveChangesAsync();
+        }
+        using var creator=await f.Login("creator");
+        var initial=await creator.GetJson("/api/creator/payout-destination");
+        Assert.Equal(string.Empty,initial["account"]!.GetValue<string>());Assert.False(initial["isConfigured"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.BadRequest,(await creator.Post("/api/creator/payout-destination",
+            new{method="Telebirr",bankName=(string?)null,accountNumber=(string?)null})).StatusCode);
+        var bank=await creator.PostJson("/api/creator/payout-destination",
+            new{method="Bank",bankName="CBE",accountNumber="123456789"});
+        Assert.Equal("Bank",bank["method"]!.GetValue<string>());Assert.Equal("CBE",bank["provider"]!.GetValue<string>());
+        Assert.True(bank["isConfigured"]!.GetValue<bool>());Assert.True(bank["isMasked"]!.GetValue<bool>());
+        Assert.EndsWith("6789",bank["account"]!.GetValue<string>(),StringComparison.Ordinal);
+    }
 }

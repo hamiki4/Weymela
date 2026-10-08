@@ -49,13 +49,6 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     await layout(page);
   }
 
-  await page.getByLabel("Business name").fill("Hana Cafe");
-  await page.getByRole("button", { name: "Submit for Review" }).click();
-  await expect(page.getByText("Your Business profile is waiting for approval.")).toBeVisible();
-  for (const width of [320, 360, 375, 390, 430]) {
-    await page.setViewportSize({ width, height: 844 });
-    await layout(page);
-  }
   await page.getByRole("button", { name: /^Become a Creator/ }).click();
   await page.getByLabel("Creator name").fill("Hana");
   await page.locator(".creator-social-row").filter({ hasText: "Instagram" }).getByRole("button", { name: "Add profile" }).click();
@@ -67,6 +60,10 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     await page.setViewportSize({ width, height: 844 });
     await layout(page);
   }
+  await page.getByRole("button", { name: /^Add a Business/ }).click();
+  await page.getByLabel("Business name").fill("Hana Cafe");
+  await page.getByRole("button", { name: "Add Business" }).click();
+  await expect(page).toHaveURL(/\/business/);
 
   const adminContext = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width: 320, height: 844 } });
   try {
@@ -75,13 +72,13 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     await expect.poll(async () => {
       const response = await adminContext.request.get("/api/notifications");
       const body = await response.json() as { items: { title: string; route: string }[] };
-      return body.items.filter(item => ["New Business awaiting review", "New Creator awaiting review"].includes(item.title)
+      return body.items.filter(item => item.title === "New Creator awaiting review"
         && item.route === "/admin/role-enrollments").length;
-    }).toBe(2);
+    }).toBe(1);
     await open(admin, "/admin/operations");
     await admin.getByRole("link", { name: "Your notifications" }).click();
     await expect(admin).toHaveURL(/\/notifications/);
-    await expect(admin.getByRole("heading", { name: "New Business awaiting review" })).toBeVisible();
+    await expect(admin.getByRole("heading", { name: "New Business awaiting review" })).toHaveCount(0);
     await expect(admin.getByRole("heading", { name: "New Creator awaiting review" })).toBeVisible();
     await admin.locator(".notification-item").filter({ hasText: "Creator application" }).getByRole("link", { name: "Open" }).click();
     await expect(admin).toHaveURL(/\/admin\/role-enrollments/);
@@ -96,39 +93,44 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
       await layout(admin);
     }
     await creator.getByRole("button", { name: "Approve" }).click();
-    const business = admin.locator(".admin-profile-request").filter({ hasText: "Business · Hana Cafe" });
-    await business.getByRole("button", { name: "Reject" }).click();
-    await business.getByLabel("Reason for rejection").fill("More business details needed");
-    await business.getByRole("button", { name: "Confirm rejection" }).click();
     await expect(admin.locator(".admin-profile-request")).toHaveCount(0);
     await layout(admin);
   } finally {
     await adminContext.close();
   }
 
+  const profiles = (await (await context.request.get("/api/session")).json() as {
+    profiles: { role: string; subjectId: string; businessId: string | null }[];
+  }).profiles;
+  const customerProfile = profiles.find(profile => profile.role === "Customer")!;
+  const customerSession = await context.request.post("/api/auth/firebase/session", {
+    headers: { "X-Weymela-Request": "1" },
+    data: { idToken: customToken, profileRole: customerProfile.role,
+      profileSubjectId: customerProfile.subjectId, profileBusinessId: customerProfile.businessId },
+  });
+  expect(customerSession.status()).toBe(204);
+
   await expect.poll(async () => {
     const response = await context.request.get("/api/notifications");
     const body = await response.json() as { items: { title: string; route: string }[] };
     return body.items.filter(item => item.title.includes("profile") && item.route === "/onboarding").length;
-  }).toBe(2);
+  }).toBe(1);
   await open(page, "/customer/offers");
   await page.getByRole("link", { name: "Your notifications" }).click();
   await expect(page).toHaveURL(/\/notifications/);
   await expect(page.getByRole("heading", { name: "Creator profile approved" })).toBeVisible();
-  await expect(page.getByText("More business details needed")).toBeVisible();
   await page.locator(".notification-item").filter({ hasText: "Creator profile approved" }).getByRole("link", { name: "Open" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
   await expect(page.getByRole("button", { name: /^Creator — Already added/ })).toBeDisabled();
-  await expect(page.getByText("More business details needed")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Add a Business/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Business — Already added/ })).toBeDisabled();
   const session = await (await context.request.get("/api/session")).json() as { profiles: { role: string }[] };
   expect(session.profiles.map(profile => profile.role)).toContain("Creator");
-  expect(session.profiles.map(profile => profile.role)).not.toContain("Business");
+  expect(session.profiles.map(profile => profile.role)).toContain("Business");
   await layout(page);
   await open(page, "/customer/offers");
   await page.getByRole("link", { name: "Open Settings" }).click();
   const switcher = page.locator("main .settings-page").getByLabel("Switch profile");
-  await expect(switcher.locator("option")).toHaveCount(2);
+  await expect(switcher.locator("option")).toHaveCount(3);
   await expect(switcher.locator("option").filter({ hasText: "Creator" })).toHaveCount(1);
   await switcher.selectOption({ label: "Hana — Creator" });
   await expect(page).toHaveURL(/\/creator/);

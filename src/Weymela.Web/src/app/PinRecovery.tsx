@@ -130,7 +130,7 @@ export function PinRecovery({ onCancel }: { onCancel: () => void }) {
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   pattern="[0-9]{5}"
-                  minLength={6}
+                  minLength={5}
                   maxLength={5}
                   value={code}
                   onChange={(event) => setCode(event.target.value)}

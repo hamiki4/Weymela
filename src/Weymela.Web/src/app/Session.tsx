@@ -136,6 +136,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const code = (event as CustomEvent<{ state?: string }>).detail?.state;
       const state = code === "PinCooldown" ? "Cooldown"
         : code === "PinRecoveryRequired" ? "RecoveryRequired"
+        : code === "DeviceEnrollmentRequired" || code === "EnrollmentRequired" ? "EnrollmentRequired"
         : code === "FullAuthenticationRequired" ? "FullAuthenticationRequired"
         : "Locked";
       setDeviceAccess({ state, idleExpiresAtUtc: null, sessionExpiresAtUtc: null, retryAfterSeconds: null });
@@ -152,8 +153,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setConfirmedAnonymous(true);
         setLoading(false);
       } else {
-        if (event.data === "locked" || event.data === "full-authentication-required")
-          setDeviceAccess({ state: event.data === "locked" ? "Locked" : "FullAuthenticationRequired",
+        if (["locked", "enrollment-required", "full-authentication-required"].includes(event.data))
+          setDeviceAccess({ state: event.data === "locked" ? "Locked"
+            : event.data === "enrollment-required" ? "EnrollmentRequired" : "FullAuthenticationRequired",
             idleExpiresAtUtc: null, sessionExpiresAtUtc: null, retryAfterSeconds: null });
         void refresh();
       }

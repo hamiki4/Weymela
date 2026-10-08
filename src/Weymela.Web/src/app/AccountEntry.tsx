@@ -8,7 +8,8 @@ export function accountEntryPath(
   security: AccountSecurityStatus,
   enrollment: DeviceEnrollmentStatus | null,
 ) {
-  if (!security.passwordEnrolled) return "/security-setup";
+  const publicAccount = ["Onboarding", "Customer", "Business", "Creator"].includes(user.role);
+  if (!publicAccount && !security.passwordEnrolled) return "/security-setup";
   if (!enrollment || !["Enrolled", "NotRequired"].includes(enrollment.state))
     return "/pin-setup";
   return roleHome[user.role];

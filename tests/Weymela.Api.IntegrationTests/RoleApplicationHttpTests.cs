@@ -43,18 +43,18 @@ public sealed class RoleApplicationHttpTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Business_application_rejection_does_not_activate_business_workspace()
+    public async Task Verified_business_registration_immediately_activates_zero_balance_workspace()
     {
         await using var host = await ApiFixture.CreateAsync(fixture);
         using var customer = await host.Login("other-customer");
-        using var platform = await host.Login("admin");
-        var pending = await customer.PostJson("/api/onboarding/profile", new { role = "Business", displayName = "Teddy Cafe",
+        var approved = await customer.PostJson("/api/onboarding/profile", new { role = "Business", displayName = "Teddy Cafe",
             category = "Restaurant", region = "Addis" }, "business-application");
-        Assert.Equal((int)RoleEnrollmentStatus.Pending, pending["status"]!.GetValue<int>());
-        var review = await platform.PostJson($"/api/admin/role-enrollments/{pending["id"]!.GetValue<Guid>()}/review",
-            new { approve = false, reason = "More details needed", expectedVersion = pending["version"]!.GetValue<long>() }, "business-rejection");
-        Assert.Equal((int)RoleEnrollmentStatus.Rejected, review["status"]!.GetValue<int>());
-        var session = await customer.GetJson("/api/session");
-        Assert.DoesNotContain(session["profiles"]!.AsArray(), x => x!["role"]!.GetValue<string>() == "Business");
+        Assert.Equal((int)RoleEnrollmentStatus.Approved, approved["status"]!.GetValue<int>());
+        await using var db = host.Database.Open();
+        var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == Weymela.Infrastructure.Development.DevelopmentDirectory.Id(8)
+            && x.Role == ActorRole.Business);
+        var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == permission.BusinessId);
+        Assert.Equal(0m, wallet.AvailableBalance.Amount);
+        Assert.Equal(0m, wallet.ReservedBalance.Amount);
     }
 }

@@ -53,7 +53,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             await tx.CommitAsync(ct);
             return Summary(existing);
         }
-        if (request.ProposedBusinessId is not null) throw new ApplicationFailure(FailureKind.Validation, "A new Business is created by Weymela after approval.");
+        if (request.ProposedBusinessId is not null) throw new ApplicationFailure(FailureKind.Validation, "A new Business is created securely during registration.");
         if (await db.RoleEnrollments.AnyAsync(x => x.UserId == actor.UserId && x.RequestedRole == request.Role && x.Status == RoleEnrollmentStatus.Pending, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This profile request is already under review.");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
@@ -75,16 +75,15 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             : string.IsNullOrWhiteSpace(request.PublicId)
                 ? $"{(request.Role == ActorRole.Creator ? "CR" : "BU")}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(16))}"
                 : request.PublicId.Trim();
-        var submission = JsonSerializer.Serialize(new
-            {
-                DisplayName = request.DisplayName.Trim(),
-                LegalName = request.LegalName?.Trim(),
-                PublicId = publicId,
-                Region = request.Role == ActorRole.Customer ? null : request.Region?.Trim(),
-                Category = request.Role == ActorRole.Customer ? null : request.Category?.Trim(),
-                Submission = request.Role == ActorRole.Customer ? null : request.Submission?.Trim(),
-                SocialProfiles = socialProfiles
-            });
+        var details = new EnrollmentDetails(
+            request.DisplayName.Trim(),
+            publicId,
+            request.Role == ActorRole.Customer ? null : request.Region?.Trim(),
+            request.Role == ActorRole.Customer ? null : request.Category?.Trim(),
+            request.Role == ActorRole.Customer ? null : request.Submission?.Trim(),
+            request.LegalName?.Trim(),
+            socialProfiles);
+        var submission = JsonSerializer.Serialize(details);
         if (submission.Length > 6000) throw new ApplicationFailure(FailureKind.Validation, "Keep application details concise.");
         var row = new RoleEnrollmentRecord
         {
@@ -95,31 +94,45 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             IdempotencyKey = idempotencyKey
         };
         db.RoleEnrollments.Add(row);
-        if (request.Role is ActorRole.Creator or ActorRole.Business)
+        if (request.Role == ActorRole.Creator)
             db.OutboxMessages.Add(new OutboxMessage { EventType = "RoleEnrollmentSubmitted",
                 Payload = JsonSerializer.Serialize(new { row.Id, row.UserId, row.RequestedRole }), OccurredAtUtc = now });
-        if (request.Role == ActorRole.Customer)
+        if (request.Role is ActorRole.Customer or ActorRole.Business)
         {
             var subject = Guid.NewGuid();
+            Guid? business = null;
             row.Status = RoleEnrollmentStatus.Approved;
             row.ReviewedAtUtc = now;
-            row.DecisionReason = "Customer profile activated by the account holder.";
+            row.DecisionReason = request.Role == ActorRole.Customer
+                ? "Customer profile activated by the account holder."
+                : "Business profile activated after verified self-service registration.";
+            if (request.Role == ActorRole.Business)
+            {
+                business = subject;
+                db.BusinessWallets.Add(new BusinessWallet(subject));
+            }
             db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile
             {
-                SubjectId = subject, Role = ActorRole.Customer, DisplayName = request.DisplayName.Trim(), PublicId = publicId
+                SubjectId = subject, Role = request.Role, DisplayName = details.DisplayName, PublicId = publicId,
+                Region = details.Region ?? "", Category = details.Category ?? ""
             });
-            db.CustomerProfiles.Add(new CustomerProfileRecord
+            db.CommercePermissions.Add(new CommercePermission(actor.UserId, request.Role, subject, business, true,
+                request.Role == ActorRole.Business));
+            if (request.Role == ActorRole.Customer)
             {
-                CustomerId = subject,
-                UserId = actor.UserId,
-                PreferredName = request.DisplayName.Trim(),
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            });
-            db.CommercePermissions.Add(new CommercePermission(actor.UserId, ActorRole.Customer, subject, null, true, false));
-            db.CustomerCashbackAccounts.Add(new CustomerCashbackAccount(subject));
-            db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "CustomerProfileActivated", actor.UserId, null, null, null,
-                Guid.NewGuid(), now, $"enrollment={row.Id:D};customerId={subject:D}"));
+                db.CustomerProfiles.Add(new CustomerProfileRecord
+                {
+                    CustomerId = subject,
+                    UserId = actor.UserId,
+                    PreferredName = details.DisplayName,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
+                });
+                db.CustomerCashbackAccounts.Add(new CustomerCashbackAccount(subject));
+            }
+            var eventType = request.Role == ActorRole.Customer ? "CustomerProfileActivated" : "BusinessProfileActivated";
+            db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), eventType, actor.UserId, business, null, null,
+                Guid.NewGuid(), now, $"enrollment={row.Id:D};subjectId={subject:D}"));
         }
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

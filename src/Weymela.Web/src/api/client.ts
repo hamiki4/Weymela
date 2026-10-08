@@ -98,11 +98,12 @@ export async function request<T>(
       error.code,
       error.retryAfterSeconds,
     );
-    if (typeof window !== "undefined" && ["SessionLocked", "PinCooldown", "PinRecoveryRequired", "FullAuthenticationRequired"].includes(error.code)) {
+    if (typeof window !== "undefined" && ["SessionLocked", "PinCooldown", "PinRecoveryRequired", "DeviceEnrollmentRequired", "FullAuthenticationRequired"].includes(error.code)) {
       window.dispatchEvent(new CustomEvent("weymela-device-access", { detail: { state: error.state ?? error.code } }));
       if (typeof BroadcastChannel !== "undefined") {
         const channel = new BroadcastChannel("weymela-v3-access");
-        channel.postMessage(error.code === "FullAuthenticationRequired" ? "full-authentication-required" : "locked");
+        channel.postMessage(error.code === "FullAuthenticationRequired" ? "full-authentication-required"
+          : error.code === "DeviceEnrollmentRequired" ? "enrollment-required" : "locked");
         channel.close();
       }
     }

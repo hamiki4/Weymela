@@ -175,7 +175,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
         }
 
         await using var recovery = database.Open();
-        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(recovery)
+        await Assert.ThrowsAsync<DevicePinRecoveryCodeInvalidException>(() => Service(recovery)
             .CompleteAsync(Request(seeded) with { Identifier = otherEmail }));
         await AssertOriginalStateAsync(database, seeded);
     }
@@ -186,7 +186,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync();
         var seeded = await SeedAsync(database);
         await using (var db = database.Open())
-            await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db)
+            await Assert.ThrowsAsync<DevicePinRecoveryCodeInvalidException>(() => Service(db)
                 .CompleteAsync(Request(seeded) with { Code = "99999" }));
 
         await using var verify = database.Open();
@@ -204,7 +204,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync();
         var seeded = await SeedAsync(database, challengeState: state);
         await using var db = database.Open();
-        var failure = await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db).CompleteAsync(Request(seeded)));
+        var failure = await Assert.ThrowsAsync<DevicePinRecoveryCodeInvalidException>(() => Service(db).CompleteAsync(Request(seeded)));
         Assert.Equal("The code is invalid or expired.", failure.Message);
         await AssertOriginalStateAsync(database, seeded,
             expectChallengeConsumed: state == "consumed");
@@ -216,10 +216,10 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync();
         var seeded = await SeedAsync(database, challengeAttempts: 4);
         await using (var db = database.Open())
-            await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db)
+            await Assert.ThrowsAsync<DevicePinRecoveryCodeInvalidException>(() => Service(db)
                 .CompleteAsync(Request(seeded) with { Code = "99999" }));
         await using (var db = database.Open())
-            await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => Service(db)
+            await Assert.ThrowsAsync<DevicePinRecoveryCodeInvalidException>(() => Service(db)
                 .CompleteAsync(Request(seeded)));
 
         await using var verify = database.Open();
@@ -277,7 +277,7 @@ public sealed class DevicePinRecoveryServiceTests(PostgresFixture fixture)
                 await Service(db).CompleteAsync(Request(seeded) with { IdempotencyKey = reference });
                 return true;
             }
-            catch (AuthChallengeInvalidException) { return false; }
+            catch (DevicePinRecoveryCodeInvalidException) { return false; }
             catch (ApplicationFailure failure) when (failure.Kind is FailureKind.ConcurrencyConflict or FailureKind.Forbidden)
             { return false; }
         }

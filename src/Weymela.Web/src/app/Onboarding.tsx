@@ -84,9 +84,10 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
     }).finally(() => setBusy(false));
   }, [user, legal.data]);
   if (!user) return <Navigate to="/sign-in" replace />;
-  const continueToSecurity = async () => {
+  const continueToWorkspace = async () => {
     await refresh(true);
-    navigate("/security-setup", { replace: true });
+    navigate(draft.role === "Business" ? "/business"
+      : draft.role === "Customer" ? "/customer/offers" : "/onboarding", { replace: true });
   };
   return <main className="main-content public-signup-status">
     <div className={`signup-status-card signup-status-${draft.role.toLowerCase()}`}>
@@ -97,10 +98,12 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
         <div className="actions"><Button onClick={() => { setError(null); started.current = false; setBusy(true); void submit().then(() => setBusy(false)).catch(cause => { setBusy(false); setError(cause instanceof Error ? cause.message : "Try again."); }); }}>Try again</Button>
           <Button variant="secondary" onClick={() => void signOut()}>Sign out</Button></div></>}
       {completed && <>
-        <h1>{draft.role === "Customer" ? "Your account is ready." : "Your email is verified."}</h1>
-        {draft.role !== "Customer" && <p>Your {draft.role === "Business" ? "Business" : "Creator"} account is waiting for Weymela approval. We will notify you when it is reviewed.</p>}
-        {draft.role === "Customer" && <p>Secure your sign-in to continue to Weymela.</p>}
-        <Button onClick={() => void continueToSecurity()}>Continue</Button>
+        <h1>{draft.role === "Business" ? "Your Business account is ready."
+          : draft.role === "Customer" ? "Your account is ready." : "Your account is under review."}</h1>
+        {draft.role === "Creator"
+          ? <p>Your Creator account is waiting for Weymela approval. We will notify you when it is reviewed.</p>
+          : <p>Your secure device is registered. You can continue to your workspace.</p>}
+        <Button onClick={() => void continueToWorkspace()}>Continue</Button>
       </>}
     </div>
   </main>;
@@ -178,8 +181,13 @@ function LegacyOnboarding() {
       socialProfiles: selected === "Creator" ? socialProfiles : [],
       ...(accountLegal ? { accountLegal } : {}) }, key);
     cancel();
-    setSubmittedRole(selected);
-    status.reload();
+    if (selected === "Business") {
+      await refresh(true);
+      navigate("/business", { replace: true });
+    } else {
+      setSubmittedRole(selected);
+      status.reload();
+    }
   });
 
   return <main className="main-content page-shell section-kicker-space onboarding-page">
@@ -279,7 +287,7 @@ function LegacyOnboarding() {
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
                 <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (approved.size === 0 && !legal.data?.current && !legalAccepted) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
-                  {action.busy ? "Submitting…" : "Submit for Review"}</Button></div>
+                  {action.busy ? "Submitting…" : role === "Business" ? "Add Business" : "Submit for Review"}</Button></div>
             </div>
           </RoleOnboardingShell>}
         </Section>

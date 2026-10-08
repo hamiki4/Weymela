@@ -29,6 +29,11 @@ public sealed class DevicePinRecoveryUnavailableException : Exception
     public DevicePinRecoveryUnavailableException() : base("PIN recovery is temporarily unavailable.") { }
 }
 
+public sealed class DevicePinRecoveryCodeInvalidException : Exception
+{
+    public DevicePinRecoveryCodeInvalidException() : base("The code is invalid or expired.") { }
+}
+
 /// <summary>
 /// Atomic, persistence-only completion of verified-email PIN recovery. Calling code
 /// must supply the identity established by the existing Firebase-backed session and
@@ -279,7 +284,7 @@ public sealed class DevicePinRecoveryService(
     }
 
     private DateTime UtcNow() => clock.GetUtcNow().UtcDateTime;
-    private static AuthChallengeInvalidException InvalidCode() => new();
+    private static DevicePinRecoveryCodeInvalidException InvalidCode() => new();
     private static ApplicationFailure Forbidden() => new(FailureKind.Forbidden,
         "Complete verified account authentication on this recognized device before recovering the PIN.");
     private static DeviceSessionSnapshot ToSnapshot(DeviceSessionRecord session) => new(

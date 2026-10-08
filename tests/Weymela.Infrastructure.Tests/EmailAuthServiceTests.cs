@@ -16,6 +16,24 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
 {
     private static RuntimeOptions Options() => new() { FirebaseProjectId = "isolated-v3-test", AuthCodeHashKey = "test-only-key" };
 
+    [Theory]
+    [InlineData("", "EmailRequired", "Email address is required.")]
+    [InlineData("owner@example", "InvalidEmail", "Enter a valid email address.")]
+    [InlineData("owner@.com", "InvalidEmail", "Enter a valid email address.")]
+    public async Task Invalid_email_is_rejected_before_delivery_with_structured_failure(
+        string email, string code, string message)
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var delivery = new TestDelivery();
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => new EmailAuthService(
+            db, delivery, new TestIssuer(), Options(), TimeProvider.System)
+            .StartAsync(email, null, EmailCodePurpose.Signup, default));
+        Assert.Equal(code, failure.Code);
+        Assert.Equal(message, failure.Message);
+        Assert.Empty(delivery.Codes);
+    }
+
     [Fact]
     public async Task Email_only_signup_verifies_once_without_creating_a_phone_alias()
     {
@@ -192,7 +210,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var code = delivery.Codes[0].Code;
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.DeviceEnrollment, code, default));
         clock.Advance(TimeSpan.FromMinutes(11));
-        await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, code, default));
+        await Assert.ThrowsAsync<AuthChallengeExpiredException>(() => service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, code, default));
     }
 
     [Fact]
@@ -313,8 +331,9 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var providerBefore = OperationalTelemetry.ProviderErrors.Value;
         var service = new EmailAuthService(db, new FailingDelivery(), new TestIssuer(), Options(), TimeProvider.System);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartAsync(
+        var failure = await Assert.ThrowsAsync<EmailDeliveryFailedException>(() => service.StartAsync(
             "provider-failure@example.test", null, EmailCodePurpose.Signup, default));
+        Assert.Equal("Unable to send verification email. Please try again.", failure.Message);
         db.ChangeTracker.Clear();
 
         Assert.Equal(failedBefore + 1, OperationalTelemetry.SignupDeliveryFailed.Value);

@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 const mocks = vi.hoisted(() => ({
   enrollDevice: vi.fn(), refresh: vi.fn(), state: "ready" as "loading" | "failed" | "ready",
   deviceState: "EnrollmentRequired",
+  passwordEnrolled: true,
 }));
 vi.mock("../src/app/Session", async importOriginal => {
   const original = await importOriginal<typeof import("../src/app/Session")>();
@@ -15,7 +16,7 @@ vi.mock("../src/app/Session", async importOriginal => {
       user: { role: "Customer", displayName: "Hana", publicId: "CU-1", profiles: [] },
       loading: mocks.state === "loading",
       loadFailed: mocks.state === "failed",
-      accountSecurity: { passwordEnrolled: true, phoneEnrolled: true },
+      accountSecurity: { passwordEnrolled: mocks.passwordEnrolled, phoneEnrolled: true },
       deviceEnrollment: { state: mocks.deviceState, expiresAtUtc: null },
       enrollDevice: mocks.enrollDevice,
       refresh: mocks.refresh,
@@ -39,6 +40,7 @@ function pinCells(label: string) {
 beforeEach(() => {
   mocks.state = "ready";
   mocks.deviceState = "EnrollmentRequired";
+  mocks.passwordEnrolled = true;
   mocks.enrollDevice.mockReset().mockResolvedValue(undefined);
   mocks.refresh.mockReset().mockResolvedValue(undefined);
 });
@@ -56,6 +58,13 @@ describe("initial five-digit PIN setup", () => {
         expect(input.maxLength).toBe(1);
       });
     }
+  });
+
+  it("allows a verified public registration to enroll its PIN without a password credential", () => {
+    mocks.passwordEnrolled = false;
+    renderSetup();
+    expect(screen.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
+    expect(screen.queryByText(/password/i)).not.toBeInTheDocument();
   });
 
   it("shows explicit loading and recoverable failure states instead of a blank route", async () => {

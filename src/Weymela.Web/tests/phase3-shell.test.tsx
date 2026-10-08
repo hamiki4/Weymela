@@ -73,7 +73,8 @@ describe("Profile and Settings shell", () => {
 
   it("keeps internal Admin navigation separate from public add-profile choice", () => {
     setup("PlatformAdmin", "/admin");
-    expect(document.querySelector(".workspace-label")).toHaveTextContent("Platform Admin / Weymela");
+    expect(document.querySelector(".workspace-label")).toHaveTextContent("Platform Admin");
+    expect(document.querySelector(".topbar-brand .brand-mark")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Add a profile" })).not.toBeInTheDocument();
   });
 

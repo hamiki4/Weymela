@@ -127,7 +127,7 @@ for (const width of [375, 1366])
       page.getByRole("button", { name: "Refresh Views" }),
     ).toBeVisible();
     await expect(
-      page.locator("main .badge").filter({ hasText: "Active" }).first(),
+      page.locator("main .badge").filter({ hasText: "Published" }).first(),
     ).toBeVisible();
     await layout(page);
     await screenshot(page, `${width}-flow-creator-active`);
@@ -149,7 +149,7 @@ test("real Add Funds accepts an arbitrary positive amount", async ({
   const before = await (
     await context.request.get("/api/business/wallet")
   ).json();
-  await page.getByText("Open Add Funds", { exact: true }).click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Amount", { exact: true }).fill("17.23");
   await page.getByRole("button", { name: "Add Funds", exact: true }).click();

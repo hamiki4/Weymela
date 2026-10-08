@@ -702,7 +702,7 @@ export interface QueueRow {
   provider: string | null;
   account: string | null;
 }
-export interface PayoutDestination { method: "Telebirr" | "Bank" | string; provider: string; account: string; legalName: string; updatedAtUtc: string | null; isMasked: boolean; isConfigured: boolean }
+export interface PayoutDestination { method: "Telebirr" | "Mpesa" | "Bank" | string; provider: string; account: string; legalName: string; updatedAtUtc: string | null; isMasked: boolean; isConfigured: boolean; registeredPhone?: string | null }
 export interface PayoutWorkspace {
   creators: QueueRow[];
   customers: QueueRow[];

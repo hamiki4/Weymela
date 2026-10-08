@@ -18,22 +18,23 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
     public async Task<PayoutDestinationView?> OwnAsync(Actor actor, CancellationToken ct = default)
     {
         var (kind, subject) = Owner(actor);
+        var registeredPhone = await VerifiedPhoneOrNull(actor.UserId, ct);
         var row = await db.PayoutDestinations.AsNoTracking().SingleOrDefaultAsync(x => x.Beneficiary == kind && x.SubjectId == subject, ct);
         if (row is null)
         {
             var legalName = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == actor.Role && x.SubjectId == subject)
                 .Select(x => x.DisplayName).SingleAsync(ct);
-            return new("Telebirr", "Telebirr", await VerifiedPhoneOrNull(actor.UserId, ct) ?? string.Empty, legalName, null, false, false);
+            return new("Telebirr", "Telebirr", registeredPhone ?? string.Empty, legalName, null, false, false, registeredPhone);
         }
-        if (row.Method == PayoutDestinationMethod.Telebirr)
+        if (row.Method is PayoutDestinationMethod.Telebirr or PayoutDestinationMethod.Mpesa)
         {
             var phone = await VerifiedPhoneOrNull(actor.UserId, ct);
             return phone is null
-                ? new("Telebirr", row.Provider, string.Empty, row.LegalName, row.UpdatedAtUtc, false, false)
-                : View(row, phone, false);
+                ? new(row.Method.ToString(), row.Provider, string.Empty, row.LegalName, row.UpdatedAtUtc, false, false)
+                : View(row, phone, false) with { RegisteredPhone = registeredPhone };
         }
         var account = new string('•', Math.Max(4, 8 - row.AccountLast4.Length)) + row.AccountLast4;
-        return View(row, account, true);
+        return View(row, account, true) with { RegisteredPhone = registeredPhone };
     }
 
     public Task<PayoutDestinationView> UpdateAsync(Actor actor, PayoutDestinationInput input, CancellationToken ct = default) =>
@@ -41,13 +42,16 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
         {
             var (kind, subject) = Owner(actor);
             if (!Enum.TryParse<PayoutDestinationMethod>(input.Method, true, out var method) || !Enum.IsDefined(method))
-                throw new ApplicationFailure(FailureKind.Validation, "Choose Telebirr or Bank.");
+                throw new ApplicationFailure(FailureKind.Validation, "Choose Telebirr, M-PESA or Bank.");
             string provider; string account;
-            if (method == PayoutDestinationMethod.Telebirr)
+            if (method is PayoutDestinationMethod.Telebirr or PayoutDestinationMethod.Mpesa)
             {
                 if (!string.IsNullOrWhiteSpace(input.BankName) || !string.IsNullOrWhiteSpace(input.AccountNumber))
-                    throw new ApplicationFailure(FailureKind.Validation, "Telebirr uses your verified Weymela phone number.");
-                provider = "Telebirr"; account = await VerifiedPhone(actor.UserId, token);
+                    throw new ApplicationFailure(FailureKind.Validation, "Mobile money uses your verified Weymela phone number.");
+                provider = method == PayoutDestinationMethod.Mpesa ? "M-PESA" : "Telebirr";
+                account = await VerifiedPhone(actor.UserId, token);
+                if (method == PayoutDestinationMethod.Mpesa && !MpesaPhonePattern().IsMatch(account))
+                    throw new ApplicationFailure(FailureKind.Validation, "M-PESA requires a verified Safaricom Ethiopia phone number (+2517 or 07).");
             }
             else
             {
@@ -71,7 +75,7 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
             db.AuditEvents.Add(new(Guid.NewGuid(), "PayoutDestinationUpdated", actor.UserId, actor.BusinessId, null,
                 kind == PayoutBeneficiary.Creator ? subject : null, row.Id, now, $"Method={method};Provider={provider}"));
             await db.SaveChangesAsync(token);
-            return View(row, method == PayoutDestinationMethod.Telebirr ? account : new string('•', 4) + row.AccountLast4,
+            return View(row, method != PayoutDestinationMethod.Bank ? account : new string('•', 4) + row.AccountLast4,
                 method == PayoutDestinationMethod.Bank);
         }, ct);
 
@@ -83,14 +87,32 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
     }
 
     internal async Task<PayoutDestination> RequiredAsync(PayoutBeneficiary kind, Guid subject, CancellationToken ct)
-        => await db.PayoutDestinations.SingleOrDefaultAsync(x => x.Beneficiary == kind && x.SubjectId == subject, ct)
+    {
+        var row = await db.PayoutDestinations.SingleOrDefaultAsync(x => x.Beneficiary == kind && x.SubjectId == subject, ct)
             ?? throw new ApplicationFailure(FailureKind.Validation, "The beneficiary must configure a payout destination first.");
+        if (row.Method == PayoutDestinationMethod.Mpesa)
+        {
+            var role = kind == PayoutBeneficiary.Creator ? ActorRole.Creator : ActorRole.Customer;
+            var owners = db.CommercePermissions.Where(x => x.Role == role && x.SubjectId == subject && x.IsActive).Select(x => x.UserId);
+            var phones = await db.AuthIdentifiers.AsNoTracking().Where(x => owners.Contains(x.UserId) && x.Kind == "Phone"
+                && x.IsVerified && x.DeliveryAddress != null).Select(x => x.DeliveryAddress!).ToListAsync(ct);
+            var account = protector.Unprotect(row.ProtectedAccount);
+            if (phones.Count != 1 || phones[0] != account || !MpesaPhonePattern().IsMatch(account))
+                throw new ApplicationFailure(FailureKind.Validation, "Update the M-PESA destination using your current verified phone before payment.");
+        }
+        return row;
+    }
 
     internal string Unprotect(string value) => protector.Unprotect(value);
 
     private async Task<string> VerifiedPhone(Guid userId, CancellationToken ct)
         => await VerifiedPhoneOrNull(userId, ct)
-            ?? throw new ApplicationFailure(FailureKind.Validation, "A single verified Weymela phone number is required for Telebirr.");
+            ?? throw new ApplicationFailure(FailureKind.Validation, "A single verified Weymela phone number is required for mobile money.");
+
+    // Service compatibility only: wallet registration and recipient identity must be
+    // checked in the external provider before an Admin records the manual payment.
+    [GeneratedRegex("^(?:\\+251|0)7[0-9]{8}$", RegexOptions.CultureInvariant)]
+    private static partial Regex MpesaPhonePattern();
 
     private async Task<string?> VerifiedPhoneOrNull(Guid userId, CancellationToken ct)
     {

@@ -65,6 +65,7 @@ public sealed partial class WorkspaceQueries
             if(p.ReservedBudget.Amount<=0||!new CreatorEligibility().IsEligible(actor.CreatorId.Value,p.Eligibility,profile))continue;
             if(!activeBusinesses.Contains(p.BusinessId))continue;
             var request=requests.FirstOrDefault(x=>x.PromotionId==p.Id);
+            if(p.ApplicationClosesAtUtc is { } closes && Now>=closes && request is null)continue;
             var allPlatformsFull=p.Platforms.Count>0&&p.Platforms.All(slot=>slot.Available<=0);
             if(p.UnallocatedBudget.Amount<=0&&request is null&&!allPlatformsFull)continue;
             var eligibleSocials=socials.Where(s=>p.Platforms.Any(slot=>slot.Available>0 && SocialAudienceEligibility.Matches(s,slot.Platform,slot.MinimumAudience,enforceAudience))).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience,s.AudienceVerificationSource)).ToArray();

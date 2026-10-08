@@ -8,6 +8,30 @@
   color: var(--product-ink);
   background: #f7f8f6;
 }
+
+/* Shared compact release treatment; retain the existing role palette. */
+.app-shell .tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-width: 100%;
+  gap: 4px;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+.app-shell .tabs button { flex: 0 0 auto; white-space: nowrap; }
+.app-shell .tabs button[aria-selected="true"] { background: var(--role-accent); }
+.payout-methods { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.payout-methods legend { font-weight: 650; margin-bottom: 8px; }
+.payout-methods label {
+  display: flex; align-items: center; gap: 7px; min-height: 44px;
+  border: 1px solid var(--role-border); border-radius: 10px; padding: 8px 12px;
+}
+.payout-methods label:has(input:checked) { background: var(--role-soft); border-color: var(--role-accent); }
+.payout-methods input { width: 18px; height: 18px; margin: 0; accent-color: var(--role-accent); }
+.customer-qr-layout { max-width: 420px; margin-inline: auto; text-align: center; }
+.customer-qr-layout .offer-simple { padding: 16px; margin-bottom: 12px; }
+.customer-qr-layout .qr-image { width: min(280px, 100%); height: auto; margin: 12px auto; }
+.customer-qr-layout .offer-simple h1 { font-size: 1.4rem; }
 .role-cashier { --role-accent: #374151; --role-soft: #f3f4f6; --role-border: #d1d5db; }
 .product-shell .topbar { height: 62px; background: #fff; border-bottom-color: var(--product-line); }
 .product-shell .workspace-label { color: var(--product-secondary); }
@@ -1323,4 +1347,44 @@ div.private-review-media {
   .product-shell.role-business .campaign-grid > .data-card .card-head {
     gap: 6px 8px;
   }
+}
+
+/* Consistent role-tinted surfaces and compact branding across all workspaces. */
+.app-shell .workspace .topbar { min-height: 64px; height: auto; gap: 10px; padding-block: max(8px, env(safe-area-inset-top)) 8px; }
+.app-shell .topbar .topbar-brand .brand-mark { width: 36px; height: 36px; object-fit: contain; }
+.app-shell .topbar .topbar-brand .brand-wordmark { width: 108px; height: auto; }
+.app-shell .topbar .workspace-label { display: block; color: var(--role-accent); font-size: .92rem; font-weight: 750; line-height: 1.25; }
+.app-shell .topbar .topbar-right { margin-left: auto; gap: 4px; }
+.app-shell .topbar .topbar-right .button { min-width: 44px; min-height: 44px; padding: 10px; }
+.app-shell.product-shell .metric,
+.app-shell.product-shell .campaign-card,
+.app-shell.product-shell .data-card,
+.app-shell.product-shell .creator-promotion-list-card,
+.app-shell.product-shell .business-promotion-card,
+.app-shell.product-shell .customer-promotion-card,
+.app-shell.product-shell .creator-home-summary-row,
+.app-shell.product-shell .creator-home-earnings-row {
+  border: 1px solid var(--role-border); border-radius: 16px;
+  background: color-mix(in srgb, var(--role-soft) 32%, white);
+  box-shadow: 0 3px 12px #142b4010;
+}
+.product-shell .metric { padding: 14px; }
+.app-shell.product-shell .creator-home-summary-row { grid-template-columns: 30px minmax(0, 1fr) auto; padding: 14px; margin-bottom: 8px; }
+.product-shell .campaign-card, .product-shell .data-card,
+.product-shell .creator-promotion-list-card { padding: 16px; }
+.app-shell .button { min-height: 44px; border-radius: 10px; }
+.app-shell .button.primary { background: var(--role-accent); color: #fff; }
+.app-shell .button:focus-visible, .payout-methods label:focus-within { outline: 3px solid var(--role-accent); outline-offset: 3px; }
+.app-shell .button:disabled { opacity: .55; cursor: not-allowed; }
+.role-business .wallet-supporting-flow { padding: 16px; border: 1px solid var(--role-border); border-radius: 16px; background: #fff; box-shadow: 0 3px 12px #142b4010; }
+@media (max-width: 600px) {
+  .app-shell .workspace .topbar { gap: 7px; padding-inline: 12px; }
+  .app-shell .topbar .brand { gap: 4px; }
+  .app-shell .topbar .topbar-brand .brand-mark { width: 32px; height: 32px; }
+  .app-shell .topbar .topbar-brand .brand-wordmark { width: 84px; }
+  .app-shell .topbar .workspace-label { font-size: .78rem; min-width: 0; }
+  .app-shell .topbar .topbar-identity { display: none; }
+  .app-shell .topbar .topbar-right { gap: 0; flex-shrink: 0; }
+  .role-business .page-heading { padding: 14px; border: 1px solid var(--role-border); border-radius: 14px; background: var(--role-soft); }
+  .role-business .page-heading-compact { padding: 0; border: 0; background: transparent; }
 }

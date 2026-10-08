@@ -149,8 +149,6 @@ export function BusinessWallet() {
             <WalletMetrics wallet={wallet} pendingDeposits={(depositRequests.data ?? []).filter(request => request.status === "Pending").reduce((sum, request) => sum + request.amount, 0)} />
             <div className="wallet-content">
               <Section title="Add Funds">
-                <details className="wallet-add-funds">
-                  <summary aria-label="Open Add Funds">Open Add Funds</summary>
                   <div className="wallet-supporting-flow">
                     {!user?.developmentMode ? <DepositSubmission showHistory={false} onSubmitted={depositRequests.reload} /> : <form
                       onSubmit={(event) => {
@@ -210,7 +208,6 @@ export function BusinessWallet() {
                       </fieldset>
                     </form>}
                   </div>
-                </details>
               </Section>
             <Tabs label="Wallet history" value={historyTab} onChange={setHistoryTab} items={["Deposits", "Wallet Activity"].map(value => ({ value, label: value }))} />
             {historyTab === "Deposits" && <Section title="Deposits">

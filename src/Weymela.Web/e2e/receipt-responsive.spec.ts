@@ -23,7 +23,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     });
     await login(context, "business");
     await open(page, "/business/wallet");
-    await page.getByText("Open Add Funds", { exact: true }).click();
+    await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Payment receipt")).toBeAttached();
     await expect(page.getByText("Upload your payment receipt for Admin review.")).toHaveCount(0);
     await expect(page.getByLabel("Payment reference")).toHaveCount(0);
@@ -89,7 +89,7 @@ test("real Business deposits remain pending until Admin approval and rejection n
   await login(context, "business");
   const before = await (await context.request.get("/api/business/wallet")).json() as { available: number };
   await open(page, "/business/wallet");
-  await page.getByText("Open Add Funds", { exact: true }).click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
 
   const submit = async (destination: string, value: string) => {
     await page.getByLabel("Deposited to").selectOption({ label: destination });
@@ -151,7 +151,7 @@ test("frozen receipt submission shows the typed pause without claiming a deposit
   });
   await login(context, "business");
   await open(page, "/business/wallet");
-  await page.getByText("Open Add Funds", { exact: true }).click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Amount", { exact: true }).fill("100");
   await page.getByLabel("Payment receipt").setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
   await page.getByRole("button", { name: "Submit for Review" }).click();
@@ -174,7 +174,7 @@ test("receipt larger than 4 MiB is rejected locally without a POST", async ({ pa
     return route.fulfill({ json: [] });
   });
   await login(context, "business"); await open(page, "/business/wallet");
-  await page.getByText("Open Add Funds", { exact: true }).click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Amount", { exact: true }).fill("3000");
   await page.getByLabel("Payment receipt").setInputFiles({ name: "large.png", mimeType: "image/png", buffer: Buffer.alloc(4 * 1024 * 1024 + 1) });
   await expect(page.getByText("Receipt must be 4 MB or smaller.")).toBeVisible();

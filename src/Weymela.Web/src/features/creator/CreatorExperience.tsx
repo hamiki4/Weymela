@@ -70,7 +70,6 @@ export function CreatorDashboard() {
               <small>Waiting for Business</small>
             </span>
             <strong className="creator-home-summary-count">{count(data.requests)}</strong>
-            <Icon name="arrow" size={17} />
           </Link>
           <Link
             className="creator-home-summary-row"
@@ -83,7 +82,6 @@ export function CreatorDashboard() {
               <small>Continue your Promotion</small>
             </span>
             <strong className="creator-home-summary-count">{count(data.activeCampaigns)}</strong>
-            <Icon name="arrow" size={17} />
           </Link>
         </div>
       </Section>
@@ -131,13 +129,11 @@ export function CreatorDashboard() {
             <small>Available Earnings</small>
             <strong>{amount(data.earnings.availableEarnings)} ETB</strong>
           </span>
-          <Icon name="arrow" size={17} />
         </Link>
       </Section>
 
       <Link className="creator-home-route-row" to="/creator/promotions">
         <span>My Promotions</span>
-        <Icon name="arrow" size={17} />
       </Link>
     </div>}</Resource>
   </>;

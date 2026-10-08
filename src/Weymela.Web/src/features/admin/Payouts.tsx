@@ -166,7 +166,7 @@ export function AdminPayouts() {
                   label={`${tab} payout queue`}
                   columns={[
                     {
-                      label: tab === "Creators" ? "Creator" : "Customer",
+                      label: "Name",
                       cell: (r) => r.name,
                     },
                     {
@@ -176,23 +176,21 @@ export function AdminPayouts() {
                     },
                     {
                       label: "Method",
-                      cell: (r) => r.method ?? "Not configured",
+                      cell: (r) => r.method === "Mpesa" ? "M-PESA" : r.method ?? "Not configured",
                     },
                     {
-                      label: "Bank / Provider",
-                      cell: (r) => r.provider ?? "—",
-                    },
-                    {
-                      label: "Account / Phone",
+                      label: "Full Account / Phone",
                       cell: (r) => r.account ?? "—",
                     },
                     {
-                      label: "Eligible Since",
-                      cell: (r) => date(r.eligibleSinceUtc),
+                      label: "Amount",
+                      cell: (r) => amount(r.payAmount),
+                      numeric: true,
                     },
                     {
-                      label: "Status",
-                      cell: (r) => <Badge status={r.status} />,
+                      label: "Remaining",
+                      cell: (r) => amount(Math.max(0, r.available - r.payAmount)),
+                      numeric: true,
                     },
                     {
                       label: "Action",
@@ -363,6 +361,7 @@ export function AdminPayouts() {
         >
           <fieldset disabled={action.busy}>
             <p><strong>{selected?.row.method}</strong> · {selected?.row.provider} · {selected?.row.account}</p>
+            {selected?.row.method === "Mpesa" && <Notice>Verify the M-PESA wallet and recipient name with the provider before paying. Phone verification alone does not verify wallet ownership.</Notice>}
             <Field label="Amount to Pay">
               <MoneyInput value={payAmount} min={selected?.row.threshold} max={selected?.row.available} disabled={!!selected?.row.payoutId} onChange={(e) => setPayAmount(e.target.value)} />
             </Field>
@@ -382,7 +381,7 @@ export function AdminPayouts() {
                 checked={confirmed}
                 onChange={(e) => confirm(e.target.checked)}
               />
-              I confirm this payment has been completed externally.
+              {selected?.row.method === "Mpesa" ? "I verified the M-PESA recipient and completed this payment externally." : "I confirm this payment has been completed externally."}
             </label>
             {action.error && <Notice error>{action.error}</Notice>}
             <Button
@@ -420,12 +419,12 @@ export function OperationsPayouts() {
     <Resource resource={resource}>{(data) => <>
       {["Creators", "Customers"].includes(tab) && <Section title={`${tab} payout queue`} action={<Currency />}>
         <DataTable rows={tab === "Creators" ? data.creators : data.customers} rowKey={(r) => r.subjectId} label={`${tab} payout queue`} columns={[
-          { label: tab === "Creators" ? "Creator" : "Customer", cell: (r) => r.name },
+          { label: "Name", cell: (r) => r.name },
           { label: "Available", cell: (r) => amount(r.available), numeric: true },
-          { label: "Method", cell: (r) => r.method ?? "Not configured" },
-          { label: "Bank / Provider", cell: (r) => r.provider ?? "—" },
-          { label: "Account / Phone", cell: (r) => r.account ?? "—" },
-          { label: "Status", cell: (r) => <Badge status={r.status} /> },
+          { label: "Method", cell: (r) => r.method === "Mpesa" ? "M-PESA" : r.method ?? "Not configured" },
+          { label: "Full Account / Phone", cell: (r) => r.account ?? "—" },
+          { label: "Amount", cell: (r) => amount(r.payAmount), numeric: true },
+          { label: "Remaining", cell: (r) => amount(Math.max(0,r.available-r.payAmount)), numeric: true },
           { label: "Action", cell: (r) => <Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>Pay</Button> },
         ]} card={(r) => <><div className="card-head"><h3>{r.name}</h3><Badge status={r.status} /></div><FundsGrid values={[["Available", r.available], ["Threshold", r.threshold]]} /><p>{r.method ?? "No payout destination"} · {r.provider ?? "—"} · {r.account ?? "—"}</p><Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>Pay</Button></>} empty={<Empty title="No eligible payouts right now" message="Payouts appear when an account reaches the effective threshold." icon="wallet" />} />
       </Section>}
@@ -438,9 +437,10 @@ export function OperationsPayouts() {
     <Dialog title={selected ? `Confirm payment to ${selected.row.name}` : "Confirm payment"} open={!!selected} onClose={() => { if (!action.busy) select(null); }}>
       <p>Available: <strong>{amount(selected?.row.available ?? 0)}</strong></p>
       <p>{selected?.row.method} · {selected?.row.provider} · {selected?.row.account}</p>
+      {selected?.row.method === "Mpesa" && <Notice>Verify the M-PESA wallet and recipient name with the provider before paying. Phone verification alone does not verify wallet ownership.</Notice>}
       <p className="fine-print">This records an external payment; it does not send money.</p>
       <form onSubmit={(e) => { e.preventDefault(); void action.run(async (key) => { let payoutId = selected!.row.payoutId; if (!payoutId) payoutId = (await post<{ id: string }>(`/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`, { amount: Number(payAmount) }, `${key}:prepare`)).id; await post(`/admin/payouts/${payoutId}/paid`, { reference }, `${key}:paid`); select(null); setMessage("Payment confirmed. The remaining balance carries forward."); resource.reload(); }); }}>
-        <fieldset disabled={action.busy}><Field label="Amount to Pay"><MoneyInput value={payAmount} min={selected?.row.threshold} max={selected?.row.available} disabled={!!selected?.row.payoutId} onChange={(e) => setPayAmount(e.target.value)} /></Field><p className="fine-print">Remaining: {amount(Math.max((selected?.row.available ?? 0) - Number(payAmount || 0), 0))}</p><Field label="Payment reference"><input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={200} required /></Field><label className="check-line"><input type="checkbox" required checked={confirmed} onChange={(e) => confirm(e.target.checked)} /> I confirm this payment has been completed externally.</label>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !confirmed || !reference || !payAmount || Number(payAmount) < (selected?.row.threshold ?? 0) || Number(payAmount) > (selected?.row.available ?? 0)}>{action.busy ? "Recording…" : "Confirm Paid"}</Button></fieldset>
+        <fieldset disabled={action.busy}><Field label="Amount to Pay"><MoneyInput value={payAmount} min={selected?.row.threshold} max={selected?.row.available} disabled={!!selected?.row.payoutId} onChange={(e) => setPayAmount(e.target.value)} /></Field><p className="fine-print">Remaining: {amount(Math.max((selected?.row.available ?? 0) - Number(payAmount || 0), 0))}</p><Field label="Payment reference"><input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={200} required /></Field><label className="check-line"><input type="checkbox" required checked={confirmed} onChange={(e) => confirm(e.target.checked)} /> {selected?.row.method === "Mpesa" ? "I verified the M-PESA recipient and completed this payment externally." : "I confirm this payment has been completed externally."}</label>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !confirmed || !reference || !payAmount || Number(payAmount) < (selected?.row.threshold ?? 0) || Number(payAmount) > (selected?.row.available ?? 0)}>{action.busy ? "Recording…" : "Confirm Paid"}</Button></fieldset>
       </form>
     </Dialog>
   </>;

@@ -34,6 +34,9 @@ describe("English and Amharic localization", () => {
     ["Earnings", "ገቢዎች"],
     ["Business Location", "የንግድ አድራሻ"],
     ["Get Directions", "አቅጣጫ ያግኙ"],
+    ["M-PESA", "M-PESA"],
+    ["Promoted by:", "ያስተዋወቀው፦"],
+    ["Full Account / Phone", "ሙሉ የሂሳብ / ስልክ ቁጥር"],
   ])("uses reviewed Amharic for %s", (english, amharic) => {
     expect(translateText(english, "am")).toBe(amharic);
   });

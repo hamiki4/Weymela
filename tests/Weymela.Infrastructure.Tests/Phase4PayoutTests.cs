@@ -13,6 +13,78 @@ namespace Weymela.Infrastructure.Tests;
 public sealed class Phase4PayoutTests(PostgresFixture fixture)
 {
     [Theory]
+    [InlineData("+251711223344", true, true)]
+    [InlineData("0711223344", true, true)]
+    [InlineData("+251911223344", true, false)]
+    [InlineData("+254711223344", true, false)]
+    [InlineData("+25171122334", true, false)]
+    [InlineData("+251711223344", false, false)]
+    public async Task Mpesa_uses_only_one_verified_registered_compatible_phone_for_each_role(string phone, bool verified, bool accepted)
+    {
+        var s=await Phase4Scenario.Create(fixture);
+        await using var db=s.Database.Open();
+        foreach(var actor in new[] { s.Creator, s.Customer })
+        {
+            var subject=actor.CreatorId ?? actor.CustomerId!.Value;
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=subject,Role=actor.Role,
+                DisplayName="Existing Legal Name",PublicId=$"MP-{subject:N}" });
+            db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=actor.UserId,Kind="Phone",
+                IdentifierHash=EmailAuthService.HashIdentifier(phone + actor.Role),DeliveryAddress=phone,
+                IsVerified=verified,CreatedAtUtc=Scenario.Now });
+        }
+        await db.SaveChangesAsync();
+        var service=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+        foreach(var actor in new[] { s.Creator, s.Customer })
+        {
+            if(!accepted)
+            {
+                var failure=await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(actor,new("Mpesa",null,null)));
+                Assert.Equal(FailureKind.Validation,failure.Kind);
+                continue;
+            }
+            var result=await service.UpdateAsync(actor,new("Mpesa",null,null));
+            Assert.Equal("M-PESA",result.Provider);Assert.Equal(phone,result.Account);
+            Assert.Equal("Existing Legal Name",result.LegalName);
+            Assert.Equal(phone,(await service.OwnAsync(actor))!.RegisteredPhone);
+            await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(actor,new("Mpesa",null,"+251799999999")));
+            var kind=actor.Role==ActorRole.Creator?PayoutBeneficiary.Creator:PayoutBeneficiary.Customer;
+            var admin=await service.AdminAsync(Phase4Scenario.Admin,kind,actor.CreatorId??actor.CustomerId!.Value);
+            Assert.Equal(phone,admin!.Account);Assert.False(admin.IsMasked);
+            await Assert.ThrowsAsync<ApplicationFailure>(()=>service.AdminAsync(s.Seed.Business,kind,actor.CreatorId??actor.CustomerId!.Value));
+        }
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(s.Cashier,new("Mpesa",null,null)));
+    }
+
+    [Fact]
+    public async Task Mpesa_payout_preserves_destination_snapshot_after_switching_to_bank()
+    {
+        var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);await s.Refresh(81000);
+        await using var db=s.Database.Open();
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Creator.CreatorId!.Value,
+            Role=ActorRole.Creator,DisplayName="Creator Legal Name",PublicId="CR-MPESA" });
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=s.Creator.UserId,Kind="Phone",
+            IdentifierHash=EmailAuthService.HashIdentifier("+251711223344"),DeliveryAddress="+251711223344",
+            IsVerified=true,CreatedAtUtc=Scenario.Now });
+        await db.SaveChangesAsync();
+        var destinations=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+        await destinations.UpdateAsync(s.Creator,new("Mpesa",null,null));
+        var payouts=new PayoutService(db,s.Clock,destinations);
+        var identifier=await db.AuthIdentifiers.SingleAsync(x=>x.UserId==s.Creator.UserId);
+        identifier.IsVerified=false;await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>payouts.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value,new Money(5000),"revoked-phone"));
+        identifier=await db.AuthIdentifiers.SingleAsync(x=>x.UserId==s.Creator.UserId);
+        identifier.IsVerified=true;await db.SaveChangesAsync();
+        var id=await payouts.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value,new Money(5000),"mpesa-prepare");
+        await destinations.UpdateAsync(s.Creator,new("Bank","CBE","123456789"));
+        await payouts.MarkPaidAsync(Phase4Scenario.Admin,id,"manual-mpesa-receipt","mpesa-paid");
+        await payouts.MarkPaidAsync(Phase4Scenario.Admin,id,"manual-mpesa-receipt","mpesa-paid");
+        var payout=await db.PayoutRecords.SingleAsync(x=>x.Id==id);
+        Assert.Equal(PayoutDestinationMethod.Mpesa,payout.DestinationMethod);
+        Assert.Equal("+251711223344",TestPayoutProtector.Instance.Unprotect(payout.ProtectedDestinationAccount!));
+        Assert.Equal(400,(await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+    }
+
+    [Theory]
     [InlineData(4999, false)]
     [InlineData(5000, true)]
     [InlineData(5200, true)]

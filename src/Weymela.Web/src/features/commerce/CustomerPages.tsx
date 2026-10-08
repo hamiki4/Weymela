@@ -29,17 +29,6 @@ const benefitLabel = (offer: Offer) =>
 
 const initial = (value: string) => value.trim().slice(0, 1).toUpperCase() || "W";
 
-function trustedVideoEmbed(value: string | null | undefined) {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || !["www.youtube.com", "youtube.com"].includes(url.hostname)) return undefined;
-    const id = url.pathname === "/watch" ? url.searchParams.get("v") : null;
-    return id && /^[A-Za-z0-9_-]{1,100}$/.test(id)
-      ? `https://www.youtube-nocookie.com/embed/${id}` : undefined;
-  } catch { return undefined; }
-}
-
 const CUSTOMER_LOCATION_KEY = "weymela.customer-location";
 
 function useCustomerLocation() {
@@ -225,7 +214,6 @@ function CustomerOfferBrowser({
   return (
     <>
       <div className="customer-filter-bar" aria-label="Promotion filters">
-        {discover && (
           <label className="customer-filter-control customer-search-control">
             <Icon name="search" size={17} />
             <span className="sr-only">Search business or creator</span>
@@ -237,7 +225,6 @@ function CustomerOfferBrowser({
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-        )}
         <label className="customer-filter-control">
           <Icon name="location" size={17} />
           <span className="sr-only">Filter by city</span>
@@ -446,9 +433,8 @@ function QrPanel({ offer }: { offer: Offer }) {
   }, [qr, remaining]);
   return (
     <div className="offer-simple">
-      <h1>{offer.business.displayName}</h1>
-      {(offer.slogan?.trim() || offer.offer?.trim()) && <p className="customer-offer-detail-title">{offer.slogan?.trim() || offer.offer}</p>}
-      {offer.creator && <p>By {offer.creator.displayName}</p>}
+      <h1 data-no-translate>{offer.business.displayName}</h1>
+      {offer.creator && <p>Promoted by: <span data-no-translate>{offer.creator.displayName}</span></p>}
       <span className="cashback">{benefitLabel(offer)}</span>
       {used ? (
         <Notice>Offer used. Your confirmed cashback is in your history.</Notice>
@@ -531,22 +517,11 @@ export function CustomerOfferQr() {
       <Resource resource={resource}>
         {(rows) => {
           const offer = rows.find((row) => row.id === id && (row.ugcAssignmentId ?? null) === assignmentId);
-          const watchUrl = offer ? safeExternal(offer.watchUrl) : null;
           const directionsUrl = offer ? offerDirectionsUrl(offer) : undefined;
-          const embedUrl = trustedVideoEmbed(watchUrl);
           return offer ? (
-            <div className="customer-live-offer-layout">
-              <section className="customer-live-video" aria-label="Promotion video">
-                {embedUrl ? <iframe className="customer-live-video-frame" src={embedUrl} title={`${offer.business.displayName} Promotion video`}
-                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
-                  : <div className="customer-live-video-frame"><Icon name="video" size={42} /></div>}
-                <div className="customer-promotion-actions customer-detail-actions">
-                  {watchUrl ? <a className="button secondary" href={watchUrl} target="_blank" rel="noopener noreferrer"><Icon name="video" />Watch Promotion</a>
-                    : <p className="muted">Video unavailable.</p>}
-                  {directionsUrl && <a className="button secondary" href={directionsUrl} target="_blank" rel="noopener noreferrer"><Icon name="location" />Get Directions</a>}
-                </div>
-              </section>
+            <div className="customer-qr-layout">
               <QrPanel key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} />
+              {directionsUrl && <a className="button secondary" href={directionsUrl} target="_blank" rel="noopener noreferrer"><Icon name="location" />Get Directions</a>}
             </div>
           ) : (
             <Section title="Offer unavailable">

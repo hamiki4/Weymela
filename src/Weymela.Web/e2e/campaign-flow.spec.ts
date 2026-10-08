@@ -127,7 +127,7 @@ for (const width of [375, 1366])
       page.getByRole("button", { name: "Refresh Views" }),
     ).toBeVisible();
     await expect(
-      page.locator("main .badge").filter({ hasText: "Published" }).first(),
+      page.locator("main .badge").filter({ hasText: "Active" }).first(),
     ).toBeVisible();
     await layout(page);
     await screenshot(page, `${width}-flow-creator-active`);

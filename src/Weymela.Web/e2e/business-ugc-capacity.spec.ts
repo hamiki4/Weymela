@@ -31,7 +31,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     if (width === 320) {
       await page.getByRole("button", { name: "Publish", exact: true }).click();
       await expect(page).toHaveURL(/\/business\/ugc\/[0-9a-f-]{36}$/i);
-      await expect(page.getByText("Active", { exact: true })).toBeVisible();
+      await expect(page.getByText("Published", { exact: true })).toBeVisible();
       const response = await context.request.get("/api/business/ugc", { headers: { "X-Weymela-Request": "1" } });
       expect(response.ok()).toBeTruthy();
       const rows = await response.json() as { title: string; creatorsNeeded: number;

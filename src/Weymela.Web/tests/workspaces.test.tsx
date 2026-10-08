@@ -837,6 +837,22 @@ describe("Creator workspace", () => {
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
       body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
   });
+  it("lets a Creator without a verified phone choose Bank while keeping Telebirr unavailable", async () => {
+    const api = mockCreatorApi({ "/creator/payout-destination": {
+      method: "Telebirr", provider: "Telebirr", account: "", legalName: "Bella",
+      updatedAtUtc: null, isMasked: false, isConfigured: false,
+    } });
+    mount(<CreatorEarnings />);
+    expect(await screen.findByLabelText("Verified Weymela phone")).toHaveAttribute("placeholder", "No verified phone available");
+    expect(screen.getByRole("button", { name: "Save Destination" })).toBeDisabled();
+    await userEvent.selectOptions(screen.getByLabelText("Payout method"), "Bank");
+    await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
+    await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");
+    expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
+    await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
+      body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
+  });
   it("shows Creator income from attributed entries without treating purchase totals as earnings", async () => {
     mockCreatorApi({ "/creator/earnings": { ...earnings, history: [
       { id: "sale-income", campaign: "Coffee stories", business: "Bella Restaurant", source: "Sale Earnings",

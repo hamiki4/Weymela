@@ -70,6 +70,34 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         Assert.Equal("CBE",payout.DestinationProvider);
         Assert.Equal("123456789",TestPayoutProtector.Instance.Unprotect(payout.ProtectedDestinationAccount!));
     }
+    [Fact]
+    public async Task Payout_destination_without_verified_phone_can_open_settings_and_choose_bank()
+    {
+        var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);
+        await using var db=s.Database.Open();
+        db.PayoutDestinations.Remove(await db.PayoutDestinations.SingleAsync(x=>x.Beneficiary==PayoutBeneficiary.Creator));
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Creator.CreatorId!.Value,
+            Role=ActorRole.Creator,DisplayName="Creator Without Phone",PublicId="CR-BANK-ONLY" });
+        await db.SaveChangesAsync();
+        var destinations=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+
+        var initial=await destinations.OwnAsync(s.Creator);
+        Assert.NotNull(initial);Assert.Equal("Telebirr",initial.Method);Assert.Equal(string.Empty,initial.Account);
+        Assert.Equal("Creator Without Phone",initial.LegalName);Assert.Null(initial.UpdatedAtUtc);
+        Assert.False(initial.IsMasked);Assert.False(initial.IsConfigured);
+
+        var telebirrFailure=await Assert.ThrowsAsync<ApplicationFailure>(()=>destinations.UpdateAsync(s.Creator,
+            new("Telebirr",null,null)));
+        Assert.Equal(FailureKind.Validation,telebirrFailure.Kind);
+
+        var bank=await destinations.UpdateAsync(s.Creator,new("Bank","CBE","123456789"));
+        Assert.Equal("Bank",bank.Method);Assert.Equal("CBE",bank.Provider);Assert.True(bank.IsConfigured);
+        Assert.True(bank.IsMasked);Assert.EndsWith("6789",bank.Account,StringComparison.Ordinal);
+
+        var saved=await destinations.OwnAsync(s.Creator);
+        Assert.NotNull(saved);Assert.Equal("Bank",saved.Method);Assert.True(saved.IsConfigured);
+        Assert.True(saved.IsMasked);Assert.EndsWith("6789",saved.Account,StringComparison.Ordinal);
+    }
     [Fact] public async Task View_only_earnings_reach_threshold_and_paid_5000_leaves_400()
     {
         var s = await Phase4Scenario.Create(fixture, PromotionType.ViewOnly, 9000, 10000); await s.Refresh(81000);

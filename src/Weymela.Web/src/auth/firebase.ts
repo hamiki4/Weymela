@@ -122,9 +122,14 @@ export class FirebaseWebAuthAdapter {
   async startEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment" | "PinRecovery" | "PasswordRecovery"): Promise<number> {
     const normalized = normalizeEmail(identifier);
     const response = await fetch("/api/auth/email/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose }) });
-    if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
-      : response.status === 400 ? "Enter a valid email address."
-      : "Email verification is temporarily unavailable.");
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+      throw new Error(response.status === 429 ? "Too many attempts. Please wait and try again."
+        : body?.code === "EmailRequired" ? "Email address is required."
+        : body?.code === "InvalidEmail" || response.status === 400 ? "Enter a valid email address."
+        : body?.code === "EmailDeliveryFailed" ? "Unable to send verification email. Please try again."
+        : "Email verification is temporarily unavailable.");
+    }
     const result = await response.json().catch(() => null) as { resendAfterSeconds?: number } | null;
     return typeof result?.resendAfterSeconds === "number" && Number.isFinite(result.resendAfterSeconds)
       ? Math.max(0, Math.min(60, Math.ceil(result.resendAfterSeconds))) : 60;
@@ -132,9 +137,16 @@ export class FirebaseWebAuthAdapter {
 
   async verifyEmailCode(identifier: string, purpose: "Signup" | "DeviceEnrollment", code: string): Promise<void> {
     const normalized = normalizeEmail(identifier);
-    if (!/^\d{5}$/.test(code.trim())) throw new Error("The code is invalid or expired.");
+    if (!/^\d{5}$/.test(code.trim())) throw new Error("Incorrect verification code.");
     const response = await fetch("/api/auth/email/verify", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Weymela-Request": "1" }, body: JSON.stringify({ identifier: normalized, purpose, code: code.trim() }) });
-    if (!response.ok) throw new Error("The code is invalid or expired.");
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { code?: string } | null;
+      throw new Error(body?.code === "ExpiredCode"
+        ? "Verification code expired. Request a new code."
+        : body?.code === "AuthUnavailable"
+          ? "Email verification is temporarily unavailable."
+          : "Incorrect verification code.");
+    }
     const result = await response.json() as { customToken?: string };
     if (!result.customToken) throw new Error("The verification session is invalid.");
     await this.signInWithCustomToken(result.customToken);
@@ -220,6 +232,8 @@ function normalizePhone(phone: string): string {
 
 function normalizeEmail(email: string): string {
   const normalized = email.trim().toLowerCase();
-  if (!/^[^@\s]{1,96}@[^@\s]{1,96}$/.test(normalized)) throw new Error("Enter a valid email address.");
+  if (!normalized) throw new Error("Email address is required.");
+  if (!/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i.test(normalized)
+      || normalized.length > 200) throw new Error("Enter a valid email address.");
   return normalized;
 }

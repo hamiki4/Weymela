@@ -14,13 +14,19 @@ const user = {
 describe("account lifecycle entry", () => {
   it("resumes the first incomplete required account step", () => {
     expect(accountEntryPath(user,
-      { passwordEnrolled: false, phoneEnrolled: false }, null)).toBe("/security-setup");
+      { passwordEnrolled: false, phoneEnrolled: false }, null)).toBe("/pin-setup");
     expect(accountEntryPath(user,
       { passwordEnrolled: true, phoneEnrolled: true },
       { state: "EnrollmentRequired", expiresAtUtc: null })).toBe("/pin-setup");
     expect(accountEntryPath(user,
       { passwordEnrolled: true, phoneEnrolled: true },
       { state: "Enrolled", expiresAtUtc: null })).toBe("/onboarding");
+  });
+
+  it("keeps password enrollment for invited non-public roles", () => {
+    expect(accountEntryPath({ ...user, role: "Cashier" },
+      { passwordEnrolled: false, phoneEnrolled: true },
+      { state: "EnrollmentRequired", expiresAtUtc: null })).toBe("/security-setup");
   });
 
   it("returns an established account to its current workspace", () => {

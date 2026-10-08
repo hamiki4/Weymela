@@ -94,6 +94,15 @@ describe("V3 Firebase Web adapter", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["", "Email address is required."],
+    ["owner@example", "Enter a valid email address."],
+  ])("validates email %j before contacting the provider", async (email, message) => {
+    await expect(new FirebaseWebAuthAdapter(auth as never).startEmailCode(email, "Signup"))
+      .rejects.toThrow(message);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("uses verified email code -> custom token -> Firebase ID token exchange for signup", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
     await adapter.startEmailCode("owner@example.com", "Signup");
@@ -136,9 +145,29 @@ describe("V3 Firebase Web adapter", () => {
     });
 
   it("shows validation rather than provider-unavailable wording for ordinary bad input", async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(null, { status: 400 }));
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(JSON.stringify({ code: "InvalidEmail" }), { status: 400 }));
     await expect(new FirebaseWebAuthAdapter(auth as never).startEmailCode("owner@example.com", "Signup"))
       .rejects.toThrow("Enter a valid email address.");
+  });
+
+  it("distinguishes delivery failure, provider outage, incorrect code and expired code", async () => {
+    const adapter = new FirebaseWebAuthAdapter(auth as never);
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(
+      JSON.stringify({ code: "EmailDeliveryFailed" }), { status: 503 }));
+    await expect(adapter.startEmailCode("owner@example.com", "Signup"))
+      .rejects.toThrow("Unable to send verification email");
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(
+      JSON.stringify({ code: "AuthUnavailable" }), { status: 503 }));
+    await expect(adapter.startEmailCode("owner@example.com", "Signup"))
+      .rejects.toThrow("temporarily unavailable");
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(
+      JSON.stringify({ code: "InvalidCode" }), { status: 400 }));
+    await expect(adapter.verifyEmailCode("owner@example.com", "Signup", "12345"))
+      .rejects.toThrow("Incorrect verification code");
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response(
+      JSON.stringify({ code: "ExpiredCode" }), { status: 400 }));
+    await expect(adapter.verifyEmailCode("owner@example.com", "Signup", "12345"))
+      .rejects.toThrow("Verification code expired");
   });
 
   it("does not accept a phone number for email verification", async () => {
@@ -197,7 +226,7 @@ describe("V3 Firebase Web adapter", () => {
 
   it("rejects malformed and non-five-digit email codes before network exchange", async () => {
     const adapter = new FirebaseWebAuthAdapter(auth as never);
-    await expect(adapter.verifyEmailCode("owner@example.com", "Signup", "12")).rejects.toThrow("invalid or expired");
+    await expect(adapter.verifyEmailCode("owner@example.com", "Signup", "12")).rejects.toThrow("Incorrect verification code");
     expect(fetch).not.toHaveBeenCalled();
   });
 

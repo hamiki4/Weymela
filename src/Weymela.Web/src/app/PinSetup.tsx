@@ -4,7 +4,6 @@ import { Button, Notice } from "../ui/components";
 import { PinInput } from "../ui/PinInput";
 import { useSession } from "./Session";
 import { Brand } from "./Shell";
-import { AccountRedirect } from "./AccountEntry";
 
 export function PinSetup() {
   const session = useSession();
@@ -26,8 +25,6 @@ export function PinSetup() {
       </section>
     </main>;
   if (!session.user) return session.loading ? <main className="pin-setup-page"><section className="pin-setup-card"><Brand /><div role="status">Opening your PIN setup…</div></section></main> : <Navigate to="/sign-in" replace />;
-  if (!session.accountSecurity?.passwordEnrolled)
-    return <AccountRedirect to="/security-setup" />;
   const state = session.deviceEnrollment?.state ?? "Unavailable";
   const canEnroll = state === "EnrollmentRequired";
 

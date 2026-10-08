@@ -7,7 +7,7 @@ import { Icon } from "../ui/Icon";
 import { PasswordField } from "../ui/PasswordField";
 import { Brand } from "./Shell";
 import { SessionLoadFailure, useSession } from "./Session";
-import { CompactLanguageChoice } from "../localization/Language";
+import { CompactLanguageChoice, translateText, useLanguage } from "../localization/Language";
 import { readSignupDraft, saveSignupDraft, type PublicSignupDraft, type PublicSignupRole } from "./signupDraft";
 import {
   ProfileSelectionRequiredError,
@@ -382,6 +382,7 @@ function PublicRegistrationForm(props: {
   onComplete: (draft: PublicSignupDraft) => void;
   onBack: () => void;
 }) {
+  const { language } = useLanguage();
   const saved = readSignupDraft();
   const sameRole = saved?.role === props.role ? saved : null;
   const [legalName, setLegalName] = useState(sameRole?.legalName ?? "");
@@ -420,7 +421,10 @@ function PublicRegistrationForm(props: {
           <Field label="Business name"><input required maxLength={120} autoComplete="organization" value={businessName} onChange={event => setBusinessName(event.target.value)} /></Field>
           <Field label="Business type"><input required maxLength={80} placeholder="For example: Restaurant" value={businessType} onChange={event => setBusinessType(event.target.value)} /></Field>
         </>}
-        <Field label="Email address"><input required type="email" inputMode="email" autoComplete="email" maxLength={200} value={email} onChange={event => setEmail(event.target.value)} /></Field>
+        <Field label="Email address"><input required type="email" inputMode="email" autoComplete="email" maxLength={200} value={email}
+          onInvalid={event => event.currentTarget.setCustomValidity(translateText(event.currentTarget.value.trim()
+            ? "Enter a valid email address." : "Email address is required.", language))}
+          onChange={event => { event.currentTarget.setCustomValidity(""); setEmail(event.target.value); }} /></Field>
         <Field label="Phone number"><input required type="tel" inputMode="tel" autoComplete="tel" maxLength={24}
           pattern="[+0-9() -]{7,24}" value={phone} onChange={event => setPhone(event.target.value)} /></Field>
         {props.role === "Creator" && <>
@@ -461,6 +465,7 @@ function PasswordRecovery(props: {
   onDone: () => void;
   onBack: () => void;
 }) {
+  const { language } = useLanguage();
   return (
     <section aria-labelledby="password-recovery-title">
       <h1 id="password-recovery-title">Reset your password</h1>
@@ -486,7 +491,9 @@ function PasswordRecovery(props: {
                 inputMode="email"
                 autoComplete="email"
                 value={props.email}
-                onChange={(event) => props.setEmail(event.target.value)}
+                onInvalid={(event) => event.currentTarget.setCustomValidity(translateText(event.currentTarget.value.trim()
+                  ? "Enter a valid email address." : "Email address is required.", language))}
+                onChange={(event) => { event.currentTarget.setCustomValidity(""); props.setEmail(event.target.value); }}
                 required
                 autoFocus
               />
@@ -604,6 +611,7 @@ function EmailAccountFlow(props: {
   onBack: () => void;
   backLabel?: string;
 }) {
+  const { language } = useLanguage();
   return (
     <section aria-labelledby="email-account-title">
       <h1 id="email-account-title">{props.title}</h1>
@@ -624,7 +632,9 @@ function EmailAccountFlow(props: {
                 inputMode="email"
                 autoComplete="email"
                 value={props.email}
-                onChange={(event) => props.setEmail(event.target.value)}
+                onInvalid={(event) => event.currentTarget.setCustomValidity(translateText(event.currentTarget.value.trim()
+                  ? "Enter a valid email address." : "Email address is required.", language))}
+                onChange={(event) => { event.currentTarget.setCustomValidity(""); props.setEmail(event.target.value); }}
                 required
                 autoFocus
               />

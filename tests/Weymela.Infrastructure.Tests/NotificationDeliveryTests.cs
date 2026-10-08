@@ -44,7 +44,7 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
         Assert.DoesNotContain(rows, x => x.Role == ActorRole.Creator);
     }
 
-    [Fact] public async Task Profile_application_notifications_reach_both_admins_and_applicants_once_with_review_routes()
+    [Fact] public async Task Creator_application_notifications_reach_both_admins_and_applicants_once_with_review_routes()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -54,15 +54,14 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
             new CommercePermission(operations, ActorRole.OperationsAdmin, operations, null, true, false));
         await db.SaveChangesAsync();
         var service = new RoleEnrollmentService(db, TimeProvider.System);
-        foreach (var role in new[] { ActorRole.Creator, ActorRole.Business })
         foreach (var approve in new[] { true, false })
         {
             var applicant = Guid.NewGuid(); var customer = Guid.NewGuid();
             db.CommercePermissions.Add(new CommercePermission(applicant, ActorRole.Customer, customer, null, true, false));
             await db.SaveChangesAsync();
-            var request = new RoleEnrollmentRequest(role, $"{role} applicant", null, "Addis", "Local", "Submitted details",
-                SocialProfiles: role == ActorRole.Creator ? [new("Instagram", "https://www.instagram.com/bella/")] : null);
-            var key = $"{role}-{approve}";
+            var request = new RoleEnrollmentRequest(ActorRole.Creator, "Creator applicant", null, "Addis", "Local", "Submitted details",
+                SocialProfiles: [new("Instagram", "https://www.instagram.com/bella/")]);
+            var key = $"Creator-{approve}";
             var pending = await service.SubmitAsync(new Actor(applicant, ActorRole.Customer, CustomerId: customer), request, key, default);
             await service.SubmitAsync(new Actor(applicant, ActorRole.Customer, CustomerId: customer), request, key, default);
             await service.ReviewAsync(new Actor(operations, ActorRole.OperationsAdmin), pending.Id, approve,
@@ -70,18 +69,19 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
         }
         for (var i = 0; i < 10; i++) if (await Processor(db, new TestClock()).ProcessAsync(default) == 0) break;
         var submissions = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync();
-        Assert.Equal(8, submissions.Count);
-        Assert.All(submissions.Where(x => x.Role == ActorRole.PlatformAdmin && x.Title.Contains("Business", StringComparison.Ordinal)), x => Assert.Equal("/admin/businesses", x.Route));
+        Assert.Equal(4, submissions.Count);
+        Assert.DoesNotContain(submissions, x => x.Title.Contains("Business", StringComparison.Ordinal));
         Assert.All(submissions.Where(x => x.Role == ActorRole.PlatformAdmin && x.Title.Contains("Creator", StringComparison.Ordinal)), x => Assert.Equal("/admin/creators", x.Route));
         Assert.All(submissions.Where(x => x.Role == ActorRole.OperationsAdmin), x => Assert.Equal("/admin/role-enrollments", x.Route));
-        Assert.Equal(4, submissions.Count(x => x.UserId == platform));
-        Assert.Equal(4, submissions.Count(x => x.UserId == operations));
+        Assert.Equal(2, submissions.Count(x => x.UserId == platform));
+        Assert.Equal(2, submissions.Count(x => x.UserId == operations));
         var approved = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentApproved").ToListAsync();
-        Assert.Equal(4, approved.Count);
-        Assert.Equal(2, approved.Count(x => x.Role == ActorRole.Customer));
+        Assert.Equal(2, approved.Count);
+        Assert.Contains(approved, x => x.Role == ActorRole.Customer);
+        Assert.Contains(approved, x => x.Role == ActorRole.Creator);
         Assert.All(approved, x => Assert.Equal("/onboarding", x.Route));
         var rejected = await db.InAppNotifications.Where(x => x.EventType == "RoleEnrollmentRejected").ToListAsync();
-        Assert.Equal(2, rejected.Count);
+        Assert.Single(rejected);
         Assert.All(rejected, x => { Assert.Equal(ActorRole.Customer, x.Role); Assert.Equal("/onboarding", x.Route);
             Assert.Contains("More details needed", x.Message, StringComparison.Ordinal); });
     }

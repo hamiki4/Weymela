@@ -196,17 +196,19 @@ async function approveLatest(context: Parameters<typeof login>[0], role: "Custom
 type AccountFixture = { suffix: string; email: string; phone: string; password: string; token: string; customerPublicId: string };
 const enrollmentStatuses = { Pending: 0, Approved: 1, Rejected: 2 } as const;
 
-async function createVerifiedAccount(context: Parameters<typeof login>[0], enroll = true): Promise<Omit<AccountFixture, "customerPublicId">> {
+async function createVerifiedAccount(context: Parameters<typeof login>[0], enroll = true, addPassword = true): Promise<Omit<AccountFixture, "customerPublicId">> {
   const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
   const email = `browser-${suffix}@example.com`;
   const phone = `+2519${suffix.slice(-8)}`;
   const password = `Browser passphrase ${suffix}`;
   const token = await emailCode(context, email, "Signup");
   await establishFirebaseSession(context, token, "Customer");
-  const security = await context.request.post("/api/account/password-credential", {
-    headers: { "X-Weymela-Request": "1" }, data: { phone, password, confirmPassword: password },
-  });
-  expect(security.status()).toBe(204);
+  if (addPassword) {
+    const security = await context.request.post("/api/account/password-credential", {
+      headers: { "X-Weymela-Request": "1" }, data: { phone, password, confirmPassword: password },
+    });
+    expect(security.status()).toBe(204);
+  }
   if (enroll) {
     await enrollDevice(context, suffix);
   }
@@ -246,7 +248,8 @@ async function submitAdditionalProfile(context: Parameters<typeof login>[0], acc
   expect(status.status()).toBe(200);
   const body = await status.json() as { profiles: { role: number; status: number; publicId: string }[] };
   expect(body.profiles).toEqual(expect.arrayContaining([
-    expect.objectContaining({ role: actorRoleWireValues[role], status: enrollmentStatuses.Pending, publicId }),
+    expect.objectContaining({ role: actorRoleWireValues[role],
+      status: role === "Business" ? enrollmentStatuses.Approved : enrollmentStatuses.Pending, publicId }),
   ]));
   return publicId;
 }
@@ -375,9 +378,9 @@ async function buildMarker(context: Parameters<typeof login>[0]) {
   return marker;
 }
 
-test("account-signup-and-customer-activation", async ({ page, context }) => {
+test("verified Customer registration proceeds directly to mandatory PIN and activation", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
-  const account = await createVerifiedAccount(context, false);
+  const account = await createVerifiedAccount(context, false, false);
   await open(page, "/onboarding");
   await expect(page).toHaveURL(/\/pin-setup/);
   await expect(page.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
@@ -424,7 +427,62 @@ test("account-signup-and-customer-activation", async ({ page, context }) => {
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
 });
 
-test("Platform Admin reviews new Creator and Business registrations in their account sections", async ({ page, context }) => {
+test("public Business signup creates the role only after verified email and device PIN", async ({ page, context }) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const email = `business-signup-${suffix}@example.com`;
+  await page.route("**/api/auth/mode", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ development: false, personas: null }),
+    });
+  });
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Create Account", exact: true }).click();
+  await page.getByRole("button", { name: /^Business Owner — ንግድ ባለቤት/ }).click();
+  await page.getByLabel("Full legal name").fill(`Owner ${suffix}`);
+  await page.getByLabel("Business name").fill(`PIN First Cafe ${suffix}`);
+  await page.getByLabel("Business type").fill("Restaurant");
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Phone number").fill(`+2519${suffix.slice(-8)}`);
+  await page.getByRole("checkbox").check();
+  const started = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/auth/email/start");
+  await page.getByRole("button", { name: "Complete Registration" }).click();
+  expect((await started).status()).toBe(202);
+
+  const delivered = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(email)}`);
+  const { code } = await delivered.json() as { code: string };
+  const verified = await context.request.post("/api/auth/email/verify", {
+    headers: { "X-Weymela-Request": "1" }, data: { identifier: email, purpose: "Signup", code },
+  });
+  const { customToken } = await verified.json() as { customToken: string };
+  await establishFirebaseSession(context, customToken, "Business");
+  const beforePin = await (await context.request.get("/api/onboarding/status")).json() as {
+    profiles: { role: number }[];
+  };
+  expect(beforePin.profiles).not.toEqual(expect.arrayContaining([
+    expect.objectContaining({ role: actorRoleWireValues.Business }),
+  ]));
+
+  await open(page, "/onboarding");
+  await expect(page).toHaveURL(/\/pin-setup/);
+  await fillPin(page, "Create PIN", "01234");
+  await fillPin(page, "Confirm PIN", "01234");
+  const enrolled = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/device/enrollment");
+  const activated = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/onboarding/profile");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect((await enrolled).status()).toBe(200);
+  expect((await activated).status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/business/);
+  await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Business" });
+});
+
+test("Platform Admin reviews Creator while verified Business registration activates immediately", async ({ page, context }) => {
   page.setDefaultTimeout(12000);
   const account = await createVerifiedAccount(context);
   await activateCustomer(context, account);
@@ -468,39 +526,28 @@ test("Platform Admin reviews new Creator and Business registrations in their acc
     },
   });
   expect(businessApplication.status()).toBe(200);
-  const businessEnrollment = await businessApplication.json() as { id: string };
+  const businessEnrollment = await businessApplication.json() as { id: string; status: number };
+  expect(businessEnrollment.status).toBe(enrollmentStatuses.Approved);
 
   await login(context, "admin");
-  await open(page, "/admin/businesses");
-  const businessRow = page.getByRole("row", { name: new RegExp(businessName) });
-  await expect(businessRow).toContainText(`Owner ${account.suffix}`);
-  await businessRow.getByRole("button", { name: "Review" }).click();
-  await expect(page.getByText("Restaurant", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Reject", exact: true }).click();
-  await page.getByLabel("Rejection reason").fill("Controlled browser rejection");
-  const rejected = page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/api/admin/role-enrollments/${businessEnrollment.id}/review`);
-  await page.getByRole("button", { name: "Confirm rejection" }).click();
-  expect((await rejected).status()).toBe(200);
+  const pending = await (await context.request.get("/api/admin/role-enrollments")).json() as { id: string }[];
+  expect(pending.some(item => item.id === businessEnrollment.id)).toBe(false);
 
   await establishFirebaseSession(context, account.token, "Customer");
   const session = await (await context.request.get("/api/session")).json() as SessionUser;
   expect(session.profiles).toEqual(expect.arrayContaining([expect.objectContaining({ role: "Creator" })]));
-  expect(session.profiles).not.toEqual(expect.arrayContaining([expect.objectContaining({ role: "Business" })]));
+  expect(session.profiles).toEqual(expect.arrayContaining([expect.objectContaining({ role: "Business" })]));
   const status = await (await context.request.get("/api/onboarding/status")).json() as {
     profiles: { id: string; status: number; decisionReason: string | null }[];
   };
   expect(status.profiles).toEqual(expect.arrayContaining([
-    expect.objectContaining({ id: businessEnrollment.id, status: enrollmentStatuses.Rejected,
-      decisionReason: "Controlled browser rejection" }),
+    expect.objectContaining({ id: businessEnrollment.id, status: enrollmentStatuses.Approved }),
   ]));
 });
 
 test("incomplete registration resumes the same identity at PIN setup without a request loop", async ({ browser }) => {
   const suffix = Date.now().toString() + Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
   const email = `resume-${suffix}@example.com`;
-  const phone = `+2519${suffix.slice(-8)}`;
-  const password = `Resume account passphrase ${suffix}`;
   const firstContext = await browser.newContext();
   let originalToken = "";
   try {
@@ -513,17 +560,10 @@ test("incomplete registration resumes the same identity at PIN setup without a r
     expect(initialEnrollment.status()).toBe(200);
     await expect(initialEnrollment.json()).resolves.toMatchObject({ state: "EnrollmentRequired" });
     const page = await firstContext.newPage();
-    await page.goto("/security-setup");
-    await expect(page.getByRole("heading", { name: "Secure your account" })).toBeVisible();
-    await page.getByLabel("Phone number").fill(phone);
-    await page.getByLabel("Password", { exact: true }).fill(password);
-    await page.getByLabel("Confirm password", { exact: true }).fill(password);
-    const secured = page.waitForResponse(response => response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/api/account/password-credential");
-    await page.getByRole("button", { name: "Continue" }).click();
-    expect((await secured).status()).toBe(204);
+    await page.goto("/onboarding");
     await expect(page).toHaveURL(/\/pin-setup/);
     await expect(page.getByRole("heading", { name: "Create your PIN" })).toBeVisible();
+    await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   } finally {
     await firstContext.close();
   }
@@ -888,7 +928,7 @@ test("customer-to-business choice uses a phase-safe blue shell", async ({ page, 
   await expect(page.getByRole("heading", { name: "Business setup" })).toBeVisible();
   await expect(page.locator('[data-role-theme="business"]')).toBeVisible();
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Submit for Review" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Business" })).toBeVisible();
   for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
     await page.setViewportSize(viewport);
     await layout(page);
@@ -897,12 +937,11 @@ test("customer-to-business choice uses a phase-safe blue shell", async ({ page, 
   await open(page, "/customer/offers");
 });
 
-test("business-admin-approval-and-switch", async ({ page, context }) => {
+test("business self-registration activates and switches without Admin approval", async ({ page, context }) => {
   page.setDefaultTimeout(8000);
   const account = await createVerifiedAccount(context);
   const active = await activateCustomer(context, account);
-  const businessPublicId = await submitAdditionalProfile(context, active, "Business");
-  await approveLatest(context, "Business", businessPublicId);
+  await submitAdditionalProfile(context, active, "Business");
   await establishFirebaseSession(context, account.token, "Customer");
   await open(page, "/customer/offers");
   await chooseProfile(page, "Business");
@@ -926,9 +965,8 @@ test("multi-role-switching", async ({ page, context }) => {
   const account = await createVerifiedAccount(context);
   const active = await activateCustomer(context, account);
   const creatorPublicId = await submitAdditionalProfile(context, active, "Creator");
-  const businessPublicId = await submitAdditionalProfile(context, active, "Business");
+  await submitAdditionalProfile(context, active, "Business");
   await approveLatest(context, "Creator", creatorPublicId);
-  await approveLatest(context, "Business", businessPublicId);
   await establishFirebaseSession(context, account.token, "Customer");
   await open(page, "/customer/offers");
   await page.getByRole("link", { name: "Open Settings" }).click();

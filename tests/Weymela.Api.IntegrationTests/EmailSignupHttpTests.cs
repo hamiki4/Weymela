@@ -71,9 +71,59 @@ public sealed class EmailSignupHttpTests(PostgresFixture fixture)
         using var client = host.Anonymous();
         var response = await Start(client, $"provider-{Guid.NewGuid():N}@example.test");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.DoesNotContain("private provider error", body);
-        Assert.DoesNotContain("Firebase", body);
+        var body = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal("EmailDeliveryFailed", body["code"]!.GetValue<string>());
+        Assert.Equal("Unable to send verification email. Please try again.", body["message"]!.GetValue<string>());
+        Assert.DoesNotContain("private provider error", body.ToJsonString());
+        Assert.DoesNotContain("Firebase", body.ToJsonString());
+    }
+
+    [Theory]
+    [InlineData("", "EmailRequired", "Email address is required.")]
+    [InlineData("owner@example", "InvalidEmail", "Enter a valid email address.")]
+    public async Task Invalid_email_returns_structured_validation_before_provider_access(
+        string email, string expectedCode, string expectedMessage)
+    {
+        var delivery = new CaptureDelivery();
+        await using var host = await Host(delivery);
+        using var client = host.Anonymous();
+        var response = await Start(client, email);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal(expectedCode, body["code"]!.GetValue<string>());
+        Assert.Equal(expectedMessage, body["message"]!.GetValue<string>());
+        Assert.Empty(delivery.Sent);
+    }
+
+    [Fact]
+    public async Task Verify_distinguishes_incorrect_and_expired_codes_without_exposing_secrets()
+    {
+        var delivery = new CaptureDelivery();
+        await using var host = await Host(delivery);
+        using var client = host.Anonymous();
+        var email = $"codes-{Guid.NewGuid():N}@example.test";
+        (await Start(client, email)).EnsureSuccessStatusCode();
+        var deliveredCode = delivery.Sent.Single().Code;
+        var wrongCode = deliveredCode == "99999" ? "99998" : "99999";
+
+        var incorrect = await client.PostAsJsonAsync("/api/auth/email/verify", new
+        {
+            identifier = email, purpose = "Signup", code = wrongCode
+        });
+        var incorrectBody = (await incorrect.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal("InvalidCode", incorrectBody["code"]!.GetValue<string>());
+        Assert.Equal("Incorrect verification code.", incorrectBody["message"]!.GetValue<string>());
+
+        await using (var db = host.Database.Open())
+            await db.EmailAuthChallenges.Where(x => x.IdentifierHash == Hash(email)).ExecuteUpdateAsync(
+                update => update.SetProperty(x => x.ExpiresAtUtc, DateTime.UtcNow.AddSeconds(-1)));
+        var expired = await client.PostAsJsonAsync("/api/auth/email/verify", new
+        {
+            identifier = email, purpose = "Signup", code = deliveredCode
+        });
+        var expiredBody = (await expired.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal("ExpiredCode", expiredBody["code"]!.GetValue<string>());
+        Assert.Equal("Verification code expired. Request a new code.", expiredBody["message"]!.GetValue<string>());
     }
 
     private async Task<ApiFixture> Host(IEmailCodeDelivery delivery) => await ApiFixture.CreateAsync(fixture, builder =>
@@ -103,7 +153,7 @@ public sealed class EmailSignupHttpTests(PostgresFixture fixture)
     {
         public bool Enabled => true;
         public Task SendAsync(string destination, string code, EmailCodePurpose purpose, CancellationToken ct)
-            => throw new AuthChallengeUnavailableException("private provider error");
+            => throw new InvalidOperationException("private provider error");
     }
     private sealed class TestIssuer : IFirebaseCustomTokenIssuer
     {

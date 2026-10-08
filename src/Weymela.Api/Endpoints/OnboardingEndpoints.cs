@@ -49,29 +49,34 @@ internal static class OnboardingEndpoints
                     c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString(), input.SocialProfiles,
                     input.LegalName, input.RegisteredPhone),
                 EndpointSupport.Key(c), ct);
-            if (role == ActorRole.Customer && result.Status == RoleEnrollmentStatus.Approved)
+            if (role is ActorRole.Customer or ActorRole.Business && result.Status == RoleEnrollmentStatus.Approved)
             {
-                if (!Guid.TryParse(c.User.FindFirst("identity-binding")?.Value, out var bindingId)
-                    || !long.TryParse(c.User.FindFirst("identity-version")?.Value, out var bindingVersion)
-                    || !DateTime.TryParseExact(c.User.FindFirst("authenticated-at")?.Value, "O",
+                // Real verified identities carry binding claims and can be moved
+                // directly into the newly activated workspace. Synthetic Development
+                // personas intentionally have no trusted binding and only exercise the
+                // persisted profile list.
+                if (Guid.TryParse(c.User.FindFirst("identity-binding")?.Value, out var bindingId)
+                    && long.TryParse(c.User.FindFirst("identity-version")?.Value, out var bindingVersion)
+                    && DateTime.TryParseExact(c.User.FindFirst("authenticated-at")?.Value, "O",
                         System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var authenticatedAt))
-                    throw new ApplicationFailure(FailureKind.Forbidden, "Your session must be refreshed before opening the Customer workspace.");
-                var permission = await db.CommercePermissions.AsNoTracking().SingleAsync(x => x.UserId == userId
-                    && x.Role == ActorRole.Customer && x.IsActive, ct);
-                var target = await identities.SelectAsync(userId, bindingId, bindingVersion,
-                    new ProfileSelection(ActorRole.Customer, permission.SubjectId, null), authenticatedAt,
-                    clock.GetUtcNow().UtcDateTime.AddHours(1), ct);
-                var principal = WorkspaceAuthentication.Principal(target.Actor, target.DisplayName, target.PublicId);
-                var claims = (ClaimsIdentity)principal.Identity!;
-                claims.AddClaim(new("identity-binding", target.BindingId.ToString()));
-                claims.AddClaim(new("identity-version", target.BindingVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-                claims.AddClaim(new("authenticated-at", target.AuthenticatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
-                claims.AddClaim(new("auth-strength", "firebase-verified"));
-                var now = clock.GetUtcNow();
-                await c.SignInAsync(WorkspaceAuthentication.Scheme, principal, new AuthenticationProperties
                 {
-                    IsPersistent = false, IssuedUtc = now, ExpiresUtc = now.AddHours(1), AllowRefresh = false
-                });
+                    var permission = await db.CommercePermissions.AsNoTracking().SingleAsync(x => x.UserId == userId
+                        && x.Role == role && x.IsActive, ct);
+                    var target = await identities.SelectAsync(userId, bindingId, bindingVersion,
+                        new ProfileSelection(role, permission.SubjectId, permission.BusinessId), authenticatedAt,
+                        clock.GetUtcNow().UtcDateTime.AddHours(1), ct);
+                    var principal = WorkspaceAuthentication.Principal(target.Actor, target.DisplayName, target.PublicId);
+                    var claims = (ClaimsIdentity)principal.Identity!;
+                    claims.AddClaim(new("identity-binding", target.BindingId.ToString()));
+                    claims.AddClaim(new("identity-version", target.BindingVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                    claims.AddClaim(new("authenticated-at", target.AuthenticatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+                    claims.AddClaim(new("auth-strength", "firebase-verified"));
+                    var now = clock.GetUtcNow();
+                    await c.SignInAsync(WorkspaceAuthentication.Scheme, principal, new AuthenticationProperties
+                    {
+                        IsPersistent = false, IssuedUtc = now, ExpiresUtc = now.AddHours(1), AllowRefresh = false
+                    });
+                }
             }
             return Results.Ok(result);
         });

@@ -104,7 +104,7 @@ describe("shared role-themed onboarding", () => {
     mocks.legalStatus = effectiveLegal;
   });
 
-  it("completes a verified public Business registration exactly once and shows pending status", async () => {
+  it("completes a PIN-enrolled public Business registration exactly once and opens its workspace", async () => {
     window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
       version: 1, idempotencyKey: "public-business-key", role: "Business",
       legalName: "Abebe Kebede", email: "owner@example.test", phone: "+251911111111",
@@ -116,8 +116,10 @@ describe("shared role-themed onboarding", () => {
       role: "Business", displayName: "ABC Trading", legalName: "Abebe Kebede",
       registeredPhone: "+251911111111", category: "Retail",
     }), "public-business-key");
-    expect(await screen.findByRole("heading", { name: "Your email is verified." })).toBeVisible();
-    expect(screen.getByText(/Business account is waiting for Weymela approval/)).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
+    expect(screen.getByText(/secure device is registered/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
+    expect(screen.queryByText(/waiting for Weymela approval/)).not.toBeInTheDocument();
     expect(window.sessionStorage.getItem("weymela.public-signup")).toBeNull();
   });
 
@@ -224,11 +226,12 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByLabelText(/Business type|About your Business/)).not.toBeInTheDocument();
     expect(screen.queryByText(/receipt|payment reference|funding/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
-    await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add Business" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
       role: "Business", displayName: "Bella Restaurant", category: null, submission: null,
     }), "enroll-key"));
-    expect(screen.getByText("Your Business profile is waiting for approval.")).toBeVisible();
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(screen.queryByText("Your Business profile is waiting for approval.")).not.toBeInTheDocument();
   });
 
   it("uses the same simplified Business setup when adding a profile to an existing account", async () => {

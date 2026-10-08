@@ -98,12 +98,19 @@ export function App() {
       && location.pathname !== "/sign-in") return <SessionTransition />;
   if (!session.loading && session.user) {
     const completingPublicSignup = session.user.role === "Onboarding" && hasSignupDraft();
-    if (completingPublicSignup && location.pathname !== "/onboarding")
-      return <AccountRedirect to="/onboarding" />;
-    if (!completingPublicSignup && session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
+    const publicAccount = ["Onboarding", "Customer", "Business", "Creator"].includes(session.user.role);
+    if (completingPublicSignup) {
+      const state = session.deviceEnrollment?.state ?? "Unavailable";
+      const recognized = state === "Enrolled" || state === "NotRequired";
+      if (!recognized && location.pathname !== "/pin-setup")
+        return <AccountRedirect to="/pin-setup" />;
+      if (recognized && location.pathname !== "/onboarding")
+        return <AccountRedirect to="/onboarding" />;
+    }
+    if (!completingPublicSignup && !publicAccount && session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
       if (location.pathname !== "/security-setup")
         return <AccountRedirect to="/security-setup" />;
-    } else if (!completingPublicSignup && session.accountSecurity?.passwordEnrolled) {
+    } else if (!completingPublicSignup && session.accountSecurity) {
       if (location.pathname === "/security-setup")
         return <AccountRedirect to={accountEntryPath(session.user, session.accountSecurity, session.deviceEnrollment)} />;
       const state = session.deviceEnrollment?.state ?? "Unavailable";

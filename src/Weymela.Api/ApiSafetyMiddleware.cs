@@ -79,9 +79,12 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
             var status=e.Kind switch{FailureKind.Forbidden=>403,FailureKind.NotFound=>404,FailureKind.ConcurrencyConflict or FailureKind.IdempotencyConflict=>409,_=>400};
             await Error(context,status,e.Code ?? e.Kind.ToString(),UserLanguage(e.Message));
         }
-        catch(AuthChallengeInvalidException){await Error(context,400,"InvalidCode","The code is invalid or expired.");}
+        catch(AuthChallengeExpiredException){await Error(context,400,"ExpiredCode","Verification code expired. Request a new code.");}
+        catch(DevicePinRecoveryCodeInvalidException){await Error(context,400,"InvalidCode","The code is invalid or expired.");}
+        catch(AuthChallengeInvalidException){await Error(context,400,"InvalidCode","Incorrect verification code.");}
         catch(PasswordRecoveryTransactionInvalidException){await Error(context,400,"RecoverySessionExpired","Your reset session has expired. Request a new code.");}
-        catch(AuthChallengeUnavailableException){await Error(context,503,"AuthUnavailable","Email authentication is temporarily unavailable.");}
+        catch(AuthChallengeUnavailableException){await Error(context,503,"AuthUnavailable","Email verification is temporarily unavailable.");}
+        catch(EmailDeliveryFailedException){await Error(context,503,"EmailDeliveryFailed","Unable to send verification email. Please try again.");}
         catch(DeviceEnrollmentUnavailableException){await Error(context,503,"DeviceEnrollmentUnavailable","Secure device setup is temporarily unavailable.");}
         catch(ArgumentException){await Error(context,400,"Validation","Check the entered amounts, pricing split and required fields.");}
         catch(InvalidOperationException){await Error(context,400,"Validation","That action is not available. Refresh the workspace and check the saved values.");}

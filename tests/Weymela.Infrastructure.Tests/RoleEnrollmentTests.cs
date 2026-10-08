@@ -280,7 +280,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Public_business_application_is_pending_until_review_and_rejection_keeps_role_inactive()
+    public async Task Verified_public_business_registration_is_immediate_idempotent_and_zero_balance()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -288,31 +288,29 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var service = new RoleEnrollmentService(db, TimeProvider.System);
         var legal = await SeedAccountLegalAsync(db);
         var request = new RoleEnrollmentRequest(ActorRole.Business, "Bella Cafe", null, "Addis", "Restaurant", "Cafe");
-        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request with { AccountLegal = legal }, "business-application", default);
-        Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
-        Assert.StartsWith("BU-", pending.PublicId, StringComparison.Ordinal);
-        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
+        var approved = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request with { AccountLegal = legal }, "business-application", default);
+        var replay = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request with { AccountLegal = legal }, "business-application", default);
+        Assert.Equal(RoleEnrollmentStatus.Approved, approved.Status);
+        Assert.Equal(approved.Id, replay.Id);
+        Assert.StartsWith("BU-", approved.PublicId, StringComparison.Ordinal);
+        var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Business);
+        Assert.True(permission.IsActive);
+        Assert.True(permission.CanCheckout);
+        Assert.Equal(permission.SubjectId, permission.BusinessId);
+        var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == permission.BusinessId);
+        Assert.Equal(0m, wallet.AvailableBalance.Amount);
+        Assert.Equal(0m, wallet.ReservedBalance.Amount);
+        Assert.Empty(await service.PendingAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
+        Assert.Empty(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
+        Assert.Contains(await db.AuditEvents.Where(x => x.ActorId == user).ToListAsync(),
+            x => x.EventType == "BusinessProfileActivated");
         var denied = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ReviewAsync(new Actor(user, ActorRole.Customer),
-            pending.Id, true, null, pending.Version, "self-review", default));
+            approved.Id, true, null, approved.Version, "self-review", default));
         Assert.Equal(FailureKind.Forbidden, denied.Kind);
-        foreach (var role in new[] { ActorRole.Business, ActorRole.Creator, ActorRole.Cashier })
-            Assert.Equal(FailureKind.Forbidden, (await Assert.ThrowsAsync<ApplicationFailure>(() => service.ReviewAsync(
-                new Actor(Guid.NewGuid(), role), pending.Id, true, null, pending.Version, $"review-{role}", default))).Kind);
-        var admin = new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin);
-        var rejected = await service.ReviewAsync(admin, pending.Id, false, "Missing business details", pending.Version, "reject", default);
-        Assert.Equal(RoleEnrollmentStatus.Rejected, rejected.Status);
-        Assert.Equal("Missing business details", rejected.DecisionReason);
-        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
-        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
-        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentRejected").ToListAsync());
-        var reapplied = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
-            "business-reapplication", default);
-        Assert.Equal(RoleEnrollmentStatus.Pending, reapplied.Status);
-        Assert.NotEqual(pending.Id, reapplied.Id);
     }
 
     [Fact]
-    public async Task Verified_public_registration_preserves_role_details_and_creates_one_pending_review()
+    public async Task Verified_public_business_registration_preserves_role_details_without_admin_review()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -327,27 +325,25 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var request = new RoleEnrollmentRequest(ActorRole.Business, "ABC Trading", null, null,
             "Retail", null, AccountLegal: legal, LegalName: "Abebe Kebede", RegisteredPhone: phone);
 
-        var pending = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
+        var approved = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
             "public-business-registration", default);
         var replay = await service.SubmitAsync(new Actor(user, ActorRole.Customer), request,
             "public-business-registration", default);
 
-        Assert.Equal(pending.Id, replay.Id);
-        Assert.Equal(RoleEnrollmentStatus.Pending, pending.Status);
-        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business));
+        Assert.Equal(approved.Id, replay.Id);
+        Assert.Equal(RoleEnrollmentStatus.Approved, approved.Status);
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == user && x.Role == ActorRole.Business && x.IsActive));
         var registeredPhone = Assert.Single(await db.AuthIdentifiers.Where(x => x.UserId == user && x.Kind == "Phone").ToListAsync());
         Assert.Equal(phone, registeredPhone.DeliveryAddress);
         Assert.False(registeredPhone.IsVerified);
         Assert.Single(await db.RoleEnrollments.Where(x => x.UserId == user && x.RequestedRole == ActorRole.Business
-            && x.Status == RoleEnrollmentStatus.Pending).ToListAsync());
-        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
-
-        var review = Assert.Single(await service.PendingAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
-        Assert.Equal("ABC Trading", review.DisplayName);
-        Assert.Equal("Abebe Kebede", review.LegalName);
-        Assert.Equal("Retail", review.Category);
-        Assert.Equal(email, review.FullEmail);
-        Assert.Equal(phone, review.FullPhone);
+            && x.Status == RoleEnrollmentStatus.Approved).ToListAsync());
+        Assert.Empty(await db.OutboxMessages.Where(x => x.EventType == "RoleEnrollmentSubmitted").ToListAsync());
+        Assert.Empty(await service.PendingAsync(new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
+        var saved = Assert.Single(await service.MineAsync(user, default));
+        Assert.Equal("ABC Trading", saved.DisplayName);
+        Assert.Equal("Abebe Kebede", saved.LegalName);
+        Assert.Equal("Retail", saved.Category);
     }
 
     [Fact]
@@ -375,7 +371,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Business_approval_creates_new_scoped_business_and_is_idempotent()
+    public async Task Existing_pending_business_review_is_not_auto_approved_and_remains_reviewable()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -383,8 +379,16 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         db.CommercePermissions.Add(new CommercePermission(user, ActorRole.Customer, customer, null, true, false));
         db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = customer, Role = ActorRole.Customer, DisplayName = "Customer", PublicId = "CU-2" });
         await db.SaveChangesAsync();
+        var row = new RoleEnrollmentRecord
+        {
+            UserId = user, RequestedRole = ActorRole.Business, SubmittedAtUtc = DateTime.UtcNow,
+            IdempotencyKey = "legacy-pending-business",
+            SubmissionJson = """{"DisplayName":"ABC Café","PublicId":"BUS-2","Region":"Addis","Category":"Restaurant","Submission":"Business details","LegalName":null,"SocialProfiles":[]}"""
+        };
+        db.RoleEnrollments.Add(row);
+        await db.SaveChangesAsync();
         var service = new RoleEnrollmentService(db, TimeProvider.System);
-        var row = await service.SubmitAsync(new Actor(user, ActorRole.Customer, CustomerId: customer), new RoleEnrollmentRequest(ActorRole.Business, "ABC Café", "BUS-2", "Addis", "Restaurant", "Business details"), "enroll-business", default);
+        Assert.Equal(RoleEnrollmentStatus.Pending, (await service.MineAsync(user, default)).Single().Status);
         var approved = await service.ReviewAsync(new Actor(admin, ActorRole.PlatformAdmin), row.Id, true, null, row.Version, "review-1", default);
         var replay = await service.ReviewAsync(new Actor(admin, ActorRole.PlatformAdmin), row.Id, true, null, approved.Version, "review-2", default);
         var permission = await db.CommercePermissions.SingleAsync(x => x.UserId == user && x.Role == ActorRole.Business);

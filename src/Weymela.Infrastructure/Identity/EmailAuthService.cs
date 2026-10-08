@@ -21,6 +21,17 @@ public sealed class AuthChallengeInvalidException : Exception
     public AuthChallengeInvalidException() : base("The code is invalid or expired.") { }
 }
 
+public sealed class AuthChallengeExpiredException : Exception
+{
+    public AuthChallengeExpiredException() : base("Verification code expired. Request a new code.") { }
+}
+
+public sealed class EmailDeliveryFailedException : Exception
+{
+    public EmailDeliveryFailedException(Exception innerException)
+        : base("Unable to send verification email. Please try again.", innerException) { }
+}
+
 public sealed class PasswordRecoveryTransactionInvalidException : Exception
 {
     public PasswordRecoveryTransactionInvalidException()
@@ -41,7 +52,9 @@ public sealed class EmailAuthService(
     RuntimeOptions options,
     TimeProvider clock)
 {
-    private static readonly Regex Email = new("^[^@\\s]{1,96}@[^@\\s]{1,96}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Email = new(
+        "^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ResendWindow = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RecoveryGrantLifetime = TimeSpan.FromMinutes(10);
@@ -108,7 +121,14 @@ public sealed class EmailAuthService(
             return new(true, recent.ExpiresAtUtc, (int)Math.Ceiling((recent.LastSentAtUtc.Value.Add(ResendWindow) - now).TotalSeconds));
         }
 
-        var code = RandomNumberGenerator.GetInt32(0, 100_000).ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
+        string code;
+        do
+        {
+            code = RandomNumberGenerator.GetInt32(0, 100_000).ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        // A replacement challenge must invalidate the prior code even in the
+        // rare case where the random generator returns the same five digits.
+        while (recent is not null && AuthCodeHashing.Verify(code, recent.CodeHash, options.AuthCodeHashKey!));
         var challenge = new EmailAuthChallengeRecord
         {
             UserId = userId,
@@ -130,7 +150,11 @@ public sealed class EmailAuthService(
             await delivery.SendAsync(deliveryAddress, code, challengePurpose, ct);
             if (purpose == EmailCodePurpose.Signup) OperationalTelemetry.SignupDeliveryAccepted.Add(1);
         }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (AuthChallengeUnavailableException)
         {
             if (purpose == EmailCodePurpose.Signup)
             {
@@ -138,6 +162,15 @@ public sealed class EmailAuthService(
                 OperationalTelemetry.ProviderErrors.Add(1);
             }
             throw;
+        }
+        catch (Exception exception)
+        {
+            if (purpose == EmailCodePurpose.Signup)
+            {
+                OperationalTelemetry.SignupDeliveryFailed.Add(1);
+                OperationalTelemetry.ProviderErrors.Add(1);
+            }
+            throw new EmailDeliveryFailedException(exception);
         }
         await tx.CommitAsync(ct);
         return new(true, challenge.ExpiresAtUtc, (int)ResendWindow.TotalSeconds);
@@ -162,7 +195,9 @@ public sealed class EmailAuthService(
             ? EmailCodePurpose.DeviceEnrollment : purpose;
         var challenge = await db.EmailAuthChallenges.AsTracking().Where(x => x.IdentifierHash == hash && x.Purpose == challengePurpose.ToString())
             .OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(ct);
-        if (challenge is null || challenge.ConsumedAtUtc is not null || challenge.ExpiresAtUtc <= now || challenge.AttemptCount >= challenge.MaxAttempts)
+        if (challenge is not null && challenge.ConsumedAtUtc is null && challenge.ExpiresAtUtc <= now)
+            throw new AuthChallengeExpiredException();
+        if (challenge is null || challenge.ConsumedAtUtc is not null || challenge.AttemptCount >= challenge.MaxAttempts)
             throw new AuthChallengeInvalidException();
         challenge.AttemptCount++;
         if (!AuthCodeHashing.Verify(code, challenge.CodeHash, options.AuthCodeHashKey!))
@@ -212,7 +247,9 @@ public sealed class EmailAuthService(
             .Where(x => x.IdentifierHash == identifierHash
                 && x.Purpose == EmailCodePurpose.PasswordRecovery.ToString())
             .OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(ct);
-        if (challenge is null || challenge.ConsumedAtUtc is not null || challenge.ExpiresAtUtc <= now
+        if (challenge is not null && challenge.ConsumedAtUtc is null && challenge.ExpiresAtUtc <= now)
+            throw new AuthChallengeExpiredException();
+        if (challenge is null || challenge.ConsumedAtUtc is not null
             || challenge.AttemptCount >= challenge.MaxAttempts || challenge.UserId is null)
             throw new AuthChallengeInvalidException();
         challenge.AttemptCount++;
@@ -271,8 +308,11 @@ public sealed class EmailAuthService(
 
     private static string NormalizeEmail(string value)
     {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ApplicationFailure(FailureKind.Validation, "Email address is required.", code: "EmailRequired");
         var normalized = value.Trim().ToLowerInvariant();
-        if (!Email.IsMatch(normalized) || normalized.Length > 200) throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.");
+        if (!Email.IsMatch(normalized) || normalized.Length > 200)
+            throw new ApplicationFailure(FailureKind.Validation, "Enter a valid email address.", code: "InvalidEmail");
         return normalized;
     }
 

@@ -1045,9 +1045,32 @@ describe("Accepted commerce compatibility", () => {
     expect(await screen.findByRole("heading", { name: "Discover Promotions", level: 1 })).toBeVisible();
     expect(screen.getAllByRole("heading", { name: "Discover Promotions" })).toHaveLength(1);
     expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Get Directions" })).toHaveLength(2);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Filter promotions" }), "UGC_CUSTOMER_OFFER");
     expect(screen.getByText("Bella Beauty")).toBeVisible();
     expect(screen.queryByText("Abc Coffee")).not.toBeInTheDocument();
+  });
+  it("keeps Watch, Directions and Offer QR visible on Customer Home, Discover and details", async () => {
+    const screens: Array<{ element: ReactNode; path?: string; pattern?: string; qrRole: "link" | "button" }> = [
+      { element: <CustomerOffers />, qrRole: "link" },
+      { element: <CustomerOffers discover />, qrRole: "link" },
+      { element: <CustomerOfferQr />, path: "/customer/offers/offer", pattern: "/customer/offers/:id", qrRole: "button" },
+    ];
+    for (const item of screens) {
+      const rendered = mount(item.element, item.path, item.pattern);
+      expect(await screen.findByRole("link", { name: "Watch Promotion" })).toBeVisible();
+      const directions = screen.getByRole("link", { name: "Get Directions" });
+      expect(directions).toBeVisible();
+      expect(new URL(directions.getAttribute("href")!).hostname).toMatch(/google\.com$/);
+      expect(screen.getByRole(item.qrRole, { name: "Get Offer QR" })).toBeVisible();
+      rendered.unmount();
+    }
+  });
+  it("does not show Directions when URL, coordinates and address are all missing", async () => {
+    mockApi({ "/customer/offers": [{ ...offer, location: null, business: { ...offer.business, directionsUrl: null, latitude: null, longitude: null, address: null } }] });
+    mount(<CustomerOffers />);
+    await screen.findByRole("link", { name: "Get Offer QR" });
+    expect(screen.queryByRole("link", { name: "Get Directions" })).not.toBeInTheDocument();
   });
   it("requests location only after an explicit tap and keeps offers when permission is denied", async () => {
     const original = Object.getOwnPropertyDescriptor(navigator, "geolocation");

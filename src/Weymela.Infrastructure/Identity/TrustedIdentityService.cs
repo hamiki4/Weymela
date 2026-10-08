@@ -152,12 +152,13 @@ public sealed class PersistentWorkspaceDirectory(WeymelaDbContext db) : IWorkspa
         await db.PublicWorkspaceProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.SubjectId == id && x.Role == role, ct)
         ?? throw new ApplicationFailure(FailureKind.NotFound, "The public workspace profile is unavailable.");
     public async Task<BusinessCard> BusinessCardAsync(Guid id, CancellationToken ct)
-    { var p = await Profile(id, ActorRole.Business, ct); return new(id, p.DisplayName, p.Region, SafeUrl(p.DirectionsUrl)); }
+    { var p = await Profile(id, ActorRole.Business, ct); return new(id, p.DisplayName, p.Region, SafeDirectionsUrl(p.DirectionsUrl)); }
     public async Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken ct)
     {
         var p = await Profile(id, ActorRole.Business, ct);
-        return new(p.DisplayName, SafeUrl(p.DirectionsUrl), p.Latitude, p.Longitude,
-            string.IsNullOrWhiteSpace(p.Category) ? null : p.Category);
+        return new(p.DisplayName, SafeDirectionsUrl(p.DirectionsUrl), p.Latitude, p.Longitude,
+            string.IsNullOrWhiteSpace(p.Category) ? null : p.Category,
+            string.IsNullOrWhiteSpace(p.Region) ? null : p.Region.Trim());
     }
     public async Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct)
     { var p = await Profile(id, ActorRole.Creator, ct); return new(id, p.DisplayName, p.PublicId, p.Region, p.Category, p.VerifiedFollowers, p.VerifiedViews, p.SocialVerified, SafeUrl(p.PortfolioUrl), p.CreatorNumber); }
@@ -171,5 +172,12 @@ public sealed class PersistentWorkspaceDirectory(WeymelaDbContext db) : IWorkspa
     {
         if (value is null || value.Length > 500 || !Uri.TryCreate(value, UriKind.Absolute, out var u) || u.Scheme != "https" || !string.IsNullOrEmpty(u.UserInfo)) return null;
         return u.Host is "www.tiktok.com" or "www.youtube.com" or "youtu.be" or "www.instagram.com" or "www.google.com" or "maps.google.com" ? value : null;
+    }
+    public static string? SafeDirectionsUrl(string? value)
+    {
+        if (value is null || value.Length > 500 || !Uri.TryCreate(value, UriKind.Absolute, out var url)
+            || url.Scheme != "https" || !string.IsNullOrEmpty(url.UserInfo)) return null;
+        return url.Host.ToLowerInvariant() is "google.com" or "www.google.com" or "maps.google.com"
+            or "maps.app.goo.gl" or "goo.gl" ? url.AbsoluteUri : null;
     }
 }

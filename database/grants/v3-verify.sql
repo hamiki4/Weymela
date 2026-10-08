@@ -151,6 +151,10 @@ CREATE TEMP TABLE _v3_expected_update_columns (
 ) ON COMMIT DROP;
 INSERT INTO _v3_expected_update_columns VALUES
     ('api', 'v3', 'PublicWorkspaceProfiles', 'CreatorPhotoKey'),
+    ('api', 'v3', 'PublicWorkspaceProfiles', 'Region'),
+    ('api', 'v3', 'PublicWorkspaceProfiles', 'DirectionsUrl'),
+    ('api', 'v3', 'PublicWorkspaceProfiles', 'Latitude'),
+    ('api', 'v3', 'PublicWorkspaceProfiles', 'Longitude'),
     ('api', 'v3', 'IdentityBindings', 'IsActive'),
     ('api', 'v3', 'IdentityBindings', 'Version'),
     ('api', 'v3', 'OutboxMessages', 'ProcessedAtUtc'),

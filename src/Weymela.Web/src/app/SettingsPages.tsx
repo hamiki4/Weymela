@@ -42,6 +42,7 @@ export function SettingsPage() {
     <section className="settings-card settings-page-list" aria-label="Settings options">
       {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") &&
         <SettingsLink to="/profile" icon="people" title="Profile" />}
+      {user.role === "Business" && <SettingsLink to="/profile#business-location" icon="location" title="Business Location" note="Add directions for Customers" />}
       {user.role === "Creator" && <SettingsLink to="/profile#social-profiles" icon="globe" title="Social Profiles" />}
       {user.role === "Business" && <SettingsLink to="/business/cashiers" icon="people" title="Cashier Management" />}
       {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") &&
@@ -78,6 +79,7 @@ const helpByRole: Partial<Record<Role, HelpItem[]>> = {
     ["Delete an account", "Open Settings, choose Delete Account, then select only the role you want to close."],
   ],
   Business: [
+    ["Add your Business location", "Open Settings, choose Business Location, and save an address, Google Maps link, or coordinates."],
     ["Add funds", "Open Wallet, choose a receiving bank, enter the amount, and upload the receipt."],
     ["Deposit receipt", "The deposit remains Pending until an authorized Admin approves the receipt."],
     ["Create and publish", "Create a Promotion, save changes, then Publish after funding and deadlines are valid."],

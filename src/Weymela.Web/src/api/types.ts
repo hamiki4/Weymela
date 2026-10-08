@@ -756,6 +756,7 @@ export interface Offer {
     latitude: number | null;
     longitude: number | null;
     category?: string | null;
+    address?: string | null;
   };
   creator: { displayName: string } | null;
   benefitPercent: number;

@@ -334,6 +334,53 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Business_location_update_is_self_scoped_validated_and_audited()
+    {
+        await using var f = await ApiFixture.CreateAsync(postgres);
+        var businessId = DevelopmentDirectory.Id(100);
+        await using (var db = f.Database.Open())
+        {
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile
+            {
+                SubjectId = businessId, Role = ActorRole.Business, DisplayName = "Abc Coffee",
+                PublicId = "BUS-100", Region = ""
+            });
+            await db.SaveChangesAsync();
+        }
+        using var business = await f.Login("business");
+        var saved = await business.PostJson("/api/business/location", new
+        {
+            address = "Bole Road, Addis Ababa", directionsUrl = "https://maps.app.goo.gl/AbCd1234",
+            latitude = 9.03m, longitude = 38.74m
+        });
+        Assert.Equal("Bole Road, Addis Ababa", saved["address"]!.GetValue<string>());
+        Assert.Equal(9.03m, saved["latitude"]!.GetValue<decimal>());
+        var profile = await business.GetJson("/api/profile");
+        Assert.Equal("Bole Road, Addis Ababa", profile["region"]!.GetValue<string>());
+        Assert.Equal("https://maps.app.goo.gl/AbCd1234", profile["directionsUrl"]!.GetValue<string>());
+        Assert.Equal(38.74m, profile["longitude"]!.GetValue<decimal>());
+
+        foreach (var invalid in new object[] {
+            new { address = "Bole", directionsUrl = "https://example.com/maps", latitude = (decimal?)null, longitude = (decimal?)null },
+            new { address = "Bole", directionsUrl = (string?)null, latitude = (decimal?)9.03m, longitude = (decimal?)null },
+            new { address = (string?)null, directionsUrl = (string?)null, latitude = (decimal?)null, longitude = (decimal?)null },
+        })
+            Assert.Equal(HttpStatusCode.BadRequest, (await business.Post("/api/business/location", invalid)).StatusCode);
+        using var customer = await f.Login("customer");
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.Post("/api/business/location", new
+        {
+            address = "Other", directionsUrl = (string?)null, latitude = (decimal?)null, longitude = (decimal?)null
+        })).StatusCode);
+
+        await using var verify = f.Database.Open();
+        var stored = await verify.PublicWorkspaceProfiles.AsNoTracking().SingleAsync(x => x.SubjectId == businessId && x.Role == ActorRole.Business);
+        Assert.Equal("Bole Road, Addis Ababa", stored.Region);
+        Assert.Equal(9.03m, stored.Latitude);
+        Assert.Equal(38.74m, stored.Longitude);
+        Assert.Single(await verify.AuditEvents.Where(x => x.EventType == "BusinessLocationUpdated" && x.BusinessId == businessId).ToListAsync());
+    }
+
+    [Fact]
     public async Task Creator_self_profile_returns_database_assigned_number_and_keeps_long_public_id_for_existing_contracts()
     {
         await using var f = await ApiFixture.CreateAsync(postgres);
@@ -553,6 +600,7 @@ public sealed class WorkspaceHttpTests(PostgresFixture postgres)
         var offer=Assert.Single((await c.GetJson("/api/customer/offers")).AsArray());
         Assert.Null(offer!["business"]!["latitude"]);
         Assert.Null(offer["business"]!["longitude"]);
+        Assert.Equal("Addis Ababa", offer["business"]!["address"]!.GetValue<string>());
         Assert.Null(offer["business"]!["businessId"]);
     }
 

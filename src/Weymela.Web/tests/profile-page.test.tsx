@@ -12,10 +12,11 @@ const base = { displayName: "Bella", publicId: "CR-BFB1200263DE37F79F1C4B0EA5D61
   status: "Active", businessType: null, region: null };
 
 function mount(role: "Customer" | "Creator" | "Business", extra: Record<string, unknown> = {}) {
-  mockApi({ "/profile": { ...base, role, ...extra }, "/creator/social-accounts": [
+  const api = mockApi({ "/profile": { ...base, role, ...extra }, "/creator/social-accounts": [
     { id: "own-social", platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella", verificationStatus: "Verified" },
   ] });
   render(<MemoryRouter><ProfilePage /></MemoryRouter>);
+  return api;
 }
 
 beforeEach(() => { vi.restoreAllMocks(); invalidateResourceCache(false); });
@@ -62,8 +63,8 @@ describe("full profile page", () => {
     expect(business).toBeVisible();
     expect(screen.getByText("Cafe")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Contact Information" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Address" })).toBeVisible();
-    expect(within(screen.getByText("Addis Ababa").closest(".profile-info-row") as HTMLElement).getByText("Region")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Business Location" })).toBeVisible();
+    expect(screen.getByLabelText("Address or area")).toHaveValue("Addis Ababa");
     expect(screen.queryByText("Phone")).not.toBeInTheDocument();
     expect(screen.queryByText("Wallet")).not.toBeInTheDocument();
     expect(screen.queryByText("Social Profiles")).not.toBeInTheDocument();
@@ -72,6 +73,21 @@ describe("full profile page", () => {
     expect(screen.queryByText("Public ID")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add photo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change photo" })).not.toBeInTheDocument();
+  });
+
+  it("lets the Business complete its directions without requesting Customer location", async () => {
+    const api = mount("Business", { displayName: "Abc Coffee", region: "", directionsUrl: null, latitude: null, longitude: null });
+    await screen.findByRole("heading", { name: "Business Location" });
+    await userEvent.type(screen.getByLabelText("Address or area"), "Bole Road, Addis Ababa");
+    await userEvent.type(screen.getByLabelText("Google Maps link"), "https://maps.app.goo.gl/AbCd1234");
+    await userEvent.type(screen.getByLabelText("Latitude"), "9.03");
+    await userEvent.type(screen.getByLabelText("Longitude"), "38.74");
+    await userEvent.click(screen.getByRole("button", { name: "Save location" }));
+    await waitFor(() => expect(api.writes[0]).toMatchObject({
+      path: "/business/location",
+      body: { address: "Bole Road, Addis Ababa", directionsUrl: "https://maps.app.goo.gl/AbCd1234", latitude: 9.03, longitude: 38.74 },
+    }));
+    expect(await screen.findByText("Business location saved.")).toBeVisible();
   });
 
   it("shows initials when a referenced Creator photo cannot be retrieved", async () => {

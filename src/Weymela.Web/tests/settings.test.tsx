@@ -65,6 +65,12 @@ describe("role-aware Settings", () => {
     expect(screen.queryByText("Approve Creators")).not.toBeInTheDocument();
   });
 
+  it("links Business Settings directly to location completion", () => {
+    state.user = { ...state.user!, role: "Business", activeProfileKey: "Business:business-1:business-1", canCheckout: true };
+    render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: /Business Location/ })).toHaveAttribute("href", "/profile#business-location");
+  });
+
   it("uses direct support links without a contact form", () => {
     render(<MemoryRouter><ContactPage /></MemoryRouter>);
     expect(screen.getByRole("link", { name: /support@weymela.com/ })).toHaveAttribute("href", "mailto:support@weymela.com");

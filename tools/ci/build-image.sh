@@ -48,7 +48,7 @@ for name in paths:
 print(digest.hexdigest())
 ')"
   [[ "$frontend_source_fingerprint" =~ ^[a-f0-9]{64}$ ]]
-  # Current upstream still contains vulnerable libuuid and libexpat. Keep the
+  # The pinned upstream contains vulnerable libuuid, libexpat, pcre2 and TIFF. Keep the
   # Alpine base fixed while Dockerfile.web applies checksum-pinned,
   # package-only fixes.
   web_image="nginx:stable-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c"
@@ -85,5 +85,6 @@ if test "$component" = web; then
     > .artifacts/release/web-runtime-packages.txt
   grep -Fx 'libuuid-2.42.3-r1' .artifacts/release/web-runtime-packages.txt
   grep -Fx 'libexpat-2.8.5-r0' .artifacts/release/web-runtime-packages.txt
+  grep -Fx 'tiff-4.7.2-r0' .artifacts/release/web-runtime-packages.txt
 fi
 printf 'image=%s\nrelease=%s\n' "$image" "$release" >> "$GITHUB_OUTPUT"

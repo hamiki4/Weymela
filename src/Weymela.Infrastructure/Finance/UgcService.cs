@@ -47,7 +47,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             {
                 if (requirements.Count == 0 || capacities.Count == 0)
                     throw new ApplicationFailure(FailureKind.Validation,
-                        "UGC + Sales requires Creator publication on a selected social platform.");
+                        "UGC + Sale requires Creator publication on a selected social platform.");
                 if (pricing.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
                     throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
                 var offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,

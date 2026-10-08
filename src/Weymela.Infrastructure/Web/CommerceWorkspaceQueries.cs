@@ -98,7 +98,7 @@ public sealed partial class WorkspaceQueries
                 var profile=await directory.CreatorCardAsync(a.CreatorId,ct);
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
                 var content=PublicContentLink.Create(live.Provider,live.ExternalContentId);
-                result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
+                result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude,business.Category),
                     new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location,offer.RemainingDays));
             }
             else
@@ -106,7 +106,7 @@ public sealed partial class WorkspaceQueries
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
                 if (offer.Creator is null || offer.UgcAssignmentId is null) continue;
                 result.Add(new(offer.OfferId,offer.Source,offer.Offer,
-                    new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude),
+                    new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude,business.Category),
                     new(offer.Creator.DisplayName),offer.BenefitPercent,
                     offer.Provider is null || offer.ExternalContentId is null ? null
                         : PublicContentLink.Create(offer.Provider,offer.ExternalContentId),

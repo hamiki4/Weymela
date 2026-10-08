@@ -98,14 +98,14 @@ describe("Business workspace", () => {
         status: "Completed", createdAtUtc: "2026-09-29T13:00:00Z" },
     ] });
     const rendered = mount(<CheckoutTransactions />);
-    await screen.findByText("Coffee stories");
+    await screen.findByText("Promotion: Coffee stories");
     expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
-    expect(screen.getByText("Creator earning: 45 ETB")).toBeVisible();
-    expect(screen.queryByText("Creator earning: 800 ETB")).not.toBeInTheDocument();
+    expect(screen.getByText("Customer Cashback: 20 ETB")).toBeVisible();
+    expect(screen.queryByText(/Creator earning|Creator:|Creator ID|Business charge/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "UGC + Sale" }));
     expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(1);
-    expect(screen.getByText("Product story")).toBeVisible();
-    expect(screen.queryByText("Coffee stories")).not.toBeInTheDocument();
+    expect(screen.getByText("Promotion: Product story")).toBeVisible();
+    expect(screen.queryByText("Promotion: Coffee stories")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "All" }));
     expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
   });
@@ -138,6 +138,18 @@ describe("Business workspace", () => {
     expect(screen.getByRole("link", { name: "Available funds, view wallet" })).toHaveAttribute("href", "/business/wallet");
     expect(screen.queryByRole("link", { name: "Wallet history" })).not.toBeInTheDocument();
     expect(screen.queryByText("Customer Offer funded")).not.toBeInTheDocument();
+  });
+  it("shows Total, Available, Reserved and pending deposits with clear history tabs", async () => {
+    mockApi({
+      "/business/deposit-requests": [{ id: "deposit", amount: 500, status: "Pending", submittedAtUtc: "2026-09-29T12:00:00Z", destinationName: "CBE", destinationAccount: "1000000000" }],
+      "/business/wallet": { ...wallet, history: [{ id: "entry", label: "Deposit approved", amount: 250, atUtc: "2026-09-28T12:00:00Z", reference: "ref" }] },
+    });
+    mount(<BusinessWallet />);
+    expect(await screen.findByText("Pending Deposits")).toBeVisible();
+    expect(screen.getAllByText("500 ETB")).toHaveLength(2);
+    expect(screen.getByText(/CBE · 1000000000/)).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "Wallet Activity" }));
+    expect(await screen.findAllByText("Deposit approved")).toHaveLength(2);
   });
   it("routes Business operations to their destination and keeps one Create Promotion action", async () => {
     mount(<BusinessDashboard />);
@@ -213,15 +225,15 @@ describe("Business workspace", () => {
     mount(<CreateCampaign />, "/business/campaigns/new?type=views");
 
     expect(await screen.findByLabelText("Promotion title")).toBeVisible();
-    expect(screen.getByText("Views", { selector: "strong" })).toBeVisible();
+    expect(screen.getByText("View Only", { selector: "strong" })).toBeVisible();
     expect(screen.queryByRole("combobox", { name: "Promotion type" })).not.toBeInTheDocument();
   });
 
-  it("opens the selected Views + Sales Promotion form", async () => {
+  it("opens the selected View + Sale Promotion form", async () => {
     mount(<CreateCampaign />, "/business/campaigns/new?type=views-sales");
 
     expect(await screen.findByLabelText("Promotion title")).toBeVisible();
-    expect(screen.getByText("Views + Sales", { selector: "strong" })).toBeVisible();
+    expect(screen.getByText("View + Sale", { selector: "strong" })).toBeVisible();
   });
 
   it("opens UGC from the unified Promotion choice without a Customer sale", async () => {
@@ -232,10 +244,10 @@ describe("Business workspace", () => {
     expect(screen.queryByLabelText("Customer cashback budget")).not.toBeInTheDocument();
   });
 
-  it("opens UGC + Sales with Customer sale fields already enabled", async () => {
+  it("opens UGC + Sale with Customer sale fields already enabled", async () => {
     mount(<CreateBusinessUgcPage />, "/business/ugc/new?type=ugc-sales");
 
-    expect(await screen.findByText("UGC + Sales", { selector: ".promotion-selected-type strong" })).toBeVisible();
+    expect(await screen.findByText("UGC + Sale", { selector: ".promotion-selected-type strong" })).toBeVisible();
     expect(screen.getByLabelText("Customer cashback %")).toBeVisible();
     expect(screen.getByLabelText("Customer cashback budget")).toBeVisible();
   });
@@ -257,7 +269,7 @@ describe("Business workspace", () => {
       screen.getByLabelText("Promotion budget"),
       "1000",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ campaignBudget: 1000, description: "", platforms: [{ platform: "TikTok", capacity: 1 }] }));
     expect(api.writes.find(write => write.path === "/business/promotions")?.body).not.toHaveProperty("creatorCommissionPercent");
   });
@@ -298,15 +310,15 @@ describe("Business workspace", () => {
     const { writes } = mockApi();
     mount(<CreateBusinessUgcPage />);
     expect(await screen.findByText("Product arrangement")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save Draft" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await userEvent.type(screen.getByLabelText("Promotion title"), "Product story");
     await userEvent.type(screen.getByLabelText("Instructions"), "Make a short video");
     await userEvent.type(screen.getByLabelText("Application closes"), "2027-11-30T10:00");
     await userEvent.type(screen.getByLabelText("Content due"), "2027-12-01T10:00");
     await userEvent.type(screen.getByLabelText("Creator payment (ETB)"), "500");
     await userEvent.click(screen.getByRole("radio", { name: new RegExp(label) }));
-    expect(screen.getByRole("button", { name: "Save Draft" })).toBeEnabled();
-    await userEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(writes.find((write) => write.path === "/business/ugc")?.body).toMatchObject({ productProvided, creatorMustPurchase, creatorPayment: 500, customerOfferEnabled: false }));
   });
   it("shows the arrangement in Business management and before a Creator joins", async () => {
@@ -333,7 +345,7 @@ describe("Business workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(await screen.findByLabelText("Promotion budget"), "10000");
     expect(screen.queryByText(/Available funds cannot cover this Promotion/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Draft" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
   it("omits the slogan and sends social capacities with the Promotion", async () => {
     const api = mockApi();
@@ -345,7 +357,7 @@ describe("Business workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.click(screen.getByRole("button", { name: "Add TikTok Creator slot" }));
     await userEvent.type(screen.getByLabelText("Promotion budget"), "1000");
-    await userEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ slogan: null, platforms: [{ platform: "TikTok", capacity: 2 }] }));
   });
   it("shows optional slogan and approved platform occupancy in Business management", async () => {
@@ -356,7 +368,7 @@ describe("Business workspace", () => {
     expect(screen.getByText("TikTok · 2 Creators")).toBeVisible();
     expect(container.querySelector(".business-platform-summary")).not.toHaveTextContent(/pending requests/);
   });
-  it("shows funding as the next action for a private Draft", async () => {
+  it("shows Publish and Edit as the next actions for a private Draft", async () => {
     const api = mockApi({
       "/business/campaigns/campaign": {
         ...detail,
@@ -368,9 +380,9 @@ describe("Business workspace", () => {
       "/business/campaigns/campaign",
       "/business/campaigns/:id",
     );
-    expect(await screen.findByRole("button", { name: "Fund Promotion" })).toBeVisible();
-    expect(screen.getByText(/Fund this Promotion, then post it/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Publish" })).toBeVisible();
+    expect(screen.getByText(/Publish when the details and confirmed funding are ready/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
     expect(api.writes).toHaveLength(0);
   });
   it("approves an applicant and sets Creator Budget in one request", async () => {
@@ -640,7 +652,7 @@ describe("Creator workspace", () => {
       customerOfferFundedAllocation: 10000, platformFee: 250, productProvided: true, creatorMustPurchase: false };
     mockCreatorApi({ "/creator/ugc": [card] });
     mount(<CreatorDiscover />, "/creator/discover");
-    expect(await screen.findByText("UGC + Sales")).toBeVisible();
+    expect(await screen.findByText("UGC + Sale")).toBeVisible();
     expect(screen.getByText("Creator payment 4,750 ETB")).toBeVisible();
     expect(screen.getByText("Customer earns 3% cashback")).toBeVisible();
     expect(screen.getByText("Product provided by Business")).toBeVisible();
@@ -966,12 +978,14 @@ describe("Accepted commerce compatibility", () => {
     const api = mockApi();
     mount(<CustomerOffers />);
     expect(
-      await screen.findByRole("link", { name: "Get Offer" }),
+      await screen.findByRole("link", { name: "Get Offer QR" }),
     ).toBeVisible();
     expect(screen.getByText("2% cashback")).toBeVisible();
+    expect(screen.getByText("Coffee Shop")).toBeVisible();
     expect(screen.getByText("Good coffee, thoughtful stories.")).toBeVisible();
-    expect(screen.getByText("By Bella")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Watch Video" })).toBeVisible();
+    expect(screen.getByText("Bella", { selector: "[data-no-translate]" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Get Directions" })).toBeVisible();
     expect(screen.getAllByText("Addis Ababa").some(element => element.tagName === "SPAN")).toBe(true);
     expect(screen.queryByText("CAM-100")).not.toBeInTheDocument();
     expect(screen.queryByText("creator")).not.toBeInTheDocument();
@@ -985,7 +999,7 @@ describe("Accepted commerce compatibility", () => {
     expect(screen.getByText("5% cashback")).toBeVisible();
     expect(screen.queryByText("Customer offer")).not.toBeInTheDocument();
     expect(screen.queryByText(/By /)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Watch Video" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
   });
   it("uses the Customer offer title when the optional slogan is blank", async () => {
     mockApi({ "/customer/offers": [{ ...offer, slogan: "  " }] });
@@ -1006,8 +1020,8 @@ describe("Accepted commerce compatibility", () => {
       "/customer/offers": [{ ...offer, watchUrl: null, business: { ...offer.business, directionsUrl: null } }],
     });
     mount(<CustomerOffers />);
-    await screen.findByRole("link", { name: "Get Offer" });
-    expect(screen.queryByRole("link", { name: "Watch Video" })).not.toBeInTheDocument();
+    await screen.findByRole("link", { name: "Get Offer QR" });
+    expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
   });
   it("keeps Discover on the same eligible Customer offer API and filters safely", async () => {
     mockApi({ "/customer/offers": [offer, ugcCustomerOffer] });
@@ -1060,7 +1074,11 @@ describe("Accepted commerce compatibility", () => {
       ],
     });
     const rendered = mount(<CustomerTransactions />);
-    expect((await screen.findAllByText("Cashback Earned")).length).toBe(2);
+    expect(await screen.findByText("Total Spent")).toBeVisible();
+    expect(screen.getByText("Total Cashback Earned")).toBeVisible();
+    expect(screen.getByText("2,000 ETB")).toBeVisible();
+    expect(screen.getByText("90 ETB")).toBeVisible();
+    expect(screen.getAllByText("Cashback Earned")).toHaveLength(2);
     expect(screen.queryByText("Promoted by Bella")).not.toBeInTheDocument();
     expect(screen.queryByText("Original purchase")).not.toBeInTheDocument();
     expect(screen.queryByText("Discount")).not.toBeInTheDocument();
@@ -1112,7 +1130,7 @@ describe("Accepted commerce compatibility", () => {
       "/customer/offers",
     );
     expect(screen.queryByText(/selected creator|Creator promotion/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Get Offer" }));
+    await userEvent.click(screen.getByRole("button", { name: "Get Offer QR" }));
     expect(
       await screen.findByRole("img", { name: "Offer QR for the cashier" }),
     ).toBeVisible();

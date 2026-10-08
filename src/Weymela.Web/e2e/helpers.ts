@@ -48,18 +48,13 @@ export async function ensureBusinessFunds(context: BrowserContext, minimum: numb
 }
 
 export async function saveFundPostAndOpenPromotion(page: Page, budget = 1000) {
-  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/business\/campaigns\/[0-9a-f-]{36}$/i);
   const promotionId = page.url().split("/").pop()!;
   await ensureBusinessFunds(page.context(), budget);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Fund Promotion", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Fund Promotion", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Post to Creators", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Post to Creators", exact: true }).click();
-  const openPromotion = page.getByRole("button", { name: "Open Promotion", exact: true });
-  if (await openPromotion.count()) await openPromotion.click();
-  await expect(page.getByRole("button", { name: "Open Promotion", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.locator("main .badge").filter({ hasText: "Active" }).first()).toBeVisible();
   return promotionId;
 }

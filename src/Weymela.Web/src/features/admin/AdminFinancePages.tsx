@@ -68,7 +68,8 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
   const [reference, setReference] = useState("");
   const [message, setMessage] = useState("");
   const pending = deposits.data?.filter(row => row.status === "Pending") ?? [];
-  const current = pending.find(row => row.id === selected);
+  const rows = deposits.data ?? [];
+  const current = rows.find(row => row.id === selected);
   const review = (approve: boolean) => {
     if (!current || !reference.trim()) return;
     void action.run(async key => {
@@ -79,19 +80,19 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
   };
   return <Section title={`Deposit review · ${pending.length} pending`}>
     {message && <Notice>{message}</Notice>}
-    <Resource resource={deposits}>{() => pending.length ? <DataTable rows={pending} rowKey={row => row.id} label="Pending deposits" columns={[
+    <Resource resource={deposits}>{() => rows.length ? <DataTable rows={rows} rowKey={row => row.id} label="Deposits" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> }, { label: "Amount", cell: row => br(row.amount), numeric: true },
       { label: "Deposited To", cell: row => row.destinationNameSnapshot ?? "Legacy" }, { label: "Weymela Destination", cell: row => row.destinationAccountSnapshot ?? "—" },
       { label: "Receipt", cell: row => row.hasReceipt ? <Button variant="secondary" onClick={() => setSelected(row.id)}>View Receipt</Button> : "—" },
       { label: "Submitted", cell: row => date(row.submittedAtUtc) }, { label: "Status", cell: row => <Badge status={row.status} /> },
-      { label: "Action", cell: row => <Button variant="secondary" onClick={() => setSelected(row.id)}>Review</Button> },
-    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><small>{row.destinationNameSnapshot ?? "Legacy"} · {row.destinationAccountSnapshot ?? "—"}</small><dl className="admin-mobile-facts"><div><dt>Amount</dt><dd>{br(row.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(row.submittedAtUtc)}</dd></div></dl><Button variant="secondary" onClick={() => setSelected(row.id)}>Review</Button></div>} empty={null} /> : <Empty title="No pending deposits" message="There are no deposits awaiting review." />}</Resource>
+      { label: "Action", cell: row => <Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button> },
+    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><small>{row.destinationNameSnapshot ?? "Legacy"} · {row.destinationAccountSnapshot ?? "—"}</small><dl className="admin-mobile-facts"><div><dt>Amount</dt><dd>{br(row.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(row.submittedAtUtc)}</dd></div></dl><Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button></div>} empty={null} /> : <Empty title="No deposits" message="Submitted deposits will appear here." />}</Resource>
     <Dialog title={current ? `Review deposit · ${current.business}` : "Review deposit"} open={!!current} onClose={() => { if (!action.busy) { setSelected(null); setReference(""); } }}>
       {current && <div className="admin-deposit-review"><dl className="admin-mobile-facts"><div><dt>Business</dt><dd>{current.business}</dd></div><div><dt>Amount</dt><dd>{br(current.amount)}</dd></div><div><dt>Deposited To</dt><dd>{current.destinationNameSnapshot ?? "Legacy request"}</dd></div><div><dt>Weymela Destination</dt><dd>{current.destinationAccountSnapshot ?? "—"}</dd></div><div><dt>Submitted</dt><dd>{date(current.submittedAtUtc)}</dd></div><div><dt>Status</dt><dd>Pending</dd></div></dl>
         {current.hasReceipt ? <ReceiptReviewImage id={current.id} /> : <Notice error>No receipt is attached to this earlier request.</Notice>}
-        <Field label="Confirmation reference or reason code"><input required maxLength={120} pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value={reference} onChange={event => setReference(event.target.value)} /></Field>
-        {action.error && <Notice error>{action.error}</Notice>}
-        <div className="actions"><Button disabled={action.busy || !reference.trim()} onClick={() => review(true)}>Approve</Button><Button variant="secondary" disabled={action.busy || !reference.trim()} onClick={() => review(false)}>Reject</Button></div>
+        {current.status === "Pending" && <><Field label="Confirmation reference or reason code"><input required maxLength={120} pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value={reference} onChange={event => setReference(event.target.value)} /></Field>
+          {action.error && <Notice error>{action.error}</Notice>}
+          <div className="actions"><Button disabled={action.busy || !reference.trim()} onClick={() => review(true)}>Approve</Button><Button variant="secondary" disabled={action.busy || !reference.trim()} onClick={() => review(false)}>Reject</Button></div></>}
       </div>}
     </Dialog>
   </Section>;

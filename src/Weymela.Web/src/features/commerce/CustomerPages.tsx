@@ -7,6 +7,7 @@ import {
   ActionLink,
   Button,
   Empty,
+  Metric,
   Notice,
   PageHeader,
   Resource,
@@ -113,6 +114,7 @@ function CustomerLocationCard({
 
 function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm: number | null }) {
   const watchUrl = safeExternal(offer.watchUrl);
+  const directionsUrl = safeExternal(offer.business.directionsUrl);
   const headingId = `customer-offer-${offer.id}-${offer.ugcAssignmentId ?? "promotion"}`;
   const customerFacingTitle = offer.slogan?.trim() || offer.offer;
 
@@ -124,7 +126,8 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             {initial(offer.business.displayName)}
           </span>
           <div>
-            <h2 id={headingId}>{offer.business.displayName}</h2>
+            <h2 id={headingId} data-no-translate>{offer.business.displayName}</h2>
+            {offer.business.category && <small>{offer.business.category}</small>}
           </div>
         </div>
         <span className="customer-benefit-badge">{benefitLabel(offer)}</span>
@@ -150,7 +153,7 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             <span className="customer-creator-avatar" aria-hidden="true">
               {initial(offer.creator.displayName)}
             </span>
-            By {offer.creator.displayName}
+            By <span data-no-translate>{offer.creator.displayName}</span>
           </span>
         )}
       </div>
@@ -164,11 +167,12 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             rel="noreferrer"
           >
             <Icon name="video" />
-            Watch Video
+            Watch Promotion
           </a>
         )}
+        {directionsUrl && <a className="button secondary" href={directionsUrl} target="_blank" rel="noreferrer"><Icon name="location" />Get Directions</a>}
         <ActionLink to={`/customer/offers/${offer.id}${offer.ugcAssignmentId ? `?assignment=${offer.ugcAssignmentId}` : ""}`} icon="qr">
-          Get Offer
+          Get Offer QR
         </ActionLink>
       </div>
     </article>
@@ -503,7 +507,7 @@ function QrPanel({ offer }: { offer: Offer }) {
               })
             }
           >
-            {action.busy ? "Preparing offer…" : "Get Offer"}
+            {action.busy ? "Preparing offer…" : "Get Offer QR"}
           </Button>
         </>
       )}
@@ -534,7 +538,7 @@ export function CustomerOfferQr() {
                 {embedUrl ? <iframe className="customer-live-video-frame" src={embedUrl} title={`${offer.business.displayName} Promotion video`}
                   allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
                   : <div className="customer-live-video-frame"><Icon name="video" size={42} /></div>}
-                {watchUrl ? <a className="button secondary" href={watchUrl} target="_blank" rel="noopener noreferrer">Watch Video</a>
+                {watchUrl ? <a className="button secondary" href={watchUrl} target="_blank" rel="noopener noreferrer">Watch Promotion</a>
                   : <p className="muted">Video unavailable.</p>}
               </section>
               <QrPanel key={`${offer.id}:${offer.ugcAssignmentId ?? "promotion"}`} offer={offer} />
@@ -559,13 +563,17 @@ export function CustomerTransactions() {
     <div className="customer-ledger-page">
       <PageHeader title="Transactions" compact />
       <Resource resource={resource}>
-        {(rows) => rows.length ? (
+        {(rows) => rows.length ? (<>
+          <div className="metric-grid customer-transaction-summary" aria-label="Transaction summary">
+            <Metric label="Total Spent" value={`${amount(rows.reduce((total, row) => total + row.purchaseAmount.amount, 0))} ETB`} icon="wallet" />
+            <Metric label="Total Cashback Earned" value={`${amount(rows.reduce((total, row) => total + (row.cashbackEarned?.amount ?? 0), 0))} ETB`} icon="plus" emphasis />
+          </div>
           <section className="customer-ledger-list" aria-label="Customer transactions">
             {rows.map((row, index) => (
                 <article className="customer-transaction-card" key={`${row.source}-${row.purchasedAtUtc}-${index}`}>
                   <header>
                     <div>
-                      <h2>{row.business}</h2>
+                      <h2 data-no-translate>{row.business}</h2>
                     </div>
                     <time dateTime={row.purchasedAtUtc}>{dateTime(row.purchasedAtUtc)}</time>
                   </header>
@@ -576,6 +584,7 @@ export function CustomerTransactions() {
                 </article>
               ))}
           </section>
+        </>
         ) : (
           <Empty
             title="No transactions yet."

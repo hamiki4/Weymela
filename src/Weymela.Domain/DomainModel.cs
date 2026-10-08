@@ -156,7 +156,7 @@ public sealed class Promotion
         IReadOnlyCollection<(CreatorPlatform Platform, int Capacity, long? MinimumAudience)> selectedPlatforms,
         DateTime? applicationClosesAtUtc, DateTime? contentDueAtUtc)
     {
-        Ensure(PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active);
+        Ensure(PromotionStatus.Draft, PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active);
         if (allocations.Count > 0)
             throw new InvalidOperationException("Promotion terms are locked because a Creator has been approved.");
         if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 120 || description.Length > 3000)

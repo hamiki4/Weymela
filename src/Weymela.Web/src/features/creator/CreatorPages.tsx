@@ -136,11 +136,11 @@ export function CreatorEarnings() {
                     { label: "Business", cell: (r) => r.business ?? r.campaign },
                     { label: "Earning Type", cell: (r) => r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source },
                     {
-                      label: "Amount",
+                      label: "Amount Earned",
                       cell: (r) => `+${amount(r.amount)} ETB`,
                       numeric: true,
                     },
-                    { label: "Date", cell: (r) => dateTime(r.atUtc) },
+                    { label: "Date/Time", cell: (r) => dateTime(r.atUtc) },
                   ]}
                   card={(r) => (
                     <>

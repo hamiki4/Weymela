@@ -29,9 +29,8 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await layout(page);
     if (width === 390 || width === 393) await screenshot(page, `${width}-business-ugc-platform-capacity`);
     if (width === 320) {
-      await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+      await page.getByRole("button", { name: "Publish", exact: true }).click();
       await expect(page).toHaveURL(/\/business\/ugc\/[0-9a-f-]{36}$/i);
-      await page.getByRole("button", { name: "Post to Creators", exact: true }).click();
       await expect(page.getByText("Active", { exact: true })).toBeVisible();
       const response = await context.request.get("/api/business/ugc", { headers: { "X-Weymela-Request": "1" } });
       expect(response.ok()).toBeTruthy();

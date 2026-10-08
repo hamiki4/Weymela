@@ -156,7 +156,8 @@ public sealed class PersistentWorkspaceDirectory(WeymelaDbContext db) : IWorkspa
     public async Task<CustomerOfferBusiness> CustomerOfferBusinessAsync(Guid id, CancellationToken ct)
     {
         var p = await Profile(id, ActorRole.Business, ct);
-        return new(p.DisplayName, SafeUrl(p.DirectionsUrl), p.Latitude, p.Longitude);
+        return new(p.DisplayName, SafeUrl(p.DirectionsUrl), p.Latitude, p.Longitude,
+            string.IsNullOrWhiteSpace(p.Category) ? null : p.Category);
     }
     public async Task<CreatorCard> CreatorCardAsync(Guid id, CancellationToken ct)
     { var p = await Profile(id, ActorRole.Creator, ct); return new(id, p.DisplayName, p.PublicId, p.Region, p.Category, p.VerifiedFollowers, p.VerifiedViews, p.SocialVerified, SafeUrl(p.PortfolioUrl), p.CreatorNumber); }

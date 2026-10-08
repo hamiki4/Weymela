@@ -24,6 +24,7 @@ import {
   PageHeader,
   Resource,
   Section,
+  Tabs,
 } from "../../ui/components";
 import {
   amount,
@@ -39,9 +40,14 @@ import { useSession } from "../../app/Session";
 import { DepositSubmission, type DepositRequest } from "./DepositSubmission";
 import { BusinessUgcCard } from "./UgcPages";
 
-export function WalletMetrics({ wallet }: { wallet: Wallet }) {
+export function WalletMetrics({ wallet, pendingDeposits }: { wallet: Wallet; pendingDeposits: number }) {
   return (
     <div className="metric-grid fund-metrics">
+      <Metric
+        label="Total"
+        value={`${amount(wallet.totalBalance)} ETB`}
+        icon="wallet"
+      />
       <Metric
         label="Available"
         value={`${amount(wallet.available)} ETB`}
@@ -54,9 +60,9 @@ export function WalletMetrics({ wallet }: { wallet: Wallet }) {
         icon="lock"
       />
       <Metric
-        label="Total"
-        value={`${amount(wallet.totalBalance)} ETB`}
-        icon="wallet"
+        label="Pending Deposits"
+        value={`${amount(pendingDeposits)} ETB`}
+        icon="document"
       />
     </div>
   );
@@ -131,6 +137,7 @@ export function BusinessWallet() {
   const depositRequests = useResource<DepositRequest[]>("/business/deposit-requests");
   const [value, setValue] = useState("");
   const [success, setSuccess] = useState(false);
+  const [historyTab, setHistoryTab] = useState("Deposits");
   const action = useAction();
   const { user } = useSession();
   return (
@@ -139,7 +146,7 @@ export function BusinessWallet() {
       <Resource resource={resource}>
         {(wallet) => (
           <>
-            <WalletMetrics wallet={wallet} />
+            <WalletMetrics wallet={wallet} pendingDeposits={(depositRequests.data ?? []).filter(request => request.status === "Pending").reduce((sum, request) => sum + request.amount, 0)} />
             <div className="wallet-content">
               <Section title="Add Funds">
                 <details className="wallet-add-funds">
@@ -205,7 +212,8 @@ export function BusinessWallet() {
                   </div>
                 </details>
               </Section>
-              <Section title="Funding requests">
+            <Tabs label="Wallet history" value={historyTab} onChange={setHistoryTab} items={["Deposits", "Wallet Activity"].map(value => ({ value, label: value }))} />
+            {historyTab === "Deposits" && <Section title="Deposits">
                 <Resource resource={depositRequests}>
                   {(rows) => {
                     const requests = Array.isArray(rows) ? rows : [];
@@ -213,16 +221,16 @@ export function BusinessWallet() {
                       {requests.map((request) => <article className="business-funding-request" key={request.id}>
                         <div>
                           <strong><Badge status={request.status} label={request.status} /></strong>
-                          <small>{date(request.submittedAtUtc)}</small>
+                          <small>{request.destinationName ? `${request.destinationName} · ${request.destinationAccount} · ` : ""}{date(request.submittedAtUtc)}</small>
                         </div>
                         <strong>{amount(request.amount)} ETB</strong>
                       </article>)}
                     </div> : <Empty title="No funding requests" message="Submitted receipts will appear here for review." />;
                   }}
                 </Resource>
-              </Section>
+              </Section>}
             </div>
-            <Section title="Wallet history" className="business-wallet-history">
+            {historyTab === "Wallet Activity" && <Section title="Wallet Activity" className="business-wallet-history">
               <DataTable
                 rows={wallet.history}
                 rowKey={(r) => r.id}
@@ -252,7 +260,7 @@ export function BusinessWallet() {
                   />
                 }
               />
-            </Section>
+            </Section>}
           </>
         )}
       </Resource>

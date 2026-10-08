@@ -79,8 +79,8 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             {
                 if (promotion.Allocations.Count > 0)
                     throw new ApplicationFailure(FailureKind.Validation,"Some terms are locked because a Creator has been approved.");
-                if (promotion.Status is not (PromotionStatus.Funded or PromotionStatus.Published or PromotionStatus.Active))
-                    throw new ApplicationFailure(FailureKind.Validation,"Only funded or published Promotions can be edited here.");
+                if (promotion.Status is not (PromotionStatus.Draft or PromotionStatus.Funded or PromotionStatus.Published or PromotionStatus.Active))
+                    throw new ApplicationFailure(FailureKind.Validation,"This Promotion can no longer be edited.");
                 var type = promotion.PromotionType;
                 if (input.Type is { } requestedType)
                 {
@@ -116,22 +116,25 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
                     start,end,pricing,Clean(input.Slogan) ?? promotion.Slogan,Clean(input.Location) ?? promotion.Location,resources,
                     platforms,input.ApplicationClosesAtUtc ?? promotion.ApplicationClosesAtUtc,input.ContentDueAtUtc ?? promotion.ContentDueAtUtc);
                 foreach (var removed in previousPlatforms.Where(old => promotion.Platforms.All(current => current.Id != old.Id))) db.PromotionPlatforms.Remove(removed);
-                var wallet = await db.BusinessWallets.SingleAsync(x=>x.BusinessId==promotion.BusinessId,token);
-                var delta = budget.Amount - previousReserved.Amount;
-                var adjustmentCorrelation = Guid.NewGuid();
-                if (delta > 0)
+                if (previousReserved.Amount > 0)
                 {
-                    var adjustment = new Money(delta,budget.Currency); wallet.ReserveForPromotion(adjustment,Now,adjustmentCorrelation); promotion.SetReservedBudget(previousReserved.Add(adjustment));
-                    var journal=PromotionAdjustmentJournal(actor,adjustment,"BusinessAvailable","CampaignUnallocatedReserve",key,adjustmentCorrelation,promotion.Id);
-                    db.WalletEntries.Add(new(Guid.NewGuid(),promotion.BusinessId,promotion.Id,adjustment,"ReserveAdjustment",journal.Id,Now));
-                    db.PromotionBudgetEntries.Add(new(Guid.NewGuid(),promotion.Id,null,adjustment,"Increased",journal.Id,Now));
-                }
-                else if (delta < 0)
-                {
-                    var adjustment = new Money(-delta,budget.Currency); wallet.ReleasePromotionReserve(adjustment,Now,adjustmentCorrelation); promotion.SetReservedBudget(previousReserved.Subtract(adjustment));
-                    var journal=PromotionAdjustmentJournal(actor,adjustment,"CampaignUnallocatedReserve","BusinessAvailable",key,adjustmentCorrelation,promotion.Id);
-                    db.WalletEntries.Add(new(Guid.NewGuid(),promotion.BusinessId,promotion.Id,adjustment,"ReleaseAdjustment",journal.Id,Now));
-                    db.PromotionBudgetEntries.Add(new(Guid.NewGuid(),promotion.Id,null,adjustment,"Released",journal.Id,Now));
+                    var wallet = await db.BusinessWallets.SingleAsync(x=>x.BusinessId==promotion.BusinessId,token);
+                    var delta = budget.Amount - previousReserved.Amount;
+                    var adjustmentCorrelation = Guid.NewGuid();
+                    if (delta > 0)
+                    {
+                        var adjustment = new Money(delta,budget.Currency); wallet.ReserveForPromotion(adjustment,Now,adjustmentCorrelation); promotion.SetReservedBudget(previousReserved.Add(adjustment));
+                        var journal=PromotionAdjustmentJournal(actor,adjustment,"BusinessAvailable","CampaignUnallocatedReserve",key,adjustmentCorrelation,promotion.Id);
+                        db.WalletEntries.Add(new(Guid.NewGuid(),promotion.BusinessId,promotion.Id,adjustment,"ReserveAdjustment",journal.Id,Now));
+                        db.PromotionBudgetEntries.Add(new(Guid.NewGuid(),promotion.Id,null,adjustment,"Increased",journal.Id,Now));
+                    }
+                    else if (delta < 0)
+                    {
+                        var adjustment = new Money(-delta,budget.Currency); wallet.ReleasePromotionReserve(adjustment,Now,adjustmentCorrelation); promotion.SetReservedBudget(previousReserved.Subtract(adjustment));
+                        var journal=PromotionAdjustmentJournal(actor,adjustment,"CampaignUnallocatedReserve","BusinessAvailable",key,adjustmentCorrelation,promotion.Id);
+                        db.WalletEntries.Add(new(Guid.NewGuid(),promotion.BusinessId,promotion.Id,adjustment,"ReleaseAdjustment",journal.Id,Now));
+                        db.PromotionBudgetEntries.Add(new(Guid.NewGuid(),promotion.Id,null,adjustment,"Released",journal.Id,Now));
+                    }
                 }
             }
             var correlation=Guid.NewGuid();op.Remember(actor,"UpdatePromotion",key,fingerprint,id.ToString(),Now);op.Audit(actor,"PromotionUpdated",correlation,Now,id);op.Event("PromotionUpdated",new{PromotionId=id,promotion.BusinessId},Now);return id;

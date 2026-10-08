@@ -227,7 +227,8 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                     .SingleAsync(x=>x.Id==allocationId,ct);
                 var promotion=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==allocation.PromotionId,ct);
                 return Plan("Creator work is Live","The verified Creator publication is now live.",promotion.Id,allocation.Id,
-                    new NotificationAudience(ActorRole.Business,promotion.BusinessId));
+                    new NotificationAudience(ActorRole.Business,promotion.BusinessId),
+                    new NotificationAudience(ActorRole.PlatformAdmin));
             }
             case "UgcPublicationActivated":
             {
@@ -239,7 +240,9 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 var opportunity=await db.UgcOpportunities.AsNoTracking()
                     .Where(x=>x.Id==opportunityId).Select(x=>new{x.Id,x.BusinessId}).SingleAsync(ct);
                 return Plan("Creator work is Live","The verified Creator publication is now live.",null,null,
-                    new NotificationAudience(ActorRole.Business,opportunity.BusinessId)) with { UgcId=opportunity.Id };
+                    new NotificationAudience(ActorRole.Business,opportunity.BusinessId),
+                    new NotificationAudience(ActorRole.PlatformAdmin),
+                    new NotificationAudience(ActorRole.OperationsAdmin)) with { UgcId=opportunity.Id };
             }
         }
         return null;

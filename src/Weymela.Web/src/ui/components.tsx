@@ -387,7 +387,7 @@ export function Person({
       {photo ? <CreatorAvatar name={person.displayName} path={`/business/creator-photos/${person.id}`} />
         : <span className="avatar" aria-hidden="true">{person.displayName.slice(0, 1)}</span>}
       <div>
-        <strong>{person.displayName}</strong>
+        <strong data-no-translate>{person.displayName}</strong>
         <small>
           {photo && person.creatorNumber != null ? `Creator #${person.creatorNumber}` : person.publicId}
           {detail && ` · ${person.category}`}

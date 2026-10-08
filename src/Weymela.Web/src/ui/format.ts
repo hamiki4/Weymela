@@ -13,14 +13,14 @@ export const count = (value: number) =>
   new Intl.NumberFormat("en-ET").format(value);
 export const date = (value: string | null) =>
   value
-    ? new Intl.DateTimeFormat("en", {
+    ? new Intl.DateTimeFormat(languageLocale(), {
         day: "numeric",
         month: "short",
         year: "numeric",
       }).format(new Date(value))
     : "—";
 export const dateTime = (value: string) =>
-  new Intl.DateTimeFormat("en", {
+  new Intl.DateTimeFormat(languageLocale(), {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -48,16 +48,16 @@ export const campaignType = (type: string) => {
 };
 export const promotionTypeLabel = (type: string) => {
   const code = promotionTypeCode(type);
-  if (code === "ViewOnly") return "Views";
-  if (code === "ViewPlusCommission") return "Views + Sales";
+  if (code === "ViewOnly") return "View Only";
+  if (code === "ViewPlusCommission") return "View + Sale";
   if (type === "UGC" || type === "Content") return "UGC";
-  if (type === "UGC + Sales" || type === "UGCWithSales") return "UGC + Sales";
+  if (type === "UGC + Sales" || type === "UGCWithSales") return "UGC + Sale";
   return type;
 };
 export const promotionStatusLabel = (status: string) => ({
   Draft: "Draft",
-  Funded: "Ready to post",
-  Published: "Posted to Creators",
+  Funded: "Ready to publish",
+  Published: "Published",
   Open: "Active",
   Active: "Active",
   AwaitingContent: "Ready for content",
@@ -91,3 +91,4 @@ export const safeExternal = (value: string | null | undefined) => {
     return undefined;
   }
 };
+import { languageLocale } from "../localization/Language";

@@ -221,6 +221,7 @@ export const offer = {
     directionsUrl: business.directionsUrl,
     latitude: null,
     longitude: null,
+    category: "Coffee Shop",
   },
   creator: { displayName: creator.displayName },
   benefitPercent: 2,

@@ -147,7 +147,7 @@ function CreatorHomeOpportunityPreview({ promotion, ugc }: { promotion?: Opportu
   const href = promotion ? `/creator/discover/${promotion.id}` : `/creator/ugc/${ugc?.id}`;
   const business = promotion?.business.displayName ?? ugc?.business ?? "Promotion";
   const title = promotion?.title ?? ugc?.title ?? "Promotion";
-  const type = promotion ? promotionTypeLabel(promotion.type) : ugc?.customerOfferEnabled ? "UGC + Sales" : "UGC";
+  const type = promotion ? promotionTypeLabel(promotion.type) : ugc?.customerOfferEnabled ? "UGC + Sale" : "UGC";
 
   return <article className="creator-home-opportunity-preview">
     <div className="creator-home-opportunity-copy">
@@ -231,7 +231,7 @@ function PromotionOpportunityCard({ row }: { row: Opportunity }) {
 }
 
 function UGCOpportunityCard({ row, onChanged }: { row: UgcCard; onChanged: () => void }) {
-  const typeLabel = row.customerOfferEnabled ? "UGC + Sales" : "UGC";
+  const typeLabel = row.customerOfferEnabled ? "UGC + Sale" : "UGC";
   const platforms = (row.platformRequirements ?? [])
     .map((requirement) => requirement.platform)
     .join(" · ");
@@ -466,7 +466,7 @@ export function CreatorUgcOpportunity() {
           : "Product arrangement unavailable";
       const requirements = opportunity.platformRequirements ?? [];
       return <>
-        <PageHeader eyebrow={opportunity.business} title={opportunity.title} description={opportunity.customerOfferEnabled ? "UGC + Sales" : "UGC"}
+        <PageHeader eyebrow={opportunity.business} title={opportunity.title} description={opportunity.customerOfferEnabled ? "UGC + Sale" : "UGC"}
           action={opportunity.requestStatus && <Badge status={opportunity.requestStatus} />} />
         <div className="content-grid">
           <Section title="Promotion details">
@@ -607,7 +607,7 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
         </div>
         <CreatorStatus status={status} />
       </div>
-      <p className="creator-work-type">{opportunity?.customerOfferEnabled ? "UGC + Sales" : "UGC"}</p>
+      <p className="creator-work-type">{opportunity?.customerOfferEnabled ? "UGC + Sale" : "UGC"}</p>
       {assignment && <p className="creator-work-summary">Payment {amount(assignment.creatorPayment)} ETB · Due {date(assignment.dueDateUtc)}</p>}
       {request && <p className="creator-work-summary">Request {status.toLowerCase()}</p>}
       {detail.error && <div className="creator-work-detail-error"><span>Promotion details unavailable.</span><Button variant="secondary" onClick={detail.reload}>Retry</Button></div>}

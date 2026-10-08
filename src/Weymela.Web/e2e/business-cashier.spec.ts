@@ -209,9 +209,9 @@ test("Checkout shows stable QR outcomes without exposing technical errors", asyn
   await login(context, "customer");
   await open(page, "/customer/offers");
   const promotionCard = page.locator("article.customer-promotion-card").filter({ hasText: "A little coffee. A great story." });
-  await promotionCard.getByRole("link", { name: "Get Offer", exact: true }).click();
+  await promotionCard.getByRole("link", { name: "Get Offer QR", exact: true }).click();
   const issuing = page.waitForResponse((response) => response.url().endsWith("/qr") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
   const qr = await (await issuing).json() as { token: string };
   await login(context, "business");
   await installQrCamera(context, qr.token);
@@ -311,9 +311,9 @@ test("Expired and no-longer-eligible QR outcomes are deterministic BrowserHost f
   await login(context, "customer");
   await open(page, "/customer/offers");
   await page.locator("article.customer-promotion-card").filter({ hasText: "A little coffee. A great story." })
-    .getByRole("link", { name: "Get Offer", exact: true }).click();
+    .getByRole("link", { name: "Get Offer QR", exact: true }).click();
   const issuing = page.waitForResponse((response) => response.url().endsWith("/qr") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
   const issued = await (await issuing).json() as { token: string };
   const expireResponse = await context.request.post("/__test/qr/expired", {
     headers: { ...requestHeaders, "Idempotency-Key": crypto.randomUUID() },
@@ -329,9 +329,9 @@ test("Expired and no-longer-eligible QR outcomes are deterministic BrowserHost f
 
   await login(context, "customer");
   await open(page, "/customer/offers");
-  await page.getByRole("link", { name: "Get Offer", exact: true }).first().click();
+  await page.getByRole("link", { name: "Get Offer QR", exact: true }).first().click();
   const secondIssuing = page.waitForResponse((response) => response.url().endsWith("/qr") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
   const ineligible = await (await secondIssuing).json() as { token: string };
   const ineligibleResponse = await context.request.post("/__test/qr/not-eligible", {
     headers: { ...requestHeaders, "Idempotency-Key": crypto.randomUUID() },

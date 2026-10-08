@@ -107,7 +107,7 @@ describe("Creator Promotions work groups", () => {
     mount();
     const activeRow = (await screen.findByRole("heading", { name: "UGC active" })).closest("article")!;
     expect(screen.getByRole("heading", { name: "Promotion work" })).toBeVisible();
-    expect(await within(activeRow).findByText("UGC + Sales")).toBeVisible();
+    expect(await within(activeRow).findByText("UGC + Sale")).toBeVisible();
     expect(within(activeRow).getByText("Changes Requested", { exact: true })).toBeVisible();
     await userEvent.click(within(activeRow).getByText("View details", { exact: true, selector: "summary" }));
     const review = new File(["review"], "review.mp4", { type: "video/mp4" });

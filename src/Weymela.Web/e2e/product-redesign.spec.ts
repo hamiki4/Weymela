@@ -237,15 +237,14 @@ test("Business keeps funding, Checkout and Cashier Management within reach", asy
   const nav = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(nav.getByRole("link", { name: "Wallet" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Checkout / Scan QR" })).toHaveAttribute("href", "/checkout");
-  await page.getByRole("button", { name: "Open Settings" }).click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
+  await page.getByRole("link", { name: "Open Settings" }).click();
+  const settings = page.locator("main .settings-page");
   await expect(settings.getByRole("link", { name: "Cashier Management" })).toHaveAttribute("href", "/business/cashiers");
   await expect(settings.getByRole("link", { name: "Create Cashier" })).toHaveCount(0);
-  await settings.getByRole("button", { name: "Close Settings" }).click();
-  await nav.getByRole("link", { name: "Profile" }).click();
+  await settings.getByRole("link", { name: "Profile", exact: true }).click();
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.getByRole("heading", { name: "Business Information" })).toBeVisible();
-  await expect(settings).not.toBeVisible();
+  await expect(settings).toHaveCount(0);
   await layout(page);
   await screenshot(page, "product-mobile-business");
 });
@@ -360,7 +359,7 @@ test("Business visual review captures operational surfaces at approved widths", 
   await screenshot(page, "business-wallet-1366");
 });
 
-test("Cashier has Purchase, Transactions and Profile without a dashboard", async ({ page, context }) => {
+test("Cashier has Purchase, Transactions and Settings without a duplicate dashboard", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "cashier");
   await open(page, "/checkout");
@@ -369,7 +368,7 @@ test("Cashier has Purchase, Transactions and Profile without a dashboard", async
   await nav.getByRole("link", { name: "Transactions" }).click();
   await expect(page).toHaveURL(/\/checkout\/transactions$/);
   await expect(page.getByRole("heading", { name: "Recent purchases" })).toBeVisible();
-  await expect(nav.getByRole("button", { name: "Profile" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();
   await layout(page);
   await screenshot(page, "product-mobile-cashier-transactions");
 });

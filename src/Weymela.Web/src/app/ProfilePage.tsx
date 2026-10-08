@@ -75,7 +75,7 @@ export function ProfilePage() {
       document.getElementById("social-profiles")?.scrollIntoView?.();
   }, [profile.data, location.hash]);
   return <div className="profile-page">
-    <PageHeader title="Profile" />
+    <PageHeader title="Profile" compact />
     <Resource resource={profile}>{data => <>
       <div className="profile-identity">
         {data.role === "Creator" ? <CreatorAvatar name={data.displayName} path={(photoOverride ?? data.hasCreatorPhoto) ? "/creator/photo" : undefined} large revision={photoRevision} />

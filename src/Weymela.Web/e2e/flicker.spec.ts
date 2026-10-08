@@ -68,7 +68,7 @@ test("iPhone first visit keeps Business Home visible until Promotions data arriv
   });
   await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Promotions" }).click();
   await expect(page).toHaveURL(/\/business$/);
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toHaveClass(/sr-only/);
   release();
   await expect(page).toHaveURL(/\/business\/campaigns$/);
   await expect(page.locator("main h1", { hasText: "Promotions" })).toBeVisible();

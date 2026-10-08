@@ -47,7 +47,7 @@ import { actorRoleNameFromWire, type ActorRoleName } from "../../api/actorRoleCo
 export function OperationsDashboard() {
   const resource = useResource<OperationsHome>("/admin/operations/home");
   return <Resource resource={resource}>{(d) => <>
-    <PageHeader title="Operations Dashboard" />
+    <PageHeader title="Operations Dashboard" compact />
     <div className="metric-grid four">
       <Metric label="Profile requests" value={count(d.pendingReviews)} icon="people" />
       <Metric label="Active campaigns" value={count(d.activeCampaigns)} icon="campaign" />
@@ -76,7 +76,7 @@ export function OperationsDashboard() {
 
 export function OperationsBusinesses() {
   const resource = useResource<OperationsBusinessView[]>("/admin/businesses");
-  return <><PageHeader eyebrow="Business operations" title="Businesses" description="Operational Business status and campaign activity. Wallet balances remain restricted to Platform Admin." />
+  return <><PageHeader title="Businesses" compact />
     <Resource resource={resource}>{(rows) => <Section title="Business accounts"><DataTable rows={rows} rowKey={(r) => r.business.id} label="Operational Business accounts" columns={[
       { label: "Business", cell: (r) => <><strong>{r.business.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.business.region}</small></> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -88,7 +88,7 @@ export function OperationsBusinesses() {
 
 export function OperationsCreators() {
   const resource = useResource<OperationsCreatorView[]>("/admin/creators");
-  return <><PageHeader eyebrow="Creator operations" title="Creators" description="Operational Creator status and campaign participation. Payout amounts are handled in the payout queue." />
+  return <><PageHeader title="Creators" compact />
     <Resource resource={resource}>{(rows) => <Section title="Creator accounts"><DataTable rows={rows} rowKey={(r) => r.creator.id} label="Operational Creator accounts" columns={[
       { label: "Creator", cell: (r) => <><Person person={r.creator} />{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}</> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -100,7 +100,7 @@ export function OperationsCreators() {
 
 export function OperationsCustomers() {
   const resource = useResource<OperationsCustomerView[]>("/admin/customers");
-  return <><PageHeader eyebrow="Customer operations" title="Customers" description="Operational Customer status for support and account review." />
+  return <><PageHeader title="Customers" compact />
     <Resource resource={resource}>{(rows) => <Section title="Customer accounts"><DataTable rows={rows} rowKey={(r) => r.customer.id} label="Operational Customer accounts" columns={[
       { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -110,7 +110,7 @@ export function OperationsCustomers() {
 
 export function OperationsCampaigns() {
   const resource = useResource<OperationsCampaignView[]>("/admin/campaigns");
-  return <><PageHeader eyebrow="Campaign operations" title="Campaigns" description="Operational promotion status and participation without Platform financial totals." />
+  return <><PageHeader title="Campaigns" compact />
     <Resource resource={resource}>{(rows) => <Section title="Campaign activity"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational campaigns" columns={[
       { label: "Campaign", cell: (r) => <><strong>{r.title}</strong><small>{r.publicId}</small></> },
       { label: "Business", cell: (r) => r.business },
@@ -124,7 +124,7 @@ export function OperationsCampaigns() {
 
 export function OperationsUgc() {
   const resource = useResource<OperationsUgcView[]>("/admin/ugc");
-  return <><PageHeader eyebrow="UGC operations" title="UGC" description="Operational UGC opportunities and delivery status. Global UGC financial configuration remains restricted." />
+  return <><PageHeader title="UGC" compact />
     <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
       { label: "Opportunity", cell: (r) => <><strong>{r.title}</strong><small>{r.business}</small></> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -140,7 +140,7 @@ export function AdminRoleEnrollments() {
   const action = useAction();
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  return <><PageHeader eyebrow="People and access" title="Profile requests" description="Approve additional profiles without replacing an existing role." />
+  return <><PageHeader title="Profile requests" compact />
     <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map(row =>
       <article className="admin-profile-request" key={row.id}>
         <div><strong>{actorRoleNameFromWire(row.role)} · {row.displayName}</strong>{row.fullEmail && <small className="admin-account-email">{row.fullEmail}</small>}<small>Submitted {date(row.submittedAtUtc)}</small></div>
@@ -173,7 +173,7 @@ export function AdminDashboard() {
   const resource = useResource<AdminHome>("/admin/home");
   const operations = useResource<OperationsHome>("/admin/operations/home");
   const deposits = useResource<{ status: string }[]>("/admin/deposit-requests");
-  return <div className="admin-page"><PageHeader title="Dashboard" />
+  return <div className="admin-page"><PageHeader title="Dashboard" compact />
     <Resource resource={operations}>{o => <Section title="Needs attention"><div className="admin-dashboard-links">
       <Link to="/admin/role-enrollments"><span>Pending profile approvals</span><strong>{count(o.pendingReviews)}</strong></Link>
       <Link to="/admin/payouts"><span>Pending payouts</span><strong>{count(o.pendingCreatorPayouts + o.pendingCustomerPayouts)}</strong></Link>
@@ -201,7 +201,7 @@ export function AdminCampaigns() {
   });
   return (
     <>
-      <PageHeader title="Campaigns" />
+      <PageHeader title="Campaigns" compact />
       <Resource resource={resource}>
         {(rows) => {
           const filtered = rows.filter(

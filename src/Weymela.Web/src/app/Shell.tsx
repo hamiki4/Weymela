@@ -13,7 +13,6 @@ import { notificationsChangedEvent, primeResources, useResource } from "../api/c
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { routeResources } from "./routeResources";
-import { LanguageChoice } from "../localization/Language";
 
 const navigation: Record<Role, [string, string, string][]> = {
   Business: [
@@ -67,7 +66,7 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/customer/transactions", "Transactions", "document"],
     ["/profile", "Profile", "people"],
   ],
-  Cashier: [["/checkout", "Purchase", "qr"], ["/checkout/transactions", "Transactions", "document"], ["/profile", "Profile", "people"]],
+  Cashier: [["/checkout", "Purchase", "qr"], ["/checkout/transactions", "Transactions", "document"], ["/settings", "Settings", "settings"]],
   Onboarding: [],
 };
 const roles: Record<Role, string> = {
@@ -102,9 +101,6 @@ export function Brand() {
 }
 export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
-  const accountMenu = useRef<HTMLDialogElement>(null);
-  const settingsMenu = useRef<HTMLDialogElement>(null);
-  const [deviceMessage, setDeviceMessage] = useState("");
   const notifications = useResource<{ unreadCount: number }>("/notifications");
   useEffect(() => {
     const refresh = () => notifications.reload();
@@ -121,7 +117,6 @@ export function Shell({ children }: { children?: ReactNode }) {
   if (!user) return null;
   const baseItems = navigation[user.role];
   const items = baseItems;
-  const hasAccountMenuProfile = user.role === "Cashier";
   const isProductRole = user.role === "Customer" || user.role === "Creator" || user.role === "Business";
   const mobileItems = user.role === "PlatformAdmin"
     ? items.filter(([to]) => ["/admin", "/admin/wallets", "/admin/payouts"].includes(to))
@@ -135,38 +130,6 @@ export function Shell({ children }: { children?: ReactNode }) {
     (!exactNavigationRoots.has(to)
       && location.pathname.startsWith(`${to}/`));
   const overflowIsActive = location.pathname === "/admin/more" || overflowItems.some(([to]) => itemIsActive(to, location.pathname === to));
-  const closeAccountMenu = () => accountMenu.current?.close();
-  const closeSettings = () => settingsMenu.current?.close();
-  const openSettings = () => {
-    setDeviceMessage("");
-    settingsMenu.current?.showModal();
-  };
-  const requestNotifications = async () => {
-    if (!("Notification" in window) || typeof Notification.requestPermission !== "function") {
-      setDeviceMessage("Browser notifications are unavailable on this device.");
-      return;
-    }
-    try {
-      const permission = await Notification.requestPermission();
-      setDeviceMessage(`Browser notifications: ${permission}.`);
-    } catch {
-      setDeviceMessage("Browser notification permission could not be requested.");
-    }
-  };
-  const requestLocation = () => {
-    if (!navigator.geolocation) {
-      setDeviceMessage("Location is unavailable on this device.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      () => setDeviceMessage("Location access granted for this request."),
-      (error) => setDeviceMessage(error.code === 1 ? "Location access denied." : "Location could not be determined."),
-      { enableHighAccuracy: false, timeout: 10000 },
-    );
-  };
-  const openAccountMenu = () => {
-    accountMenu.current?.showModal();
-  };
   const renderNavigation = (
     entries: [string, string, string][],
     ariaLabel: string,
@@ -174,12 +137,6 @@ export function Shell({ children }: { children?: ReactNode }) {
   ) => (
     <nav aria-label={ariaLabel}>
       {entries.map(([to, label, icon]) => (
-        label === "Profile" && hasAccountMenuProfile ? (
-          <button key={to} type="button" className="nav-link" onClick={openAccountMenu}>
-            <Icon name={icon} />
-            {label}
-          </button>
-        ) : (
           <NavLink
             to={to}
             end={exactNavigationRoots.has(to)}
@@ -192,13 +149,10 @@ export function Shell({ children }: { children?: ReactNode }) {
             <Icon name={icon} />
             {label}
           </NavLink>
-        )
       ))}
     </nav>
   );
   const signOutAndClose = () => {
-    closeAccountMenu();
-    closeSettings();
     void signOut().then(() => navigate("/sign-in"));
   };
   const prepareNavigation = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -221,10 +175,6 @@ export function Shell({ children }: { children?: ReactNode }) {
         navigate(`${destination.pathname}${destination.search}${destination.hash}`);
     });
   };
-  const accountIdentity = <>
-    <span className="avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
-    <div><strong data-no-translate>{user.displayName}</strong><small>{roles[user.role]}</small></div>
-  </>;
   return (
     <div onClickCapture={prepareNavigation} className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
       <a className="skip-link" href="#main-content">
@@ -257,63 +207,15 @@ export function Shell({ children }: { children?: ReactNode }) {
               <small>{roles[user.role]}</small>
             </div>
           </div>
+          <Link className="nav-link settings-nav-link" to="/settings">
+            <Icon name="settings" />
+            Settings
+          </Link>
           <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
             Sign out
           </Button>
         </div>
       </aside>
-      {!isProductRole && <dialog
-        ref={accountMenu}
-        id="account-menu"
-        className="dialog account-sheet"
-        aria-label="Account menu"
-      >
-        <div className="dialog-header">
-          <h2>Account</h2>
-          <Button
-            variant="quiet"
-            aria-label="Close account menu"
-            onClick={closeAccountMenu}
-          >
-            <Icon name="close" />
-          </Button>
-        </div>
-        <div className="account-summary">{accountIdentity}</div>
-        {user.profiles && user.profiles.length > 0 && (user.role !== "PlatformAdmin" || user.profiles.length > 1) && (
-          <ProfileSwitcher
-            profiles={user.profiles}
-            activeKey={user.activeProfileKey}
-            onSwitch={switchProfile}
-          />
-        )}
-        <Link className="account-menu-link" to="/notifications" onClick={closeAccountMenu}>
-          <Icon name="bell" />
-          Notifications
-        </Link>
-        <div className="account-menu-actions">
-          <LanguageChoice />
-          <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
-            Sign out
-          </Button>
-        </div>
-      </dialog>}
-      {isProductRole && <dialog ref={settingsMenu} id="settings-menu" className="dialog settings-sheet" aria-labelledby="settings-title">
-        <div className="dialog-header">
-          <h2 id="settings-title">Settings</h2>
-          <button type="button" className="settings-close" aria-label="Close Settings" onClick={closeSettings}><Icon name="close" size={18} /></button>
-        </div>
-        {user.profiles && <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={async profile => { await switchProfile(profile); closeSettings(); }} />}
-        <Link className="settings-row" to="/onboarding" onClick={closeSettings}><Icon name="plus" />Add Profile</Link>
-        <button type="button" className="settings-row" onClick={() => void requestNotifications()}><Icon name="bell" />Notifications</button>
-        <button type="button" className="settings-row" onClick={requestLocation}><Icon name="location" />Location</button>
-        {user.role === "Creator" && <Link className="settings-row" to="/profile#social-profiles" onClick={closeSettings}><Icon name="globe" />Social Profiles</Link>}
-        {user.role === "Business" && <>
-          <Link className="settings-row" to="/business/cashiers" onClick={closeSettings}><Icon name="people" />Cashier Management</Link>
-        </>}
-        {deviceMessage && <p className="settings-device-message" role="status">{deviceMessage}</p>}
-        <LanguageChoice />
-        <button type="button" className="settings-row settings-signout" onClick={signOutAndClose}><Icon name="logout" />Sign Out</button>
-      </dialog>}
       <div className="workspace">
         <header className="topbar">
           {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") && (
@@ -337,11 +239,9 @@ export function Shell({ children }: { children?: ReactNode }) {
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
             )}
-            {isProductRole ? <button type="button" className="button button-quiet settings-trigger" aria-label="Open Settings" aria-haspopup="dialog" aria-controls="settings-menu" onClick={openSettings}><Icon name="settings" /></button> :
-              <Button variant="quiet" className="account-trigger" aria-label="Open account menu" aria-haspopup="dialog" aria-controls="account-menu" onClick={openAccountMenu}>
-                {user.role === "PlatformAdmin" && <Icon name="settings" />}
-                <span className="small-avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
-              </Button>}
+            <Link className="button button-quiet settings-trigger" to="/settings" aria-label="Open Settings">
+              <Icon name="settings" />
+            </Link>
           </div>
         </header>
         {isProductRole && <div className="product-desktop-nav">{renderNavigation(items, `${roles[user.role]} navigation`)}</div>}
@@ -350,21 +250,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           {children ?? <Outlet />}
         </main>
         <nav className="mobile-role-nav" aria-label="Mobile navigation">
-          {mobileItems.map(([to, label, icon]) =>
-            hasAccountMenuProfile && label === "Profile" ? (
-              <button
-                key={to}
-                type="button"
-                className="mobile-role-link"
-                aria-label="Profile"
-                aria-haspopup="dialog"
-                aria-controls="account-menu"
-                onClick={openAccountMenu}
-              >
-                <Icon name={icon} />
-                <span>{label}</span>
-              </button>
-            ) : (
+          {mobileItems.map(([to, label, icon]) => (
               <NavLink
                 key={to}
                 to={to}
@@ -376,8 +262,7 @@ export function Shell({ children }: { children?: ReactNode }) {
                 <Icon name={icon} />
                 <span>{label}</span>
               </NavLink>
-            ),
-          )}
+          ))}
           {overflowItems.length > 0 && (
             <NavLink
               to="/admin/more"

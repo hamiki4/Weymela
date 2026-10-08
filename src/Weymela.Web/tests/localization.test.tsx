@@ -21,6 +21,21 @@ describe("English and Amharic localization", () => {
     expect(translateText(english, "am")).toBe(amharic);
   });
 
+  it.each([
+    ["Price", "ዋጋ"],
+    ["Promotions", "ማስታወቂያዎች"],
+    ["Promotion", "ማስታወቂያ"],
+    ["Settings", "ቅንብሮች"],
+    ["Help", "እገዛ"],
+    ["Contact Us", "ያግኙን"],
+    ["Delete Account", "መለያ ሰርዝ"],
+    ["Confirm", "አረጋግጥ"],
+    ["Cashback", "ተመላሽ ገንዘብ"],
+    ["Earnings", "ገቢዎች"],
+  ])("uses reviewed Amharic for %s", (english, amharic) => {
+    expect(translateText(english, "am")).toBe(amharic);
+  });
+
   it("persists Amharic, translates shared controls, and never translates names or amounts", async () => {
     localStorage.setItem("weymela.language", "am");
     render(<LanguageProvider>

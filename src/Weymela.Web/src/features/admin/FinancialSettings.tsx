@@ -362,9 +362,8 @@ export function AdminFinancialSettings() {
   return (
     <>
       <PageHeader
-        eyebrow="Pricing authority"
         title="Financial Settings"
-        description="Versioned pricing for views, verified sales and payouts. Clear today, preserved for every Campaign."
+        compact
       />
       <Resource resource={resource}>
         {(data) => (

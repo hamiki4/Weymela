@@ -75,7 +75,7 @@ export function BusinessDashboard() {
         <div className="business-home">
           <PageHeader
             title="Home"
-            description={data.business.displayName}
+            compact
             action={
               <ActionLink to="/business/campaigns/new" icon="plus">
                 Create Promotion
@@ -556,7 +556,7 @@ export function BusinessRequests() {
     <>
       <PageHeader
         title="Creator Requests"
-        description="Review requests for your promotions."
+        compact
       />
       <Resource resource={resource}>
         {(rows) => (

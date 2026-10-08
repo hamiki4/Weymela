@@ -296,7 +296,7 @@ test("Cashier and Business recent checkout views stay scoped and safe", async ({
   await open(page, "/checkout");
   await expect(page.getByRole("heading", { name: "Recent Transactions", exact: true })).toBeVisible();
   await expect(page.locator("main")).toContainText("A little coffee. A great story.");
-  await expect(page.getByRole("button", { name: "Profile", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings", exact: true }).first()).toBeVisible();
   await expect(page.getByText("Platform Fee", { exact: true })).toHaveCount(0);
   await login(context, "other-cashier");
   await open(page, "/checkout");

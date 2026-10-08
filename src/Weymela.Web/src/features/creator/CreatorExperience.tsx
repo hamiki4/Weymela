@@ -53,7 +53,7 @@ export function CreatorDashboard() {
     <Resource resource={home}>{(data) => <div className="creator-home">
       <PageHeader
         title="Home"
-        description={data.creator.displayName}
+        compact
         action={<ActionLink to="/creator/discover" icon="search">Discover Promotions</ActionLink>}
       />
 

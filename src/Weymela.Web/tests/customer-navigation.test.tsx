@@ -77,7 +77,7 @@ describe("Customer mobile navigation", () => {
     expect(navigation.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
   });
 
-  it("navigates to Profile while the gear opens Settings", async () => {
+  it("navigates to Profile while the gear opens the Settings route", async () => {
     render(
       <MemoryRouter initialEntries={["/customer/offers"]}>
         <>
@@ -91,8 +91,9 @@ describe("Customer mobile navigation", () => {
     await userEvent.click(navigation.getByRole("link", { name: "Profile" }));
     await waitFor(() => expect(screen.getByLabelText("Current route")).toHaveTextContent("/profile"));
     expect(screen.queryByRole("dialog", { name: "Settings" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Open Settings" }));
-    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await userEvent.click(screen.getByRole("link", { name: "Open Settings" }));
+    await waitFor(() => expect(screen.getByLabelText("Current route")).toHaveTextContent("/settings"));
+    expect(screen.queryByRole("dialog", { name: "Settings" })).not.toBeInTheDocument();
   });
 
   it("redirects legacy Customer history to Transactions", async () => {

@@ -24,7 +24,7 @@ describe("full profile page", () => {
   it("shows only available Customer identity fields", async () => {
     mount("Customer", { displayName: "Mimi", publicId: "CU-100", email: null, phone: "+251900000000" });
     expect(await screen.findByText("+251900000000")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Profile", level: 1 })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Profile", level: 1 })).toHaveClass("sr-only");
     expect(screen.getByText("+251900000000")).toBeVisible();
     expect(screen.queryByText("CU-100")).not.toBeInTheDocument();
     expect(screen.queryByText("Creator ID 7205")).not.toBeInTheDocument();

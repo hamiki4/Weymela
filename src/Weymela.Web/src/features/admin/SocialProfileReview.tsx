@@ -6,7 +6,7 @@ import { CreatorPlatformIcon, isCreatorPlatform, type CreatorPlatform } from "..
 
 export function AdminSocialProfileReview() {
   const resource = useResource<Review[]>("/admin/social-profiles/review");
-  return <><PageHeader title="Social profile review" description="Confirm Creator-reported audiences manually. This is Admin Verified, not provider verified." />
+  return <><PageHeader title="Social profile review" compact />
     <Resource resource={resource}>{rows => rows.length === 0 ? <Empty title="No social profiles to review" message="Creator social profiles will appear here." icon="people" /> :
       <div className="stack-list">{rows.map(row => <ReviewCard key={row.id} row={row} reload={resource.reload} />)}</div>}</Resource></>;
 }

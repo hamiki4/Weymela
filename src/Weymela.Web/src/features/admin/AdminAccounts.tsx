@@ -50,7 +50,7 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
     });
   };
   return <div className="admin-page">
-    <PageHeader title={areaTitle[area]} action={<Link className="button primary" to={`${areaPath[area]}/new`}>+ Create {area}</Link>} />
+    <PageHeader title={areaTitle[area]} compact action={<Link className="button primary" to={`${areaPath[area]}/new`}>+ Create {area}</Link>} />
     {searchParams.get("created") && <Notice>Preauthorization created. Activation instructions were sent to the target. The account appears below as Pending until activation.</Notice>}
     <div className="admin-toolbar">
       <form onSubmit={event => { event.preventDefault(); updateFilters({ search: draftSearch, status, adminRole: role }); }}>

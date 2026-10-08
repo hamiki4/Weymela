@@ -59,6 +59,7 @@ import { LegalDocumentPage } from "./LegalDocumentPage";
 import { CashierActivation } from "./CashierActivation";
 import { AccountActivation } from "./AccountActivation";
 import { BusinessCashiers } from "../features/business/BusinessCashiers";
+import { ContactPage, DeleteAccountPage, HelpPage, SettingsPage } from "./SettingsPages";
 
 
 function Home() {
@@ -130,6 +131,10 @@ export function App() {
         </div>
       } />
       <Route element={<ProtectedShell />}>
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/help" element={<HelpPage />} />
+        <Route path="/settings/contact" element={<ContactPage />} />
+        <Route path="/settings/delete-account" element={<DeleteAccountPage />} />
         <Route path="/profile" element={<RoleGate roles={["Customer", "Creator", "Business"]}><ProfilePage /></RoleGate>} />
         <Route path="/notifications" element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><Inbox /></RoleGate>} />
         <Route element={<RoleGate roles={["Business"]} />}>

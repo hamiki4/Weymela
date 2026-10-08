@@ -131,7 +131,7 @@ public static class ApiHost
         });
         app.UseCors("V3Origins");app.UseAuthentication();app.UseMiddleware<ApiSafetyMiddleware>();app.UseRateLimiter();app.UseAuthorization();app.UseMiddleware<DeviceSessionEnforcementMiddleware>();
         app.MapGet("/health",()=>Results.Ok(new{status="ok",phase=6})).AllowAnonymous();
-        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapCreatorPhotoEndpoints();app.MapReviewMediaEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
+        app.MapOperationalEndpoints();app.MapAuthEndpoints(development);app.MapAccountEndpoints(development);app.MapDeviceEnrollmentEndpoints(development);app.MapDeviceAccessEndpoints(development);app.MapOnboardingEndpoints();app.MapProductIntegrationEndpoints();app.MapBusinessEndpoints(development);app.MapCreatorEndpoints();app.MapCreatorPhotoEndpoints();app.MapReviewMediaEndpoints();app.MapAdminEndpoints();app.MapCommerceEndpoints();
         var webRoot=builder.Configuration["V3:WebRoot"];
         if(!string.IsNullOrEmpty(webRoot))
         {

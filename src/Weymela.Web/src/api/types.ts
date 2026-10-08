@@ -42,6 +42,24 @@ export interface AccountSecurityStatus {
   passwordEnrolled: boolean;
   phoneEnrolled: boolean;
 }
+export interface AccountClosureOption {
+  role: Role;
+  subjectId: string;
+  displayName: string;
+  status: "Eligible" | "ActionRequired" | "PendingClosure";
+  blockers: string[];
+}
+export interface AccountClosureOverview {
+  roles: AccountClosureOption[];
+}
+export interface AccountClosureResult {
+  role: Role;
+  subjectId: string;
+  status: "Closed" | "Pending" | "PendingIdentityDeletion";
+  blockers: string[];
+  remainingRoles: number;
+  nextRole: Role | null;
+}
 export type DeviceAccessState =
   | "Unlocked"
   | "Locked"

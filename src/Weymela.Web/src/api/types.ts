@@ -737,6 +737,7 @@ export interface Offer {
     directionsUrl: string | null;
     latitude: number | null;
     longitude: number | null;
+    category?: string | null;
   };
   creator: { displayName: string } | null;
   benefitPercent: number;

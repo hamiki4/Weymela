@@ -168,7 +168,7 @@ test("Creator visual review captures Discover and compact work states", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/creator/promotions?filter=Active");
   const regularCards = page.locator("article.creator-promotion-row").filter({
-    has: page.locator(".creator-work-type").filter({ hasText: /^(Views|Views \+ Sales)$/ }),
+    has: page.locator(".creator-work-type").filter({ hasText: /^(View Only|View \+ Sale)$/ }),
   });
   await expect(regularCards).not.toHaveCount(0);
   await layout(page);
@@ -232,7 +232,7 @@ test("Business keeps funding, Checkout and Cashier Management within reach", asy
   await expect(page.getByRole("heading", { name: "Active Promotions", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Create Promotion" }).click();
   await expect(page).toHaveURL(/\/business\/campaigns\/new$/);
-  await expect(page.getByText("UGC + Sales", { exact: true })).toBeVisible();
+  await expect(page.getByText("UGC + Sale", { exact: true })).toBeVisible();
   await open(page, "/business");
   const nav = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(nav.getByRole("link", { name: "Wallet" })).toBeVisible();
@@ -294,7 +294,7 @@ test("Business visual review captures operational surfaces at approved widths", 
 
   await open(page, "/business/campaigns/new");
   await expect(page.getByRole("heading", { name: "Create Promotion", exact: true })).toBeVisible();
-  await expect(page.getByText("UGC + Sales", { exact: true })).toBeVisible();
+  await expect(page.getByText("UGC + Sale", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-create-390");
 
@@ -341,7 +341,7 @@ test("Business visual review captures operational surfaces at approved widths", 
   await screenshot(page, "business-promotions-1366");
 
   await open(page, "/business/campaigns/new");
-  await expect(page.getByText("UGC + Sales", { exact: true })).toBeVisible();
+  await expect(page.getByText("UGC + Sale", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-create-1366");
 

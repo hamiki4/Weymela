@@ -27,9 +27,9 @@ describe("Promotion type API contract", () => {
   });
 
   it("uses the simple Promotion type labels in Business and Creator workspaces", () => {
-    expect(promotionTypeLabel("ViewOnly")).toBe("Views");
-    expect(promotionTypeLabel("ViewPlusCommission")).toBe("Views + Sales");
+    expect(promotionTypeLabel("ViewOnly")).toBe("View Only");
+    expect(promotionTypeLabel("ViewPlusCommission")).toBe("View + Sale");
     expect(promotionTypeLabel("UGC")).toBe("UGC");
-    expect(promotionTypeLabel("UGC + Sales")).toBe("UGC + Sales");
+    expect(promotionTypeLabel("UGC + Sales")).toBe("UGC + Sale");
   });
 });

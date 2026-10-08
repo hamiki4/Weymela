@@ -13,12 +13,12 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await page
     .locator("article.customer-promotion-card")
     .filter({ hasText: offerTitle })
-    .getByRole("link", { name: "Get Offer", exact: true })
+    .getByRole("link", { name: "Get Offer QR", exact: true })
     .click();
   const issuing = page.waitForResponse(
     (r) => r.url().endsWith("/qr") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
   const qr = await (await issuing).json();
   await expect(
     page.getByRole("img", { name: "Offer QR for the cashier" }),
@@ -83,13 +83,13 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
   await page
     .locator("article.customer-promotion-card")
     .filter({ hasText: offerTitle })
-    .getByRole("link", { name: "Get Offer", exact: true })
+    .getByRole("link", { name: "Get Offer QR", exact: true })
     .click();
   const issuing = page.waitForResponse(
     (response) =>
       response.url().endsWith("/qr") && response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Get Offer", exact: true }).click();
+  await page.getByRole("button", { name: "Get Offer QR", exact: true }).click();
   const qr = (await (await issuing).json()) as { token: string };
   const image = page.getByRole("img", { name: "Offer QR for the cashier" });
   await expect(image).toBeVisible();

@@ -13,13 +13,13 @@ test("Business sees the Promotion shortfall before publishing an unfunded Promot
   await page.getByLabel("Content due").fill(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
   await page.getByLabel("Promotion budget").fill(String(before.available + 1000));
-  const draftNotice = page.locator(".notice").filter({ hasText: "before posting it to Creators" });
+  const draftNotice = page.locator(".notice").filter({ hasText: "before publishing" });
   await expect(draftNotice).toContainText("1,000 ETB");
-  await expect(page.getByRole("button", { name: "Save Draft", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await layout(page);
-  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/business\/campaigns\/[0-9a-f-]{36}$/i);
-  await expect(page.getByRole("button", { name: "Fund Promotion", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
   const fundingNotice = page.locator(".callout .notice");
   await expect(fundingNotice).toContainText("1,000 ETB more");
   await expect(fundingNotice.getByRole("link", { name: "Add Funds" })).toHaveAttribute("href", "/business/wallet");

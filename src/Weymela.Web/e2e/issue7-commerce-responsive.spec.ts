@@ -37,7 +37,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
       await layout(page);
     }
     await open(page, "/customer/offers");
-    const offerLink = page.getByRole("link", { name: "Get Offer", exact: true }).first();
+    const offerLink = page.getByRole("link", { name: "Get Offer QR", exact: true }).first();
     if (await offerLink.count()) {
       await offerLink.click();
       await layout(page);

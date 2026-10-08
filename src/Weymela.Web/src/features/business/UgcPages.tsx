@@ -87,20 +87,20 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
   const [editDiscount, setEditDiscount] = useState("");
   const [editOfferBudget, setEditOfferBudget] = useState("");
   const [creatorError, setCreatorError] = useState("");
-  const manageOpen = false;
+  const [manageOpen, setManageOpen] = useState(false);
   return (
     <article className="data-card business-promotion-card" data-status={item.status}>
-      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sales" : "UGC"}</small><h3>{item.title}</h3></div><Badge status={item.status} label={promotionStatusLabel(item.status)} /></div>
+      <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sale" : "UGC"}</small><h3>{item.title}</h3></div><Badge status={item.status} label={promotionStatusLabel(item.status)} /></div>
       <dl className="promotion-summary-list">
         <div><dt>Creator payment</dt><dd>{amount(item.creatorPayment)} ETB</dd></div>
         <div><dt>Content due</dt><dd>{date(item.dueDateUtc)}</dd></div>
         {item.creatorsNeeded > 0 && <div><dt>Creators</dt><dd>{item.approvedCreators}/{item.creatorsNeeded}</dd></div>}
       </dl>
-      <Link className="button secondary business-promotion-manage" to={`/business/ugc/${item.id}`}>Manage</Link>
+      <div className="actions"><Link className="button secondary business-promotion-manage" to={`/business/ugc/${item.id}`}>Manage</Link>
+        <Button variant="quiet" aria-expanded={manageOpen} onClick={() => setManageOpen(value => !value)}>Edit</Button></div>
       {manageOpen && <section className="business-promotion-management" aria-label={`${item.title} management`}>
         <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
         {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer earns {amount(item.customerDiscountPercent)}% cashback.</p>}
-        {item.status !== "Draft" && <>
         <Button variant="secondary" onClick={() => void editAction.run(async () => {
           const detail = await request<UgcDetail>(`/business/ugc/${item.id}`);
           const local = (value?: string | null) => value ? new Date(value).toISOString().slice(0, 16) : "";
@@ -113,7 +113,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
           setEditPlatforms((detail.opportunity.platformCapacities ?? []).map(slot => ({ platform: slot.platform, capacity: slot.capacity, minimumAudience: detail.opportunity.platformRequirements.find(row => row.platform === slot.platform)?.minimumAudience ?? null })));
           setEditOffer(!!detail.opportunity.customerOfferEnabled); setEditDiscount(String(detail.opportunity.customerDiscountPercent ?? "")); setEditOfferBudget(String(detail.opportunity.customerOfferFundedAllocation ?? ""));
         })}>Edit</Button>
-        <Button variant="secondary" onClick={() => {
+        {item.status !== "Draft" && <><Button variant="secondary" onClick={() => {
           if (creatorDetail) { setCreatorDetail(null); return; }
           setCreatorError("");
           void request<UgcDetail>(`/business/ugc/${item.id}`).then(setCreatorDetail)
@@ -138,7 +138,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
             <CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} />
             <div><strong>{row.creator}</strong><small>{row.creatorNumber != null ? `Creator #${row.creatorNumber}` : "Creator"}</small></div><Badge status={row.status} />
           </div>)}</>}
-        </div>}
+        </div>}</>}
         <Dialog title="Edit Promotion details" open={!!editDetail} onClose={() => { if (!editAction.busy) setEditDetail(null); }}>
           <p className="muted">{editDetail && editDetail.opportunity.approvedCreators > 0 ? "Some terms are locked because a Creator has been approved." : "You can update the full UGC opportunity while no Creator is approved. Pending applications do not lock editing."}</p>
           <form className="form-grid" onSubmit={(event) => { event.preventDefault(); if (!editDetail) return; void editAction.run(async key => {
@@ -175,7 +175,6 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
             <div className="form-actions wide"><Button type="submit" disabled={editAction.busy || !editInstructions.trim()}>{editAction.busy ? "Saving…" : "Save changes"}</Button></div>
           </form>
         </Dialog>
-        </>}
       </section>}
       {action.error && <Notice error>{action.error}</Notice>}
     </article>
@@ -202,6 +201,7 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
     </div>}
     {row.status === "Approved" && !row.selectedPlatform && <Notice>Content approved. Delivery-only work is complete and has no Customer offer.</Notice>}
     {row.status === "Approved" && row.selectedPlatform && !row.publication && <Notice>Content approved. Waiting for the Creator to publish.</Notice>}
+    {row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
     {row.publication && <p className="fine-print">Publication: {row.publication.wentLiveAtUtc ? "Live" : row.publication.verificationLabel}</p>}
     {action.error && <Notice error>{action.error}</Notice>}
     <ol className="collaboration-timeline" aria-label="Activity">
@@ -227,15 +227,15 @@ export function BusinessUgcDetail() {
     const shortfall = Math.max(0, required - (wallet.data?.available ?? 0));
     return <>
       <Link className="back-link" to="/business/campaigns">← Promotions</Link>
-      <PageHeader eyebrow={item.customerOfferEnabled ? "UGC + Sales" : "UGC"} title={item.title}
+      <PageHeader eyebrow={item.customerOfferEnabled ? "UGC + Sale" : "UGC"} title={item.title}
         description={`Content due ${date(item.dueDateUtc)}`}
         action={<Badge status={item.status} label={promotionStatusLabel(item.status)} />} />
       {item.status === "Draft" && <div className="callout">
-        <div><h2>Draft</h2><p>Post this Promotion when confirmed funds are available.</p></div>
+        <div><h2>Saved</h2><p>Publish when the details and confirmed funding are ready.</p></div>
         <Button disabled={action.busy || !wallet.data || shortfall > 0} onClick={() => void action.run(async key => {
           await post(`/business/ugc/${item.id}/publish`, { version: item.version }, key); reload();
-        })}>{action.busy ? "Posting…" : "Post to Creators"}</Button>
-        {wallet.data && shortfall > 0 && <Notice><Link to="/business/wallet">Add Funds</Link> before posting. You need {amount(shortfall)} ETB more.</Notice>}
+        })}>{action.busy ? "Publishing…" : "Publish"}</Button>
+        {wallet.data && shortfall > 0 && <Notice><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
       </div>}
       {action.error && <Notice error>{action.error}</Notice>}
       <div className="two-column business-collaboration-workspace">
@@ -280,7 +280,7 @@ export function BusinessUgcPage() {
   return <>
     <PageHeader title="Promotions" compact action={<span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink></span>} />
     <Section title={openOnly ? "Active Promotions" : "Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
-      const visible = rows.filter((item) => item.status !== "Draft" && (!openOnly || item.status === "Open"));
+      const visible = rows.filter((item) => !openOnly || item.status === "Open");
       return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No active Promotions." : "No Promotions yet."} />;
     }}</Resource></Section>
   </>;
@@ -321,6 +321,8 @@ export function CreateBusinessUgcPage() {
                 <form className="form-grid" onSubmit={(event) => {
                   event.preventDefault();
                   if (!valid) return;
+                  const publish = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "publish";
+                  if (publish && shortfall > 0) return;
                   void action.run(async (key) => {
                     const created = await post<{ id: string }>("/business/ugc", {
                       title: form.title, slogan: null, contentType: form.contentType, instructions: form.instructions,
@@ -333,7 +335,11 @@ export function CreateBusinessUgcPage() {
                       customerFacingSlogan: null, customerOfferStartsAtUtc: form.customerOffer ? new Date().toISOString() : null,
                       customerOfferEndsAtUtc: form.customerOffer ? new Date(form.dueDate).toISOString() : null,
                       applicationClosesAtUtc: new Date(form.applicationCloses).toISOString(),
-                    }, key);
+                    }, `${key}:save`);
+                    if (publish) {
+                      const detail = await request<UgcDetail>(`/business/ugc/${created.id}`);
+                      await post(`/business/ugc/${created.id}/publish`, { version: detail.opportunity.version }, `${key}:publish`);
+                    }
                     navigate(`/business/ugc/${created.id}`);
                   });
                 }}>
@@ -354,7 +360,7 @@ export function CreateBusinessUgcPage() {
                   {selectedType ? (
                       <div className="field wide promotion-selected-type">
                         <span className="field-label">Promotion type</span>
-                        <strong>{selectedType === "ugc-sales" ? "UGC + Sales" : "UGC"}</strong>
+                        <strong>{selectedType === "ugc-sales" ? "UGC + Sale" : "UGC"}</strong>
                         <Link className="text-link" to="/business/campaigns/new">Change</Link>
                       </div>
                     ) : (
@@ -375,10 +381,13 @@ export function CreateBusinessUgcPage() {
                   {form.customerOffer && discount > 100 && <Notice error>Cashback must be between 0 and 100%.</Notice>}
                   {!minimumBudgetMet && <Notice error>The Promotion budget is below the minimum required to publish.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}
-                  <div className="form-actions wide"><Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save Draft"}</Button></div>
+                  <div className="form-actions wide">
+                    <Button type="submit" value="save" variant="secondary" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save"}</Button>
+                    <Button type="submit" value="publish" disabled={action.busy || !valid || shortfall > 0}>{action.busy ? "Publishing…" : "Publish"}</Button>
+                  </div>
                 </form>
               </Section>
-              {shortfall > 0 && <Notice>You can save the Draft. <Link to="/business/wallet">Add Funds</Link> before posting it to Creators. You need {amount(shortfall)} ETB more.</Notice>}
+              {shortfall > 0 && <Notice>You can save now. <Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
             </div>
           );
         }}

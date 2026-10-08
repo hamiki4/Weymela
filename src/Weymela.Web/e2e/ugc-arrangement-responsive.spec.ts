@@ -45,7 +45,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await expect(page.getByText("Product arrangement")).toBeVisible();
     await expect(page.getByRole("radio", { name: /Product provided by Business/ })).not.toBeChecked();
     await expect(page.getByRole("radio", { name: /Creator purchases product/ })).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "Save Draft" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
     await page.getByRole("radio", { name: /Creator purchases product/ }).check();
     await expect(page.getByText("Creator buys before creating content")).toBeVisible();
     await layout(page);

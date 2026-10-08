@@ -469,6 +469,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var ugcLiveNotice = await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "UgcPublicationActivated" && x.UserId == seed.BusinessUserId);
         Assert.Equal($"/business/ugc/{seed.UgcOpportunityId}", ugcLiveNotice.Route);
+        var platformAdmin = await db.CommercePermissions.Where(x => x.Role == ActorRole.PlatformAdmin && x.IsActive)
+            .Select(x => x.UserId).SingleAsync();
+        Assert.Equal($"/admin/campaigns/{seed.PromotionId}", (await db.InAppNotifications.SingleAsync(x =>
+            x.EventType == "CreatorParticipationActivated" && x.UserId == platformAdmin)).Route);
+        Assert.Equal("/admin/ugc", (await db.InAppNotifications.SingleAsync(x =>
+            x.EventType == "UgcPublicationActivated" && x.UserId == platformAdmin)).Route);
     }
 
     private static async Task AssertApiDenialsAsync(

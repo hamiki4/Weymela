@@ -18,7 +18,7 @@ async function assertBusinessContentAboveMobileNavigation(page: Page, path: stri
   const selector = path === "/business"
     ? ".business-home-tools"
     : path === "/business/wallet"
-      ? ".business-wallet-history"
+      ? ".wallet-content"
       : ".business-promotion-list";
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const bounds = await page.evaluate((targetSelector) => {
@@ -198,7 +198,7 @@ for (const viewport of viewports)
             await screenshot(page, `${viewport.width}-business-promotion-creators`);
           await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
           await page.getByLabel("Promotion budget").fill(String(available + 1000));
-          const shortfall = page.locator(".notice").filter({ hasText: "before posting it to Creators" });
+          const shortfall = page.locator(".notice").filter({ hasText: "before publishing" });
           await expect(shortfall).toContainText("1,000 ETB");
           await expect(shortfall.getByRole("link", { name: "Add Funds" })).toBeVisible();
           await layout(page);
@@ -300,7 +300,7 @@ for (const viewport of viewports)
         await layout(page);
         await screenshot(page, `${viewport.width}-customer-offer`);
         await page
-          .getByRole("button", { name: "Get Offer", exact: true })
+          .getByRole("button", { name: "Get Offer QR", exact: true })
           .click();
         await expect(
           page.getByRole("img", { name: "Offer QR for the cashier" }),

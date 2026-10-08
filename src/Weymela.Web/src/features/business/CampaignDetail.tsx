@@ -110,55 +110,26 @@ export function BusinessCampaignDetail() {
               eyebrow={promotionTypeLabel(c.type)}
               title={c.title}
               description={`${c.applicationClosesAtUtc ? `Applications close ${date(c.applicationClosesAtUtc)} · ` : ""}${c.contentDueAtUtc ? `Content due ${date(c.contentDueAtUtc)}` : ""}`}
-              action={<div className="actions"><Badge status={c.status} label={promotionStatusLabel(c.status)} />{c.status !== "Draft" && <Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button>}</div>}
+              action={<div className="actions"><Badge status={c.status} label={promotionStatusLabel(c.status)} />{["Draft", "Funded", "Published", "Active"].includes(c.status) && <Button variant="secondary" onClick={() => openEdit(data)}>Edit</Button>}</div>}
             />
             {success && <Notice>{success}</Notice>}
             {action.error && !applicant && !budget && (
               <Notice error>{action.error}</Notice>
             )}
-            {c.status === "Draft" && (
+            {["Draft", "Funded"].includes(c.status) && (
               <div className="callout">
-                <div><h2>Draft</h2><p>Fund this Promotion, then post it to eligible Creators.</p></div>
+                <div><h2>{c.status === "Draft" ? "Saved" : "Ready to publish"}</h2><p>Publish when the details and confirmed funding are ready.</p></div>
                 <Button disabled={action.busy || !wallet.data || wallet.data.available < c.campaignBudget} onClick={() => void action.run(async (key) => {
                   if (!wallet.data) return;
-                  await post(`/business/campaigns/${id}/fund`, { campaignVersion: c.version, walletVersion: wallet.data.version }, key);
-                  changed("Promotion funded. It is ready to post to Creators."); wallet.reload();
-                })}>{action.busy ? "Funding…" : "Fund Promotion"}</Button>
-                {wallet.data && wallet.data.available < c.campaignBudget && <Notice><Link to="/business/wallet">Add Funds</Link> before posting. You need {amount(c.campaignBudget - wallet.data.available)} ETB more.</Notice>}
-              </div>
-            )}
-            {["Funded", "Published"].includes(c.status) && (
-              <div className="callout">
-                <div>
-                  <h2>
-                    {c.status === "Funded"
-                        ? "Your Promotion is funded"
-                        : "Your Promotion is published"}
-                  </h2>
-                  <p>
-                    {c.status === "Funded"
-                        ? "Post it so eligible Creators can request to join."
-                        : "Eligible Creators can request to join."}
-                  </p>
-                </div>
-                <Button
-                  disabled={
-                    action.busy ||
-                    (c.status === "Published" &&
-                      new Date(c.startUtc).getTime() > Date.now())
+                  let current = data;
+                  if (c.status === "Draft") {
+                    await post(`/business/campaigns/${id}/fund`, { campaignVersion: c.version, walletVersion: wallet.data.version }, `${key}:fund`);
+                    current = await request<BusinessCampaign>(`/business/campaigns/${id}`);
                   }
-                  onClick={() =>
-                    void run(
-                      `/business/campaigns/${id}/${c.status === "Funded" ? "publish" : "start"}`,
-                      { version: c.version },
-                      c.status === "Funded"
-                        ? "Promotion posted. Eligible Creators can now find it."
-                        : "Promotion started.",
-                    )
-                  }
-                >
-                  {c.status === "Funded" ? "Post to Creators" : "Open Promotion"}
-                </Button>
+                  await post(`/business/campaigns/${id}/publish`, { version: current.campaign.version }, `${key}:publish`);
+                  changed("Promotion published. Eligible Creators can now find it."); wallet.reload();
+                })}>{action.busy ? "Publishing…" : "Publish"}</Button>
+                {wallet.data && wallet.data.available < c.campaignBudget && <Notice><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(c.campaignBudget - wallet.data.available)} ETB more.</Notice>}
               </div>
             )}
             <Tabs

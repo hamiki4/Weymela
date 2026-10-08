@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
-import type { BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
+import { post, request, useAction, useResource } from "../../api/client";
+import type { BusinessCampaign, BusinessPricing, CampaignTypeCode, Wallet } from "../../api/types";
 import { BusinessCreationGate } from "./BusinessCreationGate";
 import { PlatformCapacityPicker } from "./PlatformCapacityPicker";
 import { CreateBusinessUgcPage } from "./UgcPages";
@@ -19,12 +19,12 @@ export function CreateCampaign() {
         <Section title="What do you want to achieve?">
           <div className="promotion-type-grid">
             <Link className="promotion-type-card" to="/business/campaigns/new?type=views">
-              <strong>Views</strong>
+              <strong>View Only</strong>
               <span>Get visibility through Creator content.</span>
             </Link>
 
             <Link className="promotion-type-card" to="/business/campaigns/new?type=views-sales">
-              <strong>Views + Sales</strong>
+              <strong>View + Sale</strong>
               <span>Get visibility and attributed sales.</span>
             </Link>
 
@@ -34,7 +34,7 @@ export function CreateCampaign() {
             </Link>
 
             <Link className="promotion-type-card" to="/business/campaigns/new?type=ugc-sales">
-              <strong>UGC + Sales</strong>
+              <strong>UGC + Sale</strong>
               <span>Pay for content and offer customers cashback.</span>
             </Link>
           </div>
@@ -88,20 +88,30 @@ function CreateCampaignForm({
       return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
     };
     return <div className="content-grid form-layout"><Section title="Promotion details">
-      {wallet.available === 0 && <Notice>You can save this Draft now. <Link to="/business/wallet">Add Funds</Link> before posting it to Creators.</Notice>}
-      <form className="form-grid" onSubmit={event => { event.preventDefault(); if (!validDates || platforms.length === 0) return; void action.run(async key => {
+      {wallet.available === 0 && <Notice>You can save now. <Link to="/business/wallet">Add Funds</Link> before publishing.</Notice>}
+      <form className="form-grid" onSubmit={event => { event.preventDefault(); if (!validDates || platforms.length === 0) return;
+        const publish = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "publish";
+        if (publish && shortfall > 0) return;
+        void action.run(async key => {
         const dueUtc = endOfLocalDayUtc(form.contentDue); const result = await post<{ id: string }>("/business/promotions", {
           title: form.title, description: form.description.trim(), slogan: null, location: null, resources: [], type, campaignBudget: budget,
           requirements: null, category: null, region: form.region || null,
           minimumVerifiedFollowers: null,
           startUtc: new Date().toISOString(), endUtc: new Date(new Date(dueUtc).getTime() + 30 * 86400000).toISOString(),
           applicationClosesAtUtc: endOfLocalDayUtc(form.applicationCloses), contentDueAtUtc: dueUtc, platforms,
-        }, key); navigate(`/business/campaigns/${result.id}`);
+        }, `${key}:save`);
+        if (publish) {
+          let detail = await request<BusinessCampaign>(`/business/campaigns/${result.id}`);
+          await post(`/business/campaigns/${result.id}/fund`, { campaignVersion: detail.campaign.version, walletVersion: wallet.version }, `${key}:fund`);
+          detail = await request<BusinessCampaign>(`/business/campaigns/${result.id}`);
+          await post(`/business/campaigns/${result.id}/publish`, { version: detail.campaign.version }, `${key}:publish`);
+        }
+        navigate(`/business/campaigns/${result.id}`);
       }); }}>
         <Field label="Promotion title" wide><input value={form.title} onChange={e => set("title", e.target.value)} maxLength={120} required /></Field>
         <div className="field wide promotion-selected-type">
           <span className="field-label">Promotion type</span>
-          <strong>{type === "ViewPlusCommission" ? "Views + Sales" : "Views"}</strong>
+          <strong>{type === "ViewPlusCommission" ? "View + Sale" : "View Only"}</strong>
           <Link className="text-link" to="/business/campaigns/new">Change</Link>
         </div>
         <Field label="Application closes"><input type="date" value={form.applicationCloses} onChange={e => set("applicationCloses", e.target.value)} required /></Field>
@@ -111,8 +121,11 @@ function CreateCampaignForm({
         <div className="field wide"><PlatformCapacityPicker value={platforms} onChange={setPlatforms} />{platforms.length === 0 && <Notice error>Choose at least one Creator slot.</Notice>}</div>
         <Field label="Description" wide><textarea value={form.description} onChange={e => set("description", e.target.value)} maxLength={3000} rows={4} /></Field>
         <Field label="Promotion budget"><MoneyInput value={form.campaignBudget} min={Math.max(0.01, price.minimumCampaignBudget ?? 0.01)} onChange={e => set("campaignBudget", e.target.value)} /></Field>
-        {shortfall > 0 && <Notice>You can save the Draft. <Link to="/business/wallet">Add Funds</Link>: you need <strong>{amount(shortfall)} ETB</strong> before posting it to Creators.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
-        <div className="form-actions wide"><Button type="submit" icon="arrow" disabled={action.busy || !validDates || platforms.length === 0}>{action.busy ? "Saving…" : "Save Draft"}</Button></div>
+        {shortfall > 0 && <Notice>You can save now. <Link to="/business/wallet">Add Funds</Link>: you need <strong>{amount(shortfall)} ETB</strong> before publishing.</Notice>}{action.error && <Notice error>{action.error}</Notice>}
+        <div className="form-actions wide">
+          <Button type="submit" value="save" variant="secondary" disabled={action.busy || !validDates || platforms.length === 0}>{action.busy ? "Saving…" : "Save"}</Button>
+          <Button type="submit" value="publish" icon="arrow" disabled={action.busy || !validDates || platforms.length === 0 || shortfall > 0}>{action.busy ? "Publishing…" : "Publish"}</Button>
+        </div>
       </form>
     </Section></div>;
   }}</Resource></>;

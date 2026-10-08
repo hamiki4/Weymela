@@ -20,18 +20,25 @@ import { amount, date, dateTime } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 
-function CheckoutTransactionList({ rows }: { rows: CheckoutSaleRow[] }) {
+function CheckoutTransactionList({ rows, business = false }: { rows: CheckoutSaleRow[]; business?: boolean }) {
   return rows.length ? <div className="business-transaction-list">{rows.map((row) => <article className="business-transaction-card" key={`${row.source}-${row.id}`}>
-    <div className="business-transaction-main"><div><strong>{row.offer}</strong><small>{row.source === "UGC_CUSTOMER_OFFER" ? "UGC + Sale" : "View + Sale"} · {dateTime(row.createdAtUtc)} · {row.status}</small></div>
-      <strong>{amount(row.purchaseAmount)} ETB</strong></div>
-    <div className="business-transaction-context">
-      <span>Creator: {row.creator ?? "—"}{row.creatorNumber ? ` · #${row.creatorNumber}` : ""}</span>
-      <span>Customer: {row.customerMasked}</span>
-      {row.cashier && <span>Cashier: {row.cashier}</span>}
-      <span>{row.benefitMode === "LegacyDiscount" ? "Customer discount" : "Customer cashback"}: {amount(row.customerDiscount)} ETB</span>
-      {row.creatorEarning != null && <span>Creator earning: {amount(row.creatorEarning)} ETB</span>}
-      <span>Business charge: {amount(row.businessCharge)} ETB</span>
-    </div>
+    {business ? <div className="business-transaction-context business-only">
+        <span>Promotion: {row.offer}</span>
+        <span>Total Purchase: {amount(row.purchaseAmount)} ETB</span>
+        <span>Customer Cashback: {amount(row.customerDiscount)} ETB</span>
+        <span>Date/Time: {dateTime(row.createdAtUtc)}</span>
+      </div> : <>
+      <div className="business-transaction-main"><div><strong>{row.offer}</strong><small>{`${row.source === "UGC_CUSTOMER_OFFER" ? "UGC + Sale" : "View + Sale"} · ${dateTime(row.createdAtUtc)} · ${row.status}`}</small></div>
+        <strong>{amount(row.purchaseAmount)} ETB</strong></div>
+      <div className="business-transaction-context">
+        <span>Creator: {row.creator ?? "—"}{row.creatorNumber ? ` · #${row.creatorNumber}` : ""}</span>
+        <span>Customer: {row.customerMasked}</span>
+        {row.cashier && <span>Cashier: {row.cashier}</span>}
+        <span>{row.benefitMode === "LegacyDiscount" ? "Customer discount" : "Customer cashback"}: {amount(row.customerDiscount)} ETB</span>
+        {row.creatorEarning != null && <span>Creator earning: {amount(row.creatorEarning)} ETB</span>}
+        <span>Business charge: {amount(row.businessCharge)} ETB</span>
+      </div>
+    </>}
   </article>)}</div> : <p className="muted">No transactions yet.</p>;
 }
 
@@ -45,7 +52,7 @@ export function CheckoutTransactions() {
       {[["ALL", "All"], ["VIEW_AND_SALE_PROMOTION", "View + Sale"], ["UGC_CUSTOMER_OFFER", "UGC + Sale"]].map(([value, label]) =>
         <button key={value} type="button" aria-pressed={source === value} onClick={() => setSource(value)}>{label}</button>)}
     </div>}
-    <Section title={business ? "Purchases" : "Recent purchases"}><Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows.filter((row) => !business || source === "ALL" || row.source === source) : []} />}</Resource></Section>
+    <Section title={business ? "Purchases" : "Recent purchases"}><Resource resource={recent}>{(rows) => <CheckoutTransactionList business={business} rows={Array.isArray(rows) ? rows.filter((row) => !business || source === "ALL" || row.source === source) : []} />}</Resource></Section>
   </div>;
 }
 

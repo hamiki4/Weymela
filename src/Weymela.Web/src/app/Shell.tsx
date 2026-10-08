@@ -13,6 +13,7 @@ import { notificationsChangedEvent, primeResources, useResource } from "../api/c
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { routeResources } from "./routeResources";
+import { LanguageChoice } from "../localization/Language";
 
 const navigation: Record<Role, [string, string, string][]> = {
   Business: [
@@ -222,7 +223,7 @@ export function Shell({ children }: { children?: ReactNode }) {
   };
   const accountIdentity = <>
     <span className="avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
-    <div><strong>{user.displayName}</strong><small>{roles[user.role]}</small></div>
+    <div><strong data-no-translate>{user.displayName}</strong><small>{roles[user.role]}</small></div>
   </>;
   return (
     <div onClickCapture={prepareNavigation} className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
@@ -252,7 +253,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <div className="person">
             <span className="avatar">{user.displayName.slice(0, 1)}</span>
             <div>
-              <strong>{user.displayName}</strong>
+              <strong data-no-translate>{user.displayName}</strong>
               <small>{roles[user.role]}</small>
             </div>
           </div>
@@ -290,6 +291,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           Notifications
         </Link>
         <div className="account-menu-actions">
+          <LanguageChoice />
           <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
             Sign out
           </Button>
@@ -309,6 +311,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <Link className="settings-row" to="/business/cashiers" onClick={closeSettings}><Icon name="people" />Cashier Management</Link>
         </>}
         {deviceMessage && <p className="settings-device-message" role="status">{deviceMessage}</p>}
+        <LanguageChoice />
         <button type="button" className="settings-row settings-signout" onClick={signOutAndClose}><Icon name="logout" />Sign Out</button>
       </dialog>}
       <div className="workspace">
@@ -321,7 +324,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           <span className="workspace-label">
             {roles[user.role]} {!isProductRole && <span className="muted">/ Weymela</span>}
           </span>
-          {user.role === "PlatformAdmin" && <strong className="topbar-identity">{user.displayName}</strong>}
+          {user.role === "PlatformAdmin" && <strong className="topbar-identity" data-no-translate>{user.displayName}</strong>}
           <div className="topbar-right">
             <Link
               className="button button-quiet"
@@ -437,7 +440,7 @@ export function ProfileSwitcher({
         {profiles.map((profile, index) => {
           const key = `${profile.role}:${profile.subjectId}:${profile.businessId ?? "-"}`;
           return (
-            <option key={key} value={index}>
+            <option key={key} value={index} data-no-translate>
               {profile.displayName} — {roles[profile.role]}
             </option>
           );

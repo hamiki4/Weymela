@@ -109,6 +109,7 @@ test("Customer, Creator and Business use compact horizontal navigation on deskto
 });
 
 test("Customer Home, Discover and details keep Watch, Directions and Offer QR visible", async ({ page, context }) => {
+  await page.clock.install();
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "customer");
   await open(page, "/customer/offers");
@@ -136,7 +137,6 @@ test("Customer Home, Discover and details keep Watch, Directions and Offer QR vi
   await expect(page.locator("iframe, video")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Get Directions" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Get Offer QR" })).toBeVisible();
-  await page.clock.install();
   let qrRequests=0;
   page.on("request",request=>{if(request.method()==="POST" && /\/qr$/.test(request.url()))qrRequests++;});
   await page.getByRole("button",{name:"Get Offer QR"}).click();

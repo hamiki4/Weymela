@@ -127,6 +127,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         await service.StartAsync("owner@example.com", null, EmailCodePurpose.Signup, default);
         Assert.Equal(3, delivery.Codes.Count);
         Assert.Equal(EmailCodePurpose.DeviceEnrollment, delivery.Codes[^1].Purpose);
+        Assert.NotEqual(firstSignInCode, delivery.Codes[^1].Code);
         await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
             "owner@example.com", EmailCodePurpose.Signup, firstSignInCode, default));
     }

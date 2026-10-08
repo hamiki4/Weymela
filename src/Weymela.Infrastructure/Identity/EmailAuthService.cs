@@ -121,7 +121,14 @@ public sealed class EmailAuthService(
             return new(true, recent.ExpiresAtUtc, (int)Math.Ceiling((recent.LastSentAtUtc.Value.Add(ResendWindow) - now).TotalSeconds));
         }
 
-        var code = RandomNumberGenerator.GetInt32(0, 100_000).ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
+        string code;
+        do
+        {
+            code = RandomNumberGenerator.GetInt32(0, 100_000).ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        // A replacement challenge must invalidate the prior code even in the
+        // rare case where the random generator returns the same five digits.
+        while (recent is not null && AuthCodeHashing.Verify(code, recent.CodeHash, options.AuthCodeHashKey!));
         var challenge = new EmailAuthChallengeRecord
         {
             UserId = userId,

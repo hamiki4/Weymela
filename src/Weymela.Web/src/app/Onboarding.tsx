@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
 import { actorRoleNameFromWire } from "../api/actorRoleContract";
@@ -7,6 +7,8 @@ import { Button, Empty, Field, Notice, PageHeader, Resource, Section } from "../
 import { RoleOnboardingShell, type OnboardingRole } from "./RoleOnboardingShell";
 import { useSession } from "./Session";
 import { CreatorSocialProfilesEditor } from "../features/creator/CreatorProfile";
+import { clearSignupDraft, readSignupDraft, type PublicSignupDraft } from "./signupDraft";
+import { CompactLanguageChoice } from "../localization/Language";
 
 type Enrollment = {
   id: string;
@@ -32,7 +34,80 @@ function publicRole(role: Enrollment["role"]): OnboardingRole | null {
 }
 
 export function Onboarding() {
-  return <LegacyOnboarding />;
+  const [draft] = useState<PublicSignupDraft | null>(readSignupDraft);
+  return draft ? <PublicSignupCompletion draft={draft} /> : <LegacyOnboarding />;
+}
+
+function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
+  const navigate = useNavigate();
+  const { user, refresh, signOut } = useSession();
+  const legal = useResource<AccountLegalStatus>("/onboarding/legal");
+  const started = useRef(false);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const submit = async () => {
+    if (!user) return;
+    const terms = legal.data?.documents.find(document => document.kind === "TermsOfService");
+    const privacy = legal.data?.documents.find(document => document.kind === "PrivacyPolicy");
+    if (!legal.data?.available || !terms || !privacy) throw new Error("Account registration is temporarily unavailable.");
+    const accountLegal = legal.data.current ? undefined : {
+      termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
+      privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },
+    };
+    const socialProfiles = draft.role === "Creator" ? [{
+      platform: draft.socialPlatform,
+      profileUrl: draft.socialProfileUrl,
+      audienceCount: Math.max(draft.followerCount ?? 0, draft.subscriberCount ?? 0),
+      followerCount: draft.followerCount ?? 0,
+      subscriberCount: draft.subscriberCount,
+    }] : [];
+    await post("/onboarding/profile", {
+      role: draft.role,
+      displayName: draft.role === "Business" ? draft.businessName : draft.legalName,
+      legalName: draft.legalName,
+      registeredPhone: draft.phone,
+      category: draft.role === "Business" ? draft.businessType : null,
+      socialProfiles,
+      ...(accountLegal ? { accountLegal } : {}),
+    }, draft.idempotencyKey);
+    clearSignupDraft();
+    setCompleted(true);
+  };
+  useEffect(() => {
+    if (!user || !legal.data || started.current) return;
+    started.current = true;
+    setBusy(true);
+    void submit().catch(cause => {
+      started.current = false;
+      setError(cause instanceof Error ? cause.message : "We could not complete registration. Please try again.");
+    }).finally(() => setBusy(false));
+  }, [user, legal.data]);
+  if (!user) return <Navigate to="/sign-in" replace />;
+  const continueToSecurity = async () => {
+    await refresh(true);
+    navigate("/security-setup", { replace: true });
+  };
+  return <main className="main-content public-signup-status">
+    <div className={`signup-status-card signup-status-${draft.role.toLowerCase()}`}>
+      <CompactLanguageChoice />
+      <BrandStatus role={draft.role} />
+      {busy && <><h1>Creating your account…</h1><p role="status">Your verified details are being saved securely.</p></>}
+      {error && <><h1>Registration needs attention</h1><Notice error>{error}</Notice>
+        <div className="actions"><Button onClick={() => { setError(null); started.current = false; setBusy(true); void submit().then(() => setBusy(false)).catch(cause => { setBusy(false); setError(cause instanceof Error ? cause.message : "Try again."); }); }}>Try again</Button>
+          <Button variant="secondary" onClick={() => void signOut()}>Sign out</Button></div></>}
+      {completed && <>
+        <h1>{draft.role === "Customer" ? "Your account is ready." : "Your email is verified."}</h1>
+        {draft.role !== "Customer" && <p>Your {draft.role === "Business" ? "Business" : "Creator"} account is waiting for Weymela approval. We will notify you when it is reviewed.</p>}
+        {draft.role === "Customer" && <p>Secure your sign-in to continue to Weymela.</p>}
+        <Button onClick={() => void continueToSecurity()}>Continue</Button>
+      </>}
+    </div>
+  </main>;
+}
+
+function BrandStatus({ role }: { role: PublicSignupDraft["role"] }) {
+  return <p className="eyebrow">{role === "Business" ? "Business Owner" : role === "Creator" ? "Content Creator" : "Customer"}</p>;
 }
 
 function statusLabel(status: Enrollment["status"]) {

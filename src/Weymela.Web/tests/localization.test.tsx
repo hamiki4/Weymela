@@ -37,8 +37,27 @@ describe("English and Amharic localization", () => {
     ["M-PESA", "M-PESA"],
     ["Promoted by:", "ያስተዋወቀው፦"],
     ["Full Account / Phone", "ሙሉ የሂሳብ / ስልክ ቁጥር"],
+    ["Create Account", "መለያ ፍጠር"],
+    ["Customer", "ሸማች"],
+    ["Business Owner", "ንግድ ባለቤት"],
+    ["Content Creator", "ይዘት ፈጣሪ"],
+    ["Pending Review", "በግምገማ ላይ"],
+    ["Full legal name", "ሙሉ ሕጋዊ ስም"],
+    ["Verify", "አረጋግጥ"],
+    ["New Business awaiting review", "አዲስ ንግድ ግምገማ እየጠበቀ ነው"],
+    ["Creator profile approved", "የፈጣሪ መገለጫው ጸድቋል"],
+    ["This phone number cannot be added to your account.", "ይህን ስልክ ቁጥር ወደ መለያዎ ማከል አይቻልም።"],
   ])("uses reviewed Amharic for %s", (english, amharic) => {
     expect(translateText(english, "am")).toBe(amharic);
+  });
+
+  it("translates signup status, review counts, and notifications without changing user data", () => {
+    expect(translateText("Pending Review (3)", "am")).toBe("በግምገማ ላይ (3)");
+    expect(translateText("A Creator application is waiting for review.", "am"))
+      .toBe("የፈጣሪ ማመልከቻ ግምገማ እየጠበቀ ነው።");
+    expect(translateText("Your Business profile was not approved: Missing license", "am"))
+      .toBe("የንግድ መገለጫዎ አልጸደቀም፦ Missing license");
+    expect(translateText("Followers: 12,500", "am")).toBe("ተከታዮች፦ 12,500");
   });
 
   it("persists Amharic, translates shared controls, and never translates names or amounts", async () => {

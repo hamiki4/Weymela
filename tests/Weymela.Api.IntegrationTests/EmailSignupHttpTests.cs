@@ -48,6 +48,11 @@ public sealed class EmailSignupHttpTests(PostgresFixture fixture)
         Assert.DoesNotContain("DeviceEnrollment", existingBody.ToJsonString());
         Assert.Equal(EmailCodePurpose.DeviceEnrollment, delivery.Sent[0].Purpose);
         Assert.Equal(EmailCodePurpose.Signup, delivery.Sent[1].Purpose);
+        Assert.All(delivery.Sent, message =>
+        {
+            Assert.Equal(5, message.Code.Length);
+            Assert.All(message.Code, digit => Assert.InRange(digit, '0', '9'));
+        });
 
         var verified = await client.PostAsJsonAsync("/api/auth/email/verify", new
         {

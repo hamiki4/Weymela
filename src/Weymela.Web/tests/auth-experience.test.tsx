@@ -71,6 +71,7 @@ function renderSignIn(path = "/sign-in") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.sessionStorage.clear();
   mocks.startEmailCode.mockResolvedValue(undefined);
   mocks.verifyEmailCode.mockResolvedValue(undefined);
   mocks.signInWithPassword.mockResolvedValue(undefined);
@@ -85,7 +86,7 @@ describe("final authentication experience", () => {
     renderSignIn();
     expect(screen.getByRole("img", { name: "Weymela" })).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Create account" }),
+      screen.getByRole("button", { name: "Create Account" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeVisible();
     expect(
@@ -96,46 +97,72 @@ describe("final authentication experience", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts account creation with email only and uses Continue", async () => {
+  it("chooses a public role before collecting the compact registration form", async () => {
     renderSignIn();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Create account" }),
-    );
-    expect(
-      screen.getByRole("heading", { name: "Create your account" }),
-    ).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    expect(screen.getByRole("heading", { name: "How would you like to join?" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Customer/ })).toHaveTextContent("ሸማች");
+    expect(screen.getByRole("button", { name: /Business Owner/ })).toHaveTextContent("ንግድ ባለቤት");
+    expect(screen.getByRole("button", { name: /Content Creator/ })).toHaveTextContent("ይዘት ፈጣሪ");
+    expect(screen.queryByRole("button", { name: /Platform Admin|Operations Admin|Cashier/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
+    expect(screen.getByRole("heading", { name: "Customer registration" })).toBeVisible();
+    expect(screen.getByLabelText("Full legal name")).toBeVisible();
     expect(screen.getByLabelText("Email address")).toBeVisible();
-    expect(screen.queryByLabelText("Phone number")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Phone number")).toBeVisible();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
-    await userEvent.type(
-      screen.getByLabelText("Email address"),
-      "owner@example.com",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.type(screen.getByLabelText("Full legal name"), "Abebe Kebede");
+    await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
+    await userEvent.type(screen.getByLabelText("Phone number"), "+251911111111");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Complete Registration" }));
     expect(mocks.startEmailCode).toHaveBeenCalledWith(
       "owner@example.com",
       "Signup",
     );
-    expect(
-      await screen.findByRole("heading", { name: "Check your email" }),
-    ).toBeVisible();
-    expect(screen.getByText(/If this email is already registered, we've sent a code to help you sign in/)).toBeVisible();
-    expect(screen.queryByText("We sent a verification code to your email.")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Verify your email" })).toBeVisible();
+    expect(screen.getByText(/five-digit code sent to owner@example.com/)).toBeVisible();
+    expect(screen.getByLabelText("Verification code")).toHaveAttribute("maxlength", "5");
     expect(screen.getByRole("button", { name: "Verify" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Resend email" })).toBeDisabled();
-    expect(screen.queryByText(/This email is registered|You already have an account/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit details" })).toBeVisible();
   });
 
   it("resends through the same Create Account request without revealing the backend route", async () => {
     mocks.startEmailCode.mockResolvedValue(0);
     renderSignIn();
-    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
+    await userEvent.type(screen.getByLabelText("Full legal name"), "Abebe Kebede");
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Check your email" });
+    await userEvent.type(screen.getByLabelText("Phone number"), "+251911111111");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Complete Registration" }));
+    await screen.findByRole("heading", { name: "Verify your email" });
     await userEvent.click(screen.getByRole("button", { name: "Resend email" }));
     expect(mocks.startEmailCode).toHaveBeenNthCalledWith(2, "owner@example.com", "Signup");
-    expect(screen.getByRole("heading", { name: "Check your email" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Verify your email" })).toBeVisible();
+  });
+
+  it("shows only Business fields for Business Owner registration", async () => {
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Business Owner/ }));
+    expect(screen.getByLabelText("Full legal name")).toBeVisible();
+    expect(screen.getByLabelText("Business name")).toBeVisible();
+    expect(screen.getByLabelText("Business type")).toBeVisible();
+    expect(screen.queryByLabelText("Social-media profile link")).not.toBeInTheDocument();
+  });
+
+  it("validates Creator social and audience fields before email verification", async () => {
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Content Creator/ }));
+    expect(screen.getByLabelText("Social platform")).toBeVisible();
+    expect(screen.getByLabelText("Social-media profile link")).toHaveAttribute("type", "url");
+    expect(screen.getByLabelText("Follower count")).toHaveAttribute("min", "0");
+    await userEvent.selectOptions(screen.getByLabelText("Social platform"), "YouTube");
+    expect(screen.getByLabelText("Subscriber count")).toBeVisible();
   });
 
   it("uses phone and password for full sign-in without starting email", async () => {
@@ -220,9 +247,9 @@ describe("final authentication experience", () => {
     await userEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await userEvent.type(screen.getByLabelText("Verification code"), "123456");
+    await userEvent.type(screen.getByLabelText("Verification code"), "12345");
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
-    expect(mocks.verifyPasswordRecovery).toHaveBeenCalledWith("owner@example.com", "123456");
+    expect(mocks.verifyPasswordRecovery).toHaveBeenCalledWith("owner@example.com", "12345");
 
     await userEvent.type(screen.getByLabelText("New password"), "new correct horse battery staple");
     await userEvent.type(screen.getByLabelText("Confirm new password"), "new correct horse battery staple");
@@ -239,7 +266,7 @@ describe("final authentication experience", () => {
     await userEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await userEvent.type(screen.getByLabelText("Verification code"), "123456");
+    await userEvent.type(screen.getByLabelText("Verification code"), "12345");
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
 
     expect(mocks.refresh).toHaveBeenCalledOnce();

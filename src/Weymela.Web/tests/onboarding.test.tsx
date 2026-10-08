@@ -94,6 +94,7 @@ function renderOnboarding() {
 
 describe("shared role-themed onboarding", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     mocks.post.mockClear();
     mocks.reload.mockClear();
     mocks.refresh.mockClear();
@@ -101,6 +102,23 @@ describe("shared role-themed onboarding", () => {
     mocks.statusProfiles = [];
     mocks.activeProfiles = [];
     mocks.legalStatus = effectiveLegal;
+  });
+
+  it("completes a verified public Business registration exactly once and shows pending status", async () => {
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "public-business-key", role: "Business",
+      legalName: "Abebe Kebede", email: "owner@example.test", phone: "+251911111111",
+      businessName: "ABC Trading", businessType: "Retail", legalAccepted: true,
+    }));
+    renderOnboarding();
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+      role: "Business", displayName: "ABC Trading", legalName: "Abebe Kebede",
+      registeredPhone: "+251911111111", category: "Retail",
+    }), "public-business-key");
+    expect(await screen.findByRole("heading", { name: "Your email is verified." })).toBeVisible();
+    expect(screen.getByText(/Business account is waiting for Weymela approval/)).toBeVisible();
+    expect(window.sessionStorage.getItem("weymela.public-signup")).toBeNull();
   });
 
   it("shows only the three public choices with concise accessible wording", () => {

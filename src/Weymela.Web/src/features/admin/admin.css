@@ -151,3 +151,13 @@
 .admin-profile-social a { color: var(--role-accent); }
 .admin-profile-reject { display: grid; gap: 8px; max-width: 440px; }
 .admin-profile-reject input { width: 100%; min-width: 0; }
+.admin-pending-review { border: 1px solid #d2e2d6; box-shadow: 0 8px 22px rgb(15 23 42 / 7%); }
+.admin-enrollment-detail { display: grid; gap: 16px; }
+.admin-enrollment-detail dl { display: grid; gap: 0; margin: 0; }
+.admin-enrollment-detail dl > div { display: grid; grid-template-columns: minmax(115px, .7fr) minmax(0, 1.3fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--admin-line); }
+.admin-enrollment-detail dt { color: var(--admin-muted); font-size: .78rem; }
+.admin-enrollment-detail dd { margin: 0; color: var(--admin-ink); overflow-wrap: anywhere; }
+.admin-review-social-list { display: grid; gap: 8px; }
+.admin-review-social-list article { display: grid; gap: 4px; padding: 11px; border: 1px solid var(--admin-line); border-radius: 10px; background: #f8faf9; font-size: .8rem; }
+.admin-review-social-list a { color: #166534; font-weight: 700; }
+.review-history { display: grid; gap: 4px; padding: 11px; border-radius: 10px; background: #f3f6f4; font-size: .8rem; }

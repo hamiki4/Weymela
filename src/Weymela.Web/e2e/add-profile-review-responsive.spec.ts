@@ -75,12 +75,14 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     await expect.poll(async () => {
       const response = await adminContext.request.get("/api/notifications");
       const body = await response.json() as { items: { title: string; route: string }[] };
-      return body.items.filter(item => item.title === "Profile awaiting review" && item.route === "/admin/role-enrollments").length;
+      return body.items.filter(item => ["New Business awaiting review", "New Creator awaiting review"].includes(item.title)
+        && item.route === "/admin/role-enrollments").length;
     }).toBe(2);
     await open(admin, "/admin/operations");
     await admin.getByRole("link", { name: "Your notifications" }).click();
     await expect(admin).toHaveURL(/\/notifications/);
-    await expect(admin.getByRole("heading", { name: "Profile awaiting review" })).toHaveCount(2);
+    await expect(admin.getByRole("heading", { name: "New Business awaiting review" })).toBeVisible();
+    await expect(admin.getByRole("heading", { name: "New Creator awaiting review" })).toBeVisible();
     await admin.locator(".notification-item").filter({ hasText: "Creator application" }).getByRole("link", { name: "Open" }).click();
     await expect(admin).toHaveURL(/\/admin\/role-enrollments/);
     await expect(admin.getByText("https://www.instagram.com/hana/", { exact: true })).toHaveCount(0);

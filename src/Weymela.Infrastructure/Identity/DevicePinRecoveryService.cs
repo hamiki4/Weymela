@@ -115,7 +115,7 @@ public sealed class DevicePinRecoveryService(
                     identifierHash, verifiedEmail.IdentifierHash, now))
                 throw InvalidCode();
 
-            var codeIsWellFormed = request.Code.Length == 6
+            var codeIsWellFormed = request.Code.Length == 5
                 && request.Code.All(c => c is >= '0' and <= '9');
             if (!codeIsWellFormed
                 || !AuthCodeHashing.Verify(request.Code, challenge!.CodeHash, options.AuthCodeHashKey!))

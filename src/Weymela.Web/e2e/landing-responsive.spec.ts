@@ -26,7 +26,7 @@ for (const viewport of [
     await openPublicLanding(page);
 
     const create = page.getByRole("button", {
-      name: "Create account",
+      name: "Create Account",
       exact: true,
     });
     const signIn = page.getByRole("button", { name: "Sign in", exact: true });
@@ -44,7 +44,7 @@ for (const viewport of [
       )!;
       const createButton = Array.from(
         document.querySelectorAll<HTMLButtonElement>("button"),
-      ).find((button) => button.textContent?.trim() === "Create account")!;
+      ).find((button) => button.textContent?.trim() === "Create Account")!;
       const signInButton = Array.from(
         document.querySelectorAll<HTMLButtonElement>("button"),
       ).find((button) => button.textContent?.trim() === "Sign in")!;
@@ -125,11 +125,63 @@ test("public landing remains focused on desktop", async ({
   });
   expect(measurements.horizontalOverflow).toBe(false);
   await expect(
-    page.getByRole("button", { name: "Create account", exact: true }),
+    page.getByRole("button", { name: "Create Account", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeVisible();
+});
+
+test("public signup exposes only the three role-specific registrations", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPublicLanding(page);
+  await page.getByRole("button", { name: "Create Account", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "How would you like to join?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Customer — ሸማች/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Business Owner — ንግድ ባለቤት/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Content Creator — ይዘት ፈጣሪ/ })).toBeVisible();
+  await expect(page.getByText(/Platform Admin|Operations Admin|Cashier/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Customer — ሸማች/ }).click();
+  await expect(page.getByRole("heading", { name: "Customer registration" })).toBeVisible();
+  await expect(page.getByLabel("Business name")).toHaveCount(0);
+  await expect(page.getByLabel("Social-media profile link")).toHaveCount(0);
+  const legalName = page.locator('input[autocomplete="name"]');
+  await legalName.fill("Public Signup Customer");
+  await page.getByRole("button", { name: "አማ", exact: true }).click();
+  await expect(legalName).toHaveValue("Public Signup Customer");
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100_000)}`;
+  const email = `public-signup-${suffix}@example.test`;
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Phone number").fill(`+2519${suffix.slice(-8)}`);
+  await page.getByRole("checkbox").check();
+  const started = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/auth/email/start");
+  await page.getByRole("button", { name: "Complete Registration" }).click();
+  expect((await started).status()).toBe(202);
+  await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
+  await expect(page.getByText(`Enter the five-digit code sent to ${email}.`)).toBeVisible();
+  await expect(page.getByLabel("Verification code")).toHaveAttribute("maxlength", "5");
+  const delivered = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(email)}`);
+  expect(delivered.status()).toBe(200);
+  expect((await delivered.json() as { code: string }).code).toMatch(/^\d{5}$/);
+
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await expect(page.getByLabel("Full legal name")).toHaveValue("Public Signup Customer");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: /^Business Owner — ንግድ ባለቤት/ }).click();
+  await expect(page.getByLabel("Business name")).toBeVisible();
+  await expect(page.getByLabel("Business type")).toBeVisible();
+  await expect(page.getByLabel("Social-media profile link")).toHaveCount(0);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: /^Content Creator — ይዘት ፈጣሪ/ }).click();
+  await expect(page.getByLabel("Social platform")).toBeVisible();
+  await expect(page.getByLabel("Social-media profile link")).toBeVisible();
+  await expect(page.getByLabel("Follower count")).toBeVisible();
+  await page.getByLabel("Social platform").selectOption("YouTube");
+  await expect(page.getByLabel("Subscriber count")).toBeVisible();
+  await expect(page.getByLabel("Business name")).toHaveCount(0);
 });
 
 test("production branding assets are transparent, compact, and replace the old icon", async ({

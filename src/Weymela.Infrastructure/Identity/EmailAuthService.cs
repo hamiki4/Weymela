@@ -46,6 +46,7 @@ public sealed class EmailAuthService(
     private static readonly TimeSpan ResendWindow = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RecoveryGrantLifetime = TimeSpan.FromMinutes(10);
     private const int MaxAttempts = 5;
+    private const int CodeDigits = 5;
 
     public async Task<EmailCodeStartOutcome> StartAsync(string identifier, string? phone, EmailCodePurpose purpose, CancellationToken ct)
     {
@@ -107,7 +108,7 @@ public sealed class EmailAuthService(
             return new(true, recent.ExpiresAtUtc, (int)Math.Ceiling((recent.LastSentAtUtc.Value.Add(ResendWindow) - now).TotalSeconds));
         }
 
-        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
+        var code = RandomNumberGenerator.GetInt32(0, 100_000).ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
         var challenge = new EmailAuthChallengeRecord
         {
             UserId = userId,
@@ -150,7 +151,7 @@ public sealed class EmailAuthService(
         if (purpose is EmailCodePurpose.PinRecovery or EmailCodePurpose.PasswordRecovery)
             throw new AuthChallengeUnavailableException("Use the secure recovery completion flow.");
         var normalizedIdentifier = NormalizeEmail(email);
-        if (code.Length != 6 || code.Any(c => c is < '0' or > '9')) throw new AuthChallengeInvalidException();
+        if (code.Length != CodeDigits || code.Any(c => c is < '0' or > '9')) throw new AuthChallengeInvalidException();
         var hash = HashIdentifier(normalizedIdentifier);
         var now = clock.GetUtcNow().UtcDateTime;
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -203,7 +204,7 @@ public sealed class EmailAuthService(
     {
         EnsureConfigured();
         var normalizedEmail = NormalizeEmail(email);
-        if (code.Length != 6 || code.Any(c => c is < '0' or > '9')) throw new AuthChallengeInvalidException();
+        if (code.Length != CodeDigits || code.Any(c => c is < '0' or > '9')) throw new AuthChallengeInvalidException();
         var identifierHash = HashIdentifier(normalizedEmail);
         var now = clock.GetUtcNow().UtcDateTime;
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);

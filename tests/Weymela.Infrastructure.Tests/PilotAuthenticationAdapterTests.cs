@@ -40,7 +40,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         var handler = new RecordingHandler(_ => Success());
         using var delivery = new ResendEmailCodeDelivery(Options(), handler);
 
-        await delivery.SendAsync("registered@example.com", "123456", purpose, default);
+        await delivery.SendAsync("registered@example.com", "12345", purpose, default);
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(ResendEmailCodeDelivery.Endpoint, request.Uri);
@@ -52,7 +52,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         Assert.Equal("registered@example.com", payload.RootElement.GetProperty("to")[0].GetString());
         Assert.Equal(expectedSubject, payload.RootElement.GetProperty("subject").GetString());
         var body = payload.RootElement.GetProperty("text").GetString()!;
-        Assert.Contains("123456", body, StringComparison.Ordinal);
+        Assert.Contains("12345", body, StringComparison.Ordinal);
         Assert.Contains("expires in 10 minutes", body, StringComparison.Ordinal);
         Assert.DoesNotContain("http", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(ApiKey, request.Body, StringComparison.Ordinal);
@@ -91,10 +91,10 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         using var delivery = new ResendEmailCodeDelivery(Options(), handler);
 
         var error = await Assert.ThrowsAsync<AuthChallengeUnavailableException>(
-            () => delivery.SendAsync("registered@example.com", "654321", EmailCodePurpose.Signup, default));
+            () => delivery.SendAsync("registered@example.com", "65432", EmailCodePurpose.Signup, default));
 
         Assert.Equal("Email delivery is temporarily unavailable.", error.Message);
-        Assert.DoesNotContain("654321", error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("65432", error.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(ApiKey, error.ToString(), StringComparison.Ordinal);
     }
 
@@ -355,7 +355,7 @@ public sealed class PilotAuthenticationAdapterTests(PostgresFixture fixture)
         Content = new StringContent("{\"id\":\"test-message-id\"}", Encoding.UTF8, "application/json")
     };
 
-    private static string Code(string body) => Regex.Match(body, "[0-9]{6}").Value;
+    private static string Code(string body) => Regex.Match(body, "[0-9]{5}").Value;
 
     private sealed record RecordedRequest(Uri Uri, bool HasBearerAuthorization, string IdempotencyKey, string Body);
 

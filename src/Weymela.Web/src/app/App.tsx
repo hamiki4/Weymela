@@ -60,6 +60,7 @@ import { CashierActivation } from "./CashierActivation";
 import { AccountActivation } from "./AccountActivation";
 import { BusinessCashiers } from "../features/business/BusinessCashiers";
 import { ContactPage, DeleteAccountPage, HelpPage, SettingsPage } from "./SettingsPages";
+import { hasSignupDraft } from "./signupDraft";
 
 
 function Home() {
@@ -96,10 +97,13 @@ export function App() {
   if ((session.loading || session.resolution === "resolving") && !session.user
       && location.pathname !== "/sign-in") return <SessionTransition />;
   if (!session.loading && session.user) {
-    if (session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
+    const completingPublicSignup = session.user.role === "Onboarding" && hasSignupDraft();
+    if (completingPublicSignup && location.pathname !== "/onboarding")
+      return <AccountRedirect to="/onboarding" />;
+    if (!completingPublicSignup && session.accountSecurity && !session.accountSecurity.passwordEnrolled) {
       if (location.pathname !== "/security-setup")
         return <AccountRedirect to="/security-setup" />;
-    } else if (session.accountSecurity?.passwordEnrolled) {
+    } else if (!completingPublicSignup && session.accountSecurity?.passwordEnrolled) {
       if (location.pathname === "/security-setup")
         return <AccountRedirect to={accountEntryPath(session.user, session.accountSecurity, session.deviceEnrollment)} />;
       const state = session.deviceEnrollment?.state ?? "Unavailable";

@@ -14,12 +14,15 @@ namespace Weymela.Infrastructure.Identity;
 public sealed record RoleEnrollmentRequest(ActorRole Role, string DisplayName, string? PublicId, string? Region,
     string? Category, string? Submission, Guid? ProposedBusinessId = null,
     AccountLegalConfirmation? AccountLegal = null, string? IpReference = null, string? UserAgentReference = null,
-    IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null);
-public sealed record CreatorApplicationSocialProfile(string Platform, string ProfileUrl, long AudienceCount = 0);
+    IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null, string? LegalName = null,
+    string? RegisteredPhone = null);
+public sealed record CreatorApplicationSocialProfile(string Platform, string ProfileUrl, long AudienceCount = 0,
+    long FollowerCount = 0, long? SubscriberCount = null);
 public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollmentStatus Status, string DisplayName,
     string PublicId, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc, string? DecisionReason, long Version,
     string? Region = null, string? Category = null, string? Submission = null,
-    IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null, string? FullEmail = null);
+    IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null, string? FullEmail = null,
+    string? FullPhone = null, string? LegalName = null);
 
 public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider clock)
 {
@@ -30,17 +33,24 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         if (actor.UserId == Guid.Empty || !PublicRoles.Contains(request.Role)) throw Denied();
         Validate(request, idempotencyKey);
         var socialProfiles = NormalizeSocialProfiles(request);
+        var registeredPhone = string.IsNullOrWhiteSpace(request.RegisteredPhone)
+            ? null
+            : PhoneNumberNormalizer.Normalize(request.RegisteredPhone);
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var existing = await db.RoleEnrollments.SingleOrDefaultAsync(x => x.UserId == actor.UserId && x.IdempotencyKey == idempotencyKey, ct);
         if (existing is not null)
         {
             var prior = JsonSerializer.Deserialize<EnrollmentDetails>(existing.SubmissionJson);
             if (existing.RequestedRole != request.Role || prior is null || prior.DisplayName != request.DisplayName.Trim()
+                || prior.LegalName != request.LegalName?.Trim()
                 || (request.Role != ActorRole.Customer && !string.IsNullOrWhiteSpace(request.PublicId) && prior.PublicId != request.PublicId.Trim())
                 || prior.Region != request.Region?.Trim() || prior.Category != request.Category?.Trim()
                 || prior.Submission != request.Submission?.Trim()
                 || !(prior.SocialProfiles ?? []).SequenceEqual(socialProfiles))
                 throw new ApplicationFailure(FailureKind.IdempotencyConflict, "This request reference was already used for another profile request.");
+            await EnsureRegisteredPhoneAsync(actor.UserId, registeredPhone, ct);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
             return Summary(existing);
         }
         if (request.ProposedBusinessId is not null) throw new ApplicationFailure(FailureKind.Validation, "A new Business is created by Weymela after approval.");
@@ -58,6 +68,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
                 await accountLegal.AcceptCurrentAsync(actor.UserId, request.AccountLegal,
                     request.IpReference, request.UserAgentReference, ct);
         }
+        await EnsureRegisteredPhoneAsync(actor.UserId, registeredPhone, ct);
         var now = clock.GetUtcNow().UtcDateTime;
         var publicId = request.Role == ActorRole.Customer
             ? await NewCustomerPublicIdAsync(ct)
@@ -67,6 +78,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         var submission = JsonSerializer.Serialize(new
             {
                 DisplayName = request.DisplayName.Trim(),
+                LegalName = request.LegalName?.Trim(),
                 PublicId = publicId,
                 Region = request.Role == ActorRole.Customer ? null : request.Region?.Trim(),
                 Category = request.Role == ActorRole.Customer ? null : request.Category?.Trim(),
@@ -126,9 +138,16 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         var emails = await db.AuthIdentifiers.AsNoTracking().Where(x => userIds.Contains(x.UserId)
                 && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null)
             .ToListAsync(ct);
-        return rows.Select(row => Summary(row) with { FullEmail = emails
-            .Where(x => x.UserId == row.UserId).OrderByDescending(x => x.CreatedAtUtc)
-            .Select(x => x.DeliveryAddress).FirstOrDefault() }).ToList();
+        var phones = await db.AuthIdentifiers.AsNoTracking().Where(x => userIds.Contains(x.UserId)
+                && x.Kind == "Phone" && x.DeliveryAddress != null)
+            .ToListAsync(ct);
+        return rows.Select(row => Summary(row) with
+        {
+            FullEmail = emails.Where(x => x.UserId == row.UserId).OrderByDescending(x => x.CreatedAtUtc)
+                .Select(x => x.DeliveryAddress).FirstOrDefault(),
+            FullPhone = phones.Where(x => x.UserId == row.UserId).OrderByDescending(x => x.CreatedAtUtc)
+                .Select(x => x.DeliveryAddress).FirstOrDefault()
+        }).ToList();
     }
 
     public async Task<RoleEnrollmentSummary> ReviewAsync(Actor admin, Guid id, bool approve, string? reason, long expectedVersion, string idempotencyKey, CancellationToken ct)
@@ -178,12 +197,13 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     {
         var details = JsonSerializer.Deserialize<EnrollmentDetails>(x.SubmissionJson);
         return new(x.Id, x.RequestedRole, x.Status, details?.DisplayName ?? "", details?.PublicId ?? "", x.SubmittedAtUtc, x.ReviewedAtUtc, x.DecisionReason, x.Version,
-            details?.Region, details?.Category, details?.Submission, details?.SocialProfiles);
+            details?.Region, details?.Category, details?.Submission, details?.SocialProfiles, LegalName: details?.LegalName);
     }
     private static void Validate(RoleEnrollmentRequest x, string key)
     {
         if (string.IsNullOrWhiteSpace(key) || key.Length > 200 || string.IsNullOrWhiteSpace(x.DisplayName)
             || x.DisplayName.Trim().Length > 120
+            || (x.LegalName?.Trim().Length ?? 0) > 120
             || (x.PublicId?.Trim().Length ?? 0) > 80)
             throw new ApplicationFailure(FailureKind.Validation, "Complete the required profile details.");
         if ((x.Region?.Length ?? 0) > 80 || (x.Category?.Length ?? 0) > 80 || (x.Submission?.Length ?? 0) > 3000) throw new ApplicationFailure(FailureKind.Validation, "Keep profile details concise.");
@@ -208,9 +228,40 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
                 throw new ApplicationFailure(FailureKind.Validation, "Choose each supported social platform once.");
             if (social.AudienceCount is < 0 or > 9_000_000_000_000_000)
                 throw new ApplicationFailure(FailureKind.Validation, "Audience count must be a whole number between 0 and 9,000,000,000,000,000.");
-            result.Add(new(platform.ToString(), CreatorSocialProfileLinks.Normalize(platform, social.ProfileUrl), social.AudienceCount));
+            if (social.FollowerCount is < 0 or > 9_000_000_000_000_000
+                || social.SubscriberCount is < 0 or > 9_000_000_000_000_000)
+                throw new ApplicationFailure(FailureKind.Validation, "Follower and subscriber counts must be whole numbers.");
+            var audience = Math.Max(social.AudienceCount, Math.Max(social.FollowerCount, social.SubscriberCount ?? 0));
+            result.Add(new(platform.ToString(), CreatorSocialProfileLinks.Normalize(platform, social.ProfileUrl), audience,
+                social.FollowerCount, social.SubscriberCount));
         }
         return result;
+    }
+
+    private async Task EnsureRegisteredPhoneAsync(Guid userId, string? phone, CancellationToken ct)
+    {
+        if (phone is null) return;
+        if (!await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
+                && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null, ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Verify your email before registering a phone number.");
+        var hash = EmailAuthService.HashIdentifier(phone);
+        var claimed = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
+            && x.IdentifierHash == hash, ct);
+        if (claimed is not null && claimed.UserId != userId)
+            throw new ApplicationFailure(FailureKind.Validation, "This phone number cannot be added to your account.");
+        var existing = await db.AuthIdentifiers.AsTracking().Where(x => x.UserId == userId && x.Kind == "Phone").ToListAsync(ct);
+        if (existing.Count > 1 || existing.Count == 1 && existing[0].IdentifierHash != hash)
+            throw new ApplicationFailure(FailureKind.Validation, "Use the phone number already registered to this account.");
+        if (existing.Count == 0)
+            db.AuthIdentifiers.Add(new AuthIdentifierRecord
+            {
+                UserId = userId,
+                Kind = "Phone",
+                IdentifierHash = hash,
+                DeliveryAddress = phone,
+                IsVerified = false,
+                CreatedAtUtc = clock.GetUtcNow().UtcDateTime
+            });
     }
 
     private async Task<string> NewCustomerPublicIdAsync(CancellationToken ct)
@@ -226,5 +277,6 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     }
     private static ApplicationFailure Denied() => new(FailureKind.Forbidden, "This profile action is not available.");
     private sealed record EnrollmentDetails(string DisplayName, string PublicId, string? Region, string? Category, string? Submission,
+        string? LegalName = null,
         IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null);
 }

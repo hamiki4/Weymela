@@ -19,10 +19,16 @@ import {
   Section,
 } from "../../ui/components";
 import { date, dateTime } from "../../ui/format";
+import { actorRoleNameFromWire, type ActorRoleName } from "../../api/actorRoleContract";
+import { CompactLanguageChoice } from "../../localization/Language";
 type AccountArea = "Customer" | "Creator" | "Business" | "Admin";
 const areaTitle: Record<AccountArea, string> = { Customer: "Customers", Creator: "Creators", Business: "Businesses", Admin: "Admins" };
 const areaPath: Record<AccountArea, string> = { Customer: "/admin/customers", Creator: "/admin/creators", Business: "/admin/businesses", Admin: "/admin/admins" };
 const detailId = (row: AdminAccountSummary) => row.status === "Pending" ? row.id : row.userId ?? row.id;
+const safeSocialUrl = (value: string) => {
+  try { const url = new URL(value); return url.protocol === "https:" ? url.toString() : "#"; }
+  catch { return "#"; }
+};
 
 export function AdminAccounts({ area }: { area: AccountArea }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,6 +58,7 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
   return <div className="admin-page">
     <PageHeader title={areaTitle[area]} compact action={<Link className="button primary" to={`${areaPath[area]}/new`}>+ Create {area}</Link>} />
     {searchParams.get("created") && <Notice>Preauthorization created. Activation instructions were sent to the target. The account appears below as Pending until activation.</Notice>}
+    {(area === "Business" || area === "Creator") && <PendingEnrollmentReview area={area} onReviewed={resource.reload} />}
     <div className="admin-toolbar">
       <form onSubmit={event => { event.preventDefault(); updateFilters({ search: draftSearch, status, adminRole: role }); }}>
         <input aria-label={`Search ${areaTitle[area]}`} type="search" value={draftSearch} onChange={event => setDraftSearch(event.target.value)} placeholder={`Search ${areaTitle[area].toLowerCase()}`} />
@@ -74,6 +81,86 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
       {selected && <form onSubmit={event => { event.preventDefault(); runLifecycle(); }}>{selected.command === "delete-role" && <p>This permanently removes this {roleName(selected.row.role)} profile. Other profiles remain available.</p>}<Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{selected.command === "close" && <label className="check-line"><input type="checkbox" checked={confirmClose} onChange={event => setConfirmClose(event.target.checked)} /> Confirm terminal closure. Financial and security history remains.</label>}{action.error && <Notice error>{action.error}</Notice>}<div className="actions"><Button type="submit" className={selected.command === "delete-role" ? "destructive-action" : ""} disabled={action.busy || !reason.trim() || (selected.command === "close" && !confirmClose)}>{action.busy ? "Saving…" : commandLabel(selected.command)}</Button><Button variant="secondary" onClick={() => setSelected(null)} disabled={action.busy}>Cancel</Button></div></form>}
     </Dialog>
   </div>;
+}
+
+type EnrollmentReviewRow = {
+  id: string;
+  role: ActorRoleName | number;
+  status: string | number;
+  displayName: string;
+  legalName?: string | null;
+  version: number;
+  category?: string | null;
+  region?: string | null;
+  submission?: string | null;
+  submittedAtUtc: string;
+  fullEmail?: string | null;
+  fullPhone?: string | null;
+  socialProfiles?: { platform: string; profileUrl: string; audienceCount: number; followerCount?: number; subscriberCount?: number | null }[] | null;
+};
+
+function PendingEnrollmentReview({ area, onReviewed }: { area: "Business" | "Creator"; onReviewed: () => void }) {
+  const resource = useResource<EnrollmentReviewRow[]>("/admin/role-enrollments");
+  const action = useAction();
+  const [selected, setSelected] = useState<EnrollmentReviewRow | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const finish = (approve: boolean) => {
+    if (!selected || !approve && !reason.trim()) return;
+    void action.run(async key => {
+      await post(`/admin/role-enrollments/${selected.id}/review`, {
+        approve, reason: approve ? null : reason.trim(), expectedVersion: selected.version,
+      }, key);
+      setSelected(null); setRejecting(false); setReason("");
+      resource.reload(); onReviewed();
+    });
+  };
+  return <Resource resource={resource}>{rows => {
+    const pending = rows.filter(row => actorRoleNameFromWire(row.role) === area);
+    return <Section title={`Pending Review (${pending.length})`} action={<CompactLanguageChoice />} className="admin-pending-review">
+      <DataTable rows={pending} rowKey={row => row.id} label={`Pending ${area} reviews`} columns={area === "Business" ? [
+        { label: "Business Name", cell: (row: EnrollmentReviewRow) => <strong data-no-translate>{row.displayName}</strong> },
+        { label: "Owner", cell: (row: EnrollmentReviewRow) => <span data-no-translate>{row.legalName || "—"}</span> },
+        { label: "Submitted", cell: (row: EnrollmentReviewRow) => date(row.submittedAtUtc) },
+        { label: "Status", cell: () => <Badge status="Pending Review" /> },
+        { label: "Action", cell: (row: EnrollmentReviewRow) => <Button variant="secondary" onClick={() => setSelected(row)}>Review</Button> },
+      ] : [
+        { label: "Creator Name", cell: (row: EnrollmentReviewRow) => <strong data-no-translate>{row.legalName || row.displayName}</strong> },
+        { label: "Social Platform", cell: (row: EnrollmentReviewRow) => row.socialProfiles?.map(profile => profile.platform).join(", ") || "—" },
+        { label: "Submitted", cell: (row: EnrollmentReviewRow) => date(row.submittedAtUtc) },
+        { label: "Status", cell: () => <Badge status="Pending Review" /> },
+        { label: "Action", cell: (row: EnrollmentReviewRow) => <Button variant="secondary" onClick={() => setSelected(row)}>Review</Button> },
+      ]} card={row => <div className="admin-mobile-row"><div><strong data-no-translate>{row.displayName}</strong>
+        <small data-no-translate={area === "Business" ? "" : undefined}>{area === "Business" ? row.legalName : row.socialProfiles?.map(profile => profile.platform).join(", ")}</small>
+        <small>Submitted {date(row.submittedAtUtc)}</small></div><div className="admin-mobile-row-meta"><Badge status="Pending Review" /><Button variant="secondary" onClick={() => setSelected(row)}>Review</Button></div></div>}
+        empty={<Empty title={`No ${area.toLowerCase()} reviews waiting`} message="New verified applications will appear here automatically." icon="people" />} />
+      <Dialog title={selected ? `Review ${selected.displayName}` : `Review ${area}`} open={!!selected} onClose={() => { if (!action.busy) { setSelected(null); setRejecting(false); setReason(""); } }}>
+        {selected && <div className="admin-enrollment-detail">
+          <dl>
+            <div><dt>{area === "Business" ? "Business name" : "Creator legal name"}</dt><dd data-no-translate>{selected.displayName}</dd></div>
+            {area === "Business" && <div><dt>Business type</dt><dd data-no-translate>{selected.category || "—"}</dd></div>}
+            {area === "Business" && selected.legalName && <div><dt>Owner legal name</dt><dd data-no-translate>{selected.legalName}</dd></div>}
+            <div><dt>Verified email</dt><dd data-no-translate>{selected.fullEmail || "—"}</dd></div>
+            <div><dt>Registered phone</dt><dd data-no-translate>{selected.fullPhone || "—"}</dd></div>
+            <div><dt>Submission date</dt><dd>{dateTime(selected.submittedAtUtc)}</dd></div>
+          </dl>
+          {area === "Creator" && <div className="admin-review-social-list">{(selected.socialProfiles ?? []).map(profile => <article key={profile.platform}>
+            <strong>{profile.platform}</strong><a href={safeSocialUrl(profile.profileUrl)} target="_blank" rel="noopener noreferrer">View social profile</a>
+            <span>Followers: {(profile.followerCount ?? profile.audienceCount).toLocaleString()}</span>
+            {profile.subscriberCount != null && <span>Subscribers: {profile.subscriberCount.toLocaleString()}</span>}
+            <span>Eligibility: account review pending; audience is self-reported.</span>
+          </article>)}</div>}
+          <div className="review-history"><strong>Review history</strong><span>Submitted {dateTime(selected.submittedAtUtc)} · Pending Review</span></div>
+          {rejecting && <Field label="Rejection reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>}
+          {action.error && <Notice error>{action.error}</Notice>}
+          <div className="actions">{rejecting ? <><Button variant="secondary" onClick={() => { setRejecting(false); setReason(""); }}>Cancel</Button>
+            <Button disabled={action.busy || !reason.trim()} onClick={() => finish(false)}>Confirm rejection</Button></> : <>
+            <Button disabled={action.busy} onClick={() => finish(true)}>Approve</Button>
+            <Button variant="secondary" disabled={action.busy} onClick={() => setRejecting(true)}>Reject</Button></>}</div>
+        </div>}
+      </Dialog>
+    </Section>;
+  }}</Resource>;
 }
 
 function commandLabel(command: string) { return command === "delete-role" ? "Delete Role" : command === "close" ? "Close Account" : command === "cancel" ? "Cancel preauthorization" : command[0].toUpperCase() + command.slice(1); }

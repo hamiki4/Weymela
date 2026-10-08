@@ -109,7 +109,7 @@ public sealed class ResendEmailCodeDelivery : IEmailCodeDelivery, IDisposable
             || !destination.Contains('@', StringComparison.Ordinal)
             || (purpose == EmailCodePurpose.AdminAccountActivation
                 ? code.Length is < 40 or > 128 || code.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_')
-                : code.Length != 6 || code.Any(c => c is < '0' or > '9')))
+                : code.Length != 5 || code.Any(c => c is < '0' or > '9')))
             throw Unavailable();
     }
 

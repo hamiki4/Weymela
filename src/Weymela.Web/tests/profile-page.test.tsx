@@ -64,7 +64,7 @@ describe("full profile page", () => {
     expect(screen.getByText("Cafe")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Contact Information" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Business Location" })).toBeVisible();
-    expect(screen.getByLabelText("Address or area")).toHaveValue("Addis Ababa");
+    await waitFor(() => expect(screen.getByLabelText("Address or area")).toHaveValue("Addis Ababa"));
     expect(screen.queryByText("Phone")).not.toBeInTheDocument();
     expect(screen.queryByText("Wallet")).not.toBeInTheDocument();
     expect(screen.queryByText("Social Profiles")).not.toBeInTheDocument();

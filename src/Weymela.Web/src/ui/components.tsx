@@ -39,7 +39,7 @@ export function Button({
 export function ActionLink({
   to,
   children,
-  icon = "arrow",
+  icon,
   secondary = false,
 }: {
   to: string;
@@ -50,7 +50,7 @@ export function ActionLink({
   return (
     <Link className={`button ${secondary ? "secondary" : "primary"}`} to={to}>
       {children}
-      <Icon name={icon} />
+      {icon && <Icon name={icon} />}
     </Link>
   );
 }
@@ -429,7 +429,6 @@ export function CreatorProfile({ person, photo = false }: { person: CreatorCard;
           rel="noreferrer"
         >
           Open portfolio
-          <Icon name="arrow" />
         </a>
       ) : (
         <p className="muted">No approved portfolio samples yet.</p>

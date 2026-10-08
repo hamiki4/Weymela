@@ -16,6 +16,18 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "M-PESA": "M-PESA",
+  "Update the M-PESA destination using your current verified phone before payment.": "ከክፍያ በፊት የM-PESA መቀበያውን በአሁኑ የተረጋገጠ ስልክ ቁጥርዎ ያዘምኑ።",
+  "Full Account / Phone": "ሙሉ የሂሳብ / ስልክ ቁጥር",
+  "I verified the M-PESA recipient and completed this payment externally.": "የM-PESA ተቀባዩን አረጋግጬ ክፍያውን ከወይሜላ ውጭ ፈጽሜያለሁ።",
+  "Mpesa": "M-PESA",
+  "Promoted by:": "ያስተዋወቀው፦",
+  "Use your registered Safaricom Ethiopia number. M-PESA wallet ownership is checked before payment.": "በወይሜላ የተመዘገበውን የሳፋሪኮም ኢትዮጵያ ቁጥርዎን ይጠቀሙ። ክፍያ ከመፈጸሙ በፊት የM-PESA መለያው የእርስዎ መሆኑ ይረጋገጣል።",
+  "Choose Telebirr, M-PESA or Bank.": "ቴሌብር፣ M-PESA ወይም ባንክ ይምረጡ።",
+  "Mobile money uses your verified Weymela phone number.": "የሞባይል ገንዘብ አገልግሎት በወይሜላ የተረጋገጠውን ስልክ ቁጥርዎን ይጠቀማል።",
+  "A single verified Weymela phone number is required for mobile money.": "ለሞባይል ገንዘብ አገልግሎት በወይሜላ የተረጋገጠ አንድ ስልክ ቁጥር ያስፈልጋል።",
+  "M-PESA requires a verified Safaricom Ethiopia phone number (+2517 or 07).": "M-PESA በ+2517 ወይም 07 የሚጀምር የተረጋገጠ የሳፋሪኮም ኢትዮጵያ ስልክ ቁጥር ይፈልጋል።",
+  "Verify the M-PESA wallet and recipient name with the provider before paying. Phone verification alone does not verify wallet ownership.": "ከመክፈልዎ በፊት የM-PESA መለያውንና የተቀባዩን ስም በአገልግሎት ሰጪው ያረጋግጡ። ስልክ ቁጥር መረጋገጡ ብቻ የM-PESA መለያው ባለቤት መሆኑን አያረጋግጥም።",
   "Home": "መነሻ",
   "Dashboard": "ዳሽቦርድ",
   "Discover": "ያግኙ",

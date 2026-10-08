@@ -1,9 +1,9 @@
 /* Platform Admin presentation. Shared authorization and workspace layout stay mounted. */
 .role-platformadmin {
   background: #f7f8f6;
-  --role-accent: #1f2937;
-  --role-soft: #e9edf1;
-  --role-border: #cbd5e1;
+  --role-accent: #174c39;
+  --role-soft: #e8f2ed;
+  --role-border: #bdd4c7;
   --admin-ink: #111827;
   --admin-secondary: #374151;
   --admin-muted: #4b5563;

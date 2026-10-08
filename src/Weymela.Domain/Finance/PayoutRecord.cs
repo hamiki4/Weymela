@@ -2,7 +2,7 @@ namespace Weymela.Domain;
 
 public enum PayoutBeneficiary { Creator, Customer }
 public enum PayoutStatus { Eligible, Paid }
-public enum PayoutDestinationMethod { Telebirr, Bank }
+public enum PayoutDestinationMethod { Telebirr, Bank, Mpesa }
 
 public sealed class PayoutRecord
 {

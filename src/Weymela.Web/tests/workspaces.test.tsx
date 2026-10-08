@@ -176,7 +176,7 @@ describe("Business workspace", () => {
   it("records any positive deposit with the current wallet version", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
-    await userEvent.click(await screen.findByText("Open Add Funds", { exact: true }));
+    expect(screen.queryByText("Open Add Funds")).not.toBeInTheDocument();
     await screen.findByLabelText("Amount");
     await userEvent.type(screen.getByLabelText("Amount"), "12.34");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
@@ -190,7 +190,7 @@ describe("Business workspace", () => {
   it("rejects a zero deposit in the rendered form", async () => {
     const api = mockApi();
     mount(<BusinessWallet />);
-    await userEvent.click(await screen.findByText("Open Add Funds", { exact: true }));
+    expect(screen.queryByText("Open Add Funds")).not.toBeInTheDocument();
     const input = await screen.findByLabelText("Amount");
     await userEvent.type(input, "0");
     await userEvent.click(screen.getByRole("button", { name: "Add Funds" }));
@@ -830,12 +830,27 @@ describe("Creator workspace", () => {
     expect(await screen.findByLabelText("Verified Weymela phone")).toHaveValue("+251911223344");
     expect(screen.getByLabelText("Verified Weymela phone")).toHaveAttribute("readonly");
     expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText("Payout method"), "Bank");
+    await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));
     await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
     await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");
     await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
       body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
+  });
+  it("uses only the registered phone for M-PESA, with no alternate phone or payout amount", async () => {
+    const api = mockCreatorApi({ "/creator/payout-destination": {
+      method: "Bank", provider: "CBE", account: "••••6789", legalName: "Bella",
+      updatedAtUtc: null, isMasked: true, isConfigured: true, registeredPhone: "+251711223344",
+    } });
+    mount(<CreatorEarnings />);
+    await userEvent.click(await screen.findByRole("radio", { name: "M-PESA" }));
+    expect(screen.getByLabelText("Verified Weymela phone")).toHaveValue("+251711223344");
+    expect(screen.getByLabelText("Verified Weymela phone")).toHaveAttribute("readonly");
+    expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
+    await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
+      body: { method: "Mpesa", bankName: null, accountNumber: null } }));
   });
   it("lets a Creator without a verified phone choose Bank while keeping Telebirr unavailable", async () => {
     const api = mockCreatorApi({ "/creator/payout-destination": {
@@ -845,7 +860,7 @@ describe("Creator workspace", () => {
     mount(<CreatorEarnings />);
     expect(await screen.findByLabelText("Verified Weymela phone")).toHaveAttribute("placeholder", "No verified phone available");
     expect(screen.getByRole("button", { name: "Save Destination" })).toBeDisabled();
-    await userEvent.selectOptions(screen.getByLabelText("Payout method"), "Bank");
+    await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));
     await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
     await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");
     expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled();
@@ -1028,7 +1043,8 @@ describe("Accepted commerce compatibility", () => {
     mockApi({ "/customer/offers": [{ ...ugcCustomerOffer, slogan: "" }] });
     mount(<CustomerOfferQr />, "/customer/offers/ugc-offer", "/customer/offers/:id");
     expect(await screen.findByRole("heading", { name: "Bella Beauty" })).toBeVisible();
-    expect(screen.getByText("Save on your next visit")).toBeVisible();
+    expect(screen.queryByText("Save on your next visit")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
     expect(screen.queryByText("Available from this Business")).not.toBeInTheDocument();
   });
   it("only renders optional promotion links when the API provides safe URLs", async () => {
@@ -1038,6 +1054,18 @@ describe("Accepted commerce compatibility", () => {
     mount(<CustomerOffers />);
     await screen.findByRole("link", { name: "Get Offer QR" });
     expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
+  });
+  it.each([false, true])("searches actual Business and Creator names on Customer Home and Discover (%s)", async discover => {
+    mockApi({ "/customer/offers": [offer, ugcCustomerOffer] });
+    mount(<CustomerOffers discover={discover} />);
+    const search=await screen.findByRole("searchbox", {name:"Search business or creator"});
+    await userEvent.type(search,"Abc");
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.getByText("Abc Coffee")).toBeVisible();
+    await userEvent.clear(search);await userEvent.type(search,"Bella");
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    await userEvent.clear(search);await userEvent.type(search,"No matching name");
+    expect(screen.queryAllByRole("article")).toHaveLength(0);
   });
   it("keeps Discover on the same eligible Customer offer API and filters safely", async () => {
     mockApi({ "/customer/offers": [offer, ugcCustomerOffer] });
@@ -1058,8 +1086,9 @@ describe("Accepted commerce compatibility", () => {
     ];
     for (const item of screens) {
       const rendered = mount(item.element, item.path, item.pattern);
-      expect(await screen.findByRole("link", { name: "Watch Promotion" })).toBeVisible();
-      const directions = screen.getByRole("link", { name: "Get Directions" });
+      const directions = await screen.findByRole("link", { name: "Get Directions" });
+      if (item.qrRole === "link") expect(screen.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
+      else expect(screen.queryByRole("link", { name: "Watch Promotion" })).not.toBeInTheDocument();
       expect(directions).toBeVisible();
       expect(new URL(directions.getAttribute("href")!).hostname).toMatch(/google\.com$/);
       expect(screen.getByRole(item.qrRole, { name: "Get Offer QR" })).toBeVisible();

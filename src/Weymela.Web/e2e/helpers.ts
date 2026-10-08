@@ -55,7 +55,7 @@ export async function saveFundPostAndOpenPromotion(page: Page, budget = 1000) {
   await page.reload();
   await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Publish", exact: true }).click();
-  await expect(page.locator("main .badge").filter({ hasText: "Active" }).first()).toBeVisible();
+  await expect(page.locator("main .badge").filter({ hasText: "Published" }).first()).toBeVisible();
   return promotionId;
 }
 

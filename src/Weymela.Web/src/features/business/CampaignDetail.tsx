@@ -138,7 +138,7 @@ export function BusinessCampaignDetail() {
               onChange={(value) => setSearch({ tab: value })}
               items={[
                 { value: "overview", label: "Overview" },
-                { value: "applicants", label: "Creator Applicants" },
+                { value: "applicants", label: "Applications" },
                 { value: "budgets", label: "Approved Creators" },
                 { value: "funds", label: "Funding" },
                 { value: "performance", label: "Performance" },

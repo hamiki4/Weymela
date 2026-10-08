@@ -78,6 +78,24 @@ async function ensureVisualReviewUgc(context: BrowserContext) {
   return { title: opportunity.title, instructions: detail.instructions };
 }
 
+test("mobile money choices use the registered phone on Creator and Customer mobile screens", async ({ page, context }) => {
+  await page.setViewportSize({width:390,height:844});
+  for(const [role,path] of [["creator","/creator/earnings"],["customer","/customer/cashback"]]) {
+    await login(context,role);await open(page,path);
+    await expect(page.getByRole("radio",{name:"Telebirr",exact:true})).toBeVisible();
+    await page.getByRole("radio",{name:"M-PESA",exact:true}).check();
+    await expect(page.getByLabel("Verified Weymela phone")).toHaveAttribute("readonly","");
+    await expect(page.getByLabel("Account Number",{exact:true})).toHaveCount(0);
+    await expect(page.getByRole("button",{name:"Request Payout"})).toHaveCount(0);
+    await layout(page);
+    await page.getByRole("radio",{name:"Bank account",exact:true}).check();
+    await expect(page.getByLabel("Bank Name",{exact:true})).toBeVisible();
+    await expect(page.getByLabel("Account Number",{exact:true})).toBeVisible();
+    await expect(page.getByLabel("Verified Weymela phone")).toHaveCount(0);
+    await layout(page);
+  }
+});
+
 test("Customer, Creator and Business use compact horizontal navigation on desktop", async ({ page, context }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   for (const [role, path, label] of [["customer", "/customer/offers", "Discover"], ["creator", "/creator", "Promotions"], ["business", "/business", "Wallet"]]) {
@@ -91,6 +109,7 @@ test("Customer, Creator and Business use compact horizontal navigation on deskto
 });
 
 test("Customer Home, Discover and details keep Watch, Directions and Offer QR visible", async ({ page, context }) => {
+  await page.clock.install();
   await page.setViewportSize({ width: 390, height: 844 });
   await login(context, "customer");
   await open(page, "/customer/offers");
@@ -114,9 +133,21 @@ test("Customer Home, Discover and details keep Watch, Directions and Offer QR vi
   await expect(discoverCard.getByRole("link", { name: "Get Offer QR" })).toBeVisible();
 
   await open(page, detailPath!);
-  await expect(page.getByRole("link", { name: "Watch Promotion" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Watch Promotion" })).toHaveCount(0);
+  await expect(page.locator("iframe, video")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Get Directions" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Get Offer QR" })).toBeVisible();
+  let qrRequests=0;
+  page.on("request",request=>{if(request.method()==="POST" && /\/qr$/.test(request.url()))qrRequests++;});
+  await page.getByRole("button",{name:"Get Offer QR"}).click();
+  await expect(page.getByRole("img",{name:"Offer QR for the cashier"})).toBeVisible();
+  await page.clock.fastForward(2000);
+  expect(qrRequests).toBe(1);
+  await expect(page.getByRole("timer")).toContainText("Expires in");
+  await page.clock.fastForward(301000);
+  await expect(page.getByRole("img",{name:"Offer QR for the cashier"})).toHaveCount(0);
+  await expect(page.getByText("This QR has expired. Get a new one when you’re ready.")).toBeVisible();
+  expect(qrRequests).toBe(1);
   await layout(page);
 });
 
@@ -316,6 +347,11 @@ test("Business visual review captures operational surfaces at approved widths", 
 
   await open(page, `/business/campaigns/${detailCampaign!.id}`);
   await expect(page.getByRole("heading", { name: detailCampaign!.title, exact: true })).toBeVisible();
+  const sections=page.getByRole("tablist", {name:"Promotion sections"});
+  await expect(sections.getByRole("tab")).toHaveCount(5);
+  expect(await sections.evaluate(element=>getComputedStyle(element).flexWrap)).toBe("nowrap");
+  await sections.getByRole("tab", {name:"Performance"}).click();
+  await expect(sections.getByRole("tab", {name:"Performance"})).toHaveAttribute("aria-selected","true");
   await layout(page);
   await screenshot(page, "business-promotion-detail-390");
 
@@ -325,14 +361,12 @@ test("Business visual review captures operational surfaces at approved widths", 
   await screenshot(page, "business-requests-390");
 
   await open(page, "/business/wallet");
-  await page.locator("summary[aria-label='Open Add Funds']").click();
   await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-wallet-390");
 
   await page.setViewportSize({ width: 320, height: 800 });
   await open(page, "/business/wallet");
-  await page.locator("summary[aria-label='Open Add Funds']").click();
   await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-wallet-320");
@@ -370,7 +404,7 @@ test("Business visual review captures operational surfaces at approved widths", 
   await screenshot(page, "business-requests-1366");
 
   await open(page, "/business/wallet");
-  await page.locator("summary[aria-label='Open Add Funds']").click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await layout(page);
   await screenshot(page, "business-wallet-1366");

@@ -149,7 +149,7 @@ test("real Add Funds accepts an arbitrary positive amount", async ({
   const before = await (
     await context.request.get("/api/business/wallet")
   ).json();
-  await page.getByText("Open Add Funds", { exact: true }).click();
+  await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Amount", { exact: true }).fill("17.23");
   await page.getByRole("button", { name: "Add Funds", exact: true }).click();

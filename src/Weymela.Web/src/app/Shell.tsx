@@ -218,13 +218,11 @@ export function Shell({ children }: { children?: ReactNode }) {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") && (
             <Link className="topbar-brand" to={roleHome[user.role]} aria-label={`Weymela ${roles[user.role]} home`}>
               <Brand />
             </Link>
-          )}
           <span className="workspace-label">
-            {roles[user.role]} {!isProductRole && <span className="muted">/ Weymela</span>}
+            {roles[user.role]}
           </span>
           {user.role === "PlatformAdmin" && <strong className="topbar-identity" data-no-translate>{user.displayName}</strong>}
           <div className="topbar-right">

@@ -236,7 +236,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             <Icon name="settings" />
             Settings
           </Link>
-          <Button variant="quiet" icon="logout" onClick={signOutAndClose}>
+          <Button className="shell-signout-button" variant="quiet" icon="logout" onClick={signOutAndClose}>
             Sign out
           </Button>
         </div>

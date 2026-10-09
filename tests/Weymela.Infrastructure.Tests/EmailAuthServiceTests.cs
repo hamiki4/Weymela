@@ -45,6 +45,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
         var started = await service.StartAsync("Owner@Example.com", null, EmailCodePurpose.Signup, default);
         Assert.True(started.Accepted); Assert.Single(delivery.Codes); Assert.False(issuer.Called);
         Assert.Equal(EmailCodePurpose.Signup, delivery.Codes[0].Purpose);
+        Assert.Matches("^[0-9]{5}$", delivery.Codes[0].Code);
         Assert.Empty(await db.AuthIdentifiers.ToListAsync());
 
         var token = await service.VerifyAsync("owner@example.com", EmailCodePurpose.Signup, delivery.Codes[0].Code, default);

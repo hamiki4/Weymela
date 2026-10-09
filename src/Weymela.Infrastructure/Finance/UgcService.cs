@@ -8,6 +8,7 @@ using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Providers;
 using Weymela.Infrastructure.Web;
 
 namespace Weymela.Infrastructure.Finance;
@@ -223,6 +224,9 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id, SubmissionId = submission.Id, opportunity.BusinessId });
             return submission.Id;
         }, ct);
+
+    public Task<Guid> SubmitTikTokLinkAsync(Actor actor, Guid assignmentId, string link, string key, CancellationToken ct)
+        => SubmitAsync(actor, assignmentId, new UgcSubmissionInput(TikTokVideoLink.Normalize(link)), key, ct);
 
     public Task<Guid> SubmitPrivateAsync(Actor actor, Guid assignmentId, PrivateReviewMediaInput input,
         string key, CancellationToken ct) => Transaction.ExecuteAsync(async token =>
@@ -719,7 +723,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 submission?.ReviewMediaAssetId is null ? null : $"/api/review-media/ugc/{submission.Id}",
                 publication is null ? null : CreatorPublicationService.View(publication),
                 request.SelectedPlatform?.ToString(), social?.ProfileUrl, social?.Id,
-                submission?.ReviewMediaAssetId is { } assetId ? assets.GetValueOrDefault(assetId)?.ContentType : null);
+                submission?.ReviewMediaAssetId is { } assetId ? assets.GetValueOrDefault(assetId)?.ContentType : null,
+                TikTokVideoLink.WatchUrl(request.SelectedPlatform?.ToString(), submission?.SubmissionUrl));
         }).ToArray();
     }
 

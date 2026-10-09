@@ -71,7 +71,7 @@ public sealed record CreatorContentSubmissionStatus(int RevisionNumber, string R
 public sealed record BusinessPromotionContentReviewCard(Guid SubmissionId, string Creator, string Promotion,
     string? Provider, string? ContentReference, int RevisionNumber, DateTime SubmittedAtUtc,
     string ReviewStatus, string? Feedback, DateTime? ReviewedAtUtc, string? ReviewMediaUrl = null,
-    Guid? CreatorAllocationId = null, Guid? PromotionId = null);
+    Guid? CreatorAllocationId = null, Guid? PromotionId = null, string? WatchUrl = null);
 public sealed record PrivateReviewMediaInput(string StorageKey, string ContentType, long Length,
     string Sha256, string OriginalFileName);
 public sealed record PublicationInput(string Provider, string ExternalContentId, Guid CreatorSocialProfileId);
@@ -251,7 +251,7 @@ public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Oppor
     string? Feedback, string? SubmissionUrl, bool ProductProvided = false, bool CreatorMustPurchase = false, long? CreatorNumber = null,
     int? ContentRevisionNumber = null, string? ReviewMediaUrl = null, PublicationStatusView? Publication = null,
     string? SelectedPlatform = null, string? SelectedSocialProfileUrl = null,
-    Guid? SelectedSocialProfileId = null, string? ReviewMediaContentType = null);
+    Guid? SelectedSocialProfileId = null, string? ReviewMediaContentType = null, string? WatchUrl = null);
 public sealed record UgcRevisionView(int RevisionNumber, bool IsMaterial, DateTime CreatedAtUtc, string SnapshotJson);
 public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOnlyList<string> Resources,
     bool ProductProvided, bool CreatorMustPurchase, string? UsageRights, int CurrentRevision,

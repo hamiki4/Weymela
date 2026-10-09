@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { post, postForm, useAction, useResource } from "../../api/client";
+import { post, useAction, useResource } from "../../api/client";
 import type { CreatorCampaign } from "../../api/types";
 import {
   ActionLink,
@@ -90,7 +90,6 @@ function CreatorContent({
   reload: () => void;
 }) {
   const [content, setContent] = useState("");
-  const [media, setMedia] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const action = useAction();
   const url = contentUrl(row.provider, row.externalContentId);
@@ -108,30 +107,23 @@ function CreatorContent({
           onSubmit={(e) => {
             e.preventDefault();
             void action.run(async (key) => {
-              if (!media) return;
-              const form = new FormData(); form.append("media", media);
-              await postForm(`/creator/creator-budgets/${row.budgetId}/content/review`, form, key);
-              setMedia(null);
+              await post(`/creator/creator-budgets/${row.budgetId}/content/review`, {
+                provider: "TikTok",
+                externalContentId: content.trim(),
+              }, key);
+              setContent("");
               setMessage("Revision submitted for Business review.");
               reload();
             });
           }}
         >
           <fieldset disabled={action.busy}>
-            <Field
-              label="Private review video"
-              help="Upload an MP4 review copy marked SAMPLE • WEYMELA REVIEW ONLY. Do not publish it yet."
-            >
-              <input
-                type="file"
-                accept="video/mp4"
-                onChange={(e) => setMedia(e.target.files?.[0] ?? null)}
-                required
-              />
+            <Field label="TikTok Video Link" help="Use a public HTTPS TikTok video link that the Business can open. Weymela does not store the video file.">
+              <input type="url" inputMode="url" value={content} onChange={(e) => setContent(e.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required />
             </Field>
             {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
-            <Button type="submit" disabled={action.busy || !media}>
-              {row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Video" : "Submit for Review"}
+            <Button type="submit" disabled={action.busy || !content.trim()}>
+              {action.busy ? "Submitting…" : "Submit for Review"}
             </Button>
           </fieldset>
         </form>
@@ -148,10 +140,10 @@ function CreatorContent({
             setMessage("Publication submitted for verification."); reload();
           });
         }}>
-          <Notice>Video approved. Publish this approved revision on {row.selectedPlatform ?? "the selected platform"}, then enter the public post ID.</Notice>
+          <Notice>Video approved. Publish this approved revision on {row.selectedPlatform ?? "the selected platform"}, then confirm the final public TikTok video link.</Notice>
           {row.selectedSocialProfileUrl && <p><a href={row.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">Open selected social profile</a></p>}
           {row.selectedSocialProfileId && row.selectedPlatform ? <>
-            <Field label="Public post ID"><input value={content} onChange={(event) => setContent(event.target.value)} pattern={row.selectedPlatform === "TikTok" ? "[0-9]+" : "[a-zA-Z0-9_-]+"} maxLength={100} required /></Field>
+            <Field label={row.selectedPlatform === "TikTok" ? "TikTok Video Link" : `${row.selectedPlatform} post ID`}><input type={row.selectedPlatform === "TikTok" ? "url" : "text"} inputMode={row.selectedPlatform === "TikTok" ? "url" : "text"} value={content} onChange={(event) => setContent(event.target.value)} placeholder={row.selectedPlatform === "TikTok" ? "https://www.tiktok.com/@creator/video/…" : undefined} required /></Field>
             <Button type="submit" disabled={action.busy || !content.trim()}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
           </> : <Notice error>This work has no selected social profile. Contact the Business before publishing.</Notice>}
         </form>

@@ -1376,6 +1376,45 @@ div.private-review-media {
 .app-shell .button.primary { background: var(--role-accent); color: #fff; }
 .app-shell .button:focus-visible, .payout-methods label:focus-within { outline: 3px solid var(--role-accent); outline-offset: 3px; }
 .app-shell .button:disabled { opacity: .55; cursor: not-allowed; }
+.app-shell .shell-signout-button,
+.product-shell .settings-signout-button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  border: 1px solid #8e1d14;
+  border-radius: 10px;
+  background: #b42318;
+  color: #fff;
+  box-shadow: 0 2px 6px rgb(127 29 29 / 18%);
+}
+.app-shell .shell-signout-button:hover,
+.product-shell .settings-signout-button:hover { background: #991b1b; color: #fff; }
+.app-shell .shell-signout-button:focus-visible,
+.product-shell .settings-signout-button:focus-visible { outline: 3px solid #fca5a5; outline-offset: 3px; }
+.app-shell .profile-switcher,
+.product-shell .settings-profile-card .profile-switcher {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d8c9ff;
+  border-radius: 14px;
+  background: #f5f1ff;
+}
+.app-shell .profile-switcher label { color: #4c1d95; }
+.app-shell .profile-switcher select {
+  min-height: 44px;
+  border: 1px solid #b9a5eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #24133f;
+}
+.app-shell .profile-switcher select:focus-visible { outline: 3px solid #8b5cf6; outline-offset: 2px; }
+.product-shell.role-creator .creator-work-submit .button { width: 100%; justify-content: center; }
+.product-shell.role-creator .creator-work-submit input { min-height: 44px; }
+.product-shell .business-review-actions .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+.product-shell .business-review-actions .actions .button { width: 100%; min-width: 0; justify-content: center; }
+@media (max-width: 560px) {
+  .product-shell .business-review-actions .actions { grid-template-columns: 1fr; }
+}
 .role-business .wallet-supporting-flow { padding: 16px; border: 1px solid var(--role-border); border-radius: 16px; background: #fff; box-shadow: 0 3px 12px #142b4010; }
 @media (max-width: 600px) {
   .app-shell .workspace .topbar { gap: 7px; padding-inline: 12px; }

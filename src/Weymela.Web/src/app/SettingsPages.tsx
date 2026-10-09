@@ -36,7 +36,7 @@ export function SettingsPage() {
       <h2 id="language-settings-title">Language</h2>
       <LanguageChoice />
     </section>
-    {user.profiles && user.profiles.length > 0 && <section className="settings-card" aria-label="Account profiles">
+    {user.profiles && user.profiles.length > 0 && <section className="settings-card settings-profile-card" aria-label="Account profiles">
       <ProfileSwitcher profiles={user.profiles} activeKey={user.activeProfileKey} onSwitch={switchProfile} />
     </section>}
     <section className="settings-card settings-page-list" aria-label="Settings options">
@@ -72,7 +72,7 @@ const helpByRole: Partial<Record<Role, HelpItem[]>> = {
     ["Find opportunities", "Open Discover and choose an eligible Promotion."],
     ["Apply", "Apply before the application deadline and wait for the Business decision."],
     ["Business approval", "An approval lets you continue to the requested video or publication step."],
-    ["Upload a video", "Open the approved Promotion and upload the requested private review copy before the deadline."],
+    ["Submit a TikTok link", "Open the approved Promotion and paste a public TikTok video link that the Business can open before the deadline."],
     ["Respond to changes", "Read the Business comment, update the video, and submit a new revision."],
     ["Go Live", "After approval and any required publication check, open the Promotion and choose Go Live."],
     ["Earnings and payouts", "Verified earnings appear in Earnings. Eligible balances enter the Admin payout queue automatically."],
@@ -84,7 +84,7 @@ const helpByRole: Partial<Record<Role, HelpItem[]>> = {
     ["Deposit receipt", "The deposit remains Pending until an authorized Admin approves the receipt."],
     ["Create and publish", "Create a Promotion, save changes, then Publish after funding and deadlines are valid."],
     ["Approve Creators", "Open Requests to approve or reject Creator applications."],
-    ["Review videos", "Watch each submitted revision, then Approve, Request Changes, or Reject."],
+    ["Review TikTok links", "Open each submitted TikTok link, then Approve, Request Changes, or Reject."],
     ["Manage checkout", "Use Checkout for eligible customer purchases and keep Cashier access limited to this Business."],
     ["View transactions", "Transactions shows Promotion, total purchase, customer cashback, and date."],
     ["Delete an account", "Open Settings, choose Delete Account, then select only the role you want to close."],

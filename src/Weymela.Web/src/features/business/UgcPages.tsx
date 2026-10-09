@@ -191,13 +191,14 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
   return <article className="business-collaboration-card">
     <div className="card-head"><div className="business-ugc-creator-row"><CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} /><div><strong>{row.creator}</strong><small>Revision {row.contentRevisionNumber ?? 1}</small></div></div><Badge status={row.status} /></div>
     {row.selectedPlatform && <p className="fine-print"><strong>{row.selectedPlatform}</strong>{row.selectedSocialProfileUrl && <> · <a href={row.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">View selected profile</a></>}</p>}
+    {row.watchUrl && <a className="button secondary" href={row.watchUrl} target="_blank" rel="noopener noreferrer">Watch Sample on TikTok</a>}
     {row.reviewMediaUrl && (row.reviewMediaContentType?.startsWith("image/")
       ? <img className="private-review-media" src={row.reviewMediaUrl} alt={`Revision ${row.contentRevisionNumber ?? 1} review`} />
       : <video className="private-review-media" controls preload="metadata" src={row.reviewMediaUrl}>Private review video</video>)}
     {row.feedback && <Notice>{row.feedback}</Notice>}
     {row.status === "Submitted" && <div className="business-review-actions">
       <Field label="Feedback (required for changes)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
-      <div className="actions"><Button disabled={action.busy} onClick={() => review("approve")}>Approve Video</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("changes")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
+      <div className="actions"><Button disabled={action.busy || !row.watchUrl && !row.reviewMediaUrl} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("changes")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
     </div>}
     {row.status === "Approved" && !row.selectedPlatform && <Notice>Content approved. Delivery-only work is complete and has no Customer offer.</Notice>}
     {row.status === "Approved" && row.selectedPlatform && !row.publication && <Notice>Content approved. Waiting for the Creator to publish.</Notice>}

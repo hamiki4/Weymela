@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { layout, login, open, reviewMp4, saveFundPostAndOpenPromotion, screenshot } from "./helpers";
+import { layout, login, open, saveFundPostAndOpenPromotion, screenshot } from "./helpers";
 
 for (const width of [375, 1366])
   test(`real Promotion lifecycle through all three roles at ${width}px`, async ({
@@ -82,11 +82,9 @@ for (const width of [375, 1366])
       .getByRole("link", { name: "Add Content" })
       .click();
     const creatorBudgetId = page.url().split("/").pop()!;
-    await page.getByLabel("Private review video", { exact: true }).setInputFiles({
-      name: "SAMPLE-WEYMELA-REVIEW-ONLY.mp4",
-      mimeType: "video/mp4",
-      buffer: reviewMp4,
-    });
+    await page
+      .getByLabel("TikTok Video Link", { exact: true })
+      .fill("https://www.tiktok.com/@weymela.creator/video/7412345678901234567");
     await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
     await expect(page.getByText(/under Business review/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh Views" })).toHaveCount(0);
@@ -102,12 +100,10 @@ for (const width of [375, 1366])
     await open(page, "/creator/promotions");
     const changesRequested = page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     await changesRequested.getByRole("link", { name: "Update Content", exact: true }).click();
-    await page.getByLabel("Private review video", { exact: true }).setInputFiles({
-      name: "SAMPLE-WEYMELA-REVIEW-ONLY-revision-2.mp4",
-      mimeType: "video/mp4",
-      buffer: reviewMp4,
-    });
-    await page.getByRole("button", { name: "Submit Revised Video", exact: true }).click();
+    await page
+      .getByLabel("TikTok Video Link", { exact: true })
+      .fill("https://www.tiktok.com/@weymela.creator/video/7412345678901234568");
+    await page.getByRole("button", { name: "Submit Revised Content", exact: true }).click();
     await expect(page.getByText(/under Business review/i)).toBeVisible();
     await login(context, "business");
     await open(page, `/business/campaigns/${campaignId}`);
@@ -115,11 +111,13 @@ for (const width of [375, 1366])
       .locator(".business-promotion-review-row")
       .filter({ hasText: title })
       .filter({ hasText: "Revision 2" });
-    await revisedReview.getByRole("button", { name: "Approve Video", exact: true }).click();
+    await revisedReview.getByRole("button", { name: "Approve", exact: true }).click();
     await expect(revisedReview.getByText("Approved")).toBeVisible();
     await login(context, "other-creator");
     await open(page, `/creator/promotions/${creatorBudgetId}`);
-    await page.getByLabel("Public post ID", { exact: true }).fill(`${Date.now()}${width}`);
+    await page
+      .getByLabel("TikTok Video Link", { exact: true })
+      .fill(`https://www.tiktok.com/@weymela.creator/video/${Date.now()}${width}`);
     await page.getByRole("button", { name: "Verify Publication", exact: true }).click();
     await expect(page.getByRole("button", { name: "Go Live", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Go Live", exact: true }).click();

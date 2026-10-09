@@ -123,7 +123,7 @@ function CreatorContent({
             </Field>
             {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
             <Button type="submit" disabled={action.busy || !content.trim()}>
-              {action.busy ? "Submitting…" : "Submit for Review"}
+              {action.busy ? "Submitting…" : row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}
             </Button>
           </fieldset>
         </form>

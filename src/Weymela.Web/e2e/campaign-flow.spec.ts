@@ -86,7 +86,10 @@ for (const width of [375, 1366])
       .getByLabel("TikTok Video Link", { exact: true })
       .fill("https://www.tiktok.com/@weymela.creator/video/7412345678901234567");
     await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
-    await expect(page.getByText(/under Business review/i)).toBeVisible();
+    const initialReviewStatus = page.getByText(/under Business review/i);
+    if (!(await initialReviewStatus.count()))
+      throw new Error(`TikTok review submission did not complete: ${await page.locator("main").innerText()}`);
+    await expect(initialReviewStatus).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh Views" })).toHaveCount(0);
     await login(context, "business");
     await open(page, `/business/campaigns/${campaignId}`);

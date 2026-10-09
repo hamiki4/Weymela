@@ -621,7 +621,16 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
             <video controls preload="metadata" src={assignment.reviewMediaUrl} aria-label={`Revision ${assignment.contentRevisionNumber ?? 1} review video`} />
             <small>Private review · Revision {assignment.contentRevisionNumber ?? 1}</small>
           </div>}
-          {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
+          {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") && opportunity?.contentType === "Video" ?
+            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!externalContentId.trim()) return; void action.run(async (key) => {
+              await post(`/creator/ugc/assignments/${assignment.id}/submit-review`, { submissionUrl: externalContentId.trim() }, key); setExternalContentId(""); onSubmitted();
+            }); }}>
+              <label>TikTok Video Link
+                <input type="url" inputMode="url" value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required /></label>
+              <small>The Business must be able to open this public link. Weymela does not store the video file.</small>
+              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}</Button>
+            </form>
+            : assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
             <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!media) return; void action.run(async (key) => {
               const form = new FormData(); form.append("media", media);
               await postForm(`/creator/ugc/assignments/${assignment.id}/submit-review`, form, key); setMedia(null); onSubmitted();
@@ -639,8 +648,8 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
                 creatorSocialProfileId: assignment.selectedSocialProfileId,
               }, key); setExternalContentId(""); onSubmitted();
             }); }}>
-              <label>{assignment.selectedPlatform} post ID
-                <input value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} required maxLength={100} /></label>
+              <label>{assignment.selectedPlatform === "TikTok" ? "TikTok Video Link" : `${assignment.selectedPlatform} post ID`}
+                <input type={assignment.selectedPlatform === "TikTok" ? "url" : "text"} inputMode={assignment.selectedPlatform === "TikTok" ? "url" : "text"} value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} placeholder={assignment.selectedPlatform === "TikTok" ? "https://www.tiktok.com/@creator/video/…" : undefined} required maxLength={100} /></label>
               {assignment.selectedSocialProfileUrl && <a href={assignment.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">Selected social profile</a>}
               <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
             </form>}

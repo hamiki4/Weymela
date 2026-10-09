@@ -37,6 +37,17 @@ internal static class CreatorEndpoints
         g.MapPost("/creator-budgets/{id:guid}/content/review",async(Guid id,HttpContext c,
             PrivateReviewMediaStore media,CreatorPromotionContentService service,Weymela.Infrastructure.Persistence.WeymelaDbContext db,CancellationToken ct)=>
         {
+            if (c.Request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var input = await c.Request.ReadFromJsonAsync<ContentInput>(ct)
+                    ?? throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,
+                        "Enter a TikTok video link.");
+                if (!string.Equals(input.Provider, "TikTok", StringComparison.OrdinalIgnoreCase))
+                    throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,
+                        "Only TikTok video links are supported for new review submissions.");
+                return Results.Ok(await service.SubmitTikTokLinkAsync(EndpointSupport.Actor(c), id,
+                    input.ExternalContentId, EndpointSupport.Key(c), ct));
+            }
             if(!c.Request.HasFormContentType) throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,"Choose an MP4 review video.");
             var form=await c.Request.ReadFormAsync(ct);
             if(form.Count!=0||form.Files.Count!=1||form.Files[0].Name!="media")
@@ -66,6 +77,14 @@ internal static class CreatorEndpoints
         g.MapPost("/ugc/assignments/{id:guid}/submit-review",async(Guid id,HttpContext c,
             PrivateReviewMediaStore media,UgcService service,Weymela.Infrastructure.Persistence.WeymelaDbContext db,CancellationToken ct)=>
         {
+            if (c.Request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var input = await c.Request.ReadFromJsonAsync<UgcSubmissionInput>(ct)
+                    ?? throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,
+                        "Enter a TikTok video link.");
+                return EndpointSupport.Id(await service.SubmitTikTokLinkAsync(EndpointSupport.Actor(c), id,
+                    input.SubmissionUrl, EndpointSupport.Key(c), ct));
+            }
             if(!c.Request.HasFormContentType) throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation,"Choose a private review file.");
             var form=await c.Request.ReadFormAsync(ct);
             if(form.Count!=0||form.Files.Count!=1||form.Files[0].Name!="media")

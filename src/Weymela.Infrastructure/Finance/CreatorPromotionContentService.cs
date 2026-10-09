@@ -6,6 +6,7 @@ using Weymela.Domain;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Providers;
 
 namespace Weymela.Infrastructure.Finance;
 
@@ -67,6 +68,11 @@ public sealed class CreatorPromotionContentService(
 
     public Task<CreatorContentSubmissionStatus> SubmitAsync(
         Actor actor, Guid allocationId, ContentInput input, string idempotencyKey, CancellationToken ct)
+        => SubmitAsync(actor, allocationId, input, idempotencyKey, false, ct);
+
+    private Task<CreatorContentSubmissionStatus> SubmitAsync(
+        Actor actor, Guid allocationId, ContentInput input, string idempotencyKey,
+        bool validateTikTokLink, CancellationToken ct)
         => new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             var now = clock.GetUtcNow().UtcDateTime;
@@ -87,9 +93,11 @@ public sealed class CreatorPromotionContentService(
                 throw new ApplicationFailure(FailureKind.Validation, "This approved Promotion is no longer accepting Creator content.");
             if (await db.CreatorPromotionParticipations.AnyAsync(x => x.CreatorAllocationId == allocation.Id, token))
                 throw new ApplicationFailure(FailureKind.Validation, "This Creator participation has already gone live.");
-            var contentReference = InputRules.Reference(input.ExternalContentId, "video reference", 100);
             if (input.Provider is not ("TikTok" or "YouTube" or "Instagram"))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose a supported platform and valid content reference.");
+            var contentReference = validateTikTokLink
+                ? TikTokVideoLink.Normalize(input.ExternalContentId)
+                : InputRules.Reference(input.ExternalContentId, "video reference", 100);
 
             var latest = await db.CreatorPromotionContentSubmissions.Where(x => x.CreatorAllocationId == allocation.Id)
                 .OrderByDescending(x => x.RevisionNumber).FirstOrDefaultAsync(token);
@@ -117,6 +125,11 @@ public sealed class CreatorPromotionContentService(
                 CreatorAllocationId = allocation.Id, RevisionNumber = revision, CreatorId = allocation.CreatorId }, now);
             return View(submission);
         }, ct);
+
+    public Task<CreatorContentSubmissionStatus> SubmitTikTokLinkAsync(
+        Actor actor, Guid allocationId, string link, string idempotencyKey, CancellationToken ct)
+        => SubmitAsync(actor, allocationId,
+            new ContentInput("TikTok", link), idempotencyKey, true, ct);
 
     public Task<BusinessPromotionContentReviewCard> ReviewAsync(
         Actor actor, Guid submissionId, PromotionContentReviewInput input, string idempotencyKey, CancellationToken ct)
@@ -199,7 +212,8 @@ public sealed class CreatorPromotionContentService(
                 row.Submission.ContentReference, row.Submission.RevisionNumber, row.Submission.SubmittedAtUtc,
                 row.Submission.ReviewStatus.ToString(), row.Submission.Feedback, row.Submission.ReviewedAtUtc,
                 row.Submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{row.Submission.Id}",
-                row.Allocation.Id, row.Promotion.Id));
+                row.Allocation.Id, row.Promotion.Id,
+                TikTokVideoLink.WatchUrl(row.Submission.Provider, row.Submission.ContentReference)));
         }
         return result;
     }
@@ -212,7 +226,7 @@ public sealed class CreatorPromotionContentService(
             submission.RevisionNumber, submission.SubmittedAtUtc, submission.ReviewStatus.ToString(),
             submission.Feedback, submission.ReviewedAtUtc,
             submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{submission.Id}", allocation.Id,
-            promotion.Id);
+            promotion.Id, TikTokVideoLink.WatchUrl(submission.Provider, submission.ContentReference));
     }
 
     private static CreatorContentSubmissionStatus View(CreatorPromotionContentSubmission row)

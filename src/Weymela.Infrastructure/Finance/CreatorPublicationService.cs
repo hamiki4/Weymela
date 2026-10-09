@@ -8,6 +8,7 @@ using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Web;
+using Weymela.Infrastructure.Providers;
 
 namespace Weymela.Infrastructure.Finance;
 
@@ -31,6 +32,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
     public async Task<PublicationStatusView> RequestPromotionAsync(Actor actor, Guid allocationId,
         PublicationInput input, string key, CancellationToken ct)
     {
+        input = NormalizePublicationInput(input);
         var publicationId = await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             var allocation = await db.CreatorAllocations.SingleOrDefaultAsync(x => x.Id == allocationId, token)
@@ -40,8 +42,6 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             await access.EnsureBusinessAsync(promotion.BusinessId, token);
             VerifiedViewService.EnsureCampaignActive(promotion, clock.GetUtcNow().UtcDateTime);
             var submission = await CurrentApprovedPromotionSubmission(allocation.Id, token);
-            if (submission.ReviewMediaAssetId is null)
-                throw new ApplicationFailure(FailureKind.Validation, "Submit a private review copy before publication.");
             var profile = await EligibleSocialProfile(allocation.CreatorId, allocation.CreatorSocialProfileId,
                 input, token);
             var minimumAudience = await db.PromotionPlatforms.AsNoTracking().Where(x => x.PromotionId == promotion.Id
@@ -76,6 +76,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
     public async Task<PublicationStatusView> RequestUgcAsync(Actor actor, Guid assignmentId,
         PublicationInput input, string key, CancellationToken ct)
     {
+        input = NormalizePublicationInput(input);
         var publicationId = await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             var assignment = await db.UgcAssignments.SingleOrDefaultAsync(x => x.Id == assignmentId, token)
@@ -86,8 +87,6 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             var opportunity = await db.UgcOpportunities.SingleAsync(x => x.Id == assignment.UgcOpportunityId, token);
             await access.EnsureBusinessAsync(opportunity.BusinessId, token);
             var submission = await CurrentApprovedUgcSubmission(assignment.Id, token);
-            if (submission.ReviewMediaAssetId is null)
-                throw new ApplicationFailure(FailureKind.Validation, "Submit a private review copy before publication.");
             var request = await db.UgcCreatorRequests.AsNoTracking().SingleAsync(x => x.Id == assignment.UgcCreatorRequestId, token);
             if (request.SelectedPlatform is null || request.VerifiedSocialProfileId is null)
                 throw new ApplicationFailure(FailureKind.Validation, "This delivery-only UGC work does not require social publication.");
@@ -377,6 +376,14 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             x.Id == input.CreatorSocialProfileId && x.CreatorId == creatorId && x.Platform == platform && x.IsActive, ct);
         return profile ?? throw new ApplicationFailure(FailureKind.Validation,
             "Choose your active social profile for this platform.");
+    }
+
+    private static PublicationInput NormalizePublicationInput(PublicationInput input)
+    {
+        if (string.Equals(input.Provider, "TikTok", StringComparison.OrdinalIgnoreCase)
+            && TikTokVideoLink.VideoId(input.ExternalContentId) is { } videoId)
+            return input with { Provider = "TikTok", ExternalContentId = videoId };
+        return input;
     }
 
     private async Task EnsureAudienceAsync(CreatorSocialProfileRecord profile, long? minimumAudience,

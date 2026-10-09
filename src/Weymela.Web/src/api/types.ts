@@ -368,6 +368,7 @@ export interface PromotionContentReviewCard {
   reviewMediaUrl?: string | null;
   creatorAllocationId?: string | null;
   promotionId?: string | null;
+  watchUrl?: string | null;
 }
 export interface PublicationStatus {
   id: string;
@@ -665,6 +666,7 @@ export interface UgcAssignment {
   selectedSocialProfileUrl?: string | null;
   selectedSocialProfileId?: string | null;
   reviewMediaContentType?: string | null;
+  watchUrl?: string | null;
 }
 export interface UgcRequest {
   id: string;

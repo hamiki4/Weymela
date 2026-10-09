@@ -503,6 +503,21 @@ describe("Business workspace", () => {
     expect(screen.getByRole("button", { name: "Request Changes" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
   });
+
+  it("keeps explicit Approve and Reject decisions available for valid submitted links", async () => {
+    const api = mockApi({ "/business/promotion-content-submissions": ["approve", "reject"].map((decision) => ({
+      submissionId: `${decision}-submission`, promotionId: "campaign", creator: "Mina Creator", promotion: "Seasonal stories",
+      provider: "TikTok", contentReference: "https://www.tiktok.com/t/ZMabcdef",
+      watchUrl: "https://www.tiktok.com/t/ZMabcdef", creatorProfileUrl: "https://www.tiktok.com/@mina",
+      revisionNumber: 1, submittedAtUtc: "2026-09-22T12:00:00Z", reviewStatus: "UnderReview", feedback: null, reviewedAtUtc: null,
+    })) });
+    mount(<PromotionContentReviewQueue />);
+    await screen.findByText("Mina Creator · Seasonal stories");
+    await userEvent.click(screen.getAllByRole("button", { name: "Approve" })[0]);
+    await waitFor(() => expect(api.writes).toContainEqual(expect.objectContaining({ body: { action: "approve", feedback: null } })));
+    await userEvent.click(screen.getAllByRole("button", { name: "Reject" })[1]);
+    await waitFor(() => expect(api.writes).toContainEqual(expect.objectContaining({ body: { action: "reject", feedback: null } })));
+  });
 });
 
 describe("Creator workspace", () => {

@@ -163,7 +163,11 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   await expect(page.locator(".profile-avatar")).toHaveText("B");
   await login(context, "business");
   expect((await context.request.get(businessPhoto)).status()).toBe(404);
-  await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`);
+  await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`, [
+    "Review unavailable: this TikTok link is invalid or unsupported.",
+  ]);
+  await expect(page.getByRole("alert")).toHaveText("Review unavailable: this TikTok link is invalid or unsupported.");
+  await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
   const fallback = applicants.locator(".person:visible").filter({ hasText: "Bella" }).locator(".creator-photo-avatar");
   await expect(fallback).toHaveText("B");
   await expect(fallback.locator("img")).toHaveCount(0);

@@ -70,7 +70,11 @@ test("Creator photo changes on Profile and is visible only through Business Crea
     }
   }
   expect(creatorCampaign).not.toBeNull();
-  await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`);
+  await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`, [
+    "Review unavailable: this TikTok link is invalid or unsupported.",
+  ]);
+  await expect(page.getByRole("alert")).toHaveText("Review unavailable: this TikTok link is invalid or unsupported.");
+  await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "Creator Applicants" })).toBeVisible();
   const applicants = page.locator("section.panel")
     .filter({ has: page.getByRole("heading", { name: "Creator Applicants", exact: true }) });

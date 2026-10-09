@@ -3,6 +3,7 @@ import {
   campaignType,
   isViewAndSale,
   isViewOnly,
+  promotionStatusLabel,
   promotionTypeLabel,
   promotionTypeCode,
   statusLabel,
@@ -23,6 +24,8 @@ describe("Promotion type API contract", () => {
 
   it("uses the locked user-facing View & Sale terminology", () => {
     expect(statusLabel("ViewPlusCommission")).toBe("View & Sale");
+    expect(statusLabel("Rejected")).toBe("Rejected");
+    expect(promotionStatusLabel("Rejected")).toBe("Rejected");
     expect(campaignType("ViewPlusCommission")).not.toContain("Commission");
   });
 

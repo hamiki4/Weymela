@@ -20,6 +20,17 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
     };
 
     [Fact]
+    public void New_password_policy_accepts_eight_and_longer_and_rejects_seven_or_mismatch()
+    {
+        var shortFailure = Assert.Throws<ApplicationFailure>(() => PasswordCredentialHasher.ValidateNew("1234567", "1234567"));
+        Assert.Equal("Password must contain at least 8 characters.", shortFailure.Message);
+        PasswordCredentialHasher.ValidateNew("12345678", "12345678");
+        PasswordCredentialHasher.ValidateNew("a much longer password is accepted", "a much longer password is accepted");
+        var mismatch = Assert.Throws<ApplicationFailure>(() => PasswordCredentialHasher.ValidateNew("12345678", "87654321"));
+        Assert.Equal("Passwords do not match.", mismatch.Message);
+    }
+
+    [Fact]
     public async Task Enrollment_preserves_identity_and_admin_and_stores_only_a_versioned_hash()
     {
         var database = await fixture.CreateAsync();
@@ -72,8 +83,9 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
         await using var db = database.Open();
         var identity = await SeedIdentity(db, user, "international@example.test");
         var service = Service(db);
-        await service.EnrollAsync(identity, "+14155552671", Password, Password, default);
-        Assert.True((await service.SignInAsync("+1 (415) 555-2671", Password, default)).Succeeded);
+        const string eightCharacterPassword = "12345678";
+        await service.EnrollAsync(identity, "+14155552671", eightCharacterPassword, eightCharacterPassword, default);
+        Assert.True((await service.SignInAsync("+1 (415) 555-2671", eightCharacterPassword, default)).Succeeded);
         Assert.False((await service.SignInAsync("+1 (415) 555-2671", "wrong-password", default)).Succeeded);
         Assert.False((await service.SignInAsync("+442079460958", "wrong-password", default)).Succeeded);
     }
@@ -88,6 +100,8 @@ public sealed class PasswordCredentialServiceTests(PostgresFixture fixture)
         var service = Service(db);
         await service.EnrollAsync(firstIdentity, "0911111111", Password, Password, default);
         await service.EnrollAsync(firstIdentity, "0911111111", Password, Password, default);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.EnrollAsync(
+            firstIdentity, "0911111111", "different password", "different password", default));
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.EnrollAsync(
             secondIdentity, "+251911111111", "another secure passphrase", "another secure passphrase", default));
         Assert.Single(await db.PasswordCredentials.ToListAsync());

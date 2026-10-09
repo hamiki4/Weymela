@@ -68,7 +68,7 @@ export const promotionStatusLabel = (status: string) => ({
   Cancelled: "Completed",
   Pending: "Pending",
   Approved: "Approved",
-  Rejected: "Not approved",
+  Rejected: "Rejected",
 })[status] ?? status.replace(/([a-z])([A-Z])/g, "$1 $2");
 export const statusLabel = (status: string) =>
   ({
@@ -79,7 +79,7 @@ export const statusLabel = (status: string) =>
     Ready: "Ready to pay",
     Pending: "Request sent",
     Approved: "Approved",
-    Rejected: "Not approved",
+    Rejected: "Rejected",
     ViewOnly: "View Only",
     ViewPlusCommission: "View & Sale",
   })[status] ?? status.replace(/([a-z])([A-Z])/g, "$1 $2");

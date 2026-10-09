@@ -9,7 +9,7 @@ import {
 import type { Role, SessionProfile } from "../api/types";
 import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
-import { notificationsChangedEvent, primeResources, useResource } from "../api/client";
+import { adminActionCountsChangedEvent, notificationsChangedEvent, primeResources, useResource } from "../api/client";
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { routeResources } from "./routeResources";
@@ -102,6 +102,8 @@ export function Brand() {
 export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
   const notifications = useResource<{ unreadCount: number }>("/notifications");
+  const isAdmin = user?.role === "PlatformAdmin" || user?.role === "OperationsAdmin";
+  const actionCounts = useResource<{ creators: number; wallets: number; socialReview: number; payouts: number }>("/admin/action-counts", isAdmin);
   useEffect(() => {
     const refresh = () => notifications.reload();
     window.addEventListener(notificationsChangedEvent, refresh);
@@ -114,6 +116,17 @@ export function Shell({ children }: { children?: ReactNode }) {
   const navigationSequence = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
+  useEffect(() => {
+    if (!isAdmin) return;
+    const refresh = () => actionCounts.reload();
+    window.addEventListener(adminActionCountsChangedEvent, refresh);
+    window.addEventListener("focus", refresh);
+    refresh();
+    return () => {
+      window.removeEventListener(adminActionCountsChangedEvent, refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [actionCounts.reload, isAdmin, location.pathname]);
   if (!user) return null;
   const baseItems = navigation[user.role];
   const items = baseItems;
@@ -130,6 +143,16 @@ export function Shell({ children }: { children?: ReactNode }) {
     (!exactNavigationRoots.has(to)
       && location.pathname.startsWith(`${to}/`));
   const overflowIsActive = location.pathname === "/admin/more" || overflowItems.some(([to]) => itemIsActive(to, location.pathname === to));
+  const countFor = (to: string) => {
+    const counts = actionCounts.data;
+    if (!counts) return 0;
+    if (to === "/admin/creators" || to === "/admin/role-enrollments") return counts.creators;
+    if (to === "/admin/wallets") return counts.wallets;
+    if (to === "/admin/social-profiles") return counts.socialReview;
+    if (to === "/admin/payouts") return counts.payouts;
+    return 0;
+  };
+  const actionBadge = (count: number) => count > 0 ? <span className="admin-action-badge" aria-label={`${count} pending actions`}>{count > 99 ? "99+" : count}</span> : null;
   const renderNavigation = (
     entries: [string, string, string][],
     ariaLabel: string,
@@ -139,6 +162,7 @@ export function Shell({ children }: { children?: ReactNode }) {
       {entries.map(([to, label, icon]) => (
           <NavLink
             to={to}
+            aria-label={label}
             end={exactNavigationRoots.has(to)}
             key={to}
             className={({ isActive }) =>
@@ -147,7 +171,8 @@ export function Shell({ children }: { children?: ReactNode }) {
             onClick={onNavigate}
           >
             <Icon name={icon} />
-            {label}
+            <span>{label}</span>
+            {actionBadge(countFor(to))}
           </NavLink>
       ))}
     </nav>
@@ -252,6 +277,7 @@ export function Shell({ children }: { children?: ReactNode }) {
               <NavLink
                 key={to}
                 to={to}
+                aria-label={label}
                 end={exactNavigationRoots.has(to)}
                 className={({ isActive }) =>
                   `mobile-role-link ${label.length >= 9 ? "mobile-role-link-wide" : ""} ${itemIsActive(to, isActive) ? "active" : ""}`
@@ -259,6 +285,7 @@ export function Shell({ children }: { children?: ReactNode }) {
               >
                 <Icon name={icon} />
                 <span>{label}</span>
+                {actionBadge(countFor(to))}
               </NavLink>
           ))}
           {overflowItems.length > 0 && (
@@ -270,6 +297,7 @@ export function Shell({ children }: { children?: ReactNode }) {
             >
               <Icon name="menu" />
               <span>More</span>
+              {actionBadge(overflowItems.reduce((total, [to]) => total + countFor(to), 0))}
             </NavLink>
           )}
         </nav>

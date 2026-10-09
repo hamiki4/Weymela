@@ -55,6 +55,8 @@ function FirebaseSignIn({
   const [selectedProfile, setSelectedProfile] = useState("");
   const [signupRole, setSignupRole] = useState<PublicSignupRole | null>(() => readSignupDraft()?.role ?? null);
   const [signupEmailVerified, setSignupEmailVerified] = useState(false);
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   const authBusy = busy || !adapter;
 
   useEffect(() => {
@@ -123,6 +125,8 @@ function FirebaseSignIn({
     setRecoveryVerified(false);
     setPassword("");
     setConfirmPassword("");
+    setSignupPassword("");
+    setSignupConfirmPassword("");
     setProfiles([]);
   };
   const startAccountEmail = (purpose: "Signup" | "DeviceEnrollment") =>
@@ -144,14 +148,25 @@ function FirebaseSignIn({
       if (purpose === "Signup") {
         const draft = readSignupDraft();
         if (!draft) throw new Error("Your registration details expired. Enter them again.");
+        if (!signupPassword || !signupConfirmPassword)
+          throw new Error("Your password was not retained for security. Edit your details and enter it again.");
         await post("/account/registration-phone", { phone: draft.phone });
+        await post("/account/password-credential", {
+          phone: null,
+          password: signupPassword,
+          confirmPassword: signupConfirmPassword,
+        });
+        setSignupPassword("");
+        setSignupConfirmPassword("");
       }
       await onSignedIn();
     });
-  const beginRegistration = (draft: PublicSignupDraft) =>
+  const beginRegistration = (draft: PublicSignupDraft, registrationPassword: string, registrationConfirmation: string) =>
     submit(async () => {
       if (!adapter) throw new Error("Secure sign-in is unavailable right now.");
       saveSignupDraft(draft);
+      setSignupPassword(registrationPassword);
+      setSignupConfirmPassword(registrationConfirmation);
       setEmail(draft.email);
       const delay = await adapter.startEmailCode(draft.email, "Signup");
       setResendAfterSeconds(delay ?? 60);
@@ -389,7 +404,7 @@ function SignupRoleSelection(props: { onChoose: (role: PublicSignupRole) => void
 function PublicRegistrationForm(props: {
   role: PublicSignupRole;
   busy: boolean;
-  onComplete: (draft: PublicSignupDraft) => void;
+  onComplete: (draft: PublicSignupDraft, password: string, confirmPassword: string) => void;
   onBack: () => void;
 }) {
   const { language } = useLanguage();
@@ -407,6 +422,9 @@ function PublicRegistrationForm(props: {
   const [followerCount, setFollowerCount] = useState(String(sameRole?.followerCount ?? 0));
   const [subscriberCount, setSubscriberCount] = useState(String(sameRole?.subscriberCount ?? 0));
   const [legalAccepted, setLegalAccepted] = useState(sameRole?.legalAccepted === true);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const title = props.role === "Business" ? "Business Owner registration"
     : props.role === "Creator" ? "Content Creator registration" : "Customer registration";
   return <section className={`public-registration signup-${props.role.toLowerCase()}`} aria-labelledby="public-registration-title">
@@ -424,6 +442,15 @@ function PublicRegistrationForm(props: {
       }
       const followers = Number(followerCount);
       const subscribers = socialPlatform === "YouTube" ? Number(subscriberCount) : null;
+      if (password.length < 8) {
+        setPasswordError("Password must contain at least 8 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setPasswordError("Passwords do not match.");
+        return;
+      }
+      setPasswordError(null);
       props.onComplete({
         version: 1,
         idempotencyKey: sameRole?.idempotencyKey ?? crypto.randomUUID(),
@@ -433,7 +460,7 @@ function PublicRegistrationForm(props: {
         ...(props.role === "Creator" ? { socialPlatform, socialProfileUrl: socialProfileUrl.trim(),
           followerCount: followers, subscriberCount: subscribers } : {}),
         legalAccepted: true,
-      });
+      }, password, confirmPassword);
     }}>
       <fieldset disabled={props.busy} className="public-registration-fields">
         <Field label="Full legal name"><input required maxLength={120} autoComplete="name" value={legalName} onChange={event => setLegalName(event.target.value)} /></Field>
@@ -467,6 +494,10 @@ function PublicRegistrationForm(props: {
           <Field label="Follower count"><input required type="number" inputMode="numeric" min="0" max="9000000000000000" step="1" value={followerCount} onChange={event => setFollowerCount(event.target.value)} /></Field>
           {socialPlatform === "YouTube" && <Field label="Subscriber count"><input required type="number" inputMode="numeric" min="0" max="9000000000000000" step="1" value={subscriberCount} onChange={event => setSubscriberCount(event.target.value)} /></Field>}
         </>}
+        <PasswordField label="Password" value={password} onChange={value => { setPassword(value); setPasswordError(null); }} autoComplete="new-password" />
+        <PasswordField label="Confirm Password" value={confirmPassword} onChange={value => { setConfirmPassword(value); setPasswordError(null); }} autoComplete="new-password" />
+        <p className="fine-print">Use at least 8 characters. You can use a passphrase.</p>
+        {passwordError ? <Notice error>{passwordError}</Notice> : null}
         <label className="signup-legal-consent"><input required type="checkbox" checked={legalAccepted} onChange={event => setLegalAccepted(event.target.checked)} />
           <span>I agree to Weymela&apos;s <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
         </label>
@@ -601,7 +632,7 @@ function PasswordRecovery(props: {
               if (!props.adapter)
                 throw new Error("Secure recovery is unavailable right now.");
               if (props.password !== props.confirmPassword)
-                throw new Error("Passwords don't match. Try again.");
+                throw new Error("Passwords do not match.");
               await props.adapter.resetPassword(
                 props.password,
                 props.confirmPassword,
@@ -625,7 +656,7 @@ function PasswordRecovery(props: {
               autoComplete="new-password"
             />
             <p className="fine-print">
-              Use at least 12 characters. You can use a passphrase.
+              Use at least 8 characters. You can use a passphrase.
             </p>
             <Button type="submit" icon="arrow" disabled={props.busy}>
               {props.busy ? "Resetting…" : "Reset password"}

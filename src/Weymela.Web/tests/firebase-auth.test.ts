@@ -274,12 +274,12 @@ describe("V3 Firebase Web adapter", () => {
         message: "Your reset session has expired. Request a new code.",
       }), { status: 400, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        code: "Validation", message: "Use at least 12 characters for your password.",
+        code: "Validation", message: "Password must contain at least 8 characters.",
       }), { status: 400, headers: { "Content-Type": "application/json" } }));
 
     await expect(adapter.resetPassword("replacement passphrase", "replacement passphrase"))
       .rejects.toThrow("Your reset session has expired. Request a new code.");
     await expect(adapter.resetPassword("short", "short"))
-      .rejects.toThrow("Use at least 12 characters for your password.");
+      .rejects.toThrow("Password must contain at least 8 characters.");
   });
 });

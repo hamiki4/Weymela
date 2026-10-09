@@ -36,8 +36,8 @@ export function SecuritySetup() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting.current) return;
-    if (password.length < 12) { setError("Use at least 12 characters for your password."); return; }
-    if (password !== confirmPassword) { setError("Passwords don't match. Try again."); return; }
+    if (password.length < 8) { setError("Password must contain at least 8 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     submitting.current = true;
     setBusy(true); setError(null);
     try {
@@ -65,7 +65,7 @@ export function SecuritySetup() {
             autoComplete="new-password" autoFocus={Boolean(session.accountSecurity?.phoneEnrolled)} />
           <PasswordField label="Confirm password" value={confirmPassword} onChange={setConfirmPassword}
             autoComplete="new-password" />
-          <p className="fine-print">Use at least 12 characters. You can use a passphrase.</p>
+          <p className="fine-print">Use at least 8 characters. You can use a passphrase.</p>
           <Button type="submit" icon="arrow" disabled={busy}>{busy ? "Saving…" : "Continue"}</Button>
         </fieldset>
       </form>

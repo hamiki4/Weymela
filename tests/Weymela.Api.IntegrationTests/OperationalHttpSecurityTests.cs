@@ -20,7 +20,7 @@ public sealed class OperationalHttpSecurityTests(PostgresFixture fixture)
     public async Task Operational_admin_endpoints_reject_every_non_admin_role(string alias)
     {
         await using var host = await ApiFixture.CreateAsync(fixture); using var client = await host.Login(alias);
-        foreach (var path in new[] { "/api/admin/operations", "/api/admin/reconciliation", "/api/admin/deposit-requests" })
+        foreach (var path in new[] { "/api/admin/operations", "/api/admin/reconciliation", "/api/admin/deposit-requests", "/api/admin/action-counts" })
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
     }
     [Fact] public async Task Anonymous_notification_and_wallet_requests_fail_authorization()

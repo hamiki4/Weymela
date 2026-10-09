@@ -58,4 +58,18 @@ describe("Platform Admin financial presentation", () => {
     expect(api.writes[0].path).toBe("/admin/deposit-requests/deposit/review");
     expect(api.writes[0].body).toEqual({ approve: true, expectedVersion: 3, confirmationReference: "confirmed-123" });
   });
+
+  it("searches the complete authorized deposit queue through the server endpoint", async () => {
+    const api = mockApi({
+      "/admin/wallets": { businesses: [], promotions: [] },
+      "/admin/deposit-requests": [],
+      "/admin/deposit-requests?search=CBE": [{ id: "matched", businessId: "biz", business: "Coffee House", amount: 300,
+        status: "Pending", hasReceipt: false, submittedAtUtc: "2026-10-09T00:00:00Z", version: 0,
+        destinationNameSnapshot: "CBE", destinationAccountSnapshot: "1000" }],
+    });
+    mount(<AdminWalletsPage />);
+    await userEvent.type(await screen.findByPlaceholderText("Search business or deposit..."), "CBE");
+    await waitFor(() => expect(api.fetch).toHaveBeenCalledWith("/api/admin/deposit-requests?search=CBE", expect.anything()));
+    expect((await screen.findAllByText("Coffee House")).length).toBeGreaterThan(0);
+  });
 });

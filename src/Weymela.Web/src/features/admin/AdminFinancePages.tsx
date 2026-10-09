@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { post, privateAsset, useAction, useResource } from "../../api/client";
+import { notifyAdminActionCountsChanged, post, privateAsset, useAction, useResource } from "../../api/client";
 import type { AdminReport, AdminUgcFinance, AdminWallets } from "../../api/types";
 import { Badge, Button, DataTable, Dialog, Empty, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
 import { amount, count, date } from "../../ui/format";
@@ -62,7 +62,13 @@ function ReceiptReviewImage({ id }: { id: string }) {
 }
 
 function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
-  const deposits = useResource<Deposit[]>("/admin/deposit-requests");
+  const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSubmittedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const deposits = useResource<Deposit[]>(`/admin/deposit-requests${submittedSearch ? `?search=${encodeURIComponent(submittedSearch)}` : ""}`);
   const action = useAction();
   const [selected, setSelected] = useState<string | null>(null);
   const [reference, setReference] = useState("");
@@ -75,18 +81,20 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
     void action.run(async key => {
       await post(`/admin/deposit-requests/${current.id}/review`, { approve, expectedVersion: current.version, confirmationReference: reference.trim() }, key);
       setMessage(approve ? "Deposit approved. The wallet balance has been credited." : "Deposit rejected. The wallet balance has not changed.");
-      setSelected(null); setReference(""); deposits.reload(); onReviewed?.();
+      setSelected(null); setReference(""); deposits.reload(); onReviewed?.(); notifyAdminActionCountsChanged();
     });
   };
   return <Section title={`Deposit review · ${pending.length} pending`}>
     {message && <Notice>{message}</Notice>}
+    <div className="admin-deposit-search"><Field label="Search business or deposit..."><input type="search" value={search}
+      onChange={event => setSearch(event.target.value)} placeholder="Search business or deposit..." autoComplete="off" /></Field></div>
     <Resource resource={deposits}>{() => rows.length ? <DataTable rows={rows} rowKey={row => row.id} label="Deposits" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> }, { label: "Amount", cell: row => br(row.amount), numeric: true },
       { label: "Deposited To", cell: row => row.destinationNameSnapshot ?? "Legacy" }, { label: "Weymela Destination", cell: row => row.destinationAccountSnapshot ?? "—" },
       { label: "Receipt", cell: row => row.hasReceipt ? <Button variant="secondary" onClick={() => setSelected(row.id)}>View Receipt</Button> : "—" },
-      { label: "Submitted", cell: row => date(row.submittedAtUtc) }, { label: "Status", cell: row => <Badge status={row.status} /> },
+      { label: "Submitted", cell: row => date(row.submittedAtUtc) }, { label: "Status", cell: row => <Badge status={row.status} label={row.status} /> },
       { label: "Action", cell: row => <Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button> },
-    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><small>{row.destinationNameSnapshot ?? "Legacy"} · {row.destinationAccountSnapshot ?? "—"}</small><dl className="admin-mobile-facts"><div><dt>Amount</dt><dd>{br(row.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(row.submittedAtUtc)}</dd></div></dl><Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button></div>} empty={null} /> : <Empty title="No deposits" message="Submitted deposits will appear here." />}</Resource>
+    ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} label={row.status} /></div><small>{row.destinationNameSnapshot ?? "Legacy"} · {row.destinationAccountSnapshot ?? "—"}</small><dl className="admin-mobile-facts"><div><dt>Amount</dt><dd>{br(row.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(row.submittedAtUtc)}</dd></div></dl><Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button></div>} empty={null} /> : <Empty title="No deposits" message="Submitted deposits will appear here." />}</Resource>
     <Dialog title={current ? `Review deposit · ${current.business}` : "Review deposit"} open={!!current} onClose={() => { if (!action.busy) { setSelected(null); setReference(""); } }}>
       {current && <div className="admin-deposit-review"><dl className="admin-mobile-facts"><div><dt>Business</dt><dd>{current.business}</dd></div><div><dt>Amount</dt><dd>{br(current.amount)}</dd></div><div><dt>Deposited To</dt><dd>{current.destinationNameSnapshot ?? "Legacy request"}</dd></div><div><dt>Weymela Destination</dt><dd>{current.destinationAccountSnapshot ?? "—"}</dd></div><div><dt>Submitted</dt><dd>{date(current.submittedAtUtc)}</dd></div><div><dt>Status</dt><dd>Pending</dd></div></dl>
         {current.hasReceipt ? <ReceiptReviewImage id={current.id} /> : <Notice error>No receipt is attached to this earlier request.</Notice>}

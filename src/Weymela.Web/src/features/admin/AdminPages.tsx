@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type {
   Activity,
   AdminCampaign,
@@ -154,13 +154,13 @@ export function AdminRoleEnrollments() {
         </div>}
         <div className="actions"><Button disabled={action.busy} onClick={() => void action.run(async key => {
           await post(`/admin/role-enrollments/${row.id}/review`, { approve: true, expectedVersion: row.version }, key);
-          resource.reload();
+          resource.reload(); notifyAdminActionCountsChanged();
         })}>Approve</Button><Button variant="secondary" disabled={action.busy} onClick={() => { setRejecting(row.id); setReason(""); }}>Reject</Button></div>
         {rejecting === row.id && <div className="admin-profile-reject"><Field label="Reason for rejection"><input maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>
           <div className="actions"><Button type="button" variant="secondary" onClick={() => setRejecting(null)}>Cancel</Button>
             <Button type="button" disabled={action.busy || !reason.trim()} onClick={() => void action.run(async key => {
               await post(`/admin/role-enrollments/${row.id}/review`, { approve: false, reason: reason.trim(), expectedVersion: row.version }, key);
-              setRejecting(null); resource.reload();
+              setRejecting(null); resource.reload(); notifyAdminActionCountsChanged();
             })}>Confirm rejection</Button></div></div>}
       </article>)}</div>{action.error && <Notice error>{action.error}</Notice>}</Section>}</Resource></>;
 }

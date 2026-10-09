@@ -340,7 +340,7 @@ public static class PasswordCredentialHasher
     public const int Version = 1;
     public const int Iterations = 600_000;
     public const int MaximumLength = 128;
-    private const int MinimumLength = 12;
+    public const int MinimumLength = 8;
     private const int SaltBytes = 16;
     private const int HashBytes = 32;
     private static readonly byte[] DummySalt = SHA256.HashData("Weymela-V3-password-dummy"u8)[..SaltBytes];
@@ -349,9 +349,9 @@ public static class PasswordCredentialHasher
     public static void ValidateNew(string password, string confirmPassword)
     {
         if (password != confirmPassword)
-            throw new ApplicationFailure(FailureKind.Validation, "Passwords don't match. Try again.");
+            throw new ApplicationFailure(FailureKind.Validation, "Passwords do not match.");
         if (password.Length is < MinimumLength or > MaximumLength || password.Any(char.IsControl))
-            throw new ApplicationFailure(FailureKind.Validation, "Use at least 12 characters for your password.");
+            throw new ApplicationFailure(FailureKind.Validation, "Password must contain at least 8 characters.");
     }
 
     public static string Hash(string password)

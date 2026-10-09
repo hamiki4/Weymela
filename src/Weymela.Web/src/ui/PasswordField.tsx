@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { translateText, useLanguage } from "../localization/Language";
 
 export function PasswordField({
   label,
@@ -15,6 +16,7 @@ export function PasswordField({
 }) {
   const inputId = useId();
   const [shown, setShown] = useState(false);
+  const { language } = useLanguage();
   return <div className="field password-field">
     <label htmlFor={inputId}>{label}</label>
     <div className="password-control">
@@ -23,8 +25,12 @@ export function PasswordField({
         type={shown ? "text" : "password"}
         autoComplete={autoComplete}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        minLength={autoComplete === "new-password" ? 12 : undefined}
+        onInvalid={(event) => {
+          if (autoComplete === "new-password" && event.currentTarget.validity.tooShort)
+            event.currentTarget.setCustomValidity(translateText("Password must contain at least 8 characters.", language));
+        }}
+        onChange={(event) => { event.currentTarget.setCustomValidity(""); onChange(event.target.value); }}
+        minLength={autoComplete === "new-password" ? 8 : undefined}
         maxLength={128}
         required
         autoFocus={autoFocus}

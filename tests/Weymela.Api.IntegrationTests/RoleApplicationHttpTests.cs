@@ -17,6 +17,7 @@ public sealed class RoleApplicationHttpTests(PostgresFixture fixture)
         await using var host = await ApiFixture.CreateAsync(fixture);
         using var customer = await host.Login("customer");
         using var operations = await host.Login("operations-admin");
+        var creatorActionsBefore = (await operations.GetJson("/api/admin/action-counts"))["creators"]!.GetValue<int>();
         var missing = await customer.Post("/api/onboarding/profile", new { role = "Creator", displayName = "Hana" }, "creator-missing-social");
         Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         var invalid = await customer.Post("/api/onboarding/profile", new { role = "Creator", displayName = "Hana",
@@ -28,6 +29,9 @@ public sealed class RoleApplicationHttpTests(PostgresFixture fixture)
         var replay = await customer.PostJson("/api/onboarding/profile", application, "creator-application");
         Assert.Equal(pending["id"]!.GetValue<Guid>(), replay["id"]!.GetValue<Guid>());
         Assert.Equal((int)RoleEnrollmentStatus.Pending, pending["status"]!.GetValue<int>());
+        Assert.Equal(creatorActionsBefore + 1, (await operations.GetJson("/api/admin/action-counts"))["creators"]!.GetValue<int>());
+        Assert.Equal(HttpStatusCode.NoContent, (await operations.Post("/api/notifications/read-all", new { })).StatusCode);
+        Assert.Equal(creatorActionsBefore + 1, (await operations.GetJson("/api/admin/action-counts"))["creators"]!.GetValue<int>());
         var before = await customer.GetJson("/api/session");
         Assert.DoesNotContain(before["profiles"]!.AsArray(), x => x!["role"]!.GetValue<string>() == "Creator");
         var queue = await operations.GetJson("/api/admin/role-enrollments");
@@ -37,6 +41,7 @@ public sealed class RoleApplicationHttpTests(PostgresFixture fixture)
         var approved = await operations.PostJson($"/api/admin/role-enrollments/{pending["id"]!.GetValue<Guid>()}/review",
             new { approve = true, expectedVersion = pending["version"]!.GetValue<long>() }, "creator-approval");
         Assert.Equal((int)RoleEnrollmentStatus.Approved, approved["status"]!.GetValue<int>());
+        Assert.Equal(creatorActionsBefore, (await operations.GetJson("/api/admin/action-counts"))["creators"]!.GetValue<int>());
         await using var db = host.Database.Open();
         Assert.Single(await db.CommercePermissions.Where(x => x.UserId == Weymela.Infrastructure.Development.DevelopmentDirectory.Id(7)
             && x.Role == ActorRole.Creator).ToListAsync());

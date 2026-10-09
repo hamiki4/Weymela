@@ -253,6 +253,39 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
         finally { Directory.Delete(directory, true); }
     }
 
+    [Fact]
+    public async Task Admin_deposit_queue_searches_authoritative_data_and_sorts_pending_then_newest()
+    {
+        var (host, directory) = await Host(fixture);
+        try
+        {
+            await using (host)
+            {
+                using var business = await host.Login("business"); using var admin = await host.Login("admin");
+                var baseline = (await admin.GetJson("/api/admin/action-counts"))["wallets"]!.GetValue<int>();
+                var first = (await (await Submit(business, key: "search-sort-first")).Content.ReadFromJsonAsync<JsonNode>())!["id"]!.GetValue<Guid>();
+                Assert.Equal(baseline + 1, (await admin.GetJson("/api/admin/action-counts"))["wallets"]!.GetValue<int>());
+                await admin.PostJson($"/api/admin/deposit-requests/{first}/review",
+                    new { approve = false, expectedVersion = 0, confirmationReference = "SORT-REJECT" }, "sort-reject");
+                Assert.Equal(baseline, (await admin.GetJson("/api/admin/action-counts"))["wallets"]!.GetValue<int>());
+                var second = (await (await Submit(business, key: "search-sort-second")).Content.ReadFromJsonAsync<JsonNode>())!["id"]!.GetValue<Guid>();
+
+                var ordered = (await admin.GetJson("/api/admin/deposit-requests")).AsArray();
+                Assert.Equal(second, ordered[0]!["id"]!.GetValue<Guid>());
+                Assert.Equal("Pending", ordered[0]!["status"]!.GetValue<string>());
+                Assert.Contains(ordered.Skip(1), row => row!["id"]!.GetValue<Guid>() == first && row["status"]!.GetValue<string>() == "Rejected");
+
+                var provider = (await admin.GetJson("/api/admin/deposit-requests?search=manualapproval")).AsArray();
+                Assert.Contains(provider, row => row!["id"]!.GetValue<Guid>() == second);
+                var destination = (await admin.GetJson("/api/admin/deposit-requests?search=teleBIRR")).AsArray();
+                Assert.Contains(destination, row => row!["id"]!.GetValue<Guid>() == second);
+                var byId = (await admin.GetJson($"/api/admin/deposit-requests?search={second:D}")).AsArray();
+                Assert.Single(byId, row => row!["id"]!.GetValue<Guid>() == second);
+            }
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     [Fact] public async Task Validation_and_receipt_authorization_reject_invalid_requests_and_other_roles()
     {
         var (host, directory) = await Host(fixture);

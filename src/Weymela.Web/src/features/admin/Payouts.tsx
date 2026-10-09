@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { post, useAction, useResource } from "../../api/client";
+import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type {
   OperationsPayoutWorkspace,
   PayoutWorkspace,
@@ -356,6 +356,7 @@ export function AdminPayouts() {
                 "Payment confirmed. The remaining balance carries forward.",
               );
               resource.reload();
+              notifyAdminActionCountsChanged();
             });
           }}
         >
@@ -439,7 +440,7 @@ export function OperationsPayouts() {
       <p>{selected?.row.method} · {selected?.row.provider} · {selected?.row.account}</p>
       {selected?.row.method === "Mpesa" && <Notice>Verify the M-PESA wallet and recipient name with the provider before paying. Phone verification alone does not verify wallet ownership.</Notice>}
       <p className="fine-print">This records an external payment; it does not send money.</p>
-      <form onSubmit={(e) => { e.preventDefault(); void action.run(async (key) => { let payoutId = selected!.row.payoutId; if (!payoutId) payoutId = (await post<{ id: string }>(`/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`, { amount: Number(payAmount) }, `${key}:prepare`)).id; await post(`/admin/payouts/${payoutId}/paid`, { reference }, `${key}:paid`); select(null); setMessage("Payment confirmed. The remaining balance carries forward."); resource.reload(); }); }}>
+      <form onSubmit={(e) => { e.preventDefault(); void action.run(async (key) => { let payoutId = selected!.row.payoutId; if (!payoutId) payoutId = (await post<{ id: string }>(`/admin/payouts/${selected!.kind}/${selected!.row.subjectId}/prepare`, { amount: Number(payAmount) }, `${key}:prepare`)).id; await post(`/admin/payouts/${payoutId}/paid`, { reference }, `${key}:paid`); select(null); setMessage("Payment confirmed. The remaining balance carries forward."); resource.reload(); notifyAdminActionCountsChanged(); }); }}>
         <fieldset disabled={action.busy}><Field label="Amount to Pay"><MoneyInput value={payAmount} min={selected?.row.threshold} max={selected?.row.available} disabled={!!selected?.row.payoutId} onChange={(e) => setPayAmount(e.target.value)} /></Field><p className="fine-print">Remaining: {amount(Math.max((selected?.row.available ?? 0) - Number(payAmount || 0), 0))}</p><Field label="Payment reference"><input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={200} required /></Field><label className="check-line"><input type="checkbox" required checked={confirmed} onChange={(e) => confirm(e.target.checked)} /> {selected?.row.method === "Mpesa" ? "I verified the M-PESA recipient and completed this payment externally." : "I confirm this payment has been completed externally."}</label>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !confirmed || !reference || !payAmount || Number(payAmount) < (selected?.row.threshold ?? 0) || Number(payAmount) > (selected?.row.available ?? 0)}>{action.busy ? "Recording…" : "Confirm Paid"}</Button></fieldset>
       </form>
     </Dialog>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type {
   AccountPreauthorizationResult,
   AdminAccountDetail as AccountDetail,
@@ -112,7 +112,7 @@ function PendingEnrollmentReview({ area, onReviewed }: { area: "Business" | "Cre
         approve, reason: approve ? null : reason.trim(), expectedVersion: selected.version,
       }, key);
       setSelected(null); setRejecting(false); setReason("");
-      resource.reload(); onReviewed();
+      resource.reload(); onReviewed(); notifyAdminActionCountsChanged();
     });
   };
   return <Resource resource={resource}>{rows => {

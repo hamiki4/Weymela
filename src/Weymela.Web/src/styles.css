@@ -1261,6 +1261,32 @@ td .button {
   color: var(--green);
   font-weight: 650;
 }
+.admin-action-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #c62828;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.mobile-role-link { position: relative; }
+.mobile-role-link .admin-action-badge {
+  position: absolute;
+  top: 3px;
+  right: max(5px, calc(50% - 25px));
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 0.62rem;
+}
+.admin-deposit-search { max-width: 440px; margin-bottom: 12px; }
 .sidebar-bottom {
   margin-top: 34px;
   padding-top: 24px;

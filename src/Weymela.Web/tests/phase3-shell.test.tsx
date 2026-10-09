@@ -78,6 +78,20 @@ describe("Profile and Settings shell", () => {
     expect(screen.queryByRole("link", { name: "Add a profile" })).not.toBeInTheDocument();
   });
 
+  it("shows authorized pending-action counts independently from notifications", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      return new Response(JSON.stringify(path.endsWith("/admin/action-counts")
+        ? { creators: 3, wallets: 5, socialReview: 101, payouts: 2 }
+        : { unreadCount: 0, items: [] }), { status: 200 });
+    }));
+    setup("PlatformAdmin", "/admin");
+    expect((await screen.findAllByLabelText("3 pending actions")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByLabelText("5 pending actions")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("99+")).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText(/unread notifications/)).not.toBeInTheDocument();
+  });
+
   it.each([
     ["/admin/customers/new", "Customers", true],
     ["/admin/businesses/new", "Businesses", true],

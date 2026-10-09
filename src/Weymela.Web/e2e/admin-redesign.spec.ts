@@ -40,7 +40,7 @@ test("Wallets, UGC and Reports use authoritative projections and keep period tot
   await expect(page.getByRole("heading", { name: "UGC summary" })).toBeVisible();
   await page.getByRole("button", { name: "Custom" }).click();
   await page.getByLabel("From").fill("2050-01-01");
-  await page.getByLabel("To").fill("2050-01-07");
+  await page.getByLabel("To", { exact: true }).fill("2050-01-07");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page.locator(".admin-period-label").first()).toContainText("2050");
   await layout(page);

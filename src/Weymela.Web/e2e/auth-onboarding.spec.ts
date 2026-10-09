@@ -445,8 +445,8 @@ test("public Business signup creates the role only after verified email and devi
   await page.getByLabel("Business type").fill("Restaurant");
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Phone number").fill(`+2519${suffix.slice(-8)}`);
-  await page.getByLabel("Password").fill("password8");
-  await page.getByLabel("Confirm Password").fill("password8");
+  await page.getByLabel("Password", { exact: true }).fill("password8");
+  await page.getByLabel("Confirm Password", { exact: true }).fill("password8");
   await page.getByRole("checkbox").check();
   const started = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/auth/email/start");

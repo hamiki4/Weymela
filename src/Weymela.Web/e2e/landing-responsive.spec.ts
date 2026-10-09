@@ -155,8 +155,8 @@ test("public signup exposes only the three role-specific registrations", async (
   const email = `public-signup-${suffix}@example.test`;
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Phone number").fill(`+2519${suffix.slice(-8)}`);
-  await page.getByLabel("Password").fill("password8");
-  await page.getByLabel("Confirm Password").fill("password8");
+  await page.getByLabel("Password", { exact: true }).fill("password8");
+  await page.getByLabel("Confirm Password", { exact: true }).fill("password8");
   await page.getByRole("checkbox").check();
   const started = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/auth/email/start");
@@ -175,16 +175,16 @@ test("public signup exposes only the three role-specific registrations", async (
   await page.getByRole("button", { name: /^Business Owner — ንግድ ባለቤት/ }).click();
   await expect(page.getByLabel("Business name")).toBeVisible();
   await expect(page.getByLabel("Business type")).toBeVisible();
-  await expect(page.getByLabel("Password")).toBeVisible();
-  await expect(page.getByLabel("Confirm Password")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Confirm Password", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Social-media profile link")).toHaveCount(0);
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await page.getByRole("button", { name: /^Content Creator — ይዘት ፈጣሪ/ }).click();
   await expect(page.getByLabel("Social platform")).toBeVisible();
   await expect(page.getByLabel("Social-media profile link")).toBeVisible();
   await expect(page.getByLabel("Follower count")).toBeVisible();
-  await expect(page.getByLabel("Password")).toBeVisible();
-  await expect(page.getByLabel("Confirm Password")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Confirm Password", { exact: true })).toBeVisible();
   await page.getByLabel("Social platform").selectOption("YouTube");
   await expect(page.getByLabel("Subscriber count")).toBeVisible();
   await expect(page.getByLabel("Business name")).toHaveCount(0);

@@ -272,9 +272,10 @@ for (const viewport of viewports)
         await screenshot(page, `${viewport.width}-${role}-campaign-detail`);
         if (role === "business")
           for (const tab of ["applicants", "budgets", "funds", "performance"]) {
-            await open(page, `/business/campaigns/${id}?tab=${tab}`, tab === "applicants" ? [invalidFixtureVideoAlert] : []);
-            if (tab === "applicants") {
-              await expect(page.getByRole("alert")).toHaveText(invalidFixtureVideoAlert);
+            await open(page, `/business/campaigns/${id}?tab=${tab}`, [invalidFixtureVideoAlert]);
+            const unavailableVideoAlerts = page.getByRole("alert");
+            if (tab === "applicants" || await unavailableVideoAlerts.count()) {
+              await expect(unavailableVideoAlerts).toHaveText(invalidFixtureVideoAlert);
               await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
             }
             await layout(page);

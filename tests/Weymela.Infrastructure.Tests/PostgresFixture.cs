@@ -13,7 +13,7 @@ public sealed class PostgresCollection : ICollectionFixture<PostgresFixture>;
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
+        .WithImage("mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3")
         .WithImagePullPolicy(PullPolicy.Missing)
         .WithDatabase("v3_test_bootstrap")
         .WithUsername("v3_test").WithPassword(Guid.NewGuid().ToString("N"))

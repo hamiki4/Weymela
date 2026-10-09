@@ -16,7 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 CI = (ROOT/'.github/workflows/ci.yml').read_text()
 RELEASE = (ROOT/'.github/workflows/release.yml').read_text()
 VALIDATE = (ROOT/'tools/ci/validate.sh').read_text()
-REQUIRED = {'postgres-image-cache', 'source-security', 'dotnet-unit', 'postgres', 'http-api', 'frontend', 'dotnet-checks', 'browser'}
+REQUIRED = {'source-security', 'dotnet-unit', 'postgres', 'http-api', 'frontend', 'dotnet-checks', 'browser'}
 spec = importlib.util.spec_from_file_location('browser_host', ROOT/'tools/ci/browser-host.py')
 browser = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(browser)
@@ -60,27 +60,18 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertEqual(set(jobs), REQUIRED | {'acceptance'})
         for name in REQUIRED:
             self.assertIn('runs-on: ubuntu-24.04', jobs[name])
-            if name in {'postgres', 'http-api', 'browser'}:
-                self.assertIn('needs: [postgres-image-cache]', jobs[name])
-            else:
-                self.assertNotIn('\n    needs:', jobs[name])
+            self.assertNotIn('\n    needs:', jobs[name])
         dependencies = re.search(r'needs: \[([^]]+)\]', jobs['acceptance'])[1]
         self.assertEqual(set(dependencies.split(', ')), REQUIRED)
 
-    def test_container_backed_jobs_load_pinned_verified_cache_before_tests(self):
-        jobs = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', CI.split('jobs:\n', 1)[1], re.M | re.S))
-        cache = jobs['postgres-image-cache']
-        self.assertIn('actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830', cache)
-        self.assertIn('actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830', cache)
-        self.assertIn('aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3', cache)
-        script = (ROOT/'tools/ci/postgres-test-image-cache.sh').read_text()
-        self.assertIn('mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3', script)
-        self.assertIn('postgres:17-alpine', script)
-        for name in ('postgres', 'http-api', 'browser'):
-            with self.subTest(job=name):
-                self.assertIn('postgres-test-image-cache.sh load', jobs[name])
-        self.assertIn('.WithImage("postgres:17-alpine")', (ROOT/'tests/Weymela.Infrastructure.Tests/PostgresFixture.cs').read_text())
-        self.assertIn('.WithImage("postgres:17-alpine")', (ROOT/'tests/Weymela.BrowserHost/Program.cs').read_text())
+    def test_container_backed_jobs_use_pinned_google_cache_for_official_postgres17(self):
+        fixture = (ROOT/'tests/Weymela.Infrastructure.Tests/PostgresFixture.cs').read_text()
+        browser_host = (ROOT/'tests/Weymela.BrowserHost/Program.cs').read_text()
+        expected = 'mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3'
+        self.assertIn(expected, fixture)
+        self.assertIn(expected, browser_host)
+        self.assertIn('WithImagePullPolicy(PullPolicy.Missing)', fixture)
+        self.assertIn('WithImagePullPolicy(PullPolicy.Missing)', browser_host)
 
     def test_release_requires_success_output_in_every_downstream_path(self):
         jobs = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', RELEASE.split('jobs:\n', 1)[1], re.M | re.S))

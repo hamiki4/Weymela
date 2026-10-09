@@ -38,7 +38,7 @@ public static class TikTokVideoLink
             var match = CreatorVideoPath.Match(uri.AbsolutePath);
             if (!match.Success) return false;
             normalized = $"https://www.tiktok.com/@{match.Groups["creator"].Value}/video/{match.Groups["id"].Value}";
-            return true;
+            return normalized.Length <= 100;
         }
 
         if (host is "vm.tiktok.com" or "vt.tiktok.com")
@@ -46,7 +46,7 @@ public static class TikTokVideoLink
             var match = SharedVideoPath.Match(uri.AbsolutePath);
             if (!match.Success) return false;
             normalized = $"https://{host}/{match.Groups["id"].Value}";
-            return true;
+            return normalized.Length <= 100;
         }
 
         return false;

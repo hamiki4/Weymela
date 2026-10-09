@@ -88,9 +88,11 @@ public sealed class CreatorPromotionContentService(
                 throw new ApplicationFailure(FailureKind.Validation, "This approved Promotion is no longer accepting Creator content.");
             if (await db.CreatorPromotionParticipations.AnyAsync(x => x.CreatorAllocationId == allocation.Id, token))
                 throw new ApplicationFailure(FailureKind.Validation, "This Creator participation has already gone live.");
-            var contentReference = InputRules.Reference(input.ExternalContentId, "video reference", 100);
             if (input.Provider is not ("TikTok" or "YouTube" or "Instagram"))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose a supported platform and valid content reference.");
+            var contentReference = string.Equals(input.Provider, "TikTok", StringComparison.OrdinalIgnoreCase)
+                ? TikTokVideoLink.Normalize(input.ExternalContentId)
+                : InputRules.Reference(input.ExternalContentId, "video reference", 100);
 
             var latest = await db.CreatorPromotionContentSubmissions.Where(x => x.CreatorAllocationId == allocation.Id)
                 .OrderByDescending(x => x.RevisionNumber).FirstOrDefaultAsync(token);

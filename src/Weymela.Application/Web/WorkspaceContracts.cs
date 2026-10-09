@@ -71,7 +71,8 @@ public sealed record CreatorContentSubmissionStatus(int RevisionNumber, string R
 public sealed record BusinessPromotionContentReviewCard(Guid SubmissionId, string Creator, string Promotion,
     string? Provider, string? ContentReference, int RevisionNumber, DateTime SubmittedAtUtc,
     string ReviewStatus, string? Feedback, DateTime? ReviewedAtUtc, string? ReviewMediaUrl = null,
-    Guid? CreatorAllocationId = null, Guid? PromotionId = null, string? WatchUrl = null);
+    Guid? CreatorAllocationId = null, Guid? PromotionId = null, string? WatchUrl = null,
+    string? CreatorProfileUrl = null);
 public sealed record PrivateReviewMediaInput(string StorageKey, string ContentType, long Length,
     string Sha256, string OriginalFileName);
 public sealed record PublicationInput(string Provider, string ExternalContentId, Guid CreatorSocialProfileId);

@@ -11,6 +11,7 @@ import type {
   UgcDetail,
   UgcRequest,
 } from "../../api/types";
+import { normalizeTikTokVideoLink } from "./tiktokVideoLink";
 import {
   ActionLink,
   Badge,
@@ -593,6 +594,7 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
   const action = useAction();
   const [media, setMedia] = useState<File | null>(null);
   const [externalContentId, setExternalContentId] = useState("");
+  const [linkError, setLinkError] = useState("");
   const status = item.row.status;
   const opportunity = detail.data?.opportunity;
   return <article className="creator-promotion-row creator-work-row">
@@ -622,13 +624,14 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
             <small>Private review · Revision {assignment.contentRevisionNumber ?? 1}</small>
           </div>}
           {assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") && opportunity?.contentType === "Video" ?
-            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!externalContentId.trim()) return; void action.run(async (key) => {
-              await post(`/creator/ugc/assignments/${assignment.id}/submit-review`, { submissionUrl: externalContentId.trim() }, key); setExternalContentId(""); onSubmitted();
+            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); const link = normalizeTikTokVideoLink(externalContentId); if (!link) { setLinkError("Enter a supported HTTPS TikTok video link."); return; } setLinkError(""); void action.run(async (key) => {
+              await post(`/creator/ugc/assignments/${assignment.id}/submit-review`, { submissionUrl: link }, key); setExternalContentId(""); onSubmitted();
             }); }}>
               <label>TikTok Video Link
                 <input type="url" inputMode="url" value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required /></label>
-              <small>The Business must be able to open this public link. Weymela does not store the video file.</small>
-              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}</Button>
+              <small>Add SAMPLE watermark until approved.</small>
+              {linkError && <Notice error>{linkError}</Notice>}
+              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Submitting…" : "Submit for Review"}</Button>
             </form>
             : assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
             <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!media) return; void action.run(async (key) => {

@@ -64,6 +64,15 @@ class WorkflowGateTests(unittest.TestCase):
         dependencies = re.search(r'needs: \[([^]]+)\]', jobs['acceptance'])[1]
         self.assertEqual(set(dependencies.split(', ')), REQUIRED)
 
+    def test_container_backed_jobs_use_pinned_google_cache_for_official_postgres17(self):
+        fixture = (ROOT/'tests/Weymela.Infrastructure.Tests/PostgresFixture.cs').read_text()
+        browser_host = (ROOT/'tests/Weymela.BrowserHost/Program.cs').read_text()
+        expected = 'mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3'
+        self.assertIn(expected, fixture)
+        self.assertIn(expected, browser_host)
+        self.assertIn('WithImagePullPolicy(PullPolicy.Missing)', fixture)
+        self.assertIn('WithImagePullPolicy(PullPolicy.Missing)', browser_host)
+
     def test_release_requires_success_output_in_every_downstream_path(self):
         jobs = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', RELEASE.split('jobs:\n', 1)[1], re.M | re.S))
         for name in ('images', 'migrations', 'manifest'):

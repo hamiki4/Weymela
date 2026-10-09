@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using DotNet.Testcontainers.Images;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,7 @@ using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence.Records;
 
 // This executable owns its one disposable database/container. It never accepts an external connection string.
-await using var postgres=new PostgreSqlBuilder().WithImage("postgres:17-alpine")
+await using var postgres=new PostgreSqlBuilder().WithImage("mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3").WithImagePullPolicy(PullPolicy.Missing)
     .WithDatabase("v3_test_browser_"+Guid.NewGuid().ToString("N")).WithUsername("v3_test").WithPassword(Guid.NewGuid().ToString("N"))
     .WithCreateParameterModifier(p=>{foreach(var binding in p.HostConfig.PortBindings.Values.SelectMany(x=>x))binding.HostIP="127.0.0.1";}).Build();
 await postgres.StartAsync();

@@ -104,7 +104,7 @@ for (const width of [375, 1366])
     await page
       .getByLabel("TikTok Video Link", { exact: true })
       .fill("https://www.tiktok.com/@weymela.creator/video/7412345678901234568");
-    await page.getByRole("button", { name: "Submit Revised Content", exact: true }).click();
+    await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
     await expect(page.getByText(/under Business review/i)).toBeVisible();
     await login(context, "business");
     await open(page, `/business/campaigns/${campaignId}`);

@@ -173,14 +173,15 @@ export async function createPublishedUgc(
   await apiPost(context, `/creator/ugc/assignments/${approved.id}/go-live`, {});
   return opportunityId;
 }
-export async function open(page: Page, path: string) {
+export async function open(page: Page, path: string, allowedAlerts: readonly string[] = []) {
   await page.goto(path);
   await expect(page.locator("main h1")).toBeVisible();
   await expect(
     page.getByRole("status", { name: "Loading workspace" }),
   ).toHaveCount(0);
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  const alerts = (await page.getByRole("alert").allTextContents()).map((alert) => alert.trim());
+  expect(alerts.filter((alert) => !allowedAlerts.includes(alert))).toEqual([]);
 }
 export async function screenshot(page: Page, name: string) {
   await page.screenshot({

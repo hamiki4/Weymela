@@ -4,6 +4,10 @@ using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Web;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Weymela.Application.Operations;
+using Weymela.Infrastructure.Persistence.Repositories;
 
 namespace Weymela.Api.Endpoints;
 
@@ -13,6 +17,42 @@ internal static class AdminEndpoints
     public static void MapAdminEndpoints(this WebApplication app)
     {
         var g=app.MapGroup("/api/admin").RequireAuthorization("AdminOperations").AddEndpointFilter<Weymela.Api.Security.ValidatedInputFilter>();
+        g.MapGet("/action-counts",async(HttpContext c,WeymelaDbContext db,TimeProvider clock,CancellationToken ct)=>
+        {
+            var actor=EndpointSupport.Actor(c);
+            var authority=AdministrativeAuthority.For(new RealActor(actor));
+            var creators=authority.Allows(AdministrativeCapability.AccountReview)
+                ?await db.RoleEnrollments.AsNoTracking().CountAsync(x=>x.RequestedRole==ActorRole.Creator&&x.Status==RoleEnrollmentStatus.Pending,ct):0;
+            var wallets=authority.Allows(AdministrativeCapability.DepositReview)
+                ?await db.DepositRequests.AsNoTracking().CountAsync(x=>x.Status==DepositReviewStatus.Pending,ct):0;
+            var socialReview=authority.Allows(AdministrativeCapability.CreatorSocialProfileReview)
+                ?await db.CreatorSocialProfiles.AsNoTracking().CountAsync(x=>x.IsActive&&x.VerificationStatus!="Verified"&&x.VerificationStatus!="Rejected",ct):0;
+            var payouts=0;
+            if(authority.Allows(AdministrativeCapability.CreatorPayoutProcessing))
+            {
+                var settings=await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime,ct);
+                var preparedCreators=await db.PayoutRecords.AsNoTracking().Where(x=>x.Status==PayoutStatus.Eligible&&x.CreatorId!=null)
+                    .Select(x=>x.CreatorId!.Value).ToListAsync(ct);
+                var preparedCustomers=await db.PayoutRecords.AsNoTracking().Where(x=>x.Status==PayoutStatus.Eligible&&x.CustomerId!=null)
+                    .Select(x=>x.CustomerId!.Value).ToListAsync(ct);
+                var destinationRows=await db.PayoutDestinations.AsNoTracking()
+                    .Select(x=>new{x.Beneficiary,x.SubjectId}).ToListAsync(ct);
+                var creatorDestinations=destinationRows.Where(x=>x.Beneficiary==PayoutBeneficiary.Creator)
+                    .Select(x=>x.SubjectId).ToHashSet();
+                var customerDestinations=destinationRows.Where(x=>x.Beneficiary==PayoutBeneficiary.Customer)
+                    .Select(x=>x.SubjectId).ToHashSet();
+                // Money is a value object. Materialize the small account summaries before
+                // inspecting Amount so this count works consistently across supported EF providers.
+                var readyCreators=(await db.CreatorEarningsAccounts.AsNoTracking().ToListAsync(ct))
+                    .Where(x=>x.AvailableEarnings.Amount>=settings.CreatorPayoutThreshold.Amount&&creatorDestinations.Contains(x.CreatorId))
+                    .Select(x=>x.CreatorId);
+                var readyCustomers=(await db.CustomerCashbackAccounts.AsNoTracking().ToListAsync(ct))
+                    .Where(x=>x.AvailableCashback.Amount>=settings.CustomerPayoutThreshold.Amount&&customerDestinations.Contains(x.CustomerId))
+                    .Select(x=>x.CustomerId);
+                payouts=preparedCreators.Concat(readyCreators).Distinct().Count()+preparedCustomers.Concat(readyCustomers).Distinct().Count();
+            }
+            return Results.Ok(new{creators,wallets,socialReview,payouts});
+        });
         g.MapGet("/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminHomeAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         g.MapGet("/wallets",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminWalletsAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         g.MapGet("/ugc/finance",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminUgcFinanceAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");

@@ -151,9 +151,28 @@ internal static class OperationalEndpoints
                 : Results.Ok(await health.DetailsAsync(ct));
         });
         admin.MapGet("/reconciliation",(HttpContext c,ReconciliationService service,CancellationToken ct)=>service.CheckAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
-        admin.MapGet("/deposit-requests",async(WeymelaDbContext db,CancellationToken ct)=>
+        admin.MapGet("/deposit-requests",async(string? search,HttpContext c,WeymelaDbContext db,CancellationToken ct)=>
         {
-            var rows=await db.DepositRequests.AsNoTracking().OrderBy(x=>x.Status).ThenBy(x=>x.SubmittedAtUtc).Take(100).ToListAsync(ct);
+            var actor=EndpointSupport.Actor(c);
+            if(!AdministrativeAuthority.For(new RealActor(actor)).Allows(AdministrativeCapability.DepositReview))
+                throw new ApplicationFailure(FailureKind.Forbidden,"Deposit review access is required.");
+            var query=db.DepositRequests.AsNoTracking();
+            var term=search?.Trim();
+            if(!string.IsNullOrWhiteSpace(term))
+            {
+                var matchingBusinesses=db.PublicWorkspaceProfiles.AsNoTracking()
+                    .Where(x=>x.Role==ActorRole.Business&&EF.Functions.ILike(x.DisplayName,$"%{term}%"))
+                    .Select(x=>x.SubjectId);
+                var exactId=Guid.TryParse(term,out var parsedId)?parsedId:(Guid?)null;
+                query=query.Where(x=>matchingBusinesses.Contains(x.BusinessId)
+                    ||exactId.HasValue&&x.Id==exactId.Value
+                    ||EF.Functions.ILike(x.ExternalReference,$"%{term}%")
+                    ||EF.Functions.ILike(x.Provider,$"%{term}%")
+                    ||x.DestinationNameSnapshot!=null&&EF.Functions.ILike(x.DestinationNameSnapshot,$"%{term}%")
+                    ||x.DestinationAccountSnapshot!=null&&EF.Functions.ILike(x.DestinationAccountSnapshot,$"%{term}%"));
+            }
+            var rows=await query.OrderBy(x=>x.Status==DepositReviewStatus.Pending?0:1)
+                .ThenByDescending(x=>x.SubmittedAtUtc).ThenByDescending(x=>x.Id).ToListAsync(ct);
             var ids=rows.Select(x=>x.BusinessId).Distinct().ToArray();
             var names=await db.PublicWorkspaceProfiles.AsNoTracking().Where(x=>x.Role==ActorRole.Business&&ids.Contains(x.SubjectId))
                 .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { post, useAction, useResource } from "../../api/client";
+import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type { AdminSocialProfileReview as Review } from "../../api/types";
 import { Button, Empty, Field, PageHeader, Resource, Section } from "../../ui/components";
 import { CreatorPlatformIcon, isCreatorPlatform, type CreatorPlatform } from "../creator/CreatorPlatformIcon";
@@ -21,8 +21,8 @@ function ReviewCard({ row, reload }: { row: Review; reload: () => void }) {
       <p>Creator reported: <strong>{row.selfReportedAudience.toLocaleString()}</strong> {row.platform === "YouTube" ? "subscribers" : "followers"}</p>
       <Field label="Admin verified audience"><input type="number" min="0" max="9000000000000000" step="1" value={verified} onChange={e => setVerified(e.target.value)} /></Field>
       <small>Status: {row.audienceVerificationSource === "AdminVerified" ? "Admin Verified" : row.verificationStatus}</small>
-      <div className="actions"><Button disabled={action.busy || !/^\d+$/.test(verified)} onClick={() => void action.run(async key => { await post(`/admin/social-profiles/${row.id}/review`, { action: "approve", verifiedAudience: Number(verified) }, key); reload(); })}>Approve</Button>
-        <Button variant="secondary" disabled={action.busy} onClick={() => void action.run(async key => { await post(`/admin/social-profiles/${row.id}/review`, { action: "reject", verifiedAudience: null }, key); reload(); })}>Reject</Button></div>
+      <div className="actions"><Button disabled={action.busy || !/^\d+$/.test(verified)} onClick={() => void action.run(async key => { await post(`/admin/social-profiles/${row.id}/review`, { action: "approve", verifiedAudience: Number(verified) }, key); reload(); notifyAdminActionCountsChanged(); })}>Approve</Button>
+        <Button variant="secondary" disabled={action.busy} onClick={() => void action.run(async key => { await post(`/admin/social-profiles/${row.id}/review`, { action: "reject", verifiedAudience: null }, key); reload(); notifyAdminActionCountsChanged(); })}>Reject</Button></div>
       {action.error && <p role="alert">{action.error}</p>}
     </div>
   </Section>;

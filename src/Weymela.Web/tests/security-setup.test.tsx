@@ -74,7 +74,7 @@ describe("account security setup", () => {
     await userEvent.type(screen.getByLabelText("Password"), "correct horse battery staple");
     await userEvent.type(screen.getByLabelText("Confirm password"), "different secure passphrase");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Passwords do not match");
     expect(mocks.enrollPassword).not.toHaveBeenCalled();
   });
 

@@ -113,10 +113,13 @@ describe("final authentication experience", () => {
     expect(screen.getByLabelText("Email address")).toBeVisible();
     expect(screen.getByLabelText("Phone number")).toBeVisible();
     expect(screen.getByLabelText("Country code")).toHaveValue("+251");
-    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toHaveAttribute("minlength", "8");
+    expect(screen.getByLabelText("Confirm Password")).toHaveAttribute("autocomplete", "new-password");
     await userEvent.type(screen.getByLabelText("Full legal name"), "Abebe Kebede");
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
     await userEvent.type(screen.getByLabelText("Phone number"), "+251911111111");
+    await userEvent.type(screen.getByLabelText("Password"), "password8");
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "password8");
     await userEvent.click(screen.getByRole("checkbox"));
     await userEvent.click(screen.getByRole("button", { name: "Complete Registration" }));
     expect(mocks.startEmailCode).toHaveBeenCalledWith(
@@ -139,12 +142,18 @@ describe("final authentication experience", () => {
     await userEvent.type(screen.getByLabelText("Email address"), "international@example.com");
     await userEvent.selectOptions(screen.getByLabelText("Country code"), "+1");
     await userEvent.type(screen.getByLabelText("Phone number"), "(404) 555-0123");
+    await userEvent.type(screen.getByLabelText("Password"), "password8");
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "password8");
     await userEvent.click(screen.getByRole("checkbox"));
     fireEvent.submit(screen.getByRole("button", { name: "Complete Registration" }).closest("form")!);
     await userEvent.type(await screen.findByLabelText("Verification code"), "12345");
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
     expect(mocks.verifyEmailCode).toHaveBeenCalledWith("international@example.com", "Signup", "12345");
     expect(mocks.post).toHaveBeenCalledWith("/account/registration-phone", { phone: "+14045550123" });
+    expect(mocks.post).toHaveBeenCalledWith("/account/password-credential", {
+      phone: null, password: "password8", confirmPassword: "password8",
+    });
+    expect(window.sessionStorage.getItem("weymela.public-signup")).not.toContain("password8");
     expect(mocks.refresh).toHaveBeenCalledOnce();
   });
 
@@ -170,6 +179,8 @@ describe("final authentication experience", () => {
     await userEvent.type(screen.getByLabelText("Full legal name"), "Abebe Kebede");
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
     await userEvent.type(screen.getByLabelText("Phone number"), "+251911111111");
+    await userEvent.type(screen.getByLabelText("Password"), "password8");
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "password8");
     await userEvent.click(screen.getByRole("checkbox"));
     await userEvent.click(screen.getByRole("button", { name: "Complete Registration" }));
     await screen.findByRole("heading", { name: "Verify your email" });
@@ -186,6 +197,8 @@ describe("final authentication experience", () => {
     expect(screen.getByLabelText("Business name")).toBeVisible();
     expect(screen.getByLabelText("Business type")).toBeVisible();
     expect(screen.queryByLabelText("Social-media profile link")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeVisible();
+    expect(screen.getByLabelText("Confirm Password")).toBeVisible();
   });
 
   it("validates Creator social and audience fields before email verification", async () => {
@@ -195,8 +208,34 @@ describe("final authentication experience", () => {
     expect(screen.getByLabelText("Social platform")).toBeVisible();
     expect(screen.getByLabelText("Social-media profile link")).toHaveAttribute("type", "url");
     expect(screen.getByLabelText("Follower count")).toHaveAttribute("min", "0");
+    expect(screen.getByLabelText("Password")).toBeVisible();
+    expect(screen.getByLabelText("Confirm Password")).toBeVisible();
     await userEvent.selectOptions(screen.getByLabelText("Social platform"), "YouTube");
     expect(screen.getByLabelText("Subscriber count")).toBeVisible();
+  });
+
+  it("enforces the eight-character password policy and matching confirmation", async () => {
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
+    await userEvent.type(screen.getByLabelText("Full legal name"), "Password Test");
+    await userEvent.type(screen.getByLabelText("Email address"), "password@example.com");
+    await userEvent.type(screen.getByLabelText("Phone number"), "0911111111");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.type(screen.getByLabelText("Password"), "1234567");
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "1234567");
+    fireEvent.submit(screen.getByRole("button", { name: "Complete Registration" }).closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Password must contain at least 8 characters");
+    await userEvent.clear(screen.getByLabelText("Password"));
+    await userEvent.clear(screen.getByLabelText("Confirm Password"));
+    await userEvent.type(screen.getByLabelText("Password"), "12345678");
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "different8");
+    fireEvent.submit(screen.getByRole("button", { name: "Complete Registration" }).closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Passwords do not match");
+    await userEvent.clear(screen.getByLabelText("Confirm Password"));
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "12345678");
+    fireEvent.submit(screen.getByRole("button", { name: "Complete Registration" }).closest("form")!);
+    expect(mocks.startEmailCode).toHaveBeenCalledWith("password@example.com", "Signup");
   });
 
   it("uses phone and password for full sign-in without starting email", async () => {

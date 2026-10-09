@@ -439,7 +439,7 @@ public sealed class DevicePinRecoveryHttpTests(PostgresFixture fixture)
         anonymous.DefaultRequestHeaders.Add("Cookie", recoveryCookieHeader.Split(';')[0]);
         var invalidPassword = await anonymous.PostAsJsonAsync("/api/auth/password/reset", new
         {
-            newPassword = "too short", confirmPassword = "too short"
+            newPassword = "short7!", confirmPassword = "short7!"
         });
         Assert.Equal(HttpStatusCode.BadRequest, invalidPassword.StatusCode);
         Assert.Equal("Validation",

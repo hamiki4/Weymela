@@ -16,6 +16,17 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Password": "የይለፍ ቃል",
+  "Confirm Password": "የይለፍ ቃል ያረጋግጡ",
+  "Confirm password": "የይለፍ ቃል ያረጋግጡ",
+  "New password": "አዲስ የይለፍ ቃል",
+  "Confirm new password": "አዲሱን የይለፍ ቃል ያረጋግጡ",
+  "Password must contain at least 8 characters.": "የይለፍ ቃሉ ቢያንስ 8 ቁምፊዎች ሊኖሩት ይገባል።",
+  "Passwords do not match.": "የይለፍ ቃላት አይዛመዱም።",
+  "Use at least 8 characters. You can use a passphrase.": "ቢያንስ 8 ቁምፊዎችን ይጠቀሙ። ረጅም የይለፍ ሐረግ መጠቀም ይችላሉ።",
+  "Search business or deposit...": "ንግድ ወይም ተቀማጭ ይፈልጉ...",
+  "Show": "አሳይ",
+  "Hide": "ደብቅ",
   "M-PESA": "M-PESA",
   "Update the M-PESA destination using your current verified phone before payment.": "ከክፍያ በፊት የM-PESA መቀበያውን በአሁኑ የተረጋገጠ ስልክ ቁጥርዎ ያዘምኑ።",
   "Full Account / Phone": "ሙሉ የሂሳብ / ስልክ ቁጥር",
@@ -569,6 +580,9 @@ export function translateText(value: string, language = currentLanguage) {
     [/^Recipient: (.+)$/, name => `ተቀባይ፦ ${name}`],
     [/^Current account: (.+)$/, account => `የአሁኑ ሂሳብ፦ ${account}`],
     [/^(\d+) unread notifications$/, count => `${count} ያልተነበቡ ማሳወቂያዎች`],
+    [/^(\d+) pending actions$/, count => `${count} ያልተጠናቀቁ እርምጃዎች`],
+    [/^Show (.+)$/, label => `${label} አሳይ`],
+    [/^Hide (.+)$/, label => `${label} ደብቅ`],
     [/^Pending Review \((\d+)\)$/, count => `በግምገማ ላይ (${count})`],
     [/^Pending Business reviews$/, () => "በግምገማ ላይ ያሉ የንግድ ማመልከቻዎች"],
     [/^Pending Creator reviews$/, () => "በግምገማ ላይ ያሉ የፈጣሪ ማመልከቻዎች"],

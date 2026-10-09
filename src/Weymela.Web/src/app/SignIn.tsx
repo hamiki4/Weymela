@@ -54,6 +54,7 @@ function FirebaseSignIn({
   const [profiles, setProfiles] = useState<SessionProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [signupRole, setSignupRole] = useState<PublicSignupRole | null>(() => readSignupDraft()?.role ?? null);
+  const [signupEmailVerified, setSignupEmailVerified] = useState(false);
   const authBusy = busy || !adapter;
 
   useEffect(() => {
@@ -136,7 +137,15 @@ function FirebaseSignIn({
     submit(async () => {
       if (!adapter || !codeSent)
         throw new Error("Request an email code first.");
-      await adapter.verifyEmailCode(email, purpose, code);
+      if (purpose !== "Signup" || !signupEmailVerified) {
+        await adapter.verifyEmailCode(email, purpose, code);
+        if (purpose === "Signup") setSignupEmailVerified(true);
+      }
+      if (purpose === "Signup") {
+        const draft = readSignupDraft();
+        if (!draft) throw new Error("Your registration details expired. Enter them again.");
+        await post("/account/registration-phone", { phone: draft.phone });
+      }
       await onSignedIn();
     });
   const beginRegistration = (draft: PublicSignupDraft) =>
@@ -148,6 +157,7 @@ function FirebaseSignIn({
       setResendAfterSeconds(delay ?? 60);
       setCode("");
       setCodeSent(true);
+      setSignupEmailVerified(false);
       setView("verifySignup");
     });
 
@@ -388,6 +398,8 @@ function PublicRegistrationForm(props: {
   const [legalName, setLegalName] = useState(sameRole?.legalName ?? "");
   const [email, setEmail] = useState(sameRole?.email ?? "");
   const [phone, setPhone] = useState(sameRole?.phone ?? "");
+  const [countryCode, setCountryCode] = useState(sameRole ? "INTL" : "+251");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState(sameRole?.businessName ?? "");
   const [businessType, setBusinessType] = useState(sameRole?.businessType ?? "");
   const [socialPlatform, setSocialPlatform] = useState(sameRole?.socialPlatform ?? "TikTok");
@@ -402,13 +414,21 @@ function PublicRegistrationForm(props: {
     <h1 id="public-registration-title">{title}</h1>
     <form onSubmit={event => {
       event.preventDefault();
+      let canonicalPhone: string;
+      try {
+        canonicalPhone = registrationPhone(countryCode, phone);
+        setPhoneError(null);
+      } catch (cause) {
+        setPhoneError(cause instanceof Error ? cause.message : "Enter a valid phone number.");
+        return;
+      }
       const followers = Number(followerCount);
       const subscribers = socialPlatform === "YouTube" ? Number(subscriberCount) : null;
       props.onComplete({
         version: 1,
         idempotencyKey: sameRole?.idempotencyKey ?? crypto.randomUUID(),
         role: props.role,
-        legalName: legalName.trim(), email: email.trim().toLowerCase(), phone: phone.trim(),
+        legalName: legalName.trim(), email: email.trim().toLowerCase(), phone: canonicalPhone,
         ...(props.role === "Business" ? { businessName: businessName.trim(), businessType: businessType.trim() } : {}),
         ...(props.role === "Creator" ? { socialPlatform, socialProfileUrl: socialProfileUrl.trim(),
           followerCount: followers, subscriberCount: subscribers } : {}),
@@ -425,8 +445,20 @@ function PublicRegistrationForm(props: {
           onInvalid={event => event.currentTarget.setCustomValidity(translateText(event.currentTarget.value.trim()
             ? "Enter a valid email address." : "Email address is required.", language))}
           onChange={event => { event.currentTarget.setCustomValidity(""); setEmail(event.target.value); }} /></Field>
-        <Field label="Phone number"><input required type="tel" inputMode="tel" autoComplete="tel" maxLength={24}
-          pattern="[+0-9() -]{7,24}" value={phone} onChange={event => setPhone(event.target.value)} /></Field>
+        <div className="registration-phone-row">
+          <Field label="Country code"><select aria-label="Country code" value={countryCode} onChange={event => {
+            setCountryCode(event.target.value); setPhoneError(null);
+          }}>
+            <option value="+251">Ethiopia (+251)</option>
+            <option value="+1">United States / Canada (+1)</option>
+            <option value="+254">Kenya (+254)</option>
+            <option value="+44">United Kingdom (+44)</option>
+            <option value="INTL">Other country (+ code)</option>
+          </select></Field>
+          <Field label={countryCode === "INTL" ? "International phone number" : "Phone number"} error={phoneError ?? undefined}><input required type="tel" inputMode="tel" autoComplete="tel" maxLength={24}
+            placeholder={countryCode === "+251" ? "0911 111 111" : countryCode === "INTL" ? "+ country code and number" : "National number"}
+            pattern="[+0-9(). \\-]{7,24}" value={phone} onChange={event => { setPhone(event.target.value); setPhoneError(null); }} /></Field>
+        </div>
         {props.role === "Creator" && <>
           <Field label="Social platform"><select value={socialPlatform} onChange={event => setSocialPlatform(event.target.value)}>
             <option>TikTok</option><option>YouTube</option><option>Instagram</option><option>Facebook</option>
@@ -443,6 +475,23 @@ function PublicRegistrationForm(props: {
       </fieldset>
     </form>
   </section>;
+}
+
+function registrationPhone(dialCode: string, value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || !/^[+0-9().\s-]{7,24}$/.test(trimmed)) throw new Error("Enter a valid phone number.");
+  const digits = trimmed.replace(/\D/g, "");
+  const selectedDialCode = dialCode === "INTL" ? "" : dialCode;
+  if (trimmed.startsWith("+")) {
+    const international = `+${digits}`;
+    if (selectedDialCode && !international.startsWith(selectedDialCode))
+      throw new Error("The phone number does not match the selected country code.");
+    return international;
+  }
+  if (!selectedDialCode) throw new Error("Include the international country code, for example +1 or +254.");
+  const national = digits.replace(/^0+/, "");
+  if (!national) throw new Error("Enter a valid phone number.");
+  return `${selectedDialCode}${national}`;
 }
 
 function PasswordRecovery(props: {

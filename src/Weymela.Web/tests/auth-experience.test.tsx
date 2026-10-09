@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -10,10 +10,11 @@ const mocks = vi.hoisted(() => ({
   verifyPasswordRecovery: vi.fn(),
   resetPassword: vi.fn(),
   cancelPasswordRecovery: vi.fn(),
+  post: vi.fn(),
   refresh: vi.fn(),
 }));
 vi.mock("../src/api/client", () => ({
-  post: vi.fn(),
+  post: mocks.post,
   useAction: () => ({ busy: false, error: null, run: vi.fn() }),
   useResource: () => ({
     data: { development: false, personas: null },
@@ -78,6 +79,7 @@ beforeEach(() => {
   mocks.verifyPasswordRecovery.mockResolvedValue("PasswordReset");
   mocks.resetPassword.mockResolvedValue(undefined);
   mocks.cancelPasswordRecovery.mockResolvedValue(undefined);
+  mocks.post.mockResolvedValue(undefined);
   mocks.refresh.mockResolvedValue(undefined);
 });
 
@@ -110,6 +112,7 @@ describe("final authentication experience", () => {
     expect(screen.getByLabelText("Full legal name")).toBeVisible();
     expect(screen.getByLabelText("Email address")).toBeVisible();
     expect(screen.getByLabelText("Phone number")).toBeVisible();
+    expect(screen.getByLabelText("Country code")).toHaveValue("+251");
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Full legal name"), "Abebe Kebede");
     await userEvent.type(screen.getByLabelText("Email address"), "owner@example.com");
@@ -126,6 +129,37 @@ describe("final authentication experience", () => {
     expect(screen.getByRole("button", { name: "Verify" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Resend email" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Edit details" })).toBeVisible();
+  });
+
+  it("composes international registration phones from the selected country before claiming them", async () => {
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
+    await userEvent.type(screen.getByLabelText("Full legal name"), "International Customer");
+    await userEvent.type(screen.getByLabelText("Email address"), "international@example.com");
+    await userEvent.selectOptions(screen.getByLabelText("Country code"), "+1");
+    await userEvent.type(screen.getByLabelText("Phone number"), "(404) 555-0123");
+    await userEvent.click(screen.getByRole("checkbox"));
+    fireEvent.submit(screen.getByRole("button", { name: "Complete Registration" }).closest("form")!);
+    await userEvent.type(await screen.findByLabelText("Verification code"), "12345");
+    await userEvent.click(screen.getByRole("button", { name: "Verify" }));
+    expect(mocks.verifyEmailCode).toHaveBeenCalledWith("international@example.com", "Signup", "12345");
+    expect(mocks.post).toHaveBeenCalledWith("/account/registration-phone", { phone: "+14045550123" });
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("requires an explicit dialing code for other supported countries", async () => {
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
+    await userEvent.type(screen.getByLabelText("Full legal name"), "Other Country Customer");
+    await userEvent.type(screen.getByLabelText("Email address"), "other@example.com");
+    await userEvent.selectOptions(screen.getByLabelText("Country code"), "INTL");
+    await userEvent.type(screen.getByLabelText("International phone number"), "712345678");
+    await userEvent.click(screen.getByRole("checkbox"));
+    fireEvent.submit(screen.getByRole("button", { name: "Complete Registration" }).closest("form")!);
+    expect(await screen.findByText(/Include the international country code/)).toBeVisible();
+    expect(mocks.startEmailCode).not.toHaveBeenCalled();
   });
 
   it("resends through the same Create Account request without revealing the backend route", async () => {

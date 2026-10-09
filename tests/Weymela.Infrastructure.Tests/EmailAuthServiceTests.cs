@@ -258,12 +258,15 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     }
 
     [Theory]
-    [InlineData("0911111111", "+251911111111")]
-    [InlineData("911111111", "+251911111111")]
-    [InlineData("+251 911-111-111", "+251911111111")]
-    [InlineData("+1 (202) 555-0123", "+12025550123")]
-    public void Phones_normalize_before_hashing_and_lookup(string input, string canonical)
-        => Assert.Equal(canonical, PhoneNumberNormalizer.Normalize(input));
+    [InlineData("0911111111", "+251911111111", "ET")]
+    [InlineData("911111111", "+251911111111", "ET")]
+    [InlineData("+251 911-111-111", "+251911111111", "ET")]
+    [InlineData("+1 (202) 555-0123", "+12025550123", "ET")]
+    [InlineData("+1.404.555.0123", "+14045550123", "ET")]
+    [InlineData("0712 345 678", "+254712345678", "KE")]
+    [InlineData("020 7946 0958", "+442079460958", "GB")]
+    public void Phones_normalize_before_hashing_and_lookup(string input, string canonical, string region)
+        => Assert.Equal(canonical, PhoneNumberNormalizer.Normalize(input, region));
 
     [Theory]
     [InlineData("091111111")]

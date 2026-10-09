@@ -71,6 +71,37 @@ public sealed class PhoneAliasServiceTests(PostgresFixture fixture)
         Assert.Empty(await db.AuthIdentifiers.Where(x => x.Kind == "Phone").ToListAsync());
     }
 
+    [Fact]
+    public async Task Registration_claim_accepts_international_phone_and_same_identity_reuse_but_never_replaces_it()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var identity = await SeedAsync(db);
+        var service = new PhoneAliasService(db, Options(), TimeProvider.System);
+        await service.EnsureRegistrationAsync(identity, "+1 (404) 555-0123", default);
+        await service.EnsureRegistrationAsync(identity, "+14045550123", default);
+        var mismatch = await Assert.ThrowsAsync<ApplicationFailure>(() =>
+            service.EnsureRegistrationAsync(identity, "+254712345678", default));
+        Assert.Equal("RegisteredPhoneMismatch", mismatch.Code);
+        var alias = Assert.Single(await db.AuthIdentifiers.Where(x => x.UserId == identity.UserId && x.Kind == "Phone").ToListAsync());
+        Assert.Equal("+14045550123", alias.DeliveryAddress);
+        Assert.False(alias.IsVerified);
+        Assert.Single(await db.AuditEvents.Where(x => x.EventType == "RegistrationPhoneClaimed").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Registration_claim_rejects_a_phone_owned_by_another_identity_without_merging()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var first = await SeedAsync(db); var second = await SeedAsync(db);
+        var service = new PhoneAliasService(db, Options(), TimeProvider.System);
+        await service.EnsureRegistrationAsync(first, "+254712345678", default);
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() =>
+            service.EnsureRegistrationAsync(second, "+254 712 345 678", default));
+        Assert.Equal("PhoneUnavailable", failure.Code);
+        Assert.Single(await db.AuthIdentifiers.Where(x => x.Kind == "Phone").ToListAsync());
+        Assert.Equal(2, await db.IdentityBindings.CountAsync());
+    }
+
     private static async Task<bool> Attempt(PhoneAliasService service, DeviceSessionIdentity identity, string phone)
     {
         try { await service.RegisterAsync(identity, phone, default); return true; }

@@ -108,9 +108,14 @@ public sealed class PasswordCredentialService(
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
-        catch (Exception exception) when (DatabaseCollision(exception))
+        catch (Exception exception) when (IsPhoneCollision(exception))
         {
             throw PhoneCollision();
+        }
+        catch (Exception exception) when (DatabaseCollision(exception))
+        {
+            throw new ApplicationFailure(FailureKind.ConcurrencyConflict,
+                "Account security setup changed at the same time. Try again.", code: "AccountSecurityConflict");
         }
     }
 
@@ -306,7 +311,18 @@ public sealed class PasswordCredentialService(
         new(Guid.NewGuid(), eventType, userId, null, null, null, Guid.NewGuid(), at, "account-security");
 
     private static ApplicationFailure PhoneCollision() =>
-        new(FailureKind.Validation, "This phone number cannot be added to your account.");
+        new(FailureKind.Validation,
+            "This phone number is already in use. Sign in to the existing account or use a different number.",
+            code: "PhoneUnavailable");
+
+    private static bool IsPhoneCollision(Exception error)
+    {
+        for (Exception? current = error; current is not null; current = current.InnerException)
+            if (current is PostgresException postgres && postgres.SqlState == PostgresErrorCodes.UniqueViolation
+                && postgres.ConstraintName?.Contains("AuthIdentifiers", StringComparison.Ordinal) == true)
+                return true;
+        return false;
+    }
 
     private static bool DatabaseCollision(Exception error)
     {

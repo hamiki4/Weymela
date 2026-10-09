@@ -841,6 +841,7 @@ describe("Creator workspace", () => {
     const api = mockCreatorApi({ "/creator/payout-destination": {
       method: "Bank", provider: "CBE", account: "••••6789", legalName: "Bella",
       updatedAtUtc: null, isMasked: true, isConfigured: true, registeredPhone: "+251711223344",
+      phoneCountry: "ET", telebirrEligible: true, mpesaEligible: true,
     } });
     mount(<CreatorEarnings />);
     await userEvent.click(await screen.findByRole("radio", { name: "M-PESA" }));
@@ -867,6 +868,20 @@ describe("Creator workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
       body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
+  });
+  it("collects country-specific international bank identifiers without asking for the legal name again", async () => {
+    const api = mockCreatorApi();
+    mount(<CreatorEarnings />);
+    await userEvent.click(await screen.findByRole("radio", { name: "Bank account" }));
+    await userEvent.selectOptions(screen.getByLabelText("Bank country"), "US");
+    await userEvent.type(screen.getByLabelText("Bank Name"), "US Test Bank");
+    await userEvent.type(screen.getByLabelText("Account Number"), "US123456789");
+    await userEvent.type(screen.getByLabelText("Routing number"), "021000021");
+    expect(screen.queryByLabelText(/Legal name/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
+    await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
+      body: { method: "Bank", bankName: "US Test Bank", accountNumber: "US123456789",
+        bankCountry: "US", routingNumber: "021000021" } }));
   });
   it("shows Creator income from attributed entries without treating purchase totals as earnings", async () => {
     mockCreatorApi({ "/creator/earnings": { ...earnings, history: [

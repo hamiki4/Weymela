@@ -261,7 +261,9 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         var claimed = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
             && x.IdentifierHash == hash, ct);
         if (claimed is not null && claimed.UserId != userId)
-            throw new ApplicationFailure(FailureKind.Validation, "This phone number cannot be added to your account.");
+            throw new ApplicationFailure(FailureKind.Validation,
+                "This phone number is already in use. Sign in to the existing account or use a different number.",
+                code: "PhoneUnavailable");
         var existing = await db.AuthIdentifiers.AsTracking().Where(x => x.UserId == userId && x.Kind == "Phone").ToListAsync(ct);
         if (existing.Count > 1 || existing.Count == 1 && existing[0].IdentifierHash != hash)
             throw new ApplicationFailure(FailureKind.Validation, "Use the phone number already registered to this account.");

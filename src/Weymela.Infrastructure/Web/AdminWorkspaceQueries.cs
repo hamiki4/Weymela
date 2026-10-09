@@ -3,6 +3,7 @@ using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.Domain;
+using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Persistence.Records;
 
@@ -198,7 +199,7 @@ public sealed partial class WorkspaceQueries
             var method=pending?.DestinationMethod?.ToString()??destination?.Method.ToString();
             var provider=pending?.DestinationProvider??destination?.Provider;
             var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
-            var account=protectedAccount is null||payoutProtector is null?null:payoutProtector.Unprotect(protectedAccount);
+            var account=protectedAccount is null||payoutProtector is null?null:PayoutDestinationService.DisplayUnprotected(payoutProtector.Unprotect(protectedAccount));
             creators.Add(new(a.CreatorId,pending?.Id,name,a.AvailableEarnings.Amount,pending?.ThresholdUsed.Amount??version.CreatorPayoutThreshold.Amount,
                 pending?.Amount.Amount??version.CreatorPayoutThreshold.Amount,pending?.EligibleAtUtc??since,
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
@@ -211,7 +212,7 @@ public sealed partial class WorkspaceQueries
             var method=pending?.DestinationMethod?.ToString()??destination?.Method.ToString();
             var provider=pending?.DestinationProvider??destination?.Provider;
             var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
-            var account=protectedAccount is null||payoutProtector is null?null:payoutProtector.Unprotect(protectedAccount);
+            var account=protectedAccount is null||payoutProtector is null?null:PayoutDestinationService.DisplayUnprotected(payoutProtector.Unprotect(protectedAccount));
             customers.Add(new(a.CustomerId,pending?.Id,await CustomerLabel(a.CustomerId,ct),a.AvailableCashback.Amount,pending?.ThresholdUsed.Amount??version.CustomerPayoutThreshold.Amount,
                 pending?.Amount.Amount??version.CustomerPayoutThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,version.CustomerPayoutThreshold.Amount,version.EffectiveFromUtc,ct),
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));

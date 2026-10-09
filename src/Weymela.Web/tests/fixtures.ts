@@ -280,7 +280,7 @@ export const routes: Record<string, unknown> = {
   "/creator/ugc/requests": [],
   "/creator/campaigns": [active],
   "/creator/earnings": earnings,
-  "/creator/payout-destination": { method: "Telebirr", provider: "Telebirr", account: "+251911223344", legalName: "Bella", updatedAtUtc: "2026-09-11T12:00:00Z", isMasked: false, isConfigured: true },
+  "/creator/payout-destination": { method: "Telebirr", provider: "Telebirr", account: "+251911223344", legalName: "Bella", updatedAtUtc: "2026-09-11T12:00:00Z", isMasked: false, isConfigured: true, registeredPhone: "+251911223344", phoneCountry: "ET", telebirrEligible: true, mpesaEligible: false },
   "/creator/requests": [],
   "/admin/home": {
     businesses: 1,
@@ -372,7 +372,7 @@ export const routes: Record<string, unknown> = {
     status: "BelowThreshold",
     payoutHistory: [],
   },
-  "/customer/payout-destination": { method: "Telebirr", provider: "Telebirr", account: "+251922334455", legalName: "Customer", updatedAtUtc: null, isMasked: false, isConfigured: false },
+  "/customer/payout-destination": { method: "Telebirr", provider: "Telebirr", account: "+251922334455", legalName: "Customer", updatedAtUtc: null, isMasked: false, isConfigured: false, registeredPhone: "+251922334455", phoneCountry: "ET", telebirrEligible: true, mpesaEligible: false },
 };
 export function mockApi(overrides: Record<string, unknown> = {}) {
   const data = { ...routes, ...overrides };

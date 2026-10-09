@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using DotNet.Testcontainers.Images;
 using Testcontainers.PostgreSql;
 using Weymela.Infrastructure.Persistence;
 using Xunit;
@@ -13,6 +14,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer postgres = new PostgreSqlBuilder()
         .WithImage("postgres:17-alpine")
+        .WithImagePullPolicy(PullPolicy.Missing)
         .WithDatabase("v3_test_bootstrap")
         .WithUsername("v3_test").WithPassword(Guid.NewGuid().ToString("N"))
         .WithCreateParameterModifier(p =>

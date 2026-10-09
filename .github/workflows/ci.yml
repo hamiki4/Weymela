@@ -10,6 +10,28 @@ on:
 permissions:
   contents: read
 jobs:
+  postgres-image-cache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { persist-credentials: false }
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: postgres-image-cache
+        with:
+          path: ${{ runner.temp }}/weymela-postgres17-alpine-image
+          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+      - name: Pull pinned Docker Official PostgreSQL 17 image only on cache miss
+        if: steps.postgres-image-cache.outputs.cache-hit != 'true'
+        run: bash tools/ci/postgres-test-image-cache.sh prepare "$RUNNER_TEMP/weymela-postgres17-alpine-image"
+      - name: Verify and load cached PostgreSQL 17 image
+        run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: steps.postgres-image-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/weymela-postgres17-alpine-image
+          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+
   source-security:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -65,11 +87,18 @@ jobs:
   postgres:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    needs: [postgres-image-cache]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: { persist-credentials: false }
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with: { dotnet-version: '10.0.x' }
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/weymela-postgres17-alpine-image
+          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+      - name: Verify and load cached PostgreSQL 17 image
+        run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
       - name: All PostgreSQL integration tests (own Testcontainers database)
         run: bash tools/ci/validate.sh postgres
       - name: PostgreSQL test evidence
@@ -86,11 +115,18 @@ jobs:
   http-api:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    needs: [postgres-image-cache]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: { persist-credentials: false }
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with: { dotnet-version: '10.0.x' }
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/weymela-postgres17-alpine-image
+          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+      - name: Verify and load cached PostgreSQL 17 image
+        run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
       - name: All HTTP API integration tests (own Testcontainers database)
         run: bash tools/ci/validate.sh http
       - name: HTTP test evidence
@@ -154,6 +190,7 @@ jobs:
   browser:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
+    needs: [postgres-image-cache]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: { persist-credentials: false }
@@ -164,6 +201,12 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: src/Weymela.Web/package-lock.json
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/weymela-postgres17-alpine-image
+          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+      - name: Verify and load cached PostgreSQL 17 image
+        run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
       - name: Build isolated BrowserHost and production frontend
         timeout-minutes: 15
         run: bash tools/ci/validate.sh browser-build
@@ -225,7 +268,7 @@ jobs:
   acceptance:
     # Preserve the required acceptance check name, but never let a skipped/failed
     # child become a successful reusable-workflow result.
-    needs: [source-security, dotnet-unit, postgres, http-api, frontend, dotnet-checks, browser]
+    needs: [postgres-image-cache, source-security, dotnet-unit, postgres, http-api, frontend, dotnet-checks, browser]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -239,7 +282,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import json,os
-          expected={'source-security','dotnet-unit','postgres','http-api','frontend','dotnet-checks','browser'}
+          expected={'postgres-image-cache','source-security','dotnet-unit','postgres','http-api','frontend','dotnet-checks','browser'}
           results=json.loads(os.environ['VALIDATION_RESULTS'])
           assert set(results)==expected, 'Required suite missing from acceptance gate'
           failed={name:item['result'] for name,item in results.items() if item['result']!='success'}

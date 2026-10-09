@@ -72,9 +72,9 @@ class WorkflowGateTests(unittest.TestCase):
         cache = jobs['postgres-image-cache']
         self.assertIn('actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830', cache)
         self.assertIn('actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830', cache)
-        self.assertIn('79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537', cache)
+        self.assertIn('aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3', cache)
         script = (ROOT/'tools/ci/postgres-test-image-cache.sh').read_text()
-        self.assertIn('postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3', script)
+        self.assertIn('mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3', script)
         self.assertIn('postgres:17-alpine', script)
         for name in ('postgres', 'http-api', 'browser'):
             with self.subTest(job=name):

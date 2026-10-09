@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly upstream_image='postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3'
+readonly upstream_image='mirror.gcr.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3'
 readonly local_image='postgres:17-alpine'
-readonly expected_image_id='sha256:79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537'
+readonly expected_repo_digest='postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3'
 
 if [[ $# -ne 2 ]]; then
   echo 'usage: postgres-test-image-cache.sh prepare|load CACHE_DIRECTORY' >&2
@@ -29,9 +29,9 @@ case "$mode" in
     }
     (cd -- "$cache_dir" && sha256sum --check postgres-17-alpine-linux-amd64.tar.sha256)
     docker image load --input "$image_archive"
-    actual_image_id="$(docker image inspect --format '{{.Id}}' "$local_image")"
-    [[ "$actual_image_id" == "$expected_image_id" ]] || {
-      echo 'Cached PostgreSQL image ID does not match the pinned Docker Official Image.' >&2
+    actual_repo_digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$local_image")"
+    grep -Fxq -- "$expected_repo_digest" <<< "$actual_repo_digests" || {
+      echo 'Cached PostgreSQL image digest does not match the pinned Docker Official Image.' >&2
       exit 1
     }
     ;;

@@ -20,7 +20,7 @@ jobs:
         id: postgres-image-cache
         with:
           path: ${{ runner.temp }}/weymela-postgres17-alpine-image
-          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+          key: weymela-postgres17-alpine-linux-amd64-aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3
       - name: Pull pinned Docker Official PostgreSQL 17 image only on cache miss
         if: steps.postgres-image-cache.outputs.cache-hit != 'true'
         run: bash tools/ci/postgres-test-image-cache.sh prepare "$RUNNER_TEMP/weymela-postgres17-alpine-image"
@@ -30,7 +30,7 @@ jobs:
         if: steps.postgres-image-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/weymela-postgres17-alpine-image
-          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+          key: weymela-postgres17-alpine-linux-amd64-aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3
 
   source-security:
     runs-on: ubuntu-24.04
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/weymela-postgres17-alpine-image
-          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+          key: weymela-postgres17-alpine-linux-amd64-aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3
       - name: Verify and load cached PostgreSQL 17 image
         run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
       - name: All PostgreSQL integration tests (own Testcontainers database)
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/weymela-postgres17-alpine-image
-          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+          key: weymela-postgres17-alpine-linux-amd64-aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3
       - name: Verify and load cached PostgreSQL 17 image
         run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
       - name: All HTTP API integration tests (own Testcontainers database)
@@ -204,7 +204,7 @@ jobs:
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/weymela-postgres17-alpine-image
-          key: weymela-postgres17-alpine-linux-amd64-79bd7c99e923138f136f8009d6bffa66e21e9d4fda5c0c561b00fc9c90cfe537
+          key: weymela-postgres17-alpine-linux-amd64-aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3
       - name: Verify and load cached PostgreSQL 17 image
         run: bash tools/ci/postgres-test-image-cache.sh load "$RUNNER_TEMP/weymela-postgres17-alpine-image"
       - name: Build isolated BrowserHost and production frontend

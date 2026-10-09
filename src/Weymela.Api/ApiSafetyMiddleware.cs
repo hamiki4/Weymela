@@ -49,9 +49,11 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 var reviewUpload=(context.Request.Path.Value?.EndsWith("/content/review",StringComparison.OrdinalIgnoreCase)==true
                     ||context.Request.Path.Value?.EndsWith("/submit-review",StringComparison.OrdinalIgnoreCase)==true)
                     && HttpMethods.IsPost(context.Request.Method);
-                var fileUpload=receiptUpload||photoUpload||reviewUpload;
+                var reviewLinkSubmission = reviewUpload
+                    && context.Request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true;
+                var fileUpload=receiptUpload||photoUpload||(reviewUpload&&!reviewLinkSubmission);
                 var limit=reviewUpload?RuntimeOptions.ReviewMediaRequestBytes:fileUpload?RuntimeOptions.ReceiptRequestBytes:RuntimeOptions.RequestBytes;
-                if(reviewUpload&&context.Request.ContentLength is null){await Error(context,411,"LengthRequired","The review upload requires a known file size.");return;}
+                if(reviewUpload&&!reviewLinkSubmission&&context.Request.ContentLength is null){await Error(context,411,"LengthRequired","The review upload requires a known file size.");return;}
                 if(context.Request.ContentLength>limit){await Error(context,413,"RequestTooLarge","This request is too large.");return;}
                 // Bound unknown-length/chunked bodies too, including non-Kestrel test hosts. This remains in memory, never on disk.
                 if(context.Request.ContentLength is null)

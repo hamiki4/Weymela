@@ -2737,6 +2737,8 @@ td .button {
 .auth-existing-account { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: .86rem; }
 .auth-existing-account .auth-secondary-action { padding-inline: 4px; }
 .public-registration-fields { grid-template-columns: 1fr; }
+.field-error { color: var(--danger, #b91c1c); font-weight: 650; }
+.registration-phone-row { display: grid; grid-template-columns: minmax(145px, .85fr) minmax(0, 1.35fr); gap: 12px; min-width: 0; }
 .signup-legal-consent { display: flex; align-items: flex-start; gap: 10px; color: #374151; font-size: .8rem; line-height: 1.5; }
 .signup-legal-consent input { flex: none; width: 19px; height: 19px; margin-top: 1px; accent-color: #166534; }
 .signup-legal-consent a { color: #155e75; font-weight: 700; }
@@ -2751,8 +2753,10 @@ td .button {
   .signup-role-cards { grid-template-columns: 1fr; }
   .public-registration-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .public-registration-fields .signup-legal-consent,
-  .public-registration-fields .form-footer { grid-column: 1 / -1; }
+  .public-registration-fields .form-footer,
+  .public-registration-fields .registration-phone-row { grid-column: 1 / -1; }
 }
+@media (max-width: 420px) { .registration-phone-row { grid-template-columns: 1fr; gap: 0; } }
 .pin-setup-page {
   min-height: 100dvh;
   display: grid;

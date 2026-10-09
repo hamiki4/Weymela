@@ -23,6 +23,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);
         await using var db=s.Database.Open();
+        db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.Kind=="Phone" && (x.UserId==s.Creator.UserId||x.UserId==s.Customer.UserId)).ToListAsync());
         foreach(var actor in new[] { s.Creator, s.Customer })
         {
             var subject=actor.CreatorId ?? actor.CustomerId!.Value;
@@ -43,16 +44,63 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
                 continue;
             }
             var result=await service.UpdateAsync(actor,new("Mpesa",null,null));
-            Assert.Equal("M-PESA",result.Provider);Assert.Equal(phone,result.Account);
+            var canonical=PhoneNumberNormalizer.Normalize(phone);
+            Assert.Equal("M-PESA",result.Provider);Assert.Equal(canonical,result.Account);
             Assert.Equal("Existing Legal Name",result.LegalName);
-            Assert.Equal(phone,(await service.OwnAsync(actor))!.RegisteredPhone);
+            Assert.Equal(canonical,(await service.OwnAsync(actor))!.RegisteredPhone);
             await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(actor,new("Mpesa",null,"+251799999999")));
             var kind=actor.Role==ActorRole.Creator?PayoutBeneficiary.Creator:PayoutBeneficiary.Customer;
             var admin=await service.AdminAsync(Phase4Scenario.Admin,kind,actor.CreatorId??actor.CustomerId!.Value);
-            Assert.Equal(phone,admin!.Account);Assert.False(admin.IsMasked);
+            Assert.Equal(canonical,admin!.Account);Assert.False(admin.IsMasked);
             await Assert.ThrowsAsync<ApplicationFailure>(()=>service.AdminAsync(s.Seed.Business,kind,actor.CreatorId??actor.CustomerId!.Value));
         }
         await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(s.Cashier,new("Mpesa",null,null)));
+    }
+
+    [Fact]
+    public async Task International_bank_destination_requires_country_specific_identifiers_and_preserves_full_snapshot()
+    {
+        var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);await s.Refresh(81000);
+        await using var db=s.Database.Open();
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Creator.CreatorId!.Value,
+            Role=ActorRole.Creator,DisplayName="International Creator",PublicId="CR-INTL-BANK" });
+        await db.SaveChangesAsync();
+        var destinations=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>destinations.UpdateAsync(s.Creator,
+            new("Bank","US Test Bank","123456789",BankCountry:"US",RoutingNumber:"123456789")));
+        var saved=await destinations.UpdateAsync(s.Creator,
+            new("Bank","US Test Bank","US123456789",BankCountry:"US",RoutingNumber:"021000021"));
+        Assert.Equal("US",saved.BankCountry);Assert.EndsWith("0021",saved.RoutingNumber,StringComparison.Ordinal);
+        var admin=await destinations.AdminAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value);
+        Assert.Equal("US",admin!.BankCountry);Assert.Equal("US123456789",admin.Account);Assert.Equal("021000021",admin.RoutingNumber);
+        var payoutId=await new PayoutService(db,s.Clock,destinations).PrepareAsync(Phase4Scenario.Admin,
+            PayoutBeneficiary.Creator,s.Creator.CreatorId.Value,new Money(5000),"international-bank-snapshot");
+        await destinations.UpdateAsync(s.Creator,new("Bank","Kenya Test Bank","KE12345678",
+            BankCountry:"KE",SwiftBic:"KCBLKENX"));
+        var payout=await db.PayoutRecords.SingleAsync(x=>x.Id==payoutId);
+        var snapshot=PayoutDestinationService.DisplayUnprotected(TestPayoutProtector.Instance.Unprotect(payout.ProtectedDestinationAccount!));
+        Assert.Contains("US123456789",snapshot,StringComparison.Ordinal);Assert.Contains("Routing 021000021",snapshot,StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task International_phone_cannot_be_used_for_ethiopian_mobile_money_but_bank_remains_available()
+    {
+        var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
+        db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.UserId==s.Customer.UserId&&x.Kind=="Phone").ToListAsync());
+        db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Customer.CustomerId!.Value,
+            Role=ActorRole.Customer,DisplayName="International Customer",PublicId="CU-INTL" });
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=s.Customer.UserId,Kind="Phone",
+            IdentifierHash=EmailAuthService.HashIdentifier("+14045550123"),DeliveryAddress="+14045550123",
+            IsVerified=true,CreatedAtUtc=Scenario.Now });
+        await db.SaveChangesAsync();
+        var service=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+        var own=await service.OwnAsync(s.Customer);
+        Assert.Equal("US",own!.PhoneCountry);Assert.False(own.TelebirrEligible);Assert.False(own.MpesaEligible);
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(s.Customer,new("Telebirr",null,null)));
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(s.Customer,new("Mpesa",null,null)));
+        var bank=await service.UpdateAsync(s.Customer,new("Bank","US Test Bank","123456789",
+            BankCountry:"US",RoutingNumber:"021000021"));
+        Assert.Equal("US",bank.BankCountry);Assert.True(bank.IsConfigured);
     }
 
     [Fact]
@@ -60,6 +108,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);await s.Refresh(81000);
         await using var db=s.Database.Open();
+        db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.UserId==s.Creator.UserId&&x.Kind=="Phone").ToListAsync());
         db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Creator.CreatorId!.Value,
             Role=ActorRole.Creator,DisplayName="Creator Legal Name",PublicId="CR-MPESA" });
         db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=s.Creator.UserId,Kind="Phone",
@@ -113,6 +162,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);await s.Refresh(81000);
         await using var db=s.Database.Open();
+        db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.UserId==s.Creator.UserId&&x.Kind=="Phone").ToListAsync());
         db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Creator.CreatorId!.Value,
             Role=ActorRole.Creator,DisplayName="Creator Legal Name",PublicId="CR-PAYOUT" });
         db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=s.Creator.UserId,Kind="Phone",
@@ -147,6 +197,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);
         await using var db=s.Database.Open();
+        db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.UserId==s.Creator.UserId&&x.Kind=="Phone").ToListAsync());
         db.PayoutDestinations.Remove(await db.PayoutDestinations.SingleAsync(x=>x.Beneficiary==PayoutBeneficiary.Creator));
         db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Creator.CreatorId!.Value,
             Role=ActorRole.Creator,DisplayName="Creator Without Phone",PublicId="CR-BANK-ONLY" });
@@ -274,7 +325,9 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         var other=new Actor(Guid.NewGuid(),ActorRole.Customer,CustomerId:Guid.NewGuid());
         await using var db=s.Database.Open();
         db.CommercePermissions.Add(new(other.UserId,ActorRole.Customer,other.CustomerId!.Value,null,true,false));
-        db.PayoutDestinations.Add(new Weymela.Infrastructure.Persistence.Records.PayoutDestination { Beneficiary=PayoutBeneficiary.Customer,SubjectId=other.CustomerId.Value,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("0933445566"),AccountLast4="5566",LegalName="Other Customer",UpdatedAtUtc=Scenario.Now });
+        const string otherPhone = "+251933445566";
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=other.UserId,Kind="Phone",IdentifierHash=EmailAuthService.HashIdentifier(otherPhone),DeliveryAddress=otherPhone,IsVerified=true,CreatedAtUtc=Scenario.Now });
+        db.PayoutDestinations.Add(new Weymela.Infrastructure.Persistence.Records.PayoutDestination { Beneficiary=PayoutBeneficiary.Customer,SubjectId=other.CustomerId.Value,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect(otherPhone),AccountLast4="5566",LegalName="Other Customer",UpdatedAtUtc=Scenario.Now });
         await db.SaveChangesAsync();
         var checkout=s.Checkout(db);
         var otherQr=await checkout.IssueAsync(new(other,s.AllocationId,"customer-b-issue"));

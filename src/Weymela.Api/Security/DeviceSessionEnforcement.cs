@@ -16,6 +16,7 @@ internal static class DeviceSessionRequestPolicy
         "/api/device/enrollment",
         "/api/onboarding/legal",
         "/api/account/security",
+        "/api/account/registration-phone",
         "/api/account/password-credential"
     };
 

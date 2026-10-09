@@ -249,25 +249,29 @@ export function Resource<T>({
 export function Field({
   label,
   help,
+  error,
   children,
   wide = false,
 }: {
   label: string;
   help?: string;
+  error?: string;
   children: ReactNode;
   wide?: boolean;
 }) {
   const id = useId();
   const control = isValidElement(children)
     ? cloneElement(
-        children as ReactElement<{ id?: string; "aria-describedby"?: string }>,
-        { id, "aria-describedby": help ? `${id}-help` : undefined },
+        children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean }>,
+        { id, "aria-describedby": [error ? `${id}-error` : null, help ? `${id}-help` : null].filter(Boolean).join(" ") || undefined,
+          "aria-invalid": error ? true : undefined },
       )
     : children;
   return (
     <div className={`field ${wide ? "wide" : ""}`}>
       <label htmlFor={id}>{label}</label>
       {control}
+      {error && <small id={`${id}-error`} className="field-error" role="alert">{error}</small>}
       {help && <small id={`${id}-help`}>{help}</small>}
     </div>
   );

@@ -226,6 +226,12 @@ internal static class AuthEndpoints
             await service.RegisterAsync(new DeviceSessionIdentity(userId, bindingId, bindingVersion), input.Phone, ct);
             return Results.NoContent();
         }).RequireAuthorization("VerifiedAccount").AddEndpointFilter<ValidatedInputFilter>();
+        app.MapPost("/api/account/registration-phone", async (PhoneAliasInput input, HttpContext c,
+            PhoneAliasService service, CancellationToken ct) =>
+        {
+            await service.EnsureRegistrationAsync(VerifiedIdentity(c), input.Phone, ct);
+            return Results.NoContent();
+        }).RequireAuthorization("VerifiedAccount").AddEndpointFilter<ValidatedInputFilter>();
         if(!development)return;
         app.MapPost("/api/development/session",async(DevelopmentSignIn input,HttpContext c,DevelopmentDirectory directory,IConfiguration configuration,WeymelaDbContext db,CancellationToken ct)=>
         {

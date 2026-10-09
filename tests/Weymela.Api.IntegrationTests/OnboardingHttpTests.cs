@@ -138,6 +138,7 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
                 UserId = userId,
                 Kind = "Email",
                 IdentifierHash = Guid.NewGuid().ToString("N"),
+                DeliveryAddress = "hana@example.test",
                 IsVerified = true,
                 CreatedAtUtc = DateTime.UtcNow
             });
@@ -149,6 +150,8 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.NoContent, signIn.StatusCode);
         var authCookie = signIn.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
         client.DefaultRequestHeaders.Add("Cookie", authCookie);
+        var phoneClaim = await client.PostAsJsonAsync("/api/account/registration-phone", new { phone = "+1 (404) 555-0123" });
+        Assert.Equal(HttpStatusCode.NoContent, phoneClaim.StatusCode);
         var enrolled = await client.Post("/api/device/enrollment",
             new { pin = "01234", confirmPin = "01234" }, "customer-device-enrollment");
         Assert.Equal(HttpStatusCode.OK, enrolled.StatusCode);
@@ -167,6 +170,7 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
             role = "Customer",
             displayName = "Hana",
             publicId = "CLIENT-CONTROLLED",
+            registeredPhone = "+14045550123",
             accountLegal = new
             {
                 termsOfService = new { documentId = terms["documentId"]!.GetValue<Guid>(), contentHash = terms["contentHash"]!.GetValue<string>(), accepted = true },
@@ -184,6 +188,9 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
         var projection = await verify.PublicWorkspaceProfiles.SingleAsync(x => x.SubjectId == profile.CustomerId);
         Assert.Equal("Hana", profile.PreferredName);
         Assert.Equal(generated, projection.PublicId);
+        var phone = await verify.AuthIdentifiers.SingleAsync(x => x.UserId == userId && x.Kind == "Phone");
+        Assert.Equal("+14045550123", phone.DeliveryAddress);
+        Assert.False(phone.IsVerified);
         Assert.Single(await verify.CommercePermissions.Where(x => x.UserId == userId && x.Role == ActorRole.Customer).ToListAsync());
     }
 

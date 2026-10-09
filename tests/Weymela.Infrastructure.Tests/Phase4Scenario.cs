@@ -7,6 +7,7 @@ using Weymela.Application.Web;
 using Weymela.Infrastructure.Web;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Identity;
 
 namespace Weymela.Infrastructure.Tests;
 
@@ -46,8 +47,11 @@ internal sealed record Phase4Scenario(Scenario Seed, Actor Creator, Actor Custom
             new(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
             new(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
         db.PayoutDestinations.AddRange(
-            new PayoutDestination { Beneficiary=PayoutBeneficiary.Creator,SubjectId=creatorId,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("0911223344"),AccountLast4="3344",LegalName="Test Creator",UpdatedAtUtc=Scenario.Now },
-            new PayoutDestination { Beneficiary=PayoutBeneficiary.Customer,SubjectId=customer.CustomerId.Value,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("0922334455"),AccountLast4="4455",LegalName="Test Customer",UpdatedAtUtc=Scenario.Now });
+            new PayoutDestination { Beneficiary=PayoutBeneficiary.Creator,SubjectId=creatorId,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("+251911223344"),AccountLast4="3344",LegalName="Test Creator",UpdatedAtUtc=Scenario.Now },
+            new PayoutDestination { Beneficiary=PayoutBeneficiary.Customer,SubjectId=customer.CustomerId.Value,Method=PayoutDestinationMethod.Telebirr,Provider="Telebirr",ProtectedAccount=TestPayoutProtector.Instance.Protect("+251922334455"),AccountLast4="4455",LegalName="Test Customer",UpdatedAtUtc=Scenario.Now });
+        db.AuthIdentifiers.AddRange(
+            new AuthIdentifierRecord { UserId=creator.UserId,Kind="Phone",IdentifierHash=EmailAuthService.HashIdentifier("+251911223344"),DeliveryAddress="+251911223344",IsVerified=true,CreatedAtUtc=Scenario.Now },
+            new AuthIdentifierRecord { UserId=customer.UserId,Kind="Phone",IdentifierHash=EmailAuthService.HashIdentifier("+251922334455"),DeliveryAddress="+251922334455",IsVerified=true,CreatedAtUtc=Scenario.Now });
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         if (goLive)
         {

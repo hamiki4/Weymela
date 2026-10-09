@@ -151,8 +151,6 @@ public sealed class CreatorPromotionContentService(
                 throw new ApplicationFailure(FailureKind.Validation, "Review feedback is too long.");
             if (action == "requestchanges" && string.IsNullOrWhiteSpace(input.Feedback))
                 throw new ApplicationFailure(FailureKind.Validation, "Feedback is required when requesting changes.");
-            if (action == "approve" && TikTokVideoLink.WatchUrl(submission.Provider, submission.ContentReference) is null)
-                throw new ApplicationFailure(FailureKind.Validation, "A valid TikTok video link is required before approval.");
 
             var fingerprint = RequestFingerprint.Create(submission.Id.ToString(), action, input.Feedback?.Trim() ?? "");
             var operation = new FinancialOperation(db);

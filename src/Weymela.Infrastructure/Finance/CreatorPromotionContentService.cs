@@ -68,6 +68,11 @@ public sealed class CreatorPromotionContentService(
 
     public Task<CreatorContentSubmissionStatus> SubmitAsync(
         Actor actor, Guid allocationId, ContentInput input, string idempotencyKey, CancellationToken ct)
+        => SubmitAsync(actor, allocationId, input, idempotencyKey, false, ct);
+
+    private Task<CreatorContentSubmissionStatus> SubmitAsync(
+        Actor actor, Guid allocationId, ContentInput input, string idempotencyKey,
+        bool validateTikTokLink, CancellationToken ct)
         => new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             var now = clock.GetUtcNow().UtcDateTime;
@@ -90,7 +95,7 @@ public sealed class CreatorPromotionContentService(
                 throw new ApplicationFailure(FailureKind.Validation, "This Creator participation has already gone live.");
             if (input.Provider is not ("TikTok" or "YouTube" or "Instagram"))
                 throw new ApplicationFailure(FailureKind.Validation, "Choose a supported platform and valid content reference.");
-            var contentReference = string.Equals(input.Provider, "TikTok", StringComparison.OrdinalIgnoreCase)
+            var contentReference = validateTikTokLink
                 ? TikTokVideoLink.Normalize(input.ExternalContentId)
                 : InputRules.Reference(input.ExternalContentId, "video reference", 100);
 
@@ -124,7 +129,7 @@ public sealed class CreatorPromotionContentService(
     public Task<CreatorContentSubmissionStatus> SubmitTikTokLinkAsync(
         Actor actor, Guid allocationId, string link, string idempotencyKey, CancellationToken ct)
         => SubmitAsync(actor, allocationId,
-            new ContentInput("TikTok", TikTokVideoLink.Normalize(link)), idempotencyKey, ct);
+            new ContentInput("TikTok", link), idempotencyKey, true, ct);
 
     public Task<BusinessPromotionContentReviewCard> ReviewAsync(
         Actor actor, Guid submissionId, PromotionContentReviewInput input, string idempotencyKey, CancellationToken ct)

@@ -465,7 +465,9 @@ describe("Business workspace", () => {
         creator: "Mina Creator",
         promotion: "Seasonal stories",
         provider: "TikTok",
-        contentReference: "video-123",
+        contentReference: "https://www.tiktok.com/t/ZMabcdef",
+        watchUrl: "https://www.tiktok.com/t/ZMabcdef",
+        creatorProfileUrl: "https://www.tiktok.com/@mina",
         revisionNumber: 1,
         submittedAtUtc: "2026-09-22T12:00:00Z",
         reviewStatus: "UnderReview",
@@ -476,7 +478,9 @@ describe("Business workspace", () => {
     mount(<PromotionContentReviewQueue />);
     expect(await screen.findByText("Mina Creator · Seasonal stories")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Revision 1" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "View submitted content" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Creator Profile" })).toHaveAttribute("href", "https://www.tiktok.com/@mina");
+    expect(screen.getByRole("link", { name: "Play Sample Video" })).toHaveAttribute("href", "https://www.tiktok.com/t/ZMabcdef");
+    expect(screen.queryByText("https://www.tiktok.com/t/ZMabcdef")).not.toBeInTheDocument();
     expect(screen.queryByText(/AllocationId|BusinessId|CreatorId|Wallet|Commission/)).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Feedback (required for changes requested)"), "Please adjust the opening shot.");
     await userEvent.click(screen.getByRole("button", { name: "Request Changes" }));
@@ -484,6 +488,20 @@ describe("Business workspace", () => {
       path: "/business/promotion-content-submissions/submission-safe-key/review",
       body: { action: "requestchanges", feedback: "Please adjust the opening shot." },
     }));
+  });
+
+  it("does not fabricate inaccessible links or allow approval without a validated submission link", async () => {
+    mockApi({ "/business/promotion-content-submissions": [{
+      submissionId: "missing-link", promotionId: "campaign", creator: "Mina Creator", promotion: "Seasonal stories",
+      provider: "TikTok", contentReference: "not-a-url", revisionNumber: 2,
+      submittedAtUtc: "2026-09-22T12:00:00Z", reviewStatus: "UnderReview", feedback: null, reviewedAtUtc: null,
+    }] });
+    mount(<PromotionContentReviewQueue />);
+    expect(await screen.findByText("Review unavailable: this TikTok link is invalid or unsupported.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Request Changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
   });
 });
 

@@ -24,11 +24,25 @@ public sealed class TikTokVideoLinkTests
     }
 
     [Theory]
+    [InlineData("https://www.tiktok.com/t/ZMabcdef/", "https://www.tiktok.com/t/ZMabcdef")]
+    [InlineData("https://vm.tiktok.com/ZMabcdef/", "https://vm.tiktok.com/ZMabcdef")]
+    [InlineData("https://vt.tiktok.com/ZMabcdef", "https://vt.tiktok.com/ZMabcdef")]
+    public void Accepts_supported_tiktok_short_links_without_resolving_them(string value, string expected)
+    {
+        Assert.Equal(expected, TikTokVideoLink.Normalize(value));
+        Assert.Null(TikTokVideoLink.VideoId(value));
+    }
+
+    [Theory]
     [InlineData("http://www.tiktok.com/@creator/video/7412345678901234567")]
     [InlineData("https://example.com/@creator/video/7412345678901234567")]
     [InlineData("https://www.tiktok.com/@creator/video/123")]
     [InlineData("https://www.tiktok.com/@creator/video/7412345678901234567?redirect=https://example.com")]
     [InlineData("https://www.tiktok.com/@creator/video/7412345678901234567#fragment")]
+    [InlineData("https://www.tiktok.com.evil.test/t/ZMabcdef")]
+    [InlineData("https://www.tiktok.com/t/short")]
+    [InlineData("https://www.tiktok.com/t/ZMabcdef?redirect=https://evil.test")]
+    [InlineData("https://vm.tiktok.com/@creator/video/7412345678901234567")]
     public void Rejects_unsafe_or_unsupported_links(string value)
     {
         Assert.False(TikTokVideoLink.TryNormalize(value, out _));

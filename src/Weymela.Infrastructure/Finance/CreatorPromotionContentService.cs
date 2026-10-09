@@ -151,6 +151,8 @@ public sealed class CreatorPromotionContentService(
                 throw new ApplicationFailure(FailureKind.Validation, "Review feedback is too long.");
             if (action == "requestchanges" && string.IsNullOrWhiteSpace(input.Feedback))
                 throw new ApplicationFailure(FailureKind.Validation, "Feedback is required when requesting changes.");
+            if (action == "approve" && TikTokVideoLink.WatchUrl(submission.Provider, submission.ContentReference) is null)
+                throw new ApplicationFailure(FailureKind.Validation, "A valid TikTok video link is required before approval.");
 
             var fingerprint = RequestFingerprint.Create(submission.Id.ToString(), action, input.Feedback?.Trim() ?? "");
             var operation = new FinancialOperation(db);
@@ -213,7 +215,8 @@ public sealed class CreatorPromotionContentService(
                 row.Submission.ReviewStatus.ToString(), row.Submission.Feedback, row.Submission.ReviewedAtUtc,
                 row.Submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{row.Submission.Id}",
                 row.Allocation.Id, row.Promotion.Id,
-                TikTokVideoLink.WatchUrl(row.Submission.Provider, row.Submission.ContentReference)));
+                TikTokVideoLink.WatchUrl(row.Submission.Provider, row.Submission.ContentReference),
+                await CreatorProfileUrl(row.Allocation, ct)));
         }
         return result;
     }
@@ -226,7 +229,19 @@ public sealed class CreatorPromotionContentService(
             submission.RevisionNumber, submission.SubmittedAtUtc, submission.ReviewStatus.ToString(),
             submission.Feedback, submission.ReviewedAtUtc,
             submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{submission.Id}", allocation.Id,
-            promotion.Id, TikTokVideoLink.WatchUrl(submission.Provider, submission.ContentReference));
+            promotion.Id, TikTokVideoLink.WatchUrl(submission.Provider, submission.ContentReference),
+            await CreatorProfileUrl(allocation, ct));
+    }
+
+    private async Task<string?> CreatorProfileUrl(CreatorAllocation allocation, CancellationToken ct)
+    {
+        if (allocation.CreatorSocialProfileId is not { } profileId) return null;
+        var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.Id == profileId && x.CreatorId == allocation.CreatorId && x.IsActive
+            && x.Platform == allocation.Platform, ct);
+        if (profile is null) return null;
+        try { return Weymela.Infrastructure.Web.CreatorSocialProfileLinks.Normalize(profile.Platform, profile.ProfileUrl); }
+        catch (ApplicationFailure) { return null; }
     }
 
     private static CreatorContentSubmissionStatus View(CreatorPromotionContentSubmission row)

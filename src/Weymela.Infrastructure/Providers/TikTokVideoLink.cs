@@ -14,6 +14,9 @@ public static class TikTokVideoLink
     private static readonly System.Text.RegularExpressions.Regex SharedVideoPath = new(
         "^/(?<id>[A-Za-z0-9_-]{6,80})/?$",
         System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex TikTokShortPath = new(
+        "^/t/(?<id>[A-Za-z0-9_-]{6,80})/?$",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     public static string Normalize(string value)
     {
@@ -36,8 +39,14 @@ public static class TikTokVideoLink
         if (host is "www.tiktok.com" or "tiktok.com" or "m.tiktok.com")
         {
             var match = CreatorVideoPath.Match(uri.AbsolutePath);
-            if (!match.Success) return false;
-            normalized = $"https://www.tiktok.com/@{match.Groups["creator"].Value}/video/{match.Groups["id"].Value}";
+            if (match.Success)
+                normalized = $"https://www.tiktok.com/@{match.Groups["creator"].Value}/video/{match.Groups["id"].Value}";
+            else
+            {
+                match = TikTokShortPath.Match(uri.AbsolutePath);
+                if (!match.Success) return false;
+                normalized = $"https://www.tiktok.com/t/{match.Groups["id"].Value}";
+            }
             return normalized.Length <= 100;
         }
 

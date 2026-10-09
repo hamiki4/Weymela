@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
 import type { CreatorCampaign } from "../../api/types";
+import { normalizeTikTokVideoLink } from "./tiktokVideoLink";
 import {
   ActionLink,
   Badge,
@@ -106,10 +107,13 @@ function CreatorContent({
           className="contained-form"
           onSubmit={(e) => {
             e.preventDefault();
+            const link = normalizeTikTokVideoLink(content);
+            if (!link) { setMessage("Enter a supported HTTPS TikTok video link."); return; }
+            setMessage("");
             void action.run(async (key) => {
               await post(`/creator/creator-budgets/${row.budgetId}/content/review`, {
                 provider: "TikTok",
-                externalContentId: content.trim(),
+                externalContentId: link,
               }, key);
               setContent("");
               setMessage("Revision submitted for Business review.");
@@ -118,13 +122,14 @@ function CreatorContent({
           }}
         >
           <fieldset disabled={action.busy}>
-            <Field label="TikTok Video Link" help="Use a public HTTPS TikTok video link that the Business can open. Weymela does not store the video file.">
+            <Field label="TikTok Video Link" help="Add SAMPLE watermark until approved.">
               <input type="url" inputMode="url" value={content} onChange={(e) => setContent(e.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required />
             </Field>
             {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
             <Button type="submit" disabled={action.busy || !content.trim()}>
               {action.busy ? "Submitting…" : row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}
             </Button>
+            {message === "Enter a supported HTTPS TikTok video link." && <Notice error>{message}</Notice>}
           </fieldset>
         </form>
       ) : mayPublish ? (

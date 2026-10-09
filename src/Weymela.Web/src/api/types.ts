@@ -369,6 +369,7 @@ export interface PromotionContentReviewCard {
   creatorAllocationId?: string | null;
   promotionId?: string | null;
   watchUrl?: string | null;
+  creatorProfileUrl?: string | null;
 }
 export interface PublicationStatus {
   id: string;

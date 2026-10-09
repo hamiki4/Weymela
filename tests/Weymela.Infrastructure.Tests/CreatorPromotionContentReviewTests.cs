@@ -17,7 +17,7 @@ public sealed class CreatorPromotionContentReviewTests(PostgresFixture fixture)
         await using var db = s.Database.Open();
         var review = new CreatorPromotionContentService(db, new CommerceAccessPolicy(db), new TestDirectory(), s.Clock);
         var submitted = await review.SubmitAsync(s.Creator, s.AllocationId,
-            new ContentInput("TikTok", "approved-content"), "submit-v1", default);
+            new ContentInput("TikTok", "https://www.tiktok.com/@creator/video/7412345678901234567"), "submit-v1", default);
         Assert.Equal("UnderReview", submitted.ReviewStatus);
         Assert.Empty(await db.CreatorPromotionParticipations.ToListAsync());
         await Assert.ThrowsAsync<ApplicationFailure>(() => s.Views(db)
@@ -35,6 +35,22 @@ public sealed class CreatorPromotionContentReviewTests(PostgresFixture fixture)
         Assert.Equal(s.Clock.Now, participation.WentLiveAtUtc);
         Assert.Equal(s.Clock.Now.AddDays(promotion.PromotionLiveDurationDays),
             participation.ExpiresAtUtc(promotion.PromotionLiveDurationDays));
+    }
+
+    [Fact]
+    public async Task Business_cannot_approve_a_malformed_TikTok_submission()
+    {
+        var s = await Phase4Scenario.Create(fixture, goLive: false);
+        await using var db = s.Database.Open();
+        var review = new CreatorPromotionContentService(db, new CommerceAccessPolicy(db), new TestDirectory(), s.Clock);
+        await review.SubmitAsync(s.Creator, s.AllocationId, new("TikTok", "not-a-video-link"), "bad-tiktok-link", default);
+        var row = await db.CreatorPromotionContentSubmissions.SingleAsync();
+
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => review.ReviewAsync(s.Seed.Business, row.Id,
+            new("approve", null), "approve-invalid-tiktok", default));
+
+        Assert.Equal(FailureKind.Validation, failure.Kind);
+        Assert.Equal(PromotionContentReviewStatus.UnderReview, row.ReviewStatus);
     }
 
     [Fact]

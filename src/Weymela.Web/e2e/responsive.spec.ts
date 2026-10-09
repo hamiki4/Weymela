@@ -13,6 +13,7 @@ const viewports = [
   { width: 1440, height: 900 },
   { width: 1920, height: 1080 },
 ];
+const invalidFixtureVideoAlert = "Review unavailable: this TikTok link is invalid or unsupported.";
 
 async function assertBusinessContentAboveMobileNavigation(page: Page, path: string) {
   const selector = path === "/business"
@@ -262,12 +263,20 @@ for (const viewport of viewports)
         const id =
           campaigns.find((r: { title: string }) => r.title.includes("coffee"))
             ?.id ?? campaigns[0].id;
-        await open(page, `/${role}/campaigns/${id}`);
+        await open(page, `/${role}/campaigns/${id}`, role === "business" ? [invalidFixtureVideoAlert] : []);
+        if (role === "business") {
+          await expect(page.getByRole("alert")).toHaveText(invalidFixtureVideoAlert);
+          await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
+        }
         await layout(page);
         await screenshot(page, `${viewport.width}-${role}-campaign-detail`);
         if (role === "business")
           for (const tab of ["applicants", "budgets", "funds", "performance"]) {
-            await open(page, `/business/campaigns/${id}?tab=${tab}`);
+            await open(page, `/business/campaigns/${id}?tab=${tab}`, tab === "applicants" ? [invalidFixtureVideoAlert] : []);
+            if (tab === "applicants") {
+              await expect(page.getByRole("alert")).toHaveText(invalidFixtureVideoAlert);
+              await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
+            }
             await layout(page);
             await screenshot(page, `${viewport.width}-business-${tab}`);
           }

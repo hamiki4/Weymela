@@ -631,7 +631,7 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
                 <input type="url" inputMode="url" value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required /></label>
               <small>Add SAMPLE watermark until approved.</small>
               {linkError && <Notice error>{linkError}</Notice>}
-              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}</Button>
+              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Submitting…" : "Submit for Review"}</Button>
             </form>
             : assignment && !assignment.revisionAcceptanceRequired && (status === "InProgress" || status === "ChangesRequested") &&
             <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!media) return; void action.run(async (key) => {

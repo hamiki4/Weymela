@@ -127,7 +127,7 @@ function CreatorContent({
             </Field>
             {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
             <Button type="submit" disabled={action.busy || !content.trim()}>
-              {action.busy ? "Submitting…" : row.contentReviewStatus === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}
+              {action.busy ? "Submitting…" : "Submit for Review"}
             </Button>
             {message === "Enter a supported HTTPS TikTok video link." && <Notice error>{message}</Notice>}
           </fieldset>

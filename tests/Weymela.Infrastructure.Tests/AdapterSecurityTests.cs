@@ -95,8 +95,16 @@ public sealed class AdapterSecurityTests
 
             var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
             var loaded = new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString);
-            Assert.Empty(loaded.Password);
+            Assert.True(string.IsNullOrEmpty(loaded.Password));
             Assert.Equal(passfile, loaded.Passfile);
+
+            connection.Passfile = passfile + ".missing";
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+
+            connection.Passfile = passfile;
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
 
             File.SetUnixFileMode(passfile, UnixFileMode.UserRead | UnixFileMode.GroupRead);
             Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(

@@ -278,9 +278,9 @@ public sealed class RuntimeOptions
         && !ContainsPlaceholder(value);
     private static bool IsProtectedPassword(string? value) => value is { Length: >= 16 and <= 512 }
         && !value.Any(char.IsControl) && !ContainsPlaceholder(value);
-    private static bool IsSecurePassfile(string path)
+    private static bool IsSecurePassfile(string? path)
     {
-        if (!Path.IsPathFullyQualified(path)) return false;
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) return false;
         try
         {
             var info = new FileInfo(path);

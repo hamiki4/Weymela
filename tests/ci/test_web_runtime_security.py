@@ -74,6 +74,7 @@ class ShellFixture(unittest.TestCase):
                     'VITE_FIREBASE_API_KEY': 'AIza' + 'a' * 35,
                     'VITE_FIREBASE_AUTH_DOMAIN': 'weymela-pilot.firebaseapp.com',
                     'VITE_FIREBASE_PROJECT_ID': 'weymela-pilot',
+                    'V3_FIREBASE_TARGET': 'pilot',
                     'VITE_FIREBASE_APP_ID': '1:123456789:web:abcdef123456'}
         stub = '#!' + sys.executable + '\n' + textwrap.dedent('''\
             import json,os,pathlib,sys
@@ -195,6 +196,7 @@ class HostedRuntimeGateTests(ShellFixture):
         self.assertIn('NODE_IMAGE=node:24-bookworm-slim@sha256:' + 'b' * 64, build)
         self.assertIn('--load', build)
         self.assertIn('--provenance=false', build)
+        self.assertIn('V3_FIREBASE_TARGET=pilot', build)
         self.assertEqual(build[build.index('--platform') + 1], 'linux/amd64')
         self.assertEqual(build[build.index('--tag') + 1],
                          'ghcr.io/hamiki4/weymela-v3-web:v3-' + 'a' * 40 + '-run456-attempt1')
@@ -213,6 +215,25 @@ class HostedRuntimeGateTests(ShellFixture):
         self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', ' '.join(build))
         self.assertNotIn('RESEND', ' '.join(build).upper())
         self.assertEqual((self.root / '.artifacts/release/web-firebase-project.txt').read_text(), 'weymela-pilot\n')
+        self.assertEqual((self.root / '.artifacts/release/web-firebase-target.txt').read_text(), 'pilot\n')
+
+    def test_production_web_build_requires_production_project_and_records_target(self):
+        result = self.run_build(V3_FIREBASE_TARGET='production',
+                                VITE_FIREBASE_API_KEY='AIza' + 'p' * 35,
+                                VITE_FIREBASE_AUTH_DOMAIN='weymela-production.firebaseapp.com',
+                                VITE_FIREBASE_PROJECT_ID='weymela-production',
+                                VITE_FIREBASE_APP_ID='1:987654321:web:production123')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        build = next(call['args'] for call in self.calls() if call['stage'] == 'build')
+        self.assertIn('V3_FIREBASE_TARGET=production', build)
+        self.assertIn('VITE_FIREBASE_PROJECT_ID=weymela-production', build)
+        self.assertEqual((self.root / '.artifacts/release/web-firebase-project.txt').read_text(),
+                         'weymela-production\n')
+        self.assertEqual((self.root / '.artifacts/release/web-firebase-target.txt').read_text(),
+                         'production\n')
+        self.assertNotEqual(self.run_build(V3_FIREBASE_TARGET='production',
+                                           VITE_FIREBASE_PROJECT_ID='weymela-pilot').returncode, 0)
+        self.assertNotEqual(self.run_build(V3_FIREBASE_TARGET='other').returncode, 0)
 
     def test_missing_or_wrong_web_firebase_project_blocks_release_build(self):
         for key, value in (

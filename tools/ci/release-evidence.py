@@ -56,6 +56,13 @@ def complete(root, env):
     image = json.loads(image_path.read_text())
     if image['component'] != component or image['commit'] != env['GITHUB_SHA']:
         raise ValueError('Image component/source mismatch')
+    if component == 'web' and (image.get('firebaseTarget') not in ('pilot', 'production')
+            or image.get('firebaseProjectId') != {
+                'pilot': 'weymela-pilot', 'production': 'weymela-production'
+            }[image.get('firebaseTarget')]):
+        raise ValueError('Web Firebase target/project mismatch')
+    if component == 'web' and image['firebaseTarget'] != env.get('V3_FIREBASE_TARGET', 'pilot'):
+        raise ValueError('Web Firebase target does not match selected release target')
     name = f"ghcr.io/{env['GITHUB_REPOSITORY'].split('/')[0].lower()}/weymela-v3-{component}"
     if not re.fullmatch(re.escape(name) + r'@sha256:[a-f0-9]{64}', image['digest']):
         raise ValueError('Invalid published digest')

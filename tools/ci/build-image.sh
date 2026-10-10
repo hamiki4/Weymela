@@ -19,11 +19,16 @@ resolve_base() {
   printf '%s@%s' "$reference" "$digest"
 }
 if test "$component" = web; then
-  : "${VITE_FIREBASE_API_KEY:?Pilot Firebase Web API key is required}"
-  : "${VITE_FIREBASE_AUTH_DOMAIN:?Pilot Firebase Web auth domain is required}"
-  : "${VITE_FIREBASE_PROJECT_ID:?Pilot Firebase Web project is required}"
-  : "${VITE_FIREBASE_APP_ID:?Pilot Firebase Web app ID is required}"
-  test "$VITE_FIREBASE_PROJECT_ID" = weymela-pilot
+  : "${VITE_FIREBASE_API_KEY:?Firebase Web API key is required for the selected target}"
+  : "${VITE_FIREBASE_AUTH_DOMAIN:?Firebase Web auth domain is required for the selected target}"
+  : "${VITE_FIREBASE_PROJECT_ID:?Firebase Web project is required for the selected target}"
+  : "${VITE_FIREBASE_APP_ID:?Firebase Web app ID is required for the selected target}"
+  firebase_target="${V3_FIREBASE_TARGET:-pilot}"
+  case "$firebase_target" in
+    pilot) test "$VITE_FIREBASE_PROJECT_ID" = weymela-pilot ;;
+    production) test "$VITE_FIREBASE_PROJECT_ID" = weymela-production ;;
+    *) printf '%s\n' 'Only the Pilot or Production Firebase target is supported.' >&2; exit 1 ;;
+  esac
   [[ "$VITE_FIREBASE_API_KEY" =~ ^AIza[A-Za-z0-9_-]{35}$ ]]
   [[ "$VITE_FIREBASE_AUTH_DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$ ]]
   [[ "$VITE_FIREBASE_APP_ID" =~ ^[0-9]+:[0-9]+:web:[A-Za-z0-9]+$ ]]
@@ -55,12 +60,14 @@ print(digest.hexdigest())
   build_args=(--build-arg "NODE_IMAGE=$node_image" --build-arg "WEB_IMAGE=$web_image"
     --build-arg "V3_SOURCE_COMMIT=$GITHUB_SHA"
     --build-arg "V3_FRONTEND_SOURCE_FINGERPRINT=$frontend_source_fingerprint"
+    --build-arg "V3_FIREBASE_TARGET=$firebase_target"
     --build-arg "VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY"
     --build-arg "VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN"
     --build-arg "VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID"
     --build-arg "VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID")
   printf '%s\n%s\n' "$node_image" "$web_image" > ".artifacts/release/$component-bases.txt"
   printf '%s\n' "$VITE_FIREBASE_PROJECT_ID" > ".artifacts/release/web-firebase-project.txt"
+  printf '%s\n' "$firebase_target" > ".artifacts/release/web-firebase-target.txt"
 else
   sdk_image="$(resolve_base mcr.microsoft.com/dotnet/sdk:10.0-noble)"
   runtime_image="$(resolve_base mcr.microsoft.com/dotnet/aspnet:10.0-noble)"

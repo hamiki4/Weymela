@@ -83,6 +83,7 @@ class ImageEvidenceTests(unittest.TestCase):
         self.images = self.root/'release/images'; self.images.mkdir(parents=True)
         self.env = {'GITHUB_SHA': 'a'*40, 'GITHUB_REPOSITORY': 'hamiki4/WeymelaV3',
                     'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1', 'COMPONENT': 'web',
+                    'V3_FIREBASE_TARGET': 'pilot',
                     'BUILD_OUTCOME': 'success', 'SCAN_OUTCOME': 'success',
                     'PUBLISH_OUTCOME': 'success', 'SBOM_OUTCOME': 'success',
                     'ATTESTATION_MODE': 'unavailable', 'ATTESTATION_OUTCOME': 'skipped'}
@@ -91,7 +92,9 @@ class ImageEvidenceTests(unittest.TestCase):
                      'image': f'ghcr.io/hamiki4/weymela-v3-{component}:v3-test',
                      'digest': f'ghcr.io/hamiki4/weymela-v3-{component}@sha256:'+'1'*64,
                      'imageId': 'sha256:'+'2'*64}
-            if component == 'web': image['firebaseProjectId'] = 'weymela-pilot'
+            if component == 'web':
+                image['firebaseTarget'] = 'pilot'
+                image['firebaseProjectId'] = 'weymela-pilot'
             self.write(f'{component}-image', image)
             self.write(f'{component}-security', {'SchemaVersion': 2, 'Metadata': {'ImageID': image['imageId']}, 'Results': []})
             self.write(f'{component}-sbom', {'bomFormat': 'CycloneDX', 'specVersion': '1.6'})
@@ -112,6 +115,18 @@ class ImageEvidenceTests(unittest.TestCase):
         self.assertNotIn('id', image['attestation'])
         self.assertEqual(image['scan']['status'], 'passed')
         self.assertEqual(image['sbom']['path'], 'images/web-sbom.json')
+        self.assertEqual(image['firebaseTarget'], 'pilot')
+
+    def test_web_evidence_accepts_only_the_selected_project_identity(self):
+        image = json.loads((self.images/'web-image.json').read_text())
+        image['firebaseTarget'] = 'production'
+        image['firebaseProjectId'] = 'weymela-production'
+        self.write('web-image', image)
+        self.env['V3_FIREBASE_TARGET'] = 'production'
+        self.assertEqual(self.complete()['firebaseProjectId'], 'weymela-production')
+        self.env['V3_FIREBASE_TARGET'] = 'pilot'
+        with self.assertRaisesRegex(ValueError, 'selected release target'):
+            self.complete()
 
     def test_disabled_supported_repository_records_not_enabled(self):
         self.assertEqual(self.complete(ATTESTATION_MODE='not-enabled')['attestation']['status'], 'not-enabled')

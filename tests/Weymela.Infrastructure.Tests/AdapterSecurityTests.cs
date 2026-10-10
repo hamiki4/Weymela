@@ -53,6 +53,21 @@ public sealed class AdapterSecurityTests
         ["V3:CreatorPhotos:Directory"] = PhotoDirectory.FullName,
         ["V3:ReviewMedia:Directory"] = ReviewMediaDirectory.FullName
     };
+    private static Dictionary<string, string?> ProductionConfig()
+    {
+        var config = Config();
+        config["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_prod_test;Username=isolated;Password=test-only";
+        config["V3:Auth:FirebaseProjectId"] = "weymela-production";
+        config["V3:Auth:ResendFromAddress"] = "no-reply@mail.weymela.com";
+        config["V3:Auth:ResendFromName"] = "Weymela";
+        config["GOOGLE_APPLICATION_CREDENTIALS"] = "/run/secrets/weymela-production-firebase-admin.json";
+        config["V3:Auth:CookieKeyDirectory"] = "/run/weymela-v3/production-keys";
+        config["V3:Auth:CookieCertificatePath"] = "/run/secrets/weymela-production-cookie-protection.pfx";
+        config["V3:AllowedOrigins:0"] = "https://weymela.com";
+        config["V3:PublicWebUrl"] = "https://weymela.com";
+        config["V3:PublicApiUrl"] = "https://api.weymela.com";
+        return config;
+    }
     [Fact] public void Fully_explicit_pilot_configuration_defaults_to_frozen_and_bounded_without_connecting()
     {
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
@@ -211,26 +226,61 @@ public sealed class AdapterSecurityTests
     {
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
         var services = new ServiceCollection();
-        services.AddWeymelaPersistence(options.ConnectionString).AddPilotAuthenticationAdapters(options);
+        services.AddWeymelaPersistence(options.ConnectionString).AddConfiguredAuthenticationAdapters(options);
         Assert.Equal(ServiceLifetime.Singleton, services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).Lifetime);
         Assert.NotNull(services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationFactory);
         Assert.Equal(typeof(FirebaseAdminCustomTokenIssuer), services.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
 
         var disabled = new ServiceCollection();
-        disabled.AddWeymelaPersistence(options.ConnectionString).AddPilotAuthenticationAdapters(new RuntimeOptions());
+        disabled.AddWeymelaPersistence(options.ConnectionString).AddConfiguredAuthenticationAdapters(new RuntimeOptions());
         Assert.Equal(typeof(DisabledEmailCodeDelivery), disabled.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);
         Assert.Equal(typeof(DisabledFirebaseCustomTokenIssuer), disabled.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
     }
-    [Fact] public void Pilot_adapters_cannot_be_activated_as_Production_configuration()
+    [Fact] public void Production_requires_project_scoped_firebase_and_resend_configuration()
     {
-        var config = Config();
-        config["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_prod_test;Username=isolated;Password=test-only";
+        var config = ProductionConfig();
+        var production = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.Equal("weymela-production", production.FirebaseProjectId);
+        Assert.Equal("Resend", production.EmailDeliveryMode);
+        Assert.Equal("FirebaseAdmin", production.FirebaseCustomTokenMode);
+        Assert.Equal("/run/secrets/weymela-production-firebase-admin.json", production.FirebaseAdminCredentialsPath);
+
+        config = ProductionConfig();
+        config["V3:Auth:FirebaseProjectId"] = "weymela-pilot";
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
 
+        config = ProductionConfig();
+        config["V3:AllowedOrigins:1"] = "https://pilot.weymela.com";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config = ProductionConfig();
         config["V3:Auth:EmailDeliveryMode"] = "Disabled";
-        config["V3:Auth:FirebaseCustomTokenMode"] = "Disabled";
-        var production = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config = ProductionConfig();
+        config["V3:Auth:ResendFromAddress"] = "no-reply@pilot-mail.weymela.com";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config = ProductionConfig();
+        config["GOOGLE_APPLICATION_CREDENTIALS"] = "relative.json";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config = ProductionConfig();
+        config["V3:Auth:CookieKeyDirectory"] = "/run/weymela-v3/keys";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config = ProductionConfig();
+        config["V3:Auth:PinPepper"] = config["V3:Auth:CodeHashKey"];
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+
+        config = ProductionConfig();
         config["V3:FinancialWritesEnabled"] = "true";
         config["V3:PilotFinancialWritesUntilUtc"] = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
@@ -243,10 +293,24 @@ public sealed class AdapterSecurityTests
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
         Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production", worker: true));
+    }
+    [Fact] public void Production_api_registers_auth_adapters_but_worker_does_not()
+    {
+        var config = ProductionConfig();
+        var production = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
         var services = new ServiceCollection();
-        services.AddWeymelaPersistence(production.ConnectionString).AddPilotAuthenticationAdapters(production);
-        Assert.Equal(typeof(DisabledEmailCodeDelivery), services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);
-        Assert.Equal(typeof(DisabledFirebaseCustomTokenIssuer), services.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
+        services.AddWeymelaPersistence(production.ConnectionString).AddConfiguredAuthenticationAdapters(production);
+        Assert.NotNull(services.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationFactory);
+        Assert.Equal(typeof(FirebaseAdminCustomTokenIssuer), services.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
+
+        config.Remove("V3:CreatorPhotos:Directory");
+        config.Remove("V3:ReviewMedia:Directory");
+        var worker = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production", worker: true);
+        Assert.True(worker.IsWorkerProcess);
+        var workerServices = new ServiceCollection();
+        workerServices.AddWeymelaPersistence(worker.ConnectionString).AddConfiguredAuthenticationAdapters(worker);
+        Assert.Equal(typeof(DisabledEmailCodeDelivery), workerServices.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);
+        Assert.Equal(typeof(DisabledFirebaseCustomTokenIssuer), workerServices.Last(x => x.ServiceType == typeof(IFirebaseCustomTokenIssuer)).ImplementationType);
     }
     [Fact] public void Financial_write_gate_fails_closed_for_manually_constructed_non_pilot_options()
     {

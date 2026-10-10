@@ -41,7 +41,7 @@ public static class ApiHost
         builder.Services.ConfigureHttpJsonOptions(o=>{o.SerializerOptions.UnmappedMemberHandling=JsonUnmappedMemberHandling.Disallow;o.SerializerOptions.MaxDepth=16;});
         builder.Services.AddWeymelaPersistence(options.ConnectionString);
         builder.Services.AddSingleton<IPayoutDestinationProtector, PayoutDestinationProtector>();
-        builder.Services.AddPilotAuthenticationAdapters(options);
+        builder.Services.AddConfiguredAuthenticationAdapters(options);
         builder.Services.TryAddSingleton<IAccountIdentityDeletionProvider,DisabledAccountIdentityDeletionProvider>();
         builder.Services.AddScoped<AccountDeletionService>();
         builder.Services.AddScoped<AccountIdentityDeletionProcessor>();

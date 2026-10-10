@@ -233,7 +233,7 @@ public static class AuthenticationAdapters
     public static IServiceCollection AddConfiguredAuthenticationAdapters(
         this IServiceCollection services, RuntimeOptions options)
     {
-        if (options.EnvironmentName is not ("Pilot" or "Production")) return services;
+        if (options.IsWorkerProcess || options.EnvironmentName is not ("Pilot" or "Production")) return services;
         if (options.EmailDeliveryMode == "Resend")
         {
             services.Replace(ServiceDescriptor.Singleton<IEmailCodeDelivery>(sp =>

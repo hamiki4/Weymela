@@ -306,6 +306,7 @@ public sealed class AdapterSecurityTests
         config.Remove("V3:CreatorPhotos:Directory");
         config.Remove("V3:ReviewMedia:Directory");
         var worker = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production", worker: true);
+        Assert.True(worker.IsWorkerProcess);
         var workerServices = new ServiceCollection();
         workerServices.AddWeymelaPersistence(worker.ConnectionString).AddConfiguredAuthenticationAdapters(worker);
         Assert.Equal(typeof(DisabledEmailCodeDelivery), workerServices.Last(x => x.ServiceType == typeof(IEmailCodeDelivery)).ImplementationType);

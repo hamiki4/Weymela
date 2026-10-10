@@ -11,6 +11,7 @@ public sealed class RuntimeOptions
     public const string CameraPolicy = "camera=(self), microphone=(), geolocation=(self), payment=(), usb=()";
     public bool Development { get; init; }
     public string EnvironmentName { get; init; } = "Development";
+    public bool IsWorkerProcess { get; init; }
     public bool DevelopmentIdentity { get; init; }
     public string ConnectionString { get; init; } = "";
     public string[] AllowedOrigins { get; init; } = [];
@@ -242,7 +243,7 @@ public sealed class RuntimeOptions
         Require(proxies.All(p => System.Net.IPAddress.TryParse(p, out _)), "Trusted proxies must be explicit IP addresses.");
         return new()
         {
-            EnvironmentName = environment, Development = dev, DevelopmentIdentity = devIdentity, ConnectionString = db.ConnectionString, AllowedOrigins = origins,
+            EnvironmentName = environment, IsWorkerProcess = worker, Development = dev, DevelopmentIdentity = devIdentity, ConnectionString = db.ConnectionString, AllowedOrigins = origins,
             PublicWebUrl = web, PublicApiUrl = api, FirebaseProjectId = project,
             EmailDeliveryMode = emailDelivery, FirebaseCustomTokenMode = customToken, AuthCodeHashKey = config["V3:Auth:CodeHashKey"],
             PinPepper = config["V3:Auth:PinPepper"],

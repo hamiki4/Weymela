@@ -56,7 +56,7 @@ public sealed class AdapterSecurityTests
     private static Dictionary<string, string?> ProductionConfig()
     {
         var config = Config();
-        config["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_prod_test;Username=isolated;Password=test-only";
+        config["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_prod_auth_test;Username=isolated;Password=test-only";
         config["V3:Auth:FirebaseProjectId"] = "weymela-production";
         config["V3:Auth:ResendFromAddress"] = "no-reply@mail.weymela.com";
         config["V3:Auth:ResendFromName"] = "Weymela";
@@ -73,8 +73,60 @@ public sealed class AdapterSecurityTests
         var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(Config()).Build(), "Pilot");
         Assert.False(options.DevelopmentIdentity); Assert.False(options.FinancialWritesEnabled); Assert.Equal("Disabled", options.DepositMode);
         Assert.Equal("Resend", options.EmailDeliveryMode); Assert.Equal("FirebaseAdmin", options.FirebaseCustomTokenMode);
-        Assert.Equal(20, new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString).MaxPoolSize);
-        Assert.False(new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString).IncludeErrorDetail);
+        var database = new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString);
+        Assert.Equal("test-only", database.Password);
+        Assert.Equal(20, database.MaxPoolSize);
+        Assert.False(database.IncludeErrorDetail);
+    }
+    [Fact] public void Passfile_only_database_authentication_requires_a_private_absolute_regular_file()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var passfile = Path.Combine(Path.GetTempPath(), "v3-runtime-passfile-" + Guid.NewGuid().ToString("N"));
+        var link = passfile + ".link";
+        try
+        {
+            File.WriteAllText(passfile, "127.0.0.1:1:weymela_v3_pilot_test:isolated:fixture\n");
+            File.SetUnixFileMode(passfile, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            var config = Config();
+            var connection = new Npgsql.NpgsqlConnectionStringBuilder(config["ConnectionStrings:WeymelaV3"]);
+            connection.Password = "";
+            connection.Passfile = passfile;
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
+
+            var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot");
+            var loaded = new Npgsql.NpgsqlConnectionStringBuilder(options.ConnectionString);
+            Assert.True(string.IsNullOrEmpty(loaded.Password));
+            Assert.Equal(passfile, loaded.Passfile);
+
+            connection.Passfile = passfile + ".missing";
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+
+            connection.Passfile = passfile;
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
+
+            File.SetUnixFileMode(passfile, UnixFileMode.UserRead | UnixFileMode.GroupRead);
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+
+            File.SetUnixFileMode(passfile, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.CreateSymbolicLink(link, passfile);
+            connection.Passfile = link;
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+
+            connection.Passfile = Path.GetFileName(passfile);
+            config["ConnectionStrings:WeymelaV3"] = connection.ConnectionString;
+            Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+                new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
+        }
+        finally
+        {
+            if (File.Exists(link)) File.Delete(link);
+            if (File.Exists(passfile)) File.Delete(passfile);
+        }
     }
     [Fact] public void Pilot_accepts_the_approved_single_origin_without_weakening_other_runtime_guards()
     {
@@ -244,6 +296,13 @@ public sealed class AdapterSecurityTests
         Assert.Equal("Resend", production.EmailDeliveryMode);
         Assert.Equal("FirebaseAdmin", production.FirebaseCustomTokenMode);
         Assert.Equal("/run/secrets/weymela-production-firebase-admin.json", production.FirebaseAdminCredentialsPath);
+        Assert.False(production.FinancialWritesEnabled);
+        Assert.Equal("Disabled", production.DepositMode);
+
+        config = ProductionConfig();
+        config["ConnectionStrings:WeymelaV3"] = "Host=127.0.0.1;Port=1;Database=weymela_v3_pilot;Username=isolated;Password=test-only";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
 
         config = ProductionConfig();
         config["V3:Auth:FirebaseProjectId"] = "weymela-pilot";

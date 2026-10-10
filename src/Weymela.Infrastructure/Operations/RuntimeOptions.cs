@@ -76,7 +76,11 @@ public sealed class RuntimeOptions
             Require(environment is "Pilot" or "Production" or "Acceptance", "Unknown environment; use Development, Pilot or Production.");
             var prefix = environment == "Production" ? "weymela_v3_prod" : "weymela_v3_pilot";
             Require(environment == "Acceptance" || (db.Database ?? "").StartsWith(prefix, StringComparison.Ordinal), "Database must match the V3 environment.");
-            Require(!string.IsNullOrWhiteSpace(db.Username) && !string.IsNullOrWhiteSpace(db.Password), "Database credentials must be provided externally.");
+            var hasPassword = !string.IsNullOrWhiteSpace(db.Password);
+            var hasPassfile = !string.IsNullOrWhiteSpace(db.Passfile);
+            Require(!hasPassfile || IsSecurePassfile(db.Passfile),
+                "Database Passfile must be an absolute, private regular file.");
+            Require(!string.IsNullOrWhiteSpace(db.Username) && (hasPassword || hasPassfile), "Database credentials must be provided externally.");
         }
         db.MaxPoolSize = Math.Min(db.MaxPoolSize, worker ? 5 : 20);
         db.MinPoolSize = 0; db.Timeout = Math.Min(db.Timeout, 10); db.CommandTimeout = 30;
@@ -274,6 +278,28 @@ public sealed class RuntimeOptions
         && !ContainsPlaceholder(value);
     private static bool IsProtectedPassword(string? value) => value is { Length: >= 16 and <= 512 }
         && !value.Any(char.IsControl) && !ContainsPlaceholder(value);
+    private static bool IsSecurePassfile(string path)
+    {
+        if (!Path.IsPathFullyQualified(path)) return false;
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.LinkTarget is not null) return false;
+            var attributes = File.GetAttributes(path);
+            if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0) return false;
+            if (!OperatingSystem.IsLinux()) return false;
+            var mode = File.GetUnixFileMode(path);
+            const UnixFileMode groupOrOther = UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute;
+            return (mode & groupOrOther) == 0
+                && (mode & UnixFileMode.UserRead) != 0
+                && (mode & UnixFileMode.UserExecute) == 0;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (PlatformNotSupportedException) { return false; }
+        catch (ArgumentException) { return false; }
+    }
     private static bool ContainsPlaceholder(string value) =>
         new[] { "placeholder", "replace-me", "replace_me", "change-me", "example", "external", "test-only", "not-a-live" }
             .Any(candidate => value.Contains(candidate, StringComparison.OrdinalIgnoreCase));

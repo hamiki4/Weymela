@@ -7,6 +7,7 @@ user ID. It is a manually executed console tool, never a public API or Web UI op
 
 - Run only from a trusted V3 administration context.
 - Supply `V3_BOOTSTRAP_CONNECTION` from the protected V3 bootstrap secret store.
+- Select a target explicitly with `--target pilot` or `--target production-test`; there is no implicit target.
 - The target guard must report `current_database() = weymela_v3_pilot` and
   `current_user = weymela_v3_bootstrap`.
 - Confirm the owner-approved Firebase project is `weymela-pilot`.
@@ -17,6 +18,7 @@ user ID. It is a manually executed console tool, never a public API or Web UI op
 ```text
 V3_BOOTSTRAP_CONNECTION=<protected-external-value> dotnet run \
   --project src/Weymela.Bootstrap/Weymela.Bootstrap.csproj -- \
+  --target pilot \
   --firebase-project weymela-pilot \
   --firebase-uid <owner-approved-firebase-uid> \
   --user-id <v3-user-guid> \
@@ -54,3 +56,35 @@ Supply all values as arguments; no financial value is hard-coded by the tool. Us
 `--effective-from`, bounded operator reference/idempotency key and correlation ID. Optional
 minimum Promotion budgets are omitted when the owner approves `null`. Rehearse the exact command
 against a restored isolated database before Pilot use.
+
+## Isolated Production authentication test target
+
+The test target is available only with the exact database `weymela_v3_prod_auth_test` and
+bootstrap role `weymela_v3_prod_auth_test_bootstrap`. The tool validates the explicit target,
+database, and role before opening a connection, then checks `current_database()` and
+`current_user` on the connected server before it can write. It rejects the Pilot database,
+the live V3 Production database name, and mismatched roles. Use a disposable isolated database
+server and its protected bootstrap credential; never point this target at a live server.
+
+First create the synthetic test identity and Firebase binding inside that isolated database
+using the existing test-only auth fixture procedure. Then provision its trusted test admin:
+
+```text
+V3_BOOTSTRAP_CONNECTION=<protected-test-only-value> dotnet run \
+  --project src/Weymela.Bootstrap/Weymela.Bootstrap.csproj -- \
+  --target production-test \
+  --firebase-project weymela-production \
+  --firebase-uid <synthetic-test-firebase-uid> \
+  --user-id <test-v3-user-guid> \
+  --valid-after <utc-rfc3339> \
+  --operator-user-id <test-operator-guid> \
+  --operator-reference <test-only-reference> \
+  --correlation-id <correlation-guid> \
+  --idempotency-key <unique-test-bootstrap-key>
+```
+
+The synthetic identity and any test legal-policy fixtures belong only in this disposable
+database. They do not represent approved Production policies or identities. Keep
+`V3:FinancialWritesEnabled=false` and deposits disabled in the API/Worker runtime configuration.
+Remove the isolated database and its credentials after the tests. The `--target pilot` contract,
+database, and role remain unchanged.

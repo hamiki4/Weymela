@@ -25,13 +25,40 @@ public sealed record PlatformAdminBootstrapRequest(
 
 public sealed record PlatformAdminBootstrapResult(Guid UserId, Guid BindingId, bool Replayed);
 
+public sealed record V3BootstrapTarget(string Name, string DatabaseName, string BootstrapRole, string FirebaseProjectId);
+
 public static class PlatformAdminBootstrapTarget
 {
     public const string DatabaseName = "weymela_v3_pilot";
     public const string BootstrapRole = "weymela_v3_bootstrap";
+    public const string ProductionTestDatabaseName = "weymela_v3_prod_auth_test";
+    public const string ProductionTestBootstrapRole = "weymela_v3_prod_auth_test_bootstrap";
 
-    public static async Task VerifyAsync(WeymelaDbContext db, CancellationToken cancellationToken)
-        => await VerifyAsync(db, DatabaseName, BootstrapRole, cancellationToken);
+    public static V3BootstrapTarget Select(string? target) => target switch
+        {
+            "pilot" => new V3BootstrapTarget("pilot", DatabaseName, BootstrapRole, "weymela-pilot"),
+            "production-test" => new V3BootstrapTarget("production-test", ProductionTestDatabaseName,
+                ProductionTestBootstrapRole, "weymela-production"),
+            _ => throw new InvalidOperationException("An explicit bootstrap target is required: pilot or production-test.")
+        };
+
+    public static V3BootstrapTarget Resolve(string? target, string connectionString)
+        => ValidateConnection(Select(target), connectionString);
+
+    public static V3BootstrapTarget ValidateConnection(V3BootstrapTarget selected, string connectionString)
+    {
+        NpgsqlConnectionStringBuilder connection;
+        try { connection = new NpgsqlConnectionStringBuilder(connectionString); }
+        catch { throw new InvalidOperationException("Invalid V3 bootstrap connection configuration."); }
+        if (!string.Equals(connection.Database, selected.DatabaseName, StringComparison.Ordinal)
+            || !string.Equals(connection.Username, selected.BootstrapRole, StringComparison.Ordinal))
+            throw new InvalidOperationException("Bootstrap connection does not match the explicitly selected isolated target.");
+        return selected;
+    }
+
+    public static Task VerifyAsync(WeymelaDbContext db, V3BootstrapTarget target,
+        CancellationToken cancellationToken = default)
+        => VerifyAsync(db, target.DatabaseName, target.BootstrapRole, cancellationToken);
 
     public static async Task VerifyAsync(WeymelaDbContext db, string expectedDatabase, string expectedRole, CancellationToken cancellationToken = default)
     {
@@ -43,7 +70,7 @@ public static class PlatformAdminBootstrapTarget
         if (!await reader.ReadAsync(cancellationToken)
             || !string.Equals(reader.GetString(0), expectedDatabase, StringComparison.Ordinal)
             || !string.Equals(reader.GetString(1), expectedRole, StringComparison.Ordinal))
-            throw new InvalidOperationException("Bootstrap target guard failed: expected the isolated V3 Pilot database and bootstrap role.");
+            throw new InvalidOperationException("Bootstrap target guard failed: database and role do not match the selected isolated target.");
     }
 }
 

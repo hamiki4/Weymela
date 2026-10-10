@@ -26,16 +26,27 @@ for (var i = 0; i < args.Length; i++)
 {
     if (!args[i].StartsWith("--", StringComparison.Ordinal) || i + 1 >= args.Length)
         throw new ArgumentException("Arguments must be --name value pairs.");
-    values[args[i][2..]] = args[++i];
+    if (!values.TryAdd(args[i][2..], args[++i]))
+        throw new ArgumentException("An option may be supplied only once.");
 }
+
+var targetName = values.GetValueOrDefault("target");
+var selectedTarget = PlatformAdminBootstrapTarget.Select(targetName);
+var operation = values.GetValueOrDefault("operation") ?? "platform-admin";
+if (operation is not ("platform-admin" or "financial-configuration-v1"))
+    throw new ArgumentException("Unsupported bootstrap operation.");
 
 var connection = Environment.GetEnvironmentVariable("V3_BOOTSTRAP_CONNECTION")
     ?? throw new InvalidOperationException("V3_BOOTSTRAP_CONNECTION must be supplied outside source control.");
+var target = PlatformAdminBootstrapTarget.ValidateConnection(selectedTarget, connection);
+if (operation == "platform-admin"
+    && !string.Equals(Required(values, "firebase-project"), target.FirebaseProjectId, StringComparison.Ordinal))
+    throw new InvalidOperationException("Firebase project does not match the explicitly selected bootstrap target.");
+
 var options = new DbContextOptionsBuilder<WeymelaDbContext>().UseNpgsql(connection).Options;
 await using var db = new WeymelaDbContext(options);
-await PlatformAdminBootstrapTarget.VerifyAsync(db, CancellationToken.None);
+await PlatformAdminBootstrapTarget.VerifyAsync(db, target, CancellationToken.None);
 
-var operation = values.GetValueOrDefault("operation") ?? "platform-admin";
 if (string.Equals(operation, "financial-configuration-v1", StringComparison.Ordinal))
 {
     var effective = DateTime.Parse(Required(values, "effective-from"), null,
@@ -65,9 +76,6 @@ if (string.Equals(operation, "financial-configuration-v1", StringComparison.Ordi
     Console.WriteLine($"Financial configuration Version 1 bootstrap {(financialResult.Replayed ? "replayed" : "provisioned")}: configuration={financialResult.ConfigurationId:D}, version={financialResult.VersionId:D}, effective={financialResult.EffectiveFromUtc:O}");
     return;
 }
-if (!string.Equals(operation, "platform-admin", StringComparison.Ordinal))
-    throw new ArgumentException("Unsupported bootstrap operation.");
-
 var request = new PlatformAdminBootstrapRequest(
     Required(values, "firebase-project"),
     Required(values, "firebase-uid"),

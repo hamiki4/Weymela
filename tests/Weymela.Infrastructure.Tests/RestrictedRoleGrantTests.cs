@@ -762,7 +762,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             Version = 1
         });
         await db.SaveChangesAsync();
-        var result = await new PlatformAdminBootstrapper(db).ProvisionAsync(
+        var result = await new PlatformAdminBootstrapper(db,
+            PlatformAdminBootstrapTarget.Select("pilot")).ProvisionAsync(
             new PlatformAdminBootstrapRequest(
                 "weymela-pilot",
                 $"restricted-admin-{adminUserId:N}",

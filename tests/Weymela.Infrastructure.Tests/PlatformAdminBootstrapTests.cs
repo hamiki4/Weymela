@@ -13,8 +13,11 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
 {
     private static readonly DateTime BindingValidAfter = new(2026, 9, 12, 20, 0, 0, DateTimeKind.Utc);
 
-    private static PlatformAdminBootstrapRequest Request(Guid user, Guid operatorUser, string uid = "firebase-owner-uid") =>
-        new("weymela-pilot", uid, user, BindingValidAfter, operatorUser,
+    private static V3BootstrapTarget PilotTarget => PlatformAdminBootstrapTarget.Select("pilot");
+
+    private static PlatformAdminBootstrapRequest Request(Guid user, Guid operatorUser, string uid = "firebase-owner-uid",
+        string project = "weymela-pilot") =>
+        new(project, uid, user, BindingValidAfter, operatorUser,
             "owner-approved-console-bootstrap", Guid.NewGuid(), "bootstrap-once-001");
 
     [Fact]
@@ -24,7 +27,7 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid(); var op = Guid.NewGuid();
         var bindingId = await SeedBindingAsync(db, user);
-        var result = await new PlatformAdminBootstrapper(db).ProvisionAsync(Request(user, op));
+        var result = await new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(Request(user, op));
 
         Assert.False(result.Replayed);
         Assert.Equal(bindingId, result.BindingId);
@@ -46,8 +49,8 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid(); var op = Guid.NewGuid(); var request = Request(user, op);
         await SeedBindingAsync(db, user);
-        var first = await new PlatformAdminBootstrapper(db).ProvisionAsync(request);
-        var replay = await new PlatformAdminBootstrapper(db).ProvisionAsync(request);
+        var first = await new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(request);
+        var replay = await new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(request);
 
         Assert.False(first.Replayed);
         Assert.True(replay.Replayed);
@@ -66,10 +69,10 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         var user = Guid.NewGuid(); var op = Guid.NewGuid();
         await SeedBindingAsync(db, user);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db)
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db, PilotTarget)
             .ProvisionAsync(Request(user, op, "different-firebase-uid")));
         var otherUserRequest = Request(Guid.NewGuid(), op) with { IdempotencyKey = "bootstrap-once-002" };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db).ProvisionAsync(otherUserRequest));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(otherUserRequest));
         Assert.Equal(1, await db.IdentityBindings.CountAsync());
         Assert.Empty(await db.CommercePermissions.ToListAsync());
         Assert.Empty(await db.AuditEvents.ToListAsync());
@@ -81,7 +84,7 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db)
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db, PilotTarget)
             .ProvisionAsync(Request(Guid.NewGuid(), Guid.NewGuid())));
 
         Assert.Empty(await db.IdentityBindings.ToListAsync());
@@ -107,10 +110,10 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         await using var db = database.Open();
         var user = Guid.NewGuid(); var op = Guid.NewGuid();
         await SeedBindingAsync(db, user);
-        await new PlatformAdminBootstrapper(db).ProvisionAsync(Request(user, op));
+        await new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(Request(user, op));
 
         var second = Request(user, op) with { IdempotencyKey = "bootstrap-once-002" };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db).ProvisionAsync(second));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(second));
         Assert.Equal(1, await db.CommercePermissions.CountAsync(x => x.Role == ActorRole.PlatformAdmin && x.IsActive));
         Assert.Equal(1, await db.IdentityBindings.CountAsync());
         Assert.Equal(1, await db.AuditEvents.CountAsync());
@@ -140,17 +143,41 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         await Assert.ThrowsAsync<InvalidOperationException>(() => PlatformAdminBootstrapTarget.VerifyAsync(db, "weymela_v3_pilot", "v3_test"));
     }
 
-    private static async Task<Guid> SeedBindingAsync(WeymelaDbContext db, Guid user, string uid = "firebase-owner-uid")
+    [Fact]
+    public async Task Production_test_target_accepts_only_its_matching_firebase_project()
     {
-        var binding = Binding(user, uid);
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid(); var op = Guid.NewGuid();
+        var request = Request(user, op, "synthetic-production-test-uid", "weymela-production");
+        await SeedBindingAsync(db, user, request.FirebaseUid, request.FirebaseProjectId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PlatformAdminBootstrapper(db, PilotTarget).ProvisionAsync(request));
+        Assert.Empty(await db.CommercePermissions.ToListAsync());
+
+        var result = await new PlatformAdminBootstrapper(db,
+            PlatformAdminBootstrapTarget.Select("production-test")).ProvisionAsync(request);
+
+        Assert.Equal(user, result.UserId);
+        Assert.Equal("weymela-production", (await db.IdentityBindings.SingleAsync()).ProjectId);
+        Assert.Equal(ActorRole.PlatformAdmin, (await db.CommercePermissions.SingleAsync()).Role);
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
+        Assert.Equal(1, await db.AuditEvents.CountAsync());
+    }
+
+    private static async Task<Guid> SeedBindingAsync(WeymelaDbContext db, Guid user, string uid = "firebase-owner-uid",
+        string project = "weymela-pilot")
+    {
+        var binding = Binding(user, uid, project);
         db.IdentityBindings.Add(binding);
         await db.SaveChangesAsync();
         return binding.Id;
     }
 
-    private static IdentityBinding Binding(Guid user, string uid) => new()
+    private static IdentityBinding Binding(Guid user, string uid, string project = "weymela-pilot") => new()
     {
-        Provider = "Firebase", ProjectId = "weymela-pilot", ExternalSubject = uid,
+        Provider = "Firebase", ProjectId = project, ExternalSubject = uid,
         UserId = user, IsActive = true, ValidAfterUtc = BindingValidAfter, Version = 1
     };
 }

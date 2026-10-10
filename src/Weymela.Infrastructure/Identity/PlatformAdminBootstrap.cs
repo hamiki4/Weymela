@@ -74,13 +74,14 @@ public static class PlatformAdminBootstrapTarget
     }
 }
 
-public sealed class PlatformAdminBootstrapper(WeymelaDbContext db)
+public sealed class PlatformAdminBootstrapper(WeymelaDbContext db, V3BootstrapTarget target)
 {
     private const string Operation = "PlatformAdminBootstrap";
+    private readonly V3BootstrapTarget _target = PlatformAdminBootstrapTarget.Select(target.Name);
 
     public async Task<PlatformAdminBootstrapResult> ProvisionAsync(PlatformAdminBootstrapRequest request, CancellationToken cancellationToken = default)
     {
-        Validate(request);
+        Validate(request, _target.FirebaseProjectId);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
         var fingerprint = Fingerprint(request);
@@ -156,10 +157,10 @@ public sealed class PlatformAdminBootstrapper(WeymelaDbContext db)
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
-    private static void Validate(PlatformAdminBootstrapRequest request)
+    private static void Validate(PlatformAdminBootstrapRequest request, string expectedFirebaseProjectId)
     {
-        if (!string.Equals(request.FirebaseProjectId, "weymela-pilot", StringComparison.Ordinal))
-            throw new InvalidOperationException("Only the owner-approved Firebase project may be provisioned.");
+        if (!string.Equals(request.FirebaseProjectId, expectedFirebaseProjectId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Firebase project does not match the explicitly selected bootstrap target.");
         if (string.IsNullOrWhiteSpace(request.FirebaseUid) || request.FirebaseUid.Length > 128)
             throw new ArgumentException("A valid Firebase UID is required.", nameof(request));
         if (request.UserId == Guid.Empty || request.OperatorUserId == Guid.Empty || request.CorrelationId == Guid.Empty)

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Web;
@@ -105,6 +106,26 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
     }
 
     [Fact]
+    public async Task Production_test_financial_bootstrap_accepts_only_the_selected_target_admin()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var admin = Guid.NewGuid();
+        await SeedAdminAsync(db, admin, "weymela-production");
+        var request = Request(admin);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Bootstrap(db).ProvisionAsync(request));
+        Assert.Empty(await db.FinancialConfigurations.ToListAsync());
+
+        var result = await Bootstrap(db, PlatformAdminBootstrapTarget.Select("production-test"))
+            .ProvisionAsync(request);
+
+        Assert.False(result.Replayed);
+        Assert.Equal("PlatformPricing", (await db.FinancialConfigurations.SingleAsync()).Name);
+        Assert.Equal(1, (await db.FinancialConfigurationVersions.SingleAsync()).Version);
+    }
+
+    [Fact]
     public async Task Normal_platform_admin_settings_create_version_two_after_bootstrap()
     {
         var database = await fixture.CreateAsync();
@@ -125,8 +146,9 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
         Assert.Equal(2, await db.AuditEvents.CountAsync());
     }
 
-    private static FinancialConfigurationBootstrapper Bootstrap(WeymelaDbContext db) =>
-        new(db, new FixedClock(Now));
+    private static FinancialConfigurationBootstrapper Bootstrap(WeymelaDbContext db,
+        V3BootstrapTarget? target = null) =>
+        new(db, target ?? PlatformAdminBootstrapTarget.Select("pilot"), new FixedClock(Now));
 
     private static FinancialConfigurationBootstrapRequest Request(Guid admin) => new(admin,
         Settings(Now), "phase-i1-owner-approved", Guid.Parse("79fb0754-d029-43cb-b442-e58082ec10ba"),
@@ -137,12 +159,13 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
         new(3000, 150, 100, 50, null),
         3, 4, 3, 3000, 4000, effective);
 
-    private static async Task SeedAdminAsync(WeymelaDbContext db, Guid admin)
+    private static async Task SeedAdminAsync(WeymelaDbContext db, Guid admin,
+        string project = "weymela-pilot")
     {
         db.CommercePermissions.Add(new(admin, ActorRole.PlatformAdmin, admin, null, true, false));
         db.IdentityBindings.Add(new IdentityBinding
         {
-            Provider = "Firebase", ProjectId = "weymela-pilot", ExternalSubject = "pilot-owner",
+            Provider = "Firebase", ProjectId = project, ExternalSubject = "pilot-owner",
             UserId = admin, IsActive = true, ValidAfterUtc = Now.AddDays(-1), Version = 1
         });
         await db.SaveChangesAsync();

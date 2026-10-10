@@ -11,8 +11,8 @@ V3__Auth__Provider=Firebase
 V3__Auth__FirebaseProjectId=weymela-production
 V3__Auth__EmailDeliveryMode=Resend
 V3__Auth__FirebaseCustomTokenMode=FirebaseAdmin
-V3__Auth__ResendApiKey=<existing Weymela-Production key from the protected secret store>
-V3__Auth__ResendFromAddress=<owner-selected address>@mail.weymela.com
+V3__Auth__ResendApiKey=<injected from the existing protected secret reference Weymela-Production>
+V3__Auth__ResendFromAddress=no-reply@mail.weymela.com
 V3__Auth__ResendFromName=Weymela
 V3__Auth__CodeHashKey=<independent random 32+ byte secret, strict base64>
 V3__Auth__PinPepper=<different random 32+ byte secret, strict base64>
@@ -22,7 +22,22 @@ V3__Auth__CookieCertificatePath=/run/secrets/weymela-production-cookie-protectio
 V3__Auth__CookieCertificatePassword=<Production-only protected password>
 ```
 
-Mount the existing Production service-account file read-only into the API at the path above only after confirming the credential remains valid and has the `firebaseauth.users.delete` permission used by V3 account deletion. The existing host file is `/etc/creatorpay/firebase/weymela-production-fcm.json`; it identifies `weymela-production`, but its IAM permissions were not inspected. It is currently `0640 root:65534`; the V3 API image runs as `1654:1654`, so a direct mount is unreadable. Give only the V3 API a narrow read path, such as supplementary group `65534` on that read-only mount; do not make the file world-readable. Do not use either Pilot service-account file. The API validates the credential file's project ID when the Firebase Admin signer initializes. Prefer the narrow required permission over broad project roles.
+The proposed sender is `no-reply@mail.weymela.com`; the domain is owner-confirmed as verified, but the sender has not been provider-validated or tested. Keep the existing `Weymela-Production` API key in the approved protected secret store and map its reference to `V3__Auth__ResendApiKey` for the V3 API only. The key label alone is not a deployable secret reference; do not put the key in this file, Compose, Git, or GitHub variables.
+
+The existing Production service-account file is `/etc/creatorpay/firebase/weymela-production-fcm.json`. It identifies `weymela-production`, is `0640 root:65534`, and contains a parseable service-account private key. The V3 API image runs as `1654:1654`. Mount it read-only to the configured target and add only the API's supplementary group so that its existing group-read permission works; do not change the legacy file or make it world-readable. The API mount shape is:
+
+```yaml
+services:
+  api:
+    group_add:
+      - "65534"
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/weymela-production-firebase-admin.json
+    volumes:
+      - /etc/creatorpay/firebase/weymela-production-fcm.json:/run/secrets/weymela-production-firebase-admin.json:ro
+```
+
+Use this on the V3 API service only. The private-key structure and project ID were checked locally, but live credential validity and `firebaseauth.users.delete` IAM permission remain unverified because the authorized Google API check could not reach Google. Confirm both before mounting it for V3. The API validates the credential file's project ID when its Firebase Admin signer initializes. Do not use either Pilot service-account file; prefer the narrow required permission over broad project roles.
 
 The API also requires Production-specific protected cookie-key storage, a cookie certificate and password, the Production database connection, and the approved TLS/origin settings. Do not copy Pilot key material. Keep Firebase Admin credentials and the Resend API key out of Worker and Web configuration.
 
@@ -39,4 +54,4 @@ VITE_FIREBASE_PRODUCTION_APP_ID
 
 They are public Firebase Web configuration and are compiled into the Web image. The release manifest records both the selected target and exact Firebase project ID. The CI release workflow publishes immutable images and artifacts only; it does not deploy them.
 
-The V3 client uses Firebase `signInWithCustomToken` after Weymela verifies email challenges. Firebase Email/Password and Phone sign-in providers are not required for this flow. Registration verification, device enrollment, PIN recovery, and password recovery use Weymela's bounded Resend email-code adapter; codes expire after 10 minutes, are limited to five verification attempts, and resend is throttled for 60 seconds. Recovery is not delegated to Firebase email templates.
+The V3 client uses Firebase `signInWithCustomToken` after Weymela verifies email challenges. Firebase Email/Password and Phone sign-in providers are not required for this flow. Registration verification, device enrollment, PIN recovery, and password recovery use Weymela's bounded Resend email-code adapter; codes expire after 10 minutes, are limited to five verification attempts, and resend is throttled for 60 seconds. Recovery is not delegated to Firebase email templates. Provider sender acceptance and production delivery still require a protected key reference and provider validation; no email was sent during preparation.

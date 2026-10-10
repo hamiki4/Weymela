@@ -72,7 +72,7 @@ if (string.Equals(operation, "financial-configuration-v1", StringComparison.Ordi
         Required(values, "operator-reference"),
         Guid.Parse(Required(values, "correlation-id")),
         Required(values, "idempotency-key"));
-    var financialResult = await new FinancialConfigurationBootstrapper(db).ProvisionAsync(financialRequest);
+    var financialResult = await new FinancialConfigurationBootstrapper(db, target).ProvisionAsync(financialRequest);
     Console.WriteLine($"Financial configuration Version 1 bootstrap {(financialResult.Replayed ? "replayed" : "provisioned")}: configuration={financialResult.ConfigurationId:D}, version={financialResult.VersionId:D}, effective={financialResult.EffectiveFromUtc:O}");
     return;
 }
@@ -85,5 +85,5 @@ var request = new PlatformAdminBootstrapRequest(
     Required(values, "operator-reference"),
     Guid.Parse(Required(values, "correlation-id")),
     Required(values, "idempotency-key"));
-var result = await new PlatformAdminBootstrapper(db).ProvisionAsync(request);
+var result = await new PlatformAdminBootstrapper(db, target).ProvisionAsync(request);
 Console.WriteLine($"Platform Admin bootstrap {(result.Replayed ? "replayed" : "provisioned")}: user={result.UserId:D}, binding={result.BindingId:D}");

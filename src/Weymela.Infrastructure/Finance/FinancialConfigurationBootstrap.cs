@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 
@@ -28,10 +29,11 @@ public sealed record FinancialConfigurationBootstrapResult(
 /// Trusted, operator-run provisioning for the first effective Platform pricing version.
 /// There is deliberately no HTTP endpoint for this one-time operation.
 /// </summary>
-public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, TimeProvider? clock = null)
+public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3BootstrapTarget target, TimeProvider? clock = null)
 {
     private const string Operation = "FinancialConfigurationBootstrap";
     private const string ConfigurationName = "PlatformPricing";
+    private readonly V3BootstrapTarget _target = PlatformAdminBootstrapTarget.Select(target.Name);
     private DateTime Now => (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
 
     public async Task<FinancialConfigurationBootstrapResult> ProvisionAsync(
@@ -105,7 +107,7 @@ public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, Time
         var bindings = await db.IdentityBindings.Where(x => x.UserId == userId && x.IsActive)
             .ToListAsync(cancellationToken);
         if (bindings.Count != 1 || bindings[0].Provider != "Firebase"
-            || bindings[0].ProjectId != "weymela-pilot"
+            || bindings[0].ProjectId != _target.FirebaseProjectId
             || string.IsNullOrWhiteSpace(bindings[0].ExternalSubject)
             || bindings[0].Version <= 0 || bindings[0].ValidAfterUtc > now)
             throw new InvalidOperationException(

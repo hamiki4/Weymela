@@ -228,12 +228,12 @@ public sealed class FirebaseAdminCustomTokenIssuer(
         DateTimeOffset.FromUnixTimeSeconds(now.ToUnixTimeSeconds()).UtcDateTime;
 }
 
-public static class PilotAuthenticationAdapters
+public static class AuthenticationAdapters
 {
-    public static IServiceCollection AddPilotAuthenticationAdapters(
+    public static IServiceCollection AddConfiguredAuthenticationAdapters(
         this IServiceCollection services, RuntimeOptions options)
     {
-        if (options.EnvironmentName != "Pilot") return services;
+        if (options.EnvironmentName is not ("Pilot" or "Production")) return services;
         if (options.EmailDeliveryMode == "Resend")
         {
             services.Replace(ServiceDescriptor.Singleton<IEmailCodeDelivery>(sp =>

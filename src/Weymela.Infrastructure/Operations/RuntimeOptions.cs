@@ -99,11 +99,32 @@ public sealed class RuntimeOptions
             Require(config["V3:Security:TlsEdgeConfirmed"] == "true", "TLS edge and HSTS configuration must be confirmed.");
             Require(emailDelivery is "Disabled" or "Resend", "Unsupported email delivery mode.");
             Require(customToken is "Disabled" or "FirebaseAdmin", "Unsupported Firebase custom-token mode.");
-            if (environment == "Production")
-                Require(emailDelivery == "Disabled" && customToken == "Disabled", "Production authentication adapters are not activated by the Pilot implementation.");
             if (emailDelivery != "Disabled" || customToken != "Disabled")
                 Require(!string.IsNullOrWhiteSpace(config["V3:Auth:CodeHashKey"]), "An external auth code hash key is required when email authentication is enabled.");
             if (!worker) Require(Path.IsPathFullyQualified(config["V3:Auth:CookieKeyDirectory"] ?? "") && Path.IsPathFullyQualified(config["V3:Auth:CookieCertificatePath"] ?? ""), "External protected cookie-key storage is required.");
+            if (!worker && environment == "Production")
+            {
+                Require(project == "weymela-production", "Production must use the approved Firebase project.");
+                Require(web == "https://weymela.com" && origins.SequenceEqual([web], StringComparer.Ordinal),
+                    "Production authentication must use only the approved Weymela Web origin.");
+                Require(emailDelivery == "Resend", "Production requires the Resend email delivery adapter.");
+                Require(customToken == "FirebaseAdmin", "Production requires Firebase Admin custom-token signing.");
+                Require(IsResendKey(resendApiKey), "A protected Production Resend API key is required.");
+                Require(IsProductionResendSender(resendFromAddress), "Production email must use the verified mail.weymela.com domain.");
+                Require(IsSenderName(resendFromName), "A valid Production Resend sender name is required.");
+                var codeHashKey = SecretMaterial(config["V3:Auth:CodeHashKey"], 32);
+                var pinPepper = SecretMaterial(config["V3:Auth:PinPepper"], 32);
+                Require(codeHashKey is not null, "The auth code hash key must be strict base64-encoded 32+ byte secret material.");
+                Require(pinPepper is not null, "The PIN pepper must be strict base64-encoded 32+ byte secret material.");
+                Require(!CryptographicOperations.FixedTimeEquals(codeHashKey!, pinPepper!), "Auth code and PIN secrets must be independent.");
+                Require(firebaseAdminCredentials == "/run/secrets/weymela-production-firebase-admin.json",
+                    "The isolated Production Firebase Admin credential mount is required.");
+                Require(config["V3:Auth:CookieKeyDirectory"] == "/run/weymela-v3/production-keys"
+                    && config["V3:Auth:CookieCertificatePath"] == "/run/secrets/weymela-production-cookie-protection.pfx",
+                    "Production cookie protection must use Production-only mounted paths.");
+                Require(IsProtectedPassword(config["V3:Auth:CookieCertificatePassword"]),
+                    "A protected cookie certificate password is required.");
+            }
             if (!worker && environment == "Pilot")
             {
                 Require(project == "weymela-pilot", "Pilot must use the approved Firebase project.");
@@ -241,6 +262,10 @@ public sealed class RuntimeOptions
         && string.IsNullOrEmpty(u.UserInfo) && !value.Contains('*') && value == u.GetLeftPart(UriPartial.Authority);
     private static bool IsEmail(string value) => value.Length is > 3 and <= 320
         && System.Text.RegularExpressions.Regex.IsMatch(value, "^[^@\\s<>]+@[^@\\s<>]+$")
+        && !value.Any(char.IsControl);
+    private static bool IsProductionResendSender(string value) => IsEmail(value)
+        && value.EndsWith("@mail.weymela.com", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSenderName(string value) => value.Length is > 0 and <= 80
         && !value.Any(char.IsControl);
     private static bool IsResendKey(string? value) => value is { Length: >= 20 and <= 256 }
         && value.StartsWith("re_", StringComparison.Ordinal)

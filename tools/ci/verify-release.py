@@ -21,8 +21,14 @@ def verify(root):
         if item['commit'] != manifest['commit'] or not re.fullmatch(r'ghcr\.io/[a-z0-9_.-]+/weymela-v3-'+item['component']+r'@sha256:[a-f0-9]{64}', item['digest']):
             raise ValueError('Invalid image source/digest')
     web = next(item for item in images if item['component'] == 'web')
-    if web.get('firebaseProjectId') != 'weymela-pilot':
-        raise ValueError('Invalid Web Firebase project identity')
+    firebase_target = web.get('firebaseTarget')
+    if firebase_target is None and web.get('firebaseProjectId') == 'weymela-pilot':
+        firebase_target = 'pilot'  # Existing immutable Pilot release manifests predate target metadata.
+    if (firebase_target not in ('pilot', 'production')
+            or web.get('firebaseProjectId') != {
+                'pilot': 'weymela-pilot', 'production': 'weymela-production'
+            }[firebase_target]):
+        raise ValueError('Invalid Web Firebase target/project identity')
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
     migrations = manifest['migrations']

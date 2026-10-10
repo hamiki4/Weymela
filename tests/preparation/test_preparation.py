@@ -375,7 +375,8 @@ class ComposeIsolationTests(unittest.TestCase):
 
     def manifest(self):
         images = [{'component': p, 'commit': 'test-commit', 'digest': self.config['services'][p]['image']} for p in ('api', 'worker', 'web')]
-        next(item for item in images if item['component'] == 'web')['firebaseProjectId'] = 'weymela-pilot'
+        next(item for item in images if item['component'] == 'web').update(
+            firebaseTarget='pilot', firebaseProjectId='weymela-pilot')
         return {'commit': 'test-commit', 'images': images}
 
     def test_preflight_accepts_matching_isolated_manifest(self):
@@ -550,7 +551,8 @@ class ReleaseIntegrityTests(unittest.TestCase):
         (self.root/'migrations').mkdir()
         commit = 'a'*40
         images = [{'component':p,'commit':commit,'digest':f'ghcr.io/example/weymela-v3-{p}@sha256:'+('1'*64)} for p in ('api','worker','web')]
-        next(item for item in images if item['component'] == 'web')['firebaseProjectId'] = 'weymela-pilot'
+        next(item for item in images if item['component'] == 'web').update(
+            firebaseTarget='pilot', firebaseProjectId='weymela-pilot')
         for image in images:
             (self.root/f"images/{image['component']}-image.json").write_text(json.dumps(image))
         (self.root/'migrations/efbundle').write_text('inert test artifact, not executable')
@@ -614,6 +616,15 @@ class ReleaseIntegrityTests(unittest.TestCase):
         (self.root/'release-manifest.json').write_text(json.dumps(self.manifest))
 
     def test_complete_release_verifies_without_execution(self):
+        self.assertFalse(release.verify(self.root)['deploymentAuthorized'])
+
+    def test_legacy_pilot_manifest_without_firebase_target_remains_verifiable(self):
+        web = next(item for item in self.manifest['images'] if item['component'] == 'web')
+        web.pop('firebaseTarget')
+        image_path = self.root/'images/web-image.json'
+        image_path.write_text(json.dumps(web))
+        self.manifest['checksums']['images/web-image.json'] = hashlib.sha256(image_path.read_bytes()).hexdigest()
+        self.write_manifest()
         self.assertFalse(release.verify(self.root)['deploymentAuthorized'])
 
     def test_release_cannot_self_authorize_deployment_or_financial_writes(self):

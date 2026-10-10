@@ -110,13 +110,19 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn("assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)", manifest)
         self.assertIn("assert manifest['migrations']['commit']==manifest['commit']", manifest)
 
-    def test_web_release_requires_public_pilot_firebase_configuration_only(self):
+    def test_web_release_selects_pilot_by_default_or_explicit_production_config(self):
         images = RELEASE.split('  images:\n', 1)[1].split('\n  migrations:', 1)[0]
+        self.assertIn('default: pilot', RELEASE)
+        self.assertIn('options: [pilot, production]', RELEASE)
+        self.assertIn("V3_FIREBASE_TARGET: ${{ github.event.inputs.firebase_target || 'pilot' }}", images)
+        for name in ('API_KEY', 'AUTH_DOMAIN', 'PROJECT_ID', 'APP_ID'):
+            self.assertIn(f'vars.VITE_FIREBASE_PRODUCTION_{name}', images)
         for name in ('VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN',
                      'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID'):
-            self.assertIn(f'{name}: \'${{{{ vars.{name} }}}}\'', images)
+            self.assertIn(f'vars.{name}', images)
         self.assertIn("record[\"firebaseProjectId\"]=project", images)
-        self.assertIn("assert project==\"weymela-pilot\"", images)
+        self.assertIn("record[\"firebaseTarget\"]=target", images)
+        self.assertIn('{"pilot":"weymela-pilot","production":"weymela-production"}[target]', images)
         self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', images)
         self.assertNotIn('V3__Auth__ResendApiKey', images)
 

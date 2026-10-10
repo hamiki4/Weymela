@@ -1,0 +1,76 @@
+{
+  "environment": "Production",
+  "classification": "OwnerApprovalWorksheet",
+  "draftVersion": "production-financial-draft-0.1-2026-10-10",
+  "importable": false,
+  "ownerApprovalRequired": true,
+  "approvalState": "Incomplete",
+  "runtimeSafety": {
+    "V3:FinancialWritesEnabled": false,
+    "V3:Deposits:Mode": "Disabled",
+    "externalPayouts": "Disabled and unconfigured",
+    "receivingAccounts": []
+  },
+  "preservedBusinessRules": {
+    "verifiedSaleSplitPercent": {
+      "creatorCommission": 5,
+      "customerCashback": 4,
+      "platformCommission": 1,
+      "basis": "eligible verified purchase amount; reconcile exact calculation and rounding with approved Production settings"
+    },
+    "supportedPromotionTypes": [
+      "View Only",
+      "View & Sale",
+      "UGC",
+      "UGC + Sale"
+    ],
+    "minimumPayoutMechanics": "Preserve effective Platform Admin thresholds, accumulation across Promotions, threshold-pinned payout eligibility, admin-confirmed payment, and carry-forward. Do not introduce a schedule or threshold value in this worksheet."
+  },
+  "financialConfigurationBootstrap": {
+    "operation": "financial-configuration-v1",
+    "schema": "Weymela.Application.Web.FinancialSettingsInput",
+    "effectiveFromUtc": null,
+    "viewOnly": {
+      "viewsPerReward": null,
+      "businessPays": null,
+      "creatorEarns": null,
+      "platformKeeps": null,
+      "minimumCampaignBudget": null
+    },
+    "viewPlusCommission": {
+      "viewsPerReward": null,
+      "businessPays": null,
+      "creatorEarns": null,
+      "platformKeeps": null,
+      "minimumCampaignBudget": null
+    },
+    "creatorCommissionPercent": 5,
+    "customerCashbackPercent": 4,
+    "platformPercent": 1,
+    "creatorThreshold": null,
+    "customerThreshold": null,
+    "ugc": {
+      "minimumCreatorPayment": null,
+      "platformFeePercent": null,
+      "minimumUgcBudget": null,
+      "customerOfferPlatformSalePercent": null
+    },
+    "promotionLiveDurationDays": null,
+    "enforceAudienceRequirements": null,
+    "receivingAccounts": [],
+    "externalPayoutProvider": null
+  },
+  "approval": {
+    "ownerApprovalReference": null,
+    "approvedEffectiveUtc": null,
+    "approvedBy": null,
+    "remainingOwnerDecisions": [
+      "both view-mode thresholds and Business/Creator/Platform amounts",
+      "Creator and Customer payout threshold amounts from the approved existing policy",
+      "UGC minimum creator payment, platform fee, minimum budget, and customer-offer sale rate",
+      "Promotion live duration and audience enforcement setting",
+      "effective UTC timestamp and approval reference",
+      "real receiving accounts and external payout provider, if later authorized"
+    ]
+  }
+}

@@ -84,6 +84,27 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
     }
 
     [Fact]
+    public async Task Idempotent_replay_still_requires_the_active_bound_platform_admin()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var admin = Guid.NewGuid();
+        await SeedAdminAsync(db, admin);
+        var request = Request(admin);
+        var first = await Bootstrap(db).ProvisionAsync(request);
+
+        db.CommercePermissions.Remove(await db.CommercePermissions.SingleAsync(
+            x => x.UserId == admin && x.Role == ActorRole.PlatformAdmin));
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Bootstrap(db).ProvisionAsync(request));
+        Assert.Equal(first.VersionId, (await db.FinancialConfigurationVersions.SingleAsync()).Id);
+        Assert.Equal(1, await db.FinancialConfigurations.CountAsync());
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
+        Assert.Equal(1, await db.AuditEvents.CountAsync());
+    }
+
+    [Fact]
     public async Task Invalid_split_and_non_admin_are_rejected_without_partial_financial_data()
     {
         var database = await fixture.CreateAsync();
@@ -117,12 +138,52 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
         await Assert.ThrowsAsync<InvalidOperationException>(() => Bootstrap(db).ProvisionAsync(request));
         Assert.Empty(await db.FinancialConfigurations.ToListAsync());
 
-        var result = await Bootstrap(db, PlatformAdminBootstrapTarget.Select("production-test"))
+        var result = await Bootstrap(db, TestBootstrapTargets.Select("production-test"))
             .ProvisionAsync(request);
 
         Assert.False(result.Replayed);
         Assert.Equal("PlatformPricing", (await db.FinancialConfigurations.SingleAsync()).Name);
         Assert.Equal(1, (await db.FinancialConfigurationVersions.SingleAsync()).Version);
+    }
+
+    [Fact]
+    public async Task Production_financial_bootstrap_requires_approval_and_explicit_ugc_values()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var admin = Guid.NewGuid();
+        await SeedAdminAsync(db, admin, "weymela-production");
+        var target = TestBootstrapTargets.Select("production");
+        var bootstrap = Bootstrap(db, target);
+        var request = Request(admin) with
+        {
+            ProductionAuthorizationReference = "owner-financial-approval-record",
+            Settings = Settings(Now) with
+            {
+                Ugc = new UgcSettingsInput(200, 10, null, null),
+                PromotionLiveDurationDays = 30,
+                EnforceAudienceRequirements = true
+            }
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.ProvisionAsync(
+            request with { ProductionAuthorizationReference = null }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.ProvisionAsync(
+            request with { Settings = request.Settings with { Ugc = null } }));
+        Assert.Empty(await db.FinancialConfigurations.ToListAsync());
+        Assert.Empty(await db.FinancialConfigurationVersions.ToListAsync());
+
+        var result = await bootstrap.ProvisionAsync(request);
+        Assert.False(result.Replayed);
+        var version = await db.FinancialConfigurationVersions.SingleAsync();
+        Assert.Equal(30, version.PromotionLiveDurationDays);
+        Assert.True(version.EnforceAudienceRequirements);
+        Assert.Equal(200, version.Ugc.MinimumCreatorPayment.Amount);
+        Assert.Equal(10, version.Ugc.PlatformFeePercent);
+        Assert.Empty(await db.BusinessWallets.ToListAsync());
+        Assert.Empty(await db.PayoutRecords.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+        Assert.Contains("target=production", (await db.AuditEvents.SingleAsync()).Detail);
     }
 
     [Fact]
@@ -148,7 +209,7 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
 
     private static FinancialConfigurationBootstrapper Bootstrap(WeymelaDbContext db,
         V3BootstrapTarget? target = null) =>
-        new(db, target ?? PlatformAdminBootstrapTarget.Select("pilot"), new FixedClock(Now));
+        new(db, target ?? TestBootstrapTargets.Select("pilot"), new FixedClock(Now));
 
     private static FinancialConfigurationBootstrapRequest Request(Guid admin) => new(admin,
         Settings(Now), "phase-i1-owner-approved", Guid.Parse("79fb0754-d029-43cb-b442-e58082ec10ba"),

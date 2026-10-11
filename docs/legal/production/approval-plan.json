@@ -1,0 +1,69 @@
+{
+  "environment": "Production",
+  "classification": "OwnerLegalReviewDraft",
+  "reviewState": "Incomplete",
+  "productionApproved": false,
+  "attorneyReviewed": false,
+  "activationAllowed": false,
+  "automaticPublication": false,
+  "importable": false,
+  "legalReviewBasis": [
+    {
+      "source": "Ethiopia Ministry of Justice — Personal Data Protection Proclamation No. 1321/2024",
+      "sourceUrl": "https://justice.gov.et/en/law/personal-data-protection-proclamation/",
+      "sourceStatus": "Listed In Force by the Ministry of Justice",
+      "checkedDate": "2026-10-10",
+      "applicability": "Owner and counsel must confirm the controller, territories served, implementation requirements, and every applicable law. This reference is not a legal approval."
+    }
+  ],
+  "approvalEvidence": {
+    "ownerApprovalReference": null,
+    "legalApprovalReference": null,
+    "approvedEffectiveUtc": null,
+    "approvedBy": null,
+    "approvedFinalVersion": null,
+    "approvedFinalContentSha256": null
+  },
+  "documents": [
+    {
+      "type": "TermsOfService",
+      "language": "en",
+      "draftVersion": "en-draft-0.1-2026-10-10",
+      "draftContentSha256": "sha256:8591248b947cefeaadb06195c194a15946c1b82b2b56fe234ba3f80d64a069a0",
+      "approvedFinalVersion": null,
+      "ownerApprovalReference": null,
+      "legalApprovalReference": null,
+      "contentPath": "TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.md"
+    },
+    {
+      "type": "TermsOfService",
+      "language": "am",
+      "draftVersion": "am-draft-0.1-2026-10-10",
+      "draftContentSha256": "sha256:14592227df17394770c624aa105f98c9cf5cdb95ca658ba53d0ae215380db092",
+      "approvedFinalVersion": null,
+      "ownerApprovalReference": null,
+      "legalApprovalReference": null,
+      "contentPath": "TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.am.md"
+    },
+    {
+      "type": "PrivacyPolicy",
+      "language": "en",
+      "draftVersion": "en-draft-0.1-2026-10-10",
+      "draftContentSha256": "sha256:05a1032465a9a6adc256e31f9ccec3d0fa35b5c9287ef1787cdcac5b28922a1f",
+      "approvedFinalVersion": null,
+      "ownerApprovalReference": null,
+      "legalApprovalReference": null,
+      "contentPath": "PRIVACY-POLICY-OWNER-LEGAL-DRAFT.md"
+    },
+    {
+      "type": "PrivacyPolicy",
+      "language": "am",
+      "draftVersion": "am-draft-0.1-2026-10-10",
+      "draftContentSha256": "sha256:122956b9016b0ec22b4e8d16da47db8a5099f3a17b92985f2a004454b134ea04",
+      "approvedFinalVersion": null,
+      "ownerApprovalReference": null,
+      "legalApprovalReference": null,
+      "contentPath": "PRIVACY-POLICY-OWNER-LEGAL-DRAFT.am.md"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
 {
     private static readonly DateTime BindingValidAfter = new(2026, 9, 12, 20, 0, 0, DateTimeKind.Utc);
 
-    private static V3BootstrapTarget PilotTarget => PlatformAdminBootstrapTarget.Select("pilot");
+    private static V3BootstrapTarget PilotTarget => TestBootstrapTargets.Select("pilot");
 
     private static PlatformAdminBootstrapRequest Request(Guid user, Guid operatorUser, string uid = "firebase-owner-uid",
         string project = "weymela-pilot") =>
@@ -57,6 +57,28 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         Assert.Equal(first.BindingId, replay.BindingId);
         Assert.Equal(1, await db.IdentityBindings.CountAsync());
         Assert.Equal(1, await db.CommercePermissions.CountAsync());
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
+        Assert.Equal(1, await db.AuditEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task Idempotent_replay_does_not_report_success_after_platform_admin_revocation()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid(); var op = Guid.NewGuid();
+        await SeedBindingAsync(db, user);
+        var request = Request(user, op);
+        var bootstrap = new PlatformAdminBootstrapper(db, PilotTarget);
+        var first = await bootstrap.ProvisionAsync(request);
+
+        db.CommercePermissions.Remove(await db.CommercePermissions.SingleAsync(
+            x => x.UserId == user && x.Role == ActorRole.PlatformAdmin));
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.ProvisionAsync(request));
+        Assert.Equal(first.BindingId, (await db.IdentityBindings.SingleAsync()).Id);
+        Assert.Empty(await db.CommercePermissions.ToListAsync());
         Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
         Assert.Equal(1, await db.AuditEvents.CountAsync());
     }
@@ -157,13 +179,60 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         Assert.Empty(await db.CommercePermissions.ToListAsync());
 
         var result = await new PlatformAdminBootstrapper(db,
-            PlatformAdminBootstrapTarget.Select("production-test")).ProvisionAsync(request);
+            TestBootstrapTargets.Select("production-test")).ProvisionAsync(request);
 
         Assert.Equal(user, result.UserId);
         Assert.Equal("weymela-production", (await db.IdentityBindings.SingleAsync()).ProjectId);
         Assert.Equal(ActorRole.PlatformAdmin, (await db.CommercePermissions.SingleAsync()).Role);
         Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
         Assert.Equal(1, await db.AuditEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task Production_bootstrap_requires_owner_authorization_and_live_firebase_uid_verification()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var user = Guid.NewGuid(); var op = Guid.NewGuid();
+        var request = Request(user, op, "verified-production-owner", "weymela-production") with
+        {
+            ProductionAuthorizationReference = "owner-approval-record-134"
+        };
+        await SeedBindingAsync(db, user, request.FirebaseUid, request.FirebaseProjectId);
+        var target = TestBootstrapTargets.Select("production");
+        var verifier = new FakeProductionUidVerifier(verified: true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PlatformAdminBootstrapper(db, target, verifier).ProvisionAsync(
+                request with { ProductionAuthorizationReference = null }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PlatformAdminBootstrapper(db, target).ProvisionAsync(request));
+        Assert.Empty(verifier.Verified);
+
+        var rejectedVerifier = new FakeProductionUidVerifier(verified: false);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PlatformAdminBootstrapper(db, target, rejectedVerifier).ProvisionAsync(request));
+        Assert.Equal(new[] { ("weymela-production", "verified-production-owner") }, rejectedVerifier.Verified);
+        Assert.Empty(await db.CommercePermissions.ToListAsync());
+        Assert.Empty(await db.IdempotencyRecords.ToListAsync());
+        Assert.Empty(await db.AuditEvents.ToListAsync());
+
+        var first = await new PlatformAdminBootstrapper(db, target, verifier).ProvisionAsync(request);
+        var replay = await new PlatformAdminBootstrapper(db, target, verifier).ProvisionAsync(request);
+        Assert.False(first.Replayed);
+        Assert.True(replay.Replayed);
+        Assert.Equal(first.BindingId, replay.BindingId);
+        Assert.Equal(2, verifier.Verified.Count);
+        Assert.Equal(1, await db.IdentityBindings.CountAsync());
+        Assert.Equal(1, await db.CommercePermissions.CountAsync(x => x.Role == ActorRole.PlatformAdmin && x.IsActive));
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
+        var audit = await db.AuditEvents.SingleAsync();
+        Assert.Equal("PlatformAdminBootstrapProvisioned", audit.EventType);
+        Assert.Contains("target=production", audit.Detail);
+        Assert.Contains("authorization=owner-approval-record-134", audit.Detail);
+        Assert.Empty(await db.LegalDocumentVersions.ToListAsync());
+        Assert.Empty(await db.LegalAcceptances.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
     }
 
     private static async Task<Guid> SeedBindingAsync(WeymelaDbContext db, Guid user, string uid = "firebase-owner-uid",
@@ -180,4 +249,16 @@ public sealed class PlatformAdminBootstrapTests(PostgresFixture fixture)
         Provider = "Firebase", ProjectId = project, ExternalSubject = uid,
         UserId = user, IsActive = true, ValidAfterUtc = BindingValidAfter, Version = 1
     };
+
+    private sealed class FakeProductionUidVerifier(bool verified) : IProductionFirebaseUidVerifier
+    {
+        public List<(string Project, string Uid)> Verified { get; } = [];
+
+        public Task VerifyAsync(string projectId, string uid, CancellationToken cancellationToken)
+        {
+            Verified.Add((projectId, uid));
+            return verified ? Task.CompletedTask : Task.FromException(
+                new InvalidOperationException("Test verifier rejected UID."));
+        }
+    }
 }

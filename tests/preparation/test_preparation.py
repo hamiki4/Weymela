@@ -90,6 +90,107 @@ class RepositoryGateTests(unittest.TestCase):
                                 'FinancialConfigurationVersions'):
             self.assertNotIn(f'v3."{forbidden_table}"', sql)
 
+    def test_production_policy_drafts_are_inactive_until_owner_and_legal_approval(self):
+        bundle = ROOT / 'docs/legal/production'
+        manifest = json.loads((bundle / 'approval-plan.json').read_text())
+        self.assertEqual(manifest['environment'], 'Production')
+        self.assertEqual(manifest['classification'], 'OwnerLegalReviewDraft')
+        self.assertFalse(manifest['productionApproved'])
+        self.assertFalse(manifest['attorneyReviewed'])
+        self.assertFalse(manifest['activationAllowed'])
+        self.assertFalse(manifest['automaticPublication'])
+        self.assertFalse(manifest['importable'])
+        self.assertEqual({(item['type'], item['language']) for item in manifest['documents']},
+                         {('TermsOfService', 'en'), ('TermsOfService', 'am'),
+                          ('PrivacyPolicy', 'en'), ('PrivacyPolicy', 'am')})
+        self.assertFalse(any(manifest['approvalEvidence'][key] is not None for key in
+                             ('ownerApprovalReference', 'legalApprovalReference',
+                              'approvedEffectiveUtc', 'approvedBy', 'approvedFinalVersion',
+                              'approvedFinalContentSha256')))
+        for item in manifest['documents']:
+            self.assertRegex(item['draftVersion'], r'^(en|am)-draft-0\.1-2026-10-10$')
+            self.assertRegex(item['draftContentSha256'], r'^sha256:[a-f0-9]{64}$')
+            self.assertIsNone(item['approvedFinalVersion'])
+            self.assertIsNone(item['ownerApprovalReference'])
+            self.assertIsNone(item['legalApprovalReference'])
+            source = bundle / item['contentPath']
+            document = source.read_text()
+            self.assertEqual(item['draftContentSha256'], 'sha256:' + hashlib.sha256(source.read_bytes()).hexdigest())
+            if item['language'] == 'en':
+                self.assertIn('NOT APPROVED', document)
+                self.assertIn('OR PUBLISHED', document)
+            else:
+                self.assertIn('አልጸደቀም', document)
+                self.assertIn('አልታተመም', document)
+            self.assertFalse((ROOT / 'src/Weymela.Web/public/legal' / item['contentPath']).exists())
+        self.assertFalse(any(bundle.glob('*.sql')))
+
+        terms_en = (bundle / 'TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.md').read_text().lower()
+        terms_am = (bundle / 'TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.am.md').read_text()
+        privacy_en = (bundle / 'PRIVACY-POLICY-OWNER-LEGAL-DRAFT.md').read_text().lower()
+        privacy_am = (bundle / 'PRIVACY-POLICY-OWNER-LEGAL-DRAFT.am.md').read_text()
+        for subject in ('registration', 'Customer', 'Creator', 'Business', 'Cashier',
+                        'Promotions', 'TikTok', '5%', '4%', '1%', 'account',
+                        'closure', 'financial', 'support'):
+            self.assertIn(subject.lower(), terms_en)
+        for subject in ('ደንበኞች', 'ፈጣሪዎች', 'ንግዶች', 'ማስተዋወቂያዎች',
+                        'መለያ', 'የገንዘብ', 'ድጋፍ'):
+            self.assertIn(subject, terms_am)
+        for subject in ('email', 'phone', 'Firebase', 'Resend', 'financial',
+                        'retention', 'deletion', 'rights', 'third-party', 'support'):
+            self.assertIn(subject.lower(), privacy_en)
+        for subject in ('ኢሜይል', 'ስልክ', 'Firebase', 'Resend', 'የገንዘብ',
+                        'ማቆያ', 'መሰረዝ', 'መብቶች', 'አቅራቢዎች'):
+            self.assertIn(subject, privacy_am)
+
+    def test_production_financial_baseline_preserves_approved_rates_and_fails_closed_for_missing_values(self):
+        template = json.loads((ROOT / 'docs/deployment/v3-production-financial-baseline.template.json').read_text())
+        self.assertEqual(template['environment'], 'Production')
+        self.assertFalse(template['importable'])
+        self.assertTrue(template['ownerApprovalRequired'])
+        self.assertEqual(template['approvalState'], 'Incomplete')
+        safety = template['runtimeSafety']
+        self.assertIs(safety['V3:FinancialWritesEnabled'], False)
+        self.assertEqual(safety['V3:Deposits:Mode'], 'Disabled')
+        self.assertIn('Disabled', safety['externalPayouts'])
+        self.assertEqual(safety['receivingAccounts'], [])
+        rules = template['preservedBusinessRules']
+        self.assertEqual(rules['verifiedSaleSplitPercent'], {
+            'creatorCommission': 5, 'customerCashback': 4, 'platformCommission': 1,
+            'basis': 'eligible verified purchase amount; reconcile exact calculation and rounding with approved Production settings'})
+        self.assertEqual(rules['supportedPromotionTypes'],
+                         ['View Only', 'View & Sale', 'UGC', 'UGC + Sale'])
+        self.assertIn('carry-forward', rules['minimumPayoutMechanics'])
+        config = template['financialConfigurationBootstrap']
+        self.assertEqual(config['operation'], 'financial-configuration-v1')
+        for group in ('viewOnly', 'viewPlusCommission', 'ugc'):
+            self.assertTrue(all(value is None for value in config[group].values()))
+        for field in ('effectiveFromUtc', 'creatorThreshold', 'customerThreshold',
+                      'promotionLiveDurationDays', 'enforceAudienceRequirements'):
+            self.assertIsNone(config[field])
+        self.assertEqual(config['creatorCommissionPercent'], 5)
+        self.assertEqual(config['customerCashbackPercent'], 4)
+        self.assertEqual(config['platformPercent'], 1)
+        self.assertEqual(config['receivingAccounts'], [])
+        self.assertIsNone(config['externalPayoutProvider'])
+        self.assertIsNone(template['approval']['ownerApprovalReference'])
+        self.assertGreaterEqual(len(template['approval']['remainingOwnerDecisions']), 5)
+
+    def test_bootstrap_database_and_role_mapping_stays_in_protected_configuration(self):
+        source = (ROOT / 'src/Weymela.Infrastructure/Identity/PlatformAdminBootstrap.cs').read_text()
+        runbook = (ROOT / 'docs/deployment/V3-TRUSTED-ADMIN-BOOTSTRAP.md').read_text()
+        keys = ('V3_BOOTSTRAP_PILOT_DATABASE', 'V3_BOOTSTRAP_PILOT_ROLE',
+                'V3_BOOTSTRAP_PRODUCTION_TEST_DATABASE', 'V3_BOOTSTRAP_PRODUCTION_TEST_ROLE',
+                'V3_BOOTSTRAP_PRODUCTION_DATABASE', 'V3_BOOTSTRAP_PRODUCTION_ROLE')
+        for key in keys:
+            self.assertIn(key, source)
+            self.assertIn(key, runbook)
+        self.assertIn('entries.Select(entry => entry.Item1).Distinct', source)
+        self.assertIn('entries.Select(entry => entry.Item2).Distinct', source)
+        self.assertIn('IsV3DatabaseName', source)
+        self.assertIn('IsV3BootstrapRole', source)
+        self.assertNotRegex(source, r'(?:DatabaseName|BootstrapRole)\s*=\s*"[^"]*"')
+
     def test_source_migration_order_includes_approved_creator_photo_reference(self):
         paths = (ROOT / 'src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs')
         actual = sorted(p.stem for p in paths if not p.name.endswith('.Designer.cs'))

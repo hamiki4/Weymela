@@ -16,7 +16,8 @@ public sealed record FinancialConfigurationBootstrapRequest(
     FinancialSettingsInput Settings,
     string OperatorReference,
     Guid CorrelationId,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    string? ProductionAuthorizationReference = null);
 
 public sealed record FinancialConfigurationBootstrapResult(
     Guid ConfigurationId,
@@ -33,16 +34,17 @@ public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3Bo
 {
     private const string Operation = "FinancialConfigurationBootstrap";
     private const string ConfigurationName = "PlatformPricing";
-    private readonly V3BootstrapTarget _target = PlatformAdminBootstrapTarget.Select(target.Name);
+    private readonly V3BootstrapTarget _target = PlatformAdminBootstrapTarget.ValidateSelected(target);
     private DateTime Now => (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
 
     public async Task<FinancialConfigurationBootstrapResult> ProvisionAsync(
         FinancialConfigurationBootstrapRequest request, CancellationToken cancellationToken = default)
     {
         var now = Now;
-        Validate(request, now);
+        Validate(request, now, _target);
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
+        await RequirePlatformAdminAsync(request.PlatformAdminUserId, now, cancellationToken);
 
         var fingerprint = Fingerprint(request);
         var existing = await db.IdempotencyRecords.SingleOrDefaultAsync(x =>
@@ -64,7 +66,6 @@ public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3Bo
             return new(root.Id, version.Id, version.Version, version.EffectiveFromUtc, true);
         }
 
-        await RequirePlatformAdminAsync(request.PlatformAdminUserId, now, cancellationToken);
         if (await db.FinancialConfigurations.AnyAsync(cancellationToken)
             || await db.FinancialConfigurationVersions.AnyAsync(cancellationToken))
             throw new InvalidOperationException(
@@ -82,7 +83,7 @@ public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3Bo
             request.IdempotencyKey, fingerprint, versionIdToCreate.ToString("D"), now));
         db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "FinancialConfigurationBootstrapProvisioned",
             request.PlatformAdminUserId, null, null, null, request.CorrelationId, now,
-            $"operator={request.OperatorReference};configurationId={configurationId:D};versionId={versionIdToCreate:D};version=1;effectiveFromUtc={effective:O}"));
+            $"operator={request.OperatorReference};target={_target.Name};authorization={request.ProductionAuthorizationReference ?? "none"};configurationId={configurationId:D};versionId={versionIdToCreate:D};version=1;effectiveFromUtc={effective:O}"));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(configurationId, versionIdToCreate, 1, effective, false);
@@ -111,10 +112,10 @@ public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3Bo
             || string.IsNullOrWhiteSpace(bindings[0].ExternalSubject)
             || bindings[0].Version <= 0 || bindings[0].ValidAfterUtc > now)
             throw new InvalidOperationException(
-                "The trusted Platform Admin identity binding is not valid for Pilot.");
+                $"The trusted Platform Admin identity binding is not valid for target '{_target.Name}'.");
     }
 
-    private static void Validate(FinancialConfigurationBootstrapRequest request, DateTime now)
+    private static void Validate(FinancialConfigurationBootstrapRequest request, DateTime now, V3BootstrapTarget target)
     {
         if (request.PlatformAdminUserId == Guid.Empty || request.CorrelationId == Guid.Empty)
             throw new ArgumentException("Platform Admin and correlation identifiers are required.",
@@ -125,6 +126,14 @@ public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3Bo
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey)
             || request.IdempotencyKey.Length > 160)
             throw new ArgumentException("A bounded idempotency key is required.", nameof(request));
+        if (target.RequiresProductionAuthorization
+            && !PlatformAdminBootstrapTarget.IsValidProductionAuthorizationReference(
+                request.ProductionAuthorizationReference))
+            throw new InvalidOperationException("Production financial bootstrap requires a bounded owner authorization reference.");
+        if (!target.RequiresProductionAuthorization && request.ProductionAuthorizationReference is not null)
+            throw new InvalidOperationException("A Production authorization reference is valid only for the Production target.");
+        if (target.RequiresProductionAuthorization && request.Settings.Ugc is null)
+            throw new InvalidOperationException("Production financial bootstrap requires explicit UGC pricing values; schema defaults cannot be used.");
         if (request.Settings.EffectiveFromUtc is not { Kind: DateTimeKind.Utc } effective
             || effective > now)
             throw new ArgumentException(

@@ -55,7 +55,7 @@ jobs:
       - name: Android SDK and unsigned release compilation
         working-directory: mobile/android
         run: |
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
           chmod +x gradlew
           ./gradlew --no-daemon testReleaseUnitTest bundleRelease -PweymelaUnsignedValidation=true -PweymelaVersionCode=10
           test -f app/build/outputs/bundle/release/app-release.aab

@@ -44,6 +44,7 @@
       if (method !== "GET" && method !== "POST") throw new Error("Unsupported API method.");
       const headers = Object.fromEntries(new Headers(options.headers).entries());
       const payload = await serialize(options.body);
+      if (payload.dataType === "formData") headers["content-type"] = "multipart/form-data";
       if (options.signal?.aborted) throw new DOMException("Request aborted", "AbortError");
       const pending = cap.nativePromise("WeymelaApi", "request", { url, method, headers, ...payload });
       let abort;

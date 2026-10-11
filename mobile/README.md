@@ -4,6 +4,8 @@ This project reuses the recovered `com.weymela.app` native shell and icons. It p
 
 Unsigned CI artifacts are validation candidates. They are not signed, installable releases or authorization to publish. Live Android sign-in, email verification, device PIN, role workflows and backend compatibility remain unverified until tested against the intended ready V3 backend.
 
+Capacitor is pinned to patched 8.5.3: the recovered 8.5.0 Android dependency had a critical internal-proxy origin advisory. The build dependency lock and focused transport tests cover the new packaging; existing Web/backend components remain unchanged.
+
 Before signing, compare the original protected alias's certificate with actual Play Console Upload key certificate evidence. Before every upload, reread all Play tracks/bundles/APKs and choose an unused higher versionCode. Use only `/etc/creatorpay/android-upload/weymela-upload.jks`, alias `weymela-upload`, its protected password file, and PKCS12. The keystore and passwords stay outside Git and hosted CI.
 
 Signed builds require `WEYMELA_ANDROID_UPLOAD_KEYSTORE`, `WEYMELA_ANDROID_UPLOAD_PASSWORD_FILE`, and `WEYMELA_ANDROID_EXPECTED_UPLOAD_SHA256` from verified Play evidence. No key is generated. Build with `./gradlew --no-daemon testReleaseUnitTest bundleRelease -PweymelaVersionCode=10` after Production Firebase configuration, npm sync, and supported JDK/SDK provisioning. Inspect the manifest with bundletool and verify every entry/signing certificate with jarsigner before uploading. Upload to the existing `alpha` track only after V3 backend compatibility passes. Do not promote to public Production.

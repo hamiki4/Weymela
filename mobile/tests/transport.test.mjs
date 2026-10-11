@@ -61,6 +61,7 @@ test('preserves multipart field names, MIME type and bytes', async () => {
   await scope.fetch('/api/creator/photo', { method: 'POST', body: form, headers: { 'Idempotency-Key': 'same-upload' } });
   const payload = calls[0][2];
   assert.equal(payload.dataType, 'formData');
+  assert.equal(payload.headers['content-type'], 'multipart/form-data');
   assert.equal(payload.data[1].type, 'base64File');
   assert.equal(payload.data[1].fileName, 'photo.png');
   assert.equal(payload.data[1].contentType, 'image/png');

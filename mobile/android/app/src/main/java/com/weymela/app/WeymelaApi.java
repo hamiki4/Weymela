@@ -21,7 +21,9 @@ import org.json.JSONObject;
 @CapacitorPlugin(name = "WeymelaApi")
 public class WeymelaApi extends Plugin {
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private String userAgent;
     @Override public void load() {
+        userAgent = getBridge().getWebView().getSettings().getUserAgentString();
         CookieManager.getInstance().setAcceptCookie(true);
         CookieHandler.setDefault(new CookieHandler() {
             @Override public Map<String,List<String>> get(URI uri, Map<String,List<String>> headers) throws IOException {
@@ -52,6 +54,7 @@ public class WeymelaApi extends Plugin {
         }
         headers.put("X-Weymela-Request", "1");
         headers.put("Cache-Control", "no-store");
+        headers.put("User-Agent", userAgent);
         call.getData().put("headers", headers);
         call.getData().put("disableRedirects", true);
         call.getData().put("connectTimeout", 30000);

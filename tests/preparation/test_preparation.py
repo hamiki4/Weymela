@@ -701,7 +701,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             '20261001043831_AddAdminVerifiedAudienceAndEnforcement',
             '20261006050542_CompleteCreatorCollaborationWorkflow',
             '20261007041919_AlignFinancialUatFlows']
-        migration = {'commit':commit, 'migrationOrder':order,
+        migration = {'commit':commit, 'target':'pilot', 'migrationOrder':order,
                      'grantContracts':{
                          'from':{'sourceCommit':'1c552db44eb196603f56b623082b3cd629a46d91',
                                  'migrationCount':29,'verifier':baseline},
@@ -727,6 +727,17 @@ class ReleaseIntegrityTests(unittest.TestCase):
         self.manifest['checksums']['images/web-image.json'] = hashlib.sha256(image_path.read_bytes()).hexdigest()
         self.write_manifest()
         self.assertFalse(release.verify(self.root)['deploymentAuthorized'])
+
+    def test_release_verifier_rejects_production_web_with_pilot_migration_target(self):
+        web = next(item for item in self.manifest['images'] if item['component'] == 'web')
+        web['firebaseTarget'] = 'production'
+        web['firebaseProjectId'] = 'weymela-production'
+        image_path = self.root/'images/web-image.json'
+        image_path.write_text(json.dumps(web))
+        self.manifest['checksums']['images/web-image.json'] = hashlib.sha256(image_path.read_bytes()).hexdigest()
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, 'Migration target'):
+            release.verify(self.root)
 
     def test_release_cannot_self_authorize_deployment_or_financial_writes(self):
         for field in ('deploymentAuthorized', 'financialWritesEnabled'):

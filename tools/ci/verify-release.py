@@ -32,6 +32,11 @@ def verify(root):
     if manifest.get('migrations', {}).get('commit') != manifest['commit']:
         raise ValueError('Migration source mismatch')
     migrations = manifest['migrations']
+    migration_target = migrations.get('target')
+    if migration_target is None and firebase_target == 'pilot':
+        migration_target = 'pilot'  # Legacy immutable Pilot bundles predate migration target metadata.
+    if migration_target != firebase_target:
+        raise ValueError('Migration target does not match Web Firebase target')
     baseline = 'grants/baseline-29/v3-verify.sql'
     current = [f'grants/current/v3-{name}.sql' for name in
                ('api', 'worker', 'migrator', 'backup', 'migrator-defaults')]

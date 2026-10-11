@@ -11,6 +11,11 @@ from typing import NoReturn
 
 
 MIGRATOR = "weymela_v3_migrator"
+TARGET_DATABASE_ENV = {
+    "pilot": "V3_BOOTSTRAP_PILOT_DATABASE",
+    "production-test": "V3_BOOTSTRAP_PRODUCTION_TEST_DATABASE",
+    "production": "V3_BOOTSTRAP_PRODUCTION_DATABASE",
+}
 SUPPORTED_FIELDS = {
     "host",
     "port",
@@ -131,6 +136,23 @@ def parse_connection(value: str) -> dict[str, str]:
     return settings
 
 
+def validate_target_database(target: str, database: str, environment: dict[str, str]) -> None:
+    if target not in TARGET_DATABASE_ENV:
+        fail("an explicit supported migration target is required")
+    configured = {
+        name: environment.get(variable, "")
+        for name, variable in TARGET_DATABASE_ENV.items()
+    }
+    if any(not value for value in configured.values()):
+        fail("protected V3 migration target database mapping is incomplete")
+    if any(not value.startswith("weymela_v3_") for value in configured.values()):
+        fail("protected V3 migration target database mapping is invalid")
+    if len(set(configured.values())) != len(configured):
+        fail("protected V3 migration target databases must be distinct")
+    if database != configured[target]:
+        fail("connection Database does not match the explicit migration target")
+
+
 def build_probe(settings: dict[str, str]) -> tuple[list[str], dict[str, str]]:
     command = [
         "psql",
@@ -150,7 +172,7 @@ def build_probe(settings: dict[str, str]) -> tuple[list[str], dict[str, str]]:
             "--dbname",
             settings["database"],
             "-Atc",
-            "SELECT current_user, session_user;",
+            "SELECT current_database(), current_user, session_user;",
         )
     )
     # Remove ambient libpq settings, especially password-bearing overrides,
@@ -165,6 +187,7 @@ def build_probe(settings: dict[str, str]) -> tuple[list[str], dict[str, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=pathlib.Path)
+    parser.add_argument("--target", choices=tuple(TARGET_DATABASE_ENV), required=True)
     parser.add_argument(
         "--connection-env",
         default="WEYMELA_V3_MIGRATOR_CONNECTION",
@@ -180,6 +203,7 @@ def main() -> int:
     if not connection:
         fail(f"{args.connection_env} is required")
     settings = parse_connection(connection)
+    validate_target_database(args.target, settings["database"], os.environ)
     probe_command, probe_environment = build_probe(settings)
 
     try:
@@ -194,7 +218,7 @@ def main() -> int:
         )
     except (OSError, subprocess.TimeoutExpired):
         fail("database identity probe failed")
-    expected = f"{MIGRATOR}|{MIGRATOR}"
+    expected = f"{settings['database']}|{MIGRATOR}|{MIGRATOR}"
     if probe.returncode != 0 or probe.stdout not in (expected + "\n", expected + "\r\n"):
         fail("database session is not directly authenticated as the V3 migrator")
 

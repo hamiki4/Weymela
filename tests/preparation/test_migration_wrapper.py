@@ -33,10 +33,17 @@ class MigrationWrapperTests(unittest.TestCase):
             "Passfile=/run/secrets/v3-migrator.pgpass;Include Error Detail=false"
         )
 
-    def run_main(self, connection=None, probe_stdout="weymela_v3_migrator|weymela_v3_migrator\n",
+    def run_main(self, connection=None, target="pilot", probe_stdout=None,
                  probe_returncode=0, bundle_returncode=0, side_effect=None):
         calls = []
         self.last_calls = calls
+        databases = {
+            "pilot": "weymela_v3_pilot",
+            "production-test": "weymela_v3_prod_auth_test",
+            "production": "weymela_v3_prod_main",
+        }
+        if probe_stdout is None:
+            probe_stdout = f"{databases[target]}|weymela_v3_migrator|weymela_v3_migrator\n"
 
         def fake_run(command, **kwargs):
             calls.append((command, kwargs))
@@ -46,8 +53,13 @@ class MigrationWrapperTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, probe_returncode, probe_stdout, "")
             return subprocess.CompletedProcess(command, bundle_returncode, "", "")
 
-        with patch.dict(os.environ, {"WEYMELA_V3_MIGRATOR_CONNECTION": connection or self.connection}, clear=False), \
-             patch.object(sys, "argv", ["run-v3-migrations.py", str(self.bundle)]), \
+        with patch.dict(os.environ, {
+                 "WEYMELA_V3_MIGRATOR_CONNECTION": connection or self.connection,
+                 "V3_BOOTSTRAP_PILOT_DATABASE": databases["pilot"],
+                 "V3_BOOTSTRAP_PRODUCTION_TEST_DATABASE": databases["production-test"],
+                 "V3_BOOTSTRAP_PRODUCTION_DATABASE": databases["production"],
+             }, clear=False), \
+             patch.object(sys, "argv", ["run-v3-migrations.py", str(self.bundle), "--target", target]), \
              patch.object(runner.subprocess, "run", side_effect=fake_run):
             result = runner.main()
         return result, calls
@@ -63,7 +75,7 @@ class MigrationWrapperTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0][0][0], "psql")
-        self.assertEqual(calls[0][0][-1], "SELECT current_user, session_user;")
+        self.assertEqual(calls[0][0][-1], "SELECT current_database(), current_user, session_user;")
         self.assertEqual(calls[0][1]["env"]["PGPASSFILE"], "/run/secrets/v3-migrator.pgpass")
         self.assertNotIn("PGPASSWORD", calls[0][1]["env"])
         self.assertEqual(calls[1][0], [str(self.bundle), "--connection", self.connection])
@@ -84,7 +96,19 @@ class MigrationWrapperTests(unittest.TestCase):
             "Include Error Detail=false"
         )
         self.assertEqual(result, 0)
-        self.assertEqual(calls[0][0][-1], "SELECT current_user, session_user;")
+        self.assertEqual(calls[0][0][-1], "SELECT current_database(), current_user, session_user;")
+
+    def test_production_target_accepts_only_the_protected_production_database(self):
+        connection = (
+            "Host=weymela-v3-production-postgres;Port=5432;"
+            "Database=weymela_v3_prod_main;Username=weymela_v3_migrator;"
+            "Passfile=/run/secrets/v3-migrator.pgpass;Include Error Detail=false"
+        )
+        result, calls = self.run_main(connection, target="production")
+        self.assertEqual(result, 0)
+        self.assertIn(("--dbname", "weymela_v3_prod_main"), tuple(zip(calls[0][0], calls[0][0][1:])))
+        with self.assertRaisesRegex(SystemExit, "explicit migration target"):
+            self.run_main(connection, target="pilot")
 
     def test_bootstrap_identity_is_rejected(self):
         self.assert_refused(self.connection.replace("weymela_v3_migrator", "weymela_v3_bootstrap"), "Username")

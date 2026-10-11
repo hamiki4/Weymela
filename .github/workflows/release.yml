@@ -162,6 +162,8 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with: { dotnet-version: '10.0.x' }
       - name: Build offline migration bundle, SQL and checksums only
+        env:
+          V3_MIGRATION_TARGET: ${{ github.event.inputs.firebase_target || 'pilot' }}
         run: bash tools/ci/migration-artifacts.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -192,6 +194,8 @@ jobs:
           web=next(i for i in images if i['component']=='web')
           assert web['firebaseTarget']==os.environ['V3_FIREBASE_TARGET']
           assert web['firebaseProjectId']=={'pilot':'weymela-pilot','production':'weymela-production'}[web['firebaseTarget']]
+          migrations=json.loads((root/'migrations/migration-manifest.json').read_text())
+          assert migrations['target']==web['firebaseTarget'], 'Migration target does not match Firebase release target'
           for i in images:
               assert i['buildStatus']=='passed' and i['publishStatus']=='passed'
               assert i['scan']['status']=='passed'
@@ -202,7 +206,7 @@ jobs:
                   evidence=i[key]
                   assert evidence['path']==f"images/{i['component']}-{suffix}.json"
                   assert hashlib.sha256((root/evidence['path']).read_bytes()).hexdigest()==evidence['sha256']
-          manifest={'releaseId':f"weymela-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':json.loads((root/'migrations/migration-manifest.json').read_text()),'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
+          manifest={'releaseId':f"weymela-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':migrations,'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
           assert manifest['migrations']['commit']==manifest['commit']
           (root/'release-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
           PY

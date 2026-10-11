@@ -13,6 +13,10 @@ This operator-only procedure is preparation guidance. It is not an HTTP endpoint
 - For `production`, obtain the owner’s explicit authorization reference and confirm the destination is the separate V3 Production database, never the V1 database.
 - Never put database passwords, Firebase service-account contents, tokens, PINs, or other credentials in arguments, source control, or logs. Use the approved protected secret/file mechanism.
 
+## Production schema migrations
+
+A Production migration release must record `target: production`, and its release check must match that target to the Production Web Firebase target. Run the migration wrapper with `--target production`; it verifies the actual database against the protected `V3_BOOTSTRAP_PRODUCTION_DATABASE` mapping and requires the V3 migrator as both current and session user. Never use a Pilot-targeted migration manifest or Pilot connection for Production.
+
 ## First Platform Admin
 
 1. Create or identify the owner’s existing V3-local user through the normal authenticated identity flow. The bootstrap does not create a user or Firebase identity.

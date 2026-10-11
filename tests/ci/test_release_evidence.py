@@ -100,7 +100,8 @@ class ImageEvidenceTests(unittest.TestCase):
             self.write(f'{component}-sbom', {'bomFormat': 'CycloneDX', 'specVersion': '1.6'})
             evidence.complete(self.images, {**self.env, 'COMPONENT': component})
         migrations = self.root/'release/migrations'; migrations.mkdir()
-        (migrations/'migration-manifest.json').write_text(json.dumps({'commit': self.env['GITHUB_SHA'], 'files': {}}))
+        (migrations/'migration-manifest.json').write_text(json.dumps({
+            'commit': self.env['GITHUB_SHA'], 'target': 'pilot', 'files': {}}))
 
     def write(self, name, value):
         (self.images/f'{name}.json').write_text(json.dumps(value))
@@ -306,6 +307,20 @@ class ImageEvidenceTests(unittest.TestCase):
             self.assertEqual(image['attestation']['status'], 'unavailable')
             self.assertEqual(image['scan']['sha256'], manifest['checksums'][image['scan']['path']])
             self.assertEqual(image['sbom']['sha256'], manifest['checksums'][image['sbom']['path']])
+        self.assertEqual(manifest['migrations']['target'], 'pilot')
+
+    def test_manifest_accepts_consistently_production_targeted_release(self):
+        image = json.loads((self.images/'web-image.json').read_text())
+        image['firebaseTarget'] = 'production'
+        image['firebaseProjectId'] = 'weymela-production'
+        self.write('web-image', image)
+        migration = self.root/'release/migrations/migration-manifest.json'
+        migration.write_text(json.dumps({'commit': self.env['GITHUB_SHA'], 'target': 'production', 'files': {}}))
+        self.env['V3_FIREBASE_TARGET'] = 'production'
+        result = self.manifest()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        released = json.loads((self.root/'release/release-manifest.json').read_text())
+        self.assertEqual(released['migrations']['target'], 'production')
 
     def test_manifest_rejects_any_component_with_failed_build_scan_or_publish(self):
         for component in ('api', 'worker', 'web'):
@@ -324,6 +339,11 @@ class ImageEvidenceTests(unittest.TestCase):
 
     def test_manifest_rejects_migration_from_different_commit(self):
         (self.root/'release/migrations/migration-manifest.json').write_text(json.dumps({'commit': 'b'*40}))
+        self.assertNotEqual(self.manifest().returncode, 0)
+
+    def test_manifest_rejects_migration_target_that_does_not_match_firebase_target(self):
+        path = self.root/'release/migrations/migration-manifest.json'
+        path.write_text(json.dumps({'commit': self.env['GITHUB_SHA'], 'target': 'production'}))
         self.assertNotEqual(self.manifest().returncode, 0)
 
     def test_manifest_rejects_tampered_scan_or_sbom(self):

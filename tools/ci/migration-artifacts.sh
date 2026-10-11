@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 test "${GITHUB_ACTIONS:-}" = true
+case "${V3_MIGRATION_TARGET:-}" in
+  pilot|production) ;;
+  *) echo 'V3_MIGRATION_TARGET must be explicitly pilot or production' >&2; exit 2 ;;
+esac
 mkdir -p .artifacts/migrations
 dotnet tool restore
 dotnet build src/Weymela.Infrastructure --configuration Release --nologo
@@ -15,7 +19,11 @@ printf '%s  %s\n' d2d62970fe2e648ddd314d9a0245b23f0a87590357e1abfb78013dcc905e63
 cp database/grants/v3-{api,worker,migrator,migrator-defaults,backup,verify}.sql .artifacts/migrations/grants/current/
 python3 - <<'PY'
 import hashlib,json,pathlib,re,subprocess
+import os
 root=pathlib.Path('.artifacts/migrations')
+target=os.environ.get('V3_MIGRATION_TARGET', '')
+if target not in ('pilot', 'production'):
+    raise SystemExit('V3_MIGRATION_TARGET must be explicitly pilot or production')
 files=sorted(pathlib.Path('src/Weymela.Infrastructure/Persistence/Migrations').glob('[0-9]*.cs'))
 ids=[x.stem for x in files if not x.name.endswith('.Designer.cs')]
 commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
@@ -32,7 +40,7 @@ assert (root/'grants/baseline-29/v3-verify.sql').read_bytes()==expected_baseline
 artifact_paths=[root/'efbundle',root/'v3-forward.sql',root/'grants/baseline-29/v3-verify.sql']
 artifact_paths += [root/f'grants/current/v3-{name}.sql'
                    for name in ('api','worker','migrator','backup','migrator-defaults','verify')]
-metadata={'commit':commit,'database':'weymela_v3_pilot','migrationOrder':ids,
+metadata={'commit':commit,'target':target,'migrationOrder':ids,
  'grantContracts':{
   'from':{'sourceCommit':baseline,'migrationCount':29,'verifier':'grants/baseline-29/v3-verify.sql'},
   'to':{'sourceCommit':commit,'migrationCount':len(ids),'scripts':[f'grants/current/v3-{name}.sql' for name in ('api','worker','migrator','backup','migrator-defaults')], 'verifier':'grants/current/v3-verify.sql'}},

@@ -26,7 +26,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     [InlineData("incomplete")]
     [InlineData("tampered")]
     [InlineData("approved")]
-    public async Task Production_registration_requires_all_four_approved_published_policies(string publication)
+    public async Task Production_registration_and_role_enrollment_require_approved_publication_and_consent(string publication)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -74,6 +74,34 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
             // Email verification grants no role or consent; role activation still requires acceptance.
             Assert.Empty(await db.CommercePermissions.ToListAsync());
             Assert.Empty(await db.LegalAcceptances.ToListAsync());
+            Assert.Empty(await db.FinancialJournals.ToListAsync());
+            var admin = Guid.NewGuid();
+            db.CommercePermissions.Add(new(admin, ActorRole.PlatformAdmin, admin, null, true, false));
+            db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = admin, Kind = "Email",
+                IdentifierHash = HashIdentifier("bootstrap-admin@example.test"), DeliveryAddress = "bootstrap-admin@example.test",
+                IsVerified = true, CreatedAtUtc = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+            var enrollment = new RoleEnrollmentService(db, TimeProvider.System, ProductionOptions(),
+                new AccountLegalDocumentSource(directory.FullName));
+            var request = new RoleEnrollmentRequest(ActorRole.Customer, "Isolated owner", null, null, null, null,
+                RegisteredPhone: "+251900000000");
+            var actor = new Actor(admin, ActorRole.PlatformAdmin);
+            if (publication != "approved")
+                await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => enrollment.SubmitAsync(actor, request, "unpublished", default));
+            else
+            {
+                var rejected = await Assert.ThrowsAsync<ApplicationFailure>(() => enrollment.SubmitAsync(actor, request, "unaccepted", default));
+                Assert.Equal("Accept the current Terms of Service and Privacy Policy.", rejected.Message);
+                db.ChangeTracker.Clear();
+                var status = await new AccountLegalOnboardingService(db, TimeProvider.System).StatusAsync(admin, default);
+                var terms = status.Documents.Single(x => x.Kind == "TermsOfService");
+                var privacy = status.Documents.Single(x => x.Kind == "PrivacyPolicy");
+                await enrollment.SubmitAsync(actor, request with { AccountLegal = new(
+                    new(terms.DocumentId, terms.ContentHash, true), new(privacy.DocumentId, privacy.ContentHash, true)) },
+                    "accepted", default);
+                Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == admin));
+            }
+            Assert.Equal(publication == "approved" ? 2 : 1, await db.CommercePermissions.CountAsync());
             Assert.Empty(await db.FinancialJournals.ToListAsync());
         }
         finally { directory.Delete(recursive: true); }

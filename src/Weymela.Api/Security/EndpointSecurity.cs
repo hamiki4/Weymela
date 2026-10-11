@@ -40,7 +40,8 @@ public static class EndpointSecurity
         if (HttpMethods.IsGet(c.Request.Method) || HttpMethods.IsOptions(c.Request.Method)) return false;
         var route = Operation(c); var category = Category(c);
         return category is "checkout" or "qr" or "views" or "deposit" or "payout" or "settings"
-            || route.EndsWith("/fund") || route.EndsWith("/approve") || route.EndsWith("/increase");
+            || route.EndsWith("/fund") || route.EndsWith("/promotional-funding")
+            || route.EndsWith("/approve") || route.EndsWith("/increase");
     }
     public static void AddLimits(IServiceCollection services, RuntimeOptions config) => services.AddRateLimiter(options =>
     {

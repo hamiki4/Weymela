@@ -21,6 +21,14 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
         foreach(var route in routes)
         {
             var path=route.RoutePattern.RawText!;
+            // Prospective users must be able to read approved policies before signing up.
+            // This exact route exposes only GET; publication and byte/hash checks remain mandatory.
+            if(path == "/api/legal/account/{kind}")
+            {
+                Assert.NotNull(route.Metadata.GetMetadata<IAllowAnonymous>());
+                Assert.Equal(new[] { "GET" }, route.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods);
+                continue;
+            }
             if(path is "/api/auth/mode" or "/api/auth/firebase/session" or "/api/development/session"
                 or "/api/auth/email/start" or "/api/auth/email/verify"
                 or "/api/auth/password/sign-in" or "/api/auth/password/recovery/verify"
@@ -34,6 +42,15 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
                 Assert.NotNull(route.Metadata.GetMetadata<IAllowAnonymous>());
             else { Assert.Null(route.Metadata.GetMetadata<IAllowAnonymous>()); Assert.NotEmpty(route.Metadata.GetOrderedMetadata<IAuthorizeData>()); }
         }
+    }
+    [Fact] public async Task Public_account_legal_read_does_not_expose_unapproved_content_or_mutations()
+    {
+        await using var host=await ApiFixture.CreateAsync(fixture);using var client=host.Anonymous();
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,(await client.GetAsync("/api/legal/account/terms?language=en")).StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,(await client.GetAsync("/api/legal/account/privacy?language=am")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync("/api/legal/account/accounts?language=en")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync("/api/legal/account/terms?language=unknown")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed,(await client.Post("/api/legal/account/terms",new{})).StatusCode);
     }
     [Fact] public async Task Creator_cannot_refresh_another_creators_participation()
     {
@@ -59,6 +76,7 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
     [Theory] [InlineData("/api/business/wallet/deposits")][InlineData("/api/business/deposit-requests")]
     [InlineData("/api/admin/deposit-requests/11111111-1111-1111-1111-111111111111/review")]
     [InlineData("/api/admin/financial-settings")][InlineData("/api/admin/platform/settlements")]
+    [InlineData("/api/admin/accounts/businesses/11111111-1111-1111-1111-111111111111/promotional-funding")]
     [InlineData("/api/checkout/confirm")][InlineData("/api/customer/offers/11111111-1111-1111-1111-111111111111/qr")]
     [InlineData("/api/creator/participations/11111111-1111-1111-1111-111111111111/refresh")]
     public async Task Explicit_financial_freeze_blocks_new_and_existing_financial_write_paths(string path)

@@ -58,6 +58,8 @@ public static class ApiHost
         builder.Services.AddScoped<ProductIntegrationService>();
         builder.Services.AddScoped<AdminAccountService>();
         builder.Services.TryAddSingleton(new BusinessLegalDocumentSource(builder.Environment.ContentRootPath));
+        builder.Services.TryAddSingleton(new AccountLegalDocumentSource(
+            builder.Configuration["V3:Legal:ApprovedContentDirectory"] ?? "/run/weymela-v3/approved-legal"));
         builder.Services.AddScoped<LegalWorkspaceService>();builder.Services.AddScoped<OperationalHealth>();builder.Services.AddScoped<ReconciliationService>();builder.Services.AddScoped<AdminPromotionalFundingService>();
         builder.Services.TryAddSingleton<INotificationPushProvider,DisabledPushProvider>();
         builder.Services.AddSingleton<IDepositProvider>(options.DepositMode=="ManualApproval"?new ManualApprovalDepositProvider():new DisabledDepositProvider());

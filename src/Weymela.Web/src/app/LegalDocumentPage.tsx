@@ -20,6 +20,9 @@ const documents: Record<
 
 export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
   const document = documents[kind];
+  const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
+  const [language, setLanguage] = useState<"en" | "am">("en");
+  const source = production ? `/api/legal/account/${kind}?language=${language}` : document.source;
   const [content, setContent] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [generation, setGeneration] = useState(0);
@@ -28,13 +31,14 @@ export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
     const controller = new AbortController();
     setContent(null);
     setFailed(false);
-    void fetch(document.source, {
+    void fetch(source, {
       credentials: "same-origin",
+      cache: "no-store",
       signal: controller.signal,
     })
       .then((response) => {
         if (!response.ok) throw new Error("Legal document unavailable");
-        return response.text();
+        return production ? response.json().then((value: { content: string }) => value.content) : response.text();
       })
       .then(setContent)
       .catch((error: unknown) => {
@@ -42,7 +46,7 @@ export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
           setFailed(true);
       });
     return () => controller.abort();
-  }, [document.source, generation]);
+  }, [source, production, generation]);
 
   return (
     <main className="legal-document-page">
@@ -51,9 +55,11 @@ export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
           Back
         </Link>
         <header>
-          <p className="eyebrow">Weymela Pilot</p>
+          <p className="eyebrow">{production ? "Weymela" : "Weymela Pilot"}</p>
           <h1 id="legal-title">{document.title}</h1>
         </header>
+        {production && <div><Button variant="secondary" onClick={() => setLanguage("en")}>English</Button>
+          <Button variant="secondary" onClick={() => setLanguage("am")}>አማርኛ</Button></div>}
         {!content && !failed && (
           <div className="loading" role="status">
             Opening document…

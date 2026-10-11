@@ -33,7 +33,9 @@
       "approvedFinalVersion": null,
       "ownerApprovalReference": null,
       "legalApprovalReference": null,
-      "contentPath": "TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.md"
+      "contentPath": "TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.md",
+      "draftContentBytes": 9913,
+      "proposedFinalVersion": "tos-v3-1.0-en"
     },
     {
       "type": "TermsOfService",
@@ -43,7 +45,9 @@
       "approvedFinalVersion": null,
       "ownerApprovalReference": null,
       "legalApprovalReference": null,
-      "contentPath": "TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.am.md"
+      "contentPath": "TERMS-OF-SERVICE-OWNER-LEGAL-DRAFT.am.md",
+      "draftContentBytes": 15142,
+      "proposedFinalVersion": "tos-v3-1.0-am"
     },
     {
       "type": "PrivacyPolicy",
@@ -53,7 +57,9 @@
       "approvedFinalVersion": null,
       "ownerApprovalReference": null,
       "legalApprovalReference": null,
-      "contentPath": "PRIVACY-POLICY-OWNER-LEGAL-DRAFT.md"
+      "contentPath": "PRIVACY-POLICY-OWNER-LEGAL-DRAFT.md",
+      "draftContentBytes": 11485,
+      "proposedFinalVersion": "privacy-v3-1.0-en"
     },
     {
       "type": "PrivacyPolicy",
@@ -63,7 +69,45 @@
       "approvedFinalVersion": null,
       "ownerApprovalReference": null,
       "legalApprovalReference": null,
-      "contentPath": "PRIVACY-POLICY-OWNER-LEGAL-DRAFT.am.md"
+      "contentPath": "PRIVACY-POLICY-OWNER-LEGAL-DRAFT.am.md",
+      "draftContentBytes": 18077,
+      "proposedFinalVersion": "privacy-v3-1.0-am"
     }
+  ],
+  "integrity": {
+    "hashAlgorithm": "SHA-256",
+    "encoding": "UTF-8",
+    "hashScope": "Exact file bytes; no newline normalization.",
+    "verifiedAtUtc": "2026-10-11T15:43:47.691161+00:00",
+    "verificationMethod": "Python hashlib over exact file bytes"
+  },
+  "effectiveDateProposal": {
+    "proposedUtc": "2026-10-12T00:00:00Z",
+    "conditions": "Both languages, owner and qualified legal approval must be recorded before this time; otherwise assign a later approved UTC date. No automatic activation."
+  },
+  "verifiedOperationalEvidence": {
+    "productionFirebaseProject": "weymela-production",
+    "emailProvider": "Resend",
+    "senderDomain": "mail.weymela.com",
+    "productionDatabaseIsolated": true,
+    "activeProductionFinancialProducts": [],
+    "approvedInactiveBaselinePercent": {
+      "customerCashback": 4,
+      "creatorCommission": 5,
+      "platformCommission": 1
+    },
+    "financialAuthorizationReference": "owner-v3-final-production-release-20261011",
+    "authorizationScope": "Inactive baseline only; prices and thresholds remain unset."
+  },
+  "remainingRequiredInformation": [
+    "Contracting entity and registered address",
+    "Governing law, service territories and regulatory complaint route",
+    "Minimum age and legal capacity rules",
+    "Support, legal, privacy and security contacts with secure request procedures",
+    "Purpose-to-lawful-basis mapping, actual provider processing locations and transfer safeguards",
+    "Retention schedule for accounts, authentication, content/media, financial records, legal acceptance, support, security logs and backups",
+    "Content licence, suspension and appeal procedures, liability and dispute terms",
+    "Material-change notice terms and controlling language; equivalent English/Amharic review",
+    "Owner/legal approval references, approved exact final hashes and effective UTC date"
   ]
 }

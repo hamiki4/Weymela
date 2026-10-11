@@ -64,6 +64,19 @@ if (string.Equals(operation, "financial-configuration-v1", StringComparison.Ordi
 {
     var effective = DateTime.Parse(Required(values, "effective-from"), null,
         DateTimeStyles.RoundtripKind);
+    if (values.ContainsKey("inactive") && RequiredBoolean(values, "inactive"))
+    {
+        // Unknown prices stay absent. This operation cannot create an effective product price.
+        var inactive = new InactiveFinancialBaselineRequest(
+            Guid.Parse(Required(values, "platform-admin-user-id")),
+            RequiredDecimal(values, "customer-cashback-percent"),
+            RequiredDecimal(values, "creator-commission-percent"), RequiredDecimal(values, "platform-percent"),
+            effective, Required(values, "operator-reference"), Guid.Parse(Required(values, "correlation-id")),
+            Required(values, "idempotency-key"), productionAuthorizationReference);
+        var baseline = await new FinancialConfigurationBootstrapper(db, target).ProvisionInactiveAsync(inactive);
+        Console.WriteLine($"Inactive financial baseline approved: version={baseline.Version}, id={baseline.Id:D}; all products remain disabled.");
+        return;
+    }
     var ugc = target.RequiresProductionAuthorization
         ? new UgcSettingsInput(RequiredDecimal(values, "ugc-minimum-creator-payment"),
             RequiredDecimal(values, "ugc-platform-fee-percent"), OptionalDecimal(values, "ugc-minimum-budget"),

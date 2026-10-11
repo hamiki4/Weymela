@@ -5,24 +5,35 @@ using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Infrastructure.Deposits;
 
-public sealed class ReceivingDestinationService(WeymelaDbContext db, TimeProvider clock)
+public sealed class ReceivingDestinationService(WeymelaDbContext db, TimeProvider clock, RuntimeOptions? options = null)
 {
+    private bool Production => options?.EnvironmentName == "Production";
+    internal static bool ApprovedProductionDestination(PlatformReceivingDestination row) =>
+        row.IsActive && row.UpdatedBy is not null && row.UpdatedBy != Guid.Empty && row.Version > 0
+        && !Placeholder(row.AccountReference);
+    private static bool Placeholder(string account) => account is "0911111111" or "1000000000" or "123456789";
+
     public async Task<IReadOnlyList<ReceivingDestinationView>> ActiveAsync(Actor actor, CancellationToken ct = default)
     {
         if (actor.Role != ActorRole.Business || actor.BusinessId is null)
             throw new ApplicationFailure(FailureKind.Forbidden, "Business access is required.");
-        return await db.PlatformReceivingDestinations.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.SortOrder)
+        var rows = db.PlatformReceivingDestinations.AsNoTracking().Where(x => x.IsActive);
+        if (Production) rows = rows.Where(x => x.UpdatedBy != null && x.UpdatedBy != Guid.Empty && x.Version > 0
+            && x.AccountReference != "0911111111" && x.AccountReference != "1000000000" && x.AccountReference != "123456789");
+        return await rows.OrderBy(x => x.SortOrder)
             .Select(x => new ReceivingDestinationView(x.Id, x.Method, x.Name, x.AccountReference, x.IsActive, x.SortOrder, x.Version)).ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<ReceivingDestinationView>> AdminAsync(Actor actor, CancellationToken ct = default)
     {
         PayoutService.DemandPlatformAdmin(actor);
-        return await db.PlatformReceivingDestinations.AsNoTracking().OrderBy(x => x.SortOrder)
-            .Select(x => new ReceivingDestinationView(x.Id, x.Method, x.Name, x.AccountReference, x.IsActive, x.SortOrder, x.Version)).ToListAsync(ct);
+        var rows = await db.PlatformReceivingDestinations.AsNoTracking().OrderBy(x => x.SortOrder).ToListAsync(ct);
+        return rows.Select(x => new ReceivingDestinationView(x.Id, x.Method, x.Name, x.AccountReference,
+            Production ? ApprovedProductionDestination(x) : x.IsActive, x.SortOrder, x.Version)).ToList();
     }
 
     public async Task<ReceivingDestinationView> UpdateAsync(Actor actor, Guid id, ReceivingDestinationInput input, CancellationToken ct = default)
@@ -34,6 +45,8 @@ public sealed class ReceivingDestinationService(WeymelaDbContext db, TimeProvide
         var method = Clean(input.Method, 30); var name = Clean(input.Name, 100); var account = Clean(input.AccountReference, 100);
         if (method is not ("Telebirr" or "Bank") || input.SortOrder < 0)
             throw new ApplicationFailure(FailureKind.Validation, "Receiving destination is invalid.");
+        if (Production && input.IsActive && Placeholder(account))
+            throw new ApplicationFailure(FailureKind.Validation, "Replace the example receiving account with verified Business deposit details before activating it.");
         row.Method = method; row.Name = name; row.AccountReference = account; row.IsActive = input.IsActive;
         row.SortOrder = input.SortOrder; row.UpdatedAtUtc = clock.GetUtcNow().UtcDateTime; row.UpdatedBy = actor.UserId;
         db.AuditEvents.Add(new(Guid.NewGuid(), "ReceivingDestinationUpdated", actor.UserId, null, null, null, row.Id,

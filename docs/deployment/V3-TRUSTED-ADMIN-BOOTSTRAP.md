@@ -52,6 +52,11 @@ The operation is serializable, audited, and idempotent. It creates only the firs
 
 Keep financial writes disabled, deposits disabled, and external payouts disabled until the separate owner activation process is approved. Never use a bootstrap command to enable them.
 
+Production excludes the receiving accounts inserted as migration examples from Business choices and deposit submissions.
+The Platform Admin must replace example references with actual verified receiving details before activating them.
+Production eligibility requires a non-example reference and the audited Platform Admin update; Operations Admin cannot
+change these details. This configuration step is separate from verifying actual receipt settlement before wallet credit.
+
 ## Legal policies
 
 Production Web policy pages read `/api/legal/account/terms?language=en` and the matching Privacy/Amharic paths.

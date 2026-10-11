@@ -7,10 +7,11 @@ using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Web;
+using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Infrastructure.Deposits;
 
-public sealed class DepositService(WeymelaDbContext db, IDepositProvider provider, TimeProvider clock)
+public sealed class DepositService(WeymelaDbContext db, IDepositProvider provider, TimeProvider clock, RuntimeOptions? options = null)
 {
     public async Task<DepositReceipt> SubmitAsync(Actor actor, DepositSubmission input, string key, CancellationToken ct)
     {
@@ -26,6 +27,8 @@ public sealed class DepositService(WeymelaDbContext db, IDepositProvider provide
         {
             var destination = await db.PlatformReceivingDestinations.SingleOrDefaultAsync(x => x.Id == input.ReceivingDestinationId && x.IsActive, token)
                 ?? throw new ApplicationFailure(FailureKind.Validation, "The selected receiving destination is not active.");
+            if (options?.EnvironmentName == "Production" && !ReceivingDestinationService.ApprovedProductionDestination(destination))
+                throw new ApplicationFailure(FailureKind.Validation, "The receiving account has not been verified for Production deposits.");
             var op = new FinancialOperation(db);
             var fingerprint = RequestFingerprint.Create(actor.BusinessId.ToString()!, RequestFingerprint.Amount(amount), evidence.Provider, evidence.ExternalReference,
                 evidence.ProofReference ?? "", destination.Id.ToString());

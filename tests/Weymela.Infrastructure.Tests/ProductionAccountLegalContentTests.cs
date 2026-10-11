@@ -40,6 +40,9 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
             await db.SaveChangesAsync();
             Assert.Equal(text, (await source.ReadAsync(db, LegalDocumentType.TermsOfService, "en", now, default))!.Content);
             Assert.Null(await source.ReadAsync(db, LegalDocumentType.TermsOfService, "am", now, default));
+            db.LegalDocumentVersions.Add(new(Guid.NewGuid(), LegalDocumentType.TermsOfService, "test-new-en", hash, now.AddSeconds(1)));
+            await db.SaveChangesAsync();
+            Assert.Null(await source.ReadAsync(db, LegalDocumentType.TermsOfService, "en", now.AddSeconds(2), default));
             await File.AppendAllTextAsync(policy, "changed");
             Assert.Null(await source.ReadAsync(db, LegalDocumentType.TermsOfService, "en", now, default));
             await File.WriteAllTextAsync(Path.Combine(directory, "publication.json"), "{}");

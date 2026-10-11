@@ -36,11 +36,15 @@ public sealed class AccountLegalDocumentSource(string directory)
             var approved = documents[0];
             var versionName = approved.GetProperty("approvedFinalVersion").GetString();
             var hash = approved.GetProperty("approvedFinalContentSha256").GetString();
-            if (string.IsNullOrWhiteSpace(versionName) || hash is null || hash.Length != 71
+            if (string.IsNullOrWhiteSpace(versionName) || !versionName.EndsWith("-" + language, StringComparison.Ordinal)
+                || hash is null || hash.Length != 71
                 || !hash.StartsWith("sha256:", StringComparison.Ordinal)) return null;
-            var version = await db.LegalDocumentVersions.AsNoTracking().SingleOrDefaultAsync(x =>
-                x.Type == type && x.Version == versionName && x.EffectiveFromUtc <= now, ct);
-            if (version is null || version.ContentHash != hash) return null;
+            var suffix = "-" + language;
+            var version = await db.LegalDocumentVersions.AsNoTracking().Where(x =>
+                x.Type == type && x.Version.EndsWith(suffix) && x.EffectiveFromUtc <= now)
+                .OrderByDescending(x => x.EffectiveFromUtc).ThenByDescending(x => x.Version)
+                .ThenByDescending(x => x.Id).FirstOrDefaultAsync(ct);
+            if (version is null || version.Version != versionName || version.ContentHash != hash) return null;
             var path = Path.Combine(directory, $"{type}-{language}.txt");
             if (!File.Exists(path) || new FileInfo(path).Length is <= 0 or > 262144) return null;
             var bytes = await File.ReadAllBytesAsync(path, ct);

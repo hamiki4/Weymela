@@ -29,6 +29,23 @@ The operator reference and Production authorization reference are audit identifi
 
 ## First financial configuration
 
+For an installation with every financial product disabled, use `--operation financial-configuration-v1 --inactive true`.
+Supply only the real bound Platform Admin, approved Customer cashback/Creator commission/Platform rates,
+effective UTC time, operator/correlation/idempotency references, and the Production owner authorization reference.
+The owner authorized rates on 2026-10-11 are 4%, 5%, and 1%, respectively. This approval does not approve product activation.
+
+This records Version 1 of the inactive baseline as a structured immutable `InactiveFinancialBaselineApproved`
+audit event and its idempotency record. Prices, verified-view thresholds, payout thresholds, UGC pricing,
+duration and audience rules remain absent. It creates no product pricing, wallet, journal or obligation.
+The baseline can satisfy the configuration readiness gate only with financial writes disabled and deposits
+`Disabled`; the existing approved-legal and trusted-Admin gates still apply. Money endpoints also reject
+missing effective pricing if runtime writes are accidentally enabled. Existing financial activity or
+configuration closes inactive bootstrap. Replay requires the same active bound Admin and identical approval.
+
+After the owner approves complete product settings, run the full bootstrap below with a separate idempotency key.
+The immutable inactive approval remains in history. Active pricing still has all existing validation,
+reservations, reconciliation and authorization requirements; subsequent changes use normal audited Admin versioning.
+
 After a trusted V3 Platform Admin exists, the console supports a separate `financial-configuration-v1` operation. It requires the existing Admin identity and explicit, owner-approved values for both view modes, verified-sale rates, payout thresholds, effective UTC time, and the Production UGC, audience, and duration fields. Production rejects omitted UGC values rather than applying schema defaults. Optional minimum Promotion budgets may be null only when the owner expressly approves that choice.
 
 The operation is serializable, audited, and idempotent. It creates only the first pricing root, version, idempotency record, and audit event. It refuses to overwrite existing configuration and does not create wallets, Promotions, payouts, or ledger transactions. Normal Admin financial settings remain the subsequent versioning path. The non-importable Production worksheet records known candidate rules and every unresolved owner value; it is not a runtime configuration.

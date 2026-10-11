@@ -30,7 +30,7 @@ public sealed record FinancialConfigurationBootstrapResult(
 /// Trusted, operator-run provisioning for the first effective Platform pricing version.
 /// There is deliberately no HTTP endpoint for this one-time operation.
 /// </summary>
-public sealed class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3BootstrapTarget target, TimeProvider? clock = null)
+public sealed partial class FinancialConfigurationBootstrapper(WeymelaDbContext db, V3BootstrapTarget target, TimeProvider? clock = null)
 {
     private const string Operation = "FinancialConfigurationBootstrap";
     private const string ConfigurationName = "PlatformPricing";

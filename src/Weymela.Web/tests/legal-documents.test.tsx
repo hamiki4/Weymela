@@ -6,7 +6,30 @@ import { LegalDocumentPage } from "../src/app/LegalDocumentPage";
 
 describe("Pilot legal document pages", () => {
   beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+  it("Production reads approved content and switches to the approved Amharic version", async () => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ content: "Approved English test content" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ content: "የጸደቀ የሙከራ ጽሑፍ" }), { status: 200 }));
+    render(<MemoryRouter><LegalDocumentPage kind="terms" /></MemoryRouter>);
+    expect(await screen.findByText("Approved English test content")).toBeVisible();
+    expect(fetch).toHaveBeenCalledWith("/api/legal/account/terms?language=en", expect.objectContaining({ cache: "no-store" }));
+    await userEvent.click(screen.getByRole("button", { name: "አማርኛ" }));
+    expect(await screen.findByText("የጸደቀ የሙከራ ጽሑፍ")).toBeVisible();
+    expect(fetch).toHaveBeenLastCalledWith("/api/legal/account/terms?language=am", expect.anything());
+    expect(screen.queryByText("Weymela Pilot")).not.toBeInTheDocument();
+  });
+
+  it("Production never falls back to Pilot policy text when approval is unavailable", async () => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 503 }));
+    render(<MemoryRouter><LegalDocumentPage kind="privacy" /></MemoryRouter>);
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/legal/account/privacy?language=en", expect.anything());
+  });
 
   it("renders the concise Pilot/Draft Terms without claiming final review", async () => {
     vi.mocked(fetch).mockResolvedValue(

@@ -8,6 +8,8 @@ using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence;
+using Weymela.Infrastructure.Operations;
+using Weymela.Domain;
 
 namespace Weymela.Api.Endpoints;
 
@@ -23,6 +25,17 @@ internal static class OnboardingEndpoints
 
     public static void MapOnboardingEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/legal/account/{kind}", async (string kind, string? language,
+            AccountLegalDocumentSource source, WeymelaDbContext db, TimeProvider clock, CancellationToken ct) =>
+        {
+            var type = kind switch { "terms" => LegalDocumentType.TermsOfService,
+                "privacy" => LegalDocumentType.PrivacyPolicy, _ => (LegalDocumentType?)null };
+            if (type is null || language is not (null or "en" or "am")) return Results.NotFound();
+            var content = await source.ReadAsync(db, type.Value, language ?? "en", clock.GetUtcNow().UtcDateTime, ct);
+            return content is null
+                ? Results.Json(new { code = "ApprovedLegalUnavailable", message = "The approved legal document is not available yet." }, statusCode: 503)
+                : Results.Ok(content);
+        }).AllowAnonymous();
         var account = app.MapGroup("/api/onboarding").RequireAuthorization("VerifiedAccount")
             .AddEndpointFilter<ValidatedInputFilter>();
         account.MapGet("/status", async (HttpContext c, RoleEnrollmentService service, CancellationToken ct) =>

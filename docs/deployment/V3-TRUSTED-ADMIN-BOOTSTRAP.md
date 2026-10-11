@@ -54,6 +54,16 @@ Keep financial writes disabled, deposits disabled, and external payouts disabled
 
 ## Legal policies
 
+Production Web policy pages read `/api/legal/account/terms?language=en` and the matching Privacy/Amharic paths.
+They require operator-published approved files mounted read-only at `/run/weymela-v3/approved-legal` (or
+`V3:Legal:ApprovedContentDirectory`). The directory contains `TermsOfService-en.txt`, `TermsOfService-am.txt`,
+`PrivacyPolicy-en.txt`, `PrivacyPolicy-am.txt`, and `publication.json`. The manifest must record
+`environment=Production`, actual `productionApproved`/`attorneyReviewed` evidence, owner/legal approval references,
+and exactly one document per type/language with `approvedFinalVersion` and `approvedFinalContentSha256`.
+Each version/hash must match its effective database record and the exact UTF-8 file bytes. Missing approval,
+missing content, future effectiveness or a hash mismatch returns unavailable. No Pilot content is used as a
+Production fallback. Populate this protected directory only after the real approvals are supplied.
+
 English and Amharic Production Terms and Privacy drafts are review material only. Their draft versions and content hashes are recorded in `docs/legal/production/approval-plan.json`; they are not approved policy records and cannot be imported or activated. Do not seed test policies into live Production. Legal approval, owner approval, final versioning, and a separately reviewed publication process are required before readiness can advance.
 
 ## Audit and cleanup

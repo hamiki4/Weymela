@@ -13,8 +13,8 @@ final class ProductionApiPolicy {
             String path = uri.getRawPath();
             return "https".equals(uri.getScheme()) && HOST.equals(uri.getHost())
                 && (uri.getPort() == -1 || uri.getPort() == 443) && uri.getUserInfo() == null && uri.getFragment() == null
-                && path != null && path.startsWith("/api/") && !path.startsWith("/api/v1/")
-                && !path.contains("\\") && !path.toLowerCase(Locale.ROOT).matches(".*%(2e|2f|5c).*" )
+                && path != null && path.startsWith("/api/") && !path.toLowerCase(Locale.ROOT).startsWith("/api/v1/")
+                && !path.contains("\\") && !path.contains("%")
                 && path.equals(uri.normalize().getRawPath());
         } catch (Exception ignored) { return false; }
     }

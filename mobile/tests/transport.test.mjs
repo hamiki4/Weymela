@@ -51,6 +51,8 @@ test('web execution is unchanged', async () => {
 test('rejects legacy API, unsupported methods, and complex bodies', async () => {
   const { scope, calls } = fixture();
   await assert.rejects(scope.fetch('/api/v1/auth/refresh'), /Legacy/);
+  await assert.rejects(scope.fetch('/api/V1/auth/refresh'), /Legacy/);
+  await assert.rejects(scope.fetch('/api/%76%31/auth/refresh'), /Unsupported API path/);
   await assert.rejects(scope.fetch('/api/session', { method: 'DELETE' }), /Unsupported API method/);
   await assert.rejects(scope.fetch('/api/session', { method: 'POST', body: new Blob(['unknown']) }), /Unsupported API request body/);
   assert.equal(calls.length, 0);

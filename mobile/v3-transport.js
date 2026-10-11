@@ -6,7 +6,8 @@
   function apiUrl(input, origin) {
     const url = new URL(input instanceof Request ? input.url : String(input), origin);
     if (url.origin !== origin || !url.pathname.startsWith("/api/")) return null;
-    if (url.pathname.startsWith("/api/v1/")) throw new Error("Legacy API is unavailable in Weymela V3.");
+    if (url.pathname.toLowerCase().startsWith("/api/v1/")) throw new Error("Legacy API is unavailable in Weymela V3.");
+    if (url.pathname.includes("%")) throw new Error("Unsupported API path.");
     return apiOrigin + url.pathname + url.search;
   }
 

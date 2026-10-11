@@ -17,8 +17,9 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
             if (options.EnvironmentName == "Pilot" && (options.EmailDeliveryMode != "Resend"
                 || options.FirebaseCustomTokenMode != "FirebaseAdmin")) return new(false, "not_ready");
             if (!await db.Database.CanConnectAsync(bound.Token) || (await db.Database.GetPendingMigrationsAsync(bound.Token)).Any()) return new(false, "not_ready");
+            // Policy publication gates consent-dependent operations, not service availability.
             if (!options.Development && (!await FinancialConfigurationReadyAsync(bound.Token)
-                || !await RequiredAccountLegalReadyAsync(bound.Token) || !await PlatformAdminReadyAsync(bound.Token)))
+                || !await PlatformAdminReadyAsync(bound.Token)))
                 return new(false, "not_ready");
             if (options.WorkerEnabled)
             {
@@ -41,14 +42,6 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
         // Turning on money operations still requires complete effective pricing.
         return !options.FinancialWritesEnabled && options.DepositMode == "Disabled"
             && await InactiveFinancialBaselines.EffectiveAsync(db, options.FirebaseProjectId, now, ct) is not null;
-    }
-    private async Task<bool> RequiredAccountLegalReadyAsync(CancellationToken ct)
-    {
-        var now = clock.GetUtcNow().UtcDateTime;
-        return await db.LegalDocumentVersions.AnyAsync(x => x.Type == LegalDocumentType.TermsOfService
-                && x.EffectiveFromUtc <= now && x.ContentHash.Trim() != "", ct)
-            && await db.LegalDocumentVersions.AnyAsync(x => x.Type == LegalDocumentType.PrivacyPolicy
-                && x.EffectiveFromUtc <= now && x.ContentHash.Trim() != "", ct);
     }
     private async Task<bool> PlatformAdminReadyAsync(CancellationToken ct)
     {

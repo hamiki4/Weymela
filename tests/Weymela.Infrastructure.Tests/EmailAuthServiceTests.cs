@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Weymela.Application;
 using Weymela.Application.Operations;
+using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
@@ -15,6 +17,87 @@ namespace Weymela.Infrastructure.Tests;
 public sealed class EmailAuthServiceTests(PostgresFixture fixture)
 {
     private static RuntimeOptions Options() => new() { FirebaseProjectId = "isolated-v3-test", AuthCodeHashKey = "test-only-key" };
+    private static RuntimeOptions ProductionOptions() => new()
+        { EnvironmentName = "Production", FirebaseProjectId = "isolated-v3-test", AuthCodeHashKey = "test-only-key" };
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unapproved")]
+    [InlineData("incomplete")]
+    [InlineData("tampered")]
+    [InlineData("approved")]
+    public async Task Production_registration_requires_all_four_approved_published_policies(string publication)
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var directory = Directory.CreateTempSubdirectory("isolated-registration-legal-");
+        try
+        {
+            const string text = "Isolated policy fixture, never a Production document.\n";
+            var hash = "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+            var documents = new List<object>();
+            foreach (var type in new[] { LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy })
+                foreach (var language in new[] { "en", "am" })
+                {
+                    var version = $"isolated-{type}-{language}";
+                    db.LegalDocumentVersions.Add(new(Guid.NewGuid(), type, version, hash, DateTime.UtcNow.AddMinutes(-1)));
+                    documents.Add(new { type = type.ToString(), language,
+                        approvedFinalVersion = version, approvedFinalContentSha256 = hash });
+                    if (publication != "incomplete" || language != "am")
+                        await File.WriteAllTextAsync(Path.Combine(directory.FullName, $"{type}-{language}.txt"), text);
+                }
+            await db.SaveChangesAsync();
+            if (publication != "missing")
+                await File.WriteAllTextAsync(Path.Combine(directory.FullName, "publication.json"), JsonSerializer.Serialize(new
+                {
+                    environment = "Production", productionApproved = publication != "unapproved",
+                    attorneyReviewed = publication != "unapproved", ownerApprovalReference = "isolated-test-owner",
+                    legalApprovalReference = "isolated-test-legal", documents
+                }));
+            if (publication == "tampered")
+                await File.AppendAllTextAsync(Path.Combine(directory.FullName, "PrivacyPolicy-am.txt"), "changed");
+            var delivery = new TestDelivery(); var issuer = new TestIssuer();
+            var service = new EmailAuthService(db, delivery, issuer, ProductionOptions(),
+                TimeProvider.System, new AccountLegalDocumentSource(directory.FullName));
+            await service.StartAsync("new@example.test", null, EmailCodePurpose.Signup, default);
+            if (publication == "approved")
+                await service.VerifyAsync("new@example.test", EmailCodePurpose.Signup, delivery.Codes.Single().Code, default);
+            else
+            {
+                await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => service.VerifyAsync(
+                    "new@example.test", EmailCodePurpose.Signup, delivery.Codes.Single().Code, default));
+                db.ChangeTracker.Clear();
+                Assert.Empty(await db.AuthIdentifiers.ToListAsync());
+                Assert.Null((await db.EmailAuthChallenges.SingleAsync()).ConsumedAtUtc);
+            }
+            Assert.Equal(publication == "approved", issuer.Called);
+            // Email verification grants no role or consent; role activation still requires acceptance.
+            Assert.Empty(await db.CommercePermissions.ToListAsync());
+            Assert.Empty(await db.LegalAcceptances.ToListAsync());
+            Assert.Empty(await db.FinancialJournals.ToListAsync());
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
+    [Fact]
+    public async Task Production_existing_verified_account_can_sign_in_without_published_policies()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var userId = Guid.NewGuid();
+        db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Email",
+            IdentifierHash = HashIdentifier("owner@example.test"), DeliveryAddress = "owner@example.test",
+            IsVerified = true, CreatedAtUtc = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        var service = new EmailAuthService(db, delivery, issuer, ProductionOptions(), TimeProvider.System);
+        await service.StartAsync("owner@example.test", null, EmailCodePurpose.Signup, default);
+        Assert.Equal(EmailCodePurpose.DeviceEnrollment, delivery.Codes.Single().Purpose);
+        await service.VerifyAsync("owner@example.test", EmailCodePurpose.Signup, delivery.Codes.Single().Code, default);
+        Assert.Equal(userId, Assert.Single(issuer.IssuedUserIds));
+        Assert.Single(await db.AuthIdentifiers.ToListAsync());
+        Assert.Empty(await db.LegalAcceptances.ToListAsync());
+    }
 
     [Theory]
     [InlineData("", "EmailRequired", "Email address is required.")]

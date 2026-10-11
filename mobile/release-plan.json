@@ -1,0 +1,17 @@
+{
+  "applicationId": "com.weymela.app",
+  "versionCode": 10,
+  "versionName": "3.0.0",
+  "highestPlayVersionCodeAtPreparation": 9,
+  "track": "alpha",
+  "firebaseProjectId": "weymela-production",
+  "apiOrigin": "https://api.weymela.com",
+  "webSourceCommit": "f457e7c982b9d326efb5ab44a2e45c30f9e0329d",
+  "webImage": "ghcr.io/hamiki4/weymela-v3-web@sha256:bfe41d394ea8007ae72107f79b4ea2230f0e1dacc0a4d1ca56c2764a04e1c85d",
+  "recoveredNativeSourceCommit": "c3de86d9fd0748df5e630d86f494c5386f8846dc",
+  "uploadAlias": "weymela-upload",
+  "registeredUploadCertificateVerification": "Pending actual Play Console evidence",
+  "signingAuthorizedAfterCertificateMatch": true,
+  "submissionAuthorizedAfterBackendCompatibility": true,
+  "publicProductionPromotionAuthorized": false
+}

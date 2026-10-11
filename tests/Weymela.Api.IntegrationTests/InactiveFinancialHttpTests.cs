@@ -19,6 +19,7 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
     [InlineData("/api/business/campaigns/{id:guid}/fund")]
     [InlineData("/api/admin/payouts/{id:guid}/paid")]
     [InlineData("/api/business/checkout")]
+    [InlineData("/api/admin/accounts/businesses/{businessId:guid}/promotional-funding")]
     public async Task Missing_product_configuration_blocks_money_even_when_runtime_writes_are_enabled(string route)
     {
         var database = await fixture.CreateAsync();

@@ -76,6 +76,7 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
     [Theory] [InlineData("/api/business/wallet/deposits")][InlineData("/api/business/deposit-requests")]
     [InlineData("/api/admin/deposit-requests/11111111-1111-1111-1111-111111111111/review")]
     [InlineData("/api/admin/financial-settings")][InlineData("/api/admin/platform/settlements")]
+    [InlineData("/api/admin/accounts/businesses/11111111-1111-1111-1111-111111111111/promotional-funding")]
     [InlineData("/api/checkout/confirm")][InlineData("/api/customer/offers/11111111-1111-1111-1111-111111111111/qr")]
     [InlineData("/api/creator/participations/11111111-1111-1111-1111-111111111111/refresh")]
     public async Task Explicit_financial_freeze_blocks_new_and_existing_financial_write_paths(string path)

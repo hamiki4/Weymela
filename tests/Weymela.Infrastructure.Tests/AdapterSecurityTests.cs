@@ -17,6 +17,17 @@ namespace Weymela.Infrastructure.Tests;
 
 public sealed class AdapterSecurityTests
 {
+    [Fact] public void Policy_deferral_requires_the_production_owner_reference_and_never_changes_pilot()
+    {
+        var config = ProductionConfig(); config["V3:Legal:ConsentMode"] = "Deferred";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+        config["V3:Legal:DeferralAuthorizationReference"] = "isolated-test-owner-deferral";
+        var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.True(options.LegalConsentDeferred);
+        var pilot = Config(); pilot["V3:Legal:ConsentMode"] = "Deferred";
+        pilot["V3:Legal:DeferralAuthorizationReference"] = "isolated-test-owner-deferral";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(pilot).Build(), "Pilot"));
+    }
     private static readonly DirectoryInfo PhotoDirectory = CreatePhotoDirectory();
     private static readonly DirectoryInfo ReviewMediaDirectory = CreateReviewMediaDirectory();
     private static DirectoryInfo CreatePhotoDirectory()
@@ -377,6 +388,58 @@ public sealed class AdapterSecurityTests
             PilotFinancialWritesMode = "Uat" }.FinancialWritesActive(DateTime.UtcNow));
         Assert.False(new RuntimeOptions { EnvironmentName = "Pilot", FinancialWritesEnabled = true,
             PilotFinancialWritesMode = "Timed" }.FinancialWritesActive(DateTime.UtcNow));
+    }
+    [Fact] public void Production_enables_only_explicit_operations_and_preserves_the_master_pause()
+    {
+        var config = ProductionConfig();
+        config["V3:FinancialWritesEnabled"] = "true";
+        config["V3:ProductionFinancial:AuthorizationReference"] = "isolated-test-production-authorization";
+        config["V3:ProductionFinancial:Operations:0"] = ProductionFinancialOperations.Checkout;
+        var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.True(options.FinancialOperationActive(ProductionFinancialOperations.Checkout, DateTime.UtcNow));
+        Assert.False(options.FinancialOperationActive(ProductionFinancialOperations.DepositRequests, DateTime.UtcNow));
+        Assert.False(options.FinancialOperationActive(ProductionFinancialOperations.Payouts, DateTime.UtcNow));
+        Assert.False(options.FinancialOperationActive(ProductionFinancialOperations.ViewRewards, DateTime.UtcNow));
+        config["V3:FinancialWritesEnabled"] = "false";
+        var paused = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.False(paused.FinancialOperationActive(ProductionFinancialOperations.Checkout, DateTime.UtcNow));
+        Assert.False(new RuntimeOptions { EnvironmentName = "Production", FinancialWritesEnabled = false,
+            ProductionFinancialAuthorizationReference = "isolated-test-production-authorization",
+            EnabledProductionFinancialOperations = [ProductionFinancialOperations.Checkout] }
+            .FinancialOperationActive(ProductionFinancialOperations.Checkout, DateTime.UtcNow));
+    }
+    [Theory]
+    [InlineData(null, "Checkout")]
+    [InlineData("invalid reference", "Checkout")]
+    [InlineData("isolated-test-authorization", "ViewRewards")]
+    [InlineData("isolated-test-authorization", "Unknown")]
+    public void Production_rejects_missing_authorization_and_unsupported_operations(string? reference, string operation)
+    {
+        var config = ProductionConfig();
+        config["V3:FinancialWritesEnabled"] = "true";
+        config["V3:ProductionFinancial:AuthorizationReference"] = reference;
+        config["V3:ProductionFinancial:Operations:0"] = operation;
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+    }
+    [Theory]
+    [InlineData("DepositRequests")][InlineData("WalletFunding")]
+    public void Production_funding_and_deposits_require_the_settlement_approval_adapter(string operation)
+    {
+        var config = ProductionConfig();
+        config["V3:FinancialWritesEnabled"] = "true";
+        config["V3:ProductionFinancial:AuthorizationReference"] = "isolated-test-authorization";
+        config["V3:ProductionFinancial:Operations:0"] = operation;
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+    }
+    [Fact] public void Production_operation_authorization_cannot_escape_to_pilot()
+    {
+        var config = Config();
+        config["V3:ProductionFinancial:AuthorizationReference"] = "isolated-test-authorization";
+        config["V3:ProductionFinancial:Operations:0"] = ProductionFinancialOperations.Checkout;
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Pilot"));
     }
     [Theory]
     [InlineData("V3:Auth:Provider", "")][InlineData("V3:Auth:FirebaseProjectId", "")]

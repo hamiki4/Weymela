@@ -43,7 +43,7 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 if (suppliedProfile.Length > 0 && (activeProfile is null || !WorkspaceAuthentication.MatchesKey(activeProfile, suppliedProfile)))
                 {await Error(context,409,"ProfileContextChanged","This workspace changed in another tab. Refresh before submitting again.");return;}
                 if(!options.Development&&!context.Request.IsHttps){await Error(context,403,"SecureTransportRequired","A secure connection is required.");return;}
-                if(!options.FinancialWritesActive(DateTime.UtcNow)&&EndpointSecurity.Financial(context)){await Error(context,503,"FinancialWritesPaused","Financial actions are currently paused. No funds have moved.");return;}
+                if(EndpointSecurity.Financial(context)&&!options.FinancialOperationActive(EndpointSecurity.FinancialOperation(context),DateTime.UtcNow)){await Error(context,503,"FinancialWritesPaused","Financial actions are currently paused. No funds have moved.");return;}
                 // Product services validate their own current prices, immutable funding snapshots,
                 // beneficiary thresholds and verified receiving accounts. Unrelated settings do not gate this request.
                 var receiptUpload=context.Request.Path.Equals("/api/business/deposit-requests",StringComparison.OrdinalIgnoreCase)

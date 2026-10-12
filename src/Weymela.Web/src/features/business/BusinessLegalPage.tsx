@@ -31,6 +31,7 @@ export function BusinessLegalPage() {
   const destination = businessLegalReturn(params.get("returnTo"));
   const navigate = useNavigate();
   const legal = useResource<BusinessLegalDocument[]>("/legal/current");
+  const mode = useResource<{ legalConsentRequired?: boolean }>("/auth/mode");
   const action = useAction();
   const [acknowledged, setAcknowledged] = useState(false);
   const [content, setContent] = useState<Record<string, LegalContent> | null>(null);
@@ -56,6 +57,7 @@ export function BusinessLegalPage() {
     return () => { active = false; };
   }, [versionKey]);
 
+  if (mode.data?.legalConsentRequired === false) return <Navigate to={destination} replace />;
   if (legal.loading) return <p className="loading" role="status">Checking current Business requirements…</p>;
   if (legal.error) return <Notice error>{legal.error.message}</Notice>;
   return <Resource resource={legal}>{current => {

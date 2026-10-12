@@ -104,6 +104,18 @@ describe("shared role-themed onboarding", () => {
     mocks.activeProfiles = [];
     mocks.legalStatus = effectiveLegal;
   });
+  it.each(["Customer", "Creator", "Business"])("completes owner-deferred %s signup without claiming policy acceptance", async role => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    mocks.legalStatus = { required: false, available: false, current: false, documents: [] };
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({ version: 1, idempotencyKey: "deferred-" + role,
+      role, legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      businessName: "Isolated business", businessType: "Retail", socialPlatform: "TikTok",
+      socialProfileUrl: "https://www.tiktok.com/@isolated_creator", legalAccepted: false, legalDeferred: true }));
+    renderOnboarding();
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile",
+      expect.objectContaining({ role }), "deferred-" + role));
+    expect(mocks.post.mock.calls[0][1]).not.toHaveProperty("accountLegal");
+  });
 
   it.each(["Business", "Creator", "Customer"])("keeps verified %s registration blocked with an accurate unpublished-policy message", async role => {
     mocks.legalStatus = { available: false, current: false, documents: [] };

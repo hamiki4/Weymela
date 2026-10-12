@@ -108,13 +108,15 @@ class RepositoryGateTests(unittest.TestCase):
                               'approvedEffectiveUtc', 'approvedBy', 'approvedFinalVersion',
                               'approvedFinalContentSha256')))
         for item in manifest['documents']:
-            self.assertRegex(item['draftVersion'], r'^(en|am)-draft-0\.1-2026-10-10$')
+            self.assertRegex(item['draftVersion'], r'^(en|am)-draft-0\.2-2026-10-12$')
             self.assertRegex(item['draftContentSha256'], r'^sha256:[a-f0-9]{64}$')
             self.assertIsNone(item['approvedFinalVersion'])
             self.assertIsNone(item['ownerApprovalReference'])
             self.assertIsNone(item['legalApprovalReference'])
             source = bundle / item['contentPath']
             document = source.read_text()
+            self.assertIn('Weymela', document)
+            self.assertIn('support@weymela.com', document)
             self.assertEqual(item['draftContentSha256'], 'sha256:' + hashlib.sha256(source.read_bytes()).hexdigest())
             if item['language'] == 'en':
                 self.assertIn('NOT APPROVED', document)

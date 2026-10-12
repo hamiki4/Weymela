@@ -34,14 +34,25 @@ public sealed class RuntimeOptions
     public string CreatorPhotoDirectory { get; init; } = "";
     public string ReviewMediaDirectory { get; init; } = "";
     public string SocialMode { get; init; } = "Disabled";
+    public string LegalConsentMode { get; init; } = "Required";
+    public string? LegalConsentAuthorizationReference { get; init; }
+    public bool LegalConsentDeferred => EnvironmentName == "Production" && LegalConsentMode == "Deferred"
+        && Weymela.Infrastructure.Identity.PlatformAdminBootstrapTarget.IsValidProductionAuthorizationReference(LegalConsentAuthorizationReference);
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
     public string PilotFinancialWritesMode { get; init; } = "Disabled";
     public DateTime? PilotFinancialWritesUntilUtc { get; init; }
+    public string? ProductionFinancialAuthorizationReference { get; init; }
+    public string[] EnabledProductionFinancialOperations { get; init; } = [];
     public bool FinancialWritesActive(DateTime nowUtc) => FinancialWritesEnabled
-        && (Development || EnvironmentName == "Pilot"
+        && (Development || EnvironmentName == "Production"
+            && ProductionFinancialOperations.Valid(ProductionFinancialAuthorizationReference, EnabledProductionFinancialOperations)
+            || EnvironmentName == "Pilot"
             && (PilotFinancialWritesMode == "Uat" || PilotFinancialWritesMode == "Timed"
                 && PilotFinancialWritesUntilUtc is not null && nowUtc < PilotFinancialWritesUntilUtc.Value));
+    public bool FinancialOperationActive(string operation, DateTime nowUtc) => FinancialWritesActive(nowUtc)
+        && (EnvironmentName != "Production" || ProductionFinancialOperations.Known(operation)
+            && EnabledProductionFinancialOperations.Contains(operation, StringComparer.Ordinal));
     public int WorkerBatchSize { get; init; } = 20;
     public int RecipientBatchSize { get; init; } = 100;
     public int WorkerIntervalSeconds { get; init; } = 5;
@@ -201,6 +212,13 @@ public sealed class RuntimeOptions
                     "The private review media directory must have mode 0700.");
         }
         var social = config["V3:Social:Mode"] ?? "Disabled";
+        var legalMode = config["V3:Legal:ConsentMode"] ?? "Required";
+        var legalReference = config["V3:Legal:DeferralAuthorizationReference"];
+        Require(legalMode is "Required" or "Deferred", "Legal consent mode must be explicit.");
+        Require(legalMode == "Required" && string.IsNullOrEmpty(legalReference)
+            || environment == "Production" && legalMode == "Deferred"
+                && Weymela.Infrastructure.Identity.PlatformAdminBootstrapTarget.IsValidProductionAuthorizationReference(legalReference),
+            "Policy deferral requires an explicit Production owner instruction; it is not approval or user consent.");
         Require(social == "Disabled" || dev && social == "Test", "Live social providers require an approved adapter; test providers cannot run outside Development.");
         Require(!config.GetValue<bool>("V3:Push:Enabled"), "Push is not connected; in-app notifications do not require push.");
         var batch = config.GetValue("V3:Worker:BatchSize", 20); var interval = config.GetValue("V3:Worker:IntervalSeconds", 5);
@@ -215,6 +233,13 @@ public sealed class RuntimeOptions
             "Pilot financial writes mode must be Disabled, Timed or Uat.");
         var untilSetting = config["V3:PilotFinancialWritesUntilUtc"];
         DateTime? pilotFinancialWritesUntilUtc = null;
+        var productionReference = config["V3:ProductionFinancial:AuthorizationReference"];
+        var productionOperations = config.GetSection("V3:ProductionFinancial:Operations").Get<string[]>() ?? [];
+        Require(productionOperations.All(ProductionFinancialOperations.Known)
+            && productionOperations.Distinct(StringComparer.Ordinal).Count() == productionOperations.Length,
+            "Production financial operations must use the explicit supported allowlist; view rewards are unavailable.");
+        Require(environment == "Production" || productionOperations.Length == 0 && string.IsNullOrEmpty(productionReference),
+            "Production financial authorization cannot be used in another environment.");
         if (environment == "Pilot" && financialWrites)
         {
             Require(deposits == "ManualApproval", "Pilot financial writes require manual deposit approval.");
@@ -237,7 +262,20 @@ public sealed class RuntimeOptions
         }
         else
         {
-            Require(dev || !financialWrites, "Financial writes must remain disabled outside Pilot testing and Development.");
+            if (environment == "Production" && financialWrites)
+            {
+                Require(ProductionFinancialOperations.Valid(productionReference, productionOperations),
+                    "Production financial writes require an operator authorization reference and explicitly enabled operations.");
+                if (productionOperations.Any(x => x is ProductionFinancialOperations.DepositRequests or ProductionFinancialOperations.WalletFunding))
+                    Require(deposits == "ManualApproval", "Deposit requests and wallet funding require manual settlement approval.");
+            }
+            else
+            {
+                Require(dev || !financialWrites, "Financial writes require an explicitly supported environment.");
+                Require(productionOperations.Length == 0 && string.IsNullOrEmpty(productionReference)
+                    || environment == "Production" && ProductionFinancialOperations.Valid(productionReference, productionOperations),
+                    "Retained Production operation authorization must remain complete and valid while paused.");
+            }
             Require(pilotFinancialWritesMode == "Disabled",
                 "Pilot financial writes mode must remain Disabled unless Pilot financial writes are enabled.");
             Require(string.IsNullOrEmpty(untilSetting) || untilSetting == "disabled",
@@ -258,6 +296,9 @@ public sealed class RuntimeOptions
             WorkerEnabled = config.GetValue("V3:Worker:Enabled", !dev), WorkerBatchSize = batch, WorkerIntervalSeconds = interval,
             FinancialWritesEnabled = financialWrites, PilotFinancialWritesMode = pilotFinancialWritesMode,
             PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
+            ProductionFinancialAuthorizationReference = productionReference,
+            EnabledProductionFinancialOperations = productionOperations,
+            LegalConsentMode = legalMode, LegalConsentAuthorizationReference = legalReference,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies
         };
     }

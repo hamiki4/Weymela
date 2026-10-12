@@ -27,7 +27,8 @@ public static class ServiceRegistration
         services.AddScoped<IIdempotencyStore, IdempotencyStore>();
         services.AddScoped<IFinancialConfigurationResolver, FinancialConfigurationResolver>();
         services.AddScoped<IEventPublisher, OutboxEventPublisher>();
-        services.AddScoped<ILegalAcceptanceGate>(sp => new LegalAcceptanceGate(sp.GetRequiredService<WeymelaDbContext>(), TimeProvider.System));
+        services.AddScoped<ILegalAcceptanceGate>(sp => new LegalAcceptanceGate(sp.GetRequiredService<WeymelaDbContext>(), TimeProvider.System,
+            sp.GetService<Weymela.Infrastructure.Operations.RuntimeOptions>()));
         services.AddScoped<FinancialCommands>();
         services.AddScoped<FinancialJournalRepository>();
         services.AddScoped<CreatorEarningsRepository>();

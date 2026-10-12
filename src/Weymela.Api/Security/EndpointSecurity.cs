@@ -39,6 +39,7 @@ public static class EndpointSecurity
     {
         if (HttpMethods.IsGet(c.Request.Method) || HttpMethods.IsOptions(c.Request.Method)) return false;
         var route = Operation(c); var category = Category(c);
+        if (route.EndsWith("/payout-destination")) return false;
         // Pricing configuration is audited metadata, and must remain editable while money is paused.
         return category is "checkout" or "qr" or "views" or "deposit" or "payout"
             || route.EndsWith("/fund") || route.EndsWith("/promotional-funding")
@@ -47,6 +48,20 @@ public static class EndpointSecurity
             || route == "/api/business/ugc/{id:guid}/cancel"
             || route == "/api/business/promotions/{id:guid}/cancel"
             || route == "/api/business/ugc/assignments/{id:guid}/review/{action}";
+    }
+    public static string FinancialOperation(HttpContext c)
+    {
+        var route = Operation(c);
+        if (route.EndsWith("/promotional-funding")) return ProductionFinancialOperations.WalletFunding;
+        if (route.StartsWith("/api/admin/deposit", StringComparison.Ordinal))
+            return ProductionFinancialOperations.WalletFunding;
+        if (Category(c) == "deposit") return ProductionFinancialOperations.DepositRequests;
+        if (Category(c) is "checkout" or "qr") return ProductionFinancialOperations.Checkout;
+        if (Category(c) == "payout") return ProductionFinancialOperations.Payouts;
+        if (Category(c) == "views") return ProductionFinancialOperations.ViewRewards;
+        if (route.StartsWith("/api/business/", StringComparison.Ordinal))
+            return ProductionFinancialOperations.PromotionReservations;
+        return "Unknown"; // New money routes stay disabled until explicitly classified.
     }
     public static void AddLimits(IServiceCollection services, RuntimeOptions config) => services.AddRateLimiter(options =>
     {

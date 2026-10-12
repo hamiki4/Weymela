@@ -13,6 +13,30 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
 {
+    [Theory]
+    [InlineData(ActorRole.Customer)][InlineData(ActorRole.Creator)][InlineData(ActorRole.Business)]
+    public async Task Explicit_owner_policy_deferral_allows_registration_without_fabricating_policy_or_consent(ActorRole role)
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var options = new RuntimeOptions { EnvironmentName = "Production", LegalConsentMode = "Deferred",
+            LegalConsentAuthorizationReference = "isolated-test-owner-policy-deferral" };
+        var user = Guid.NewGuid();
+        var legal = new AccountLegalOnboardingService(db, TimeProvider.System, options);
+        var status = await legal.StatusAsync(user, default);
+        Assert.False(status.Required); Assert.False(status.Available); Assert.False(status.Current); Assert.Empty(status.Documents);
+        var request = new RoleEnrollmentRequest(role, "Isolated user", null, "Addis Ababa", "Retail", null,
+            SocialProfiles: role == ActorRole.Creator ? [new("TikTok", "https://www.tiktok.com/@isolated_creator")] : null);
+        await new RoleEnrollmentService(db, TimeProvider.System, options).SubmitAsync(
+            new Actor(user, ActorRole.Customer, CustomerId: Guid.Empty), request, "isolated-deferral-" + role, default);
+        Assert.Single(await db.RoleEnrollments.ToListAsync());
+        Assert.Empty(await db.LegalDocumentVersions.ToListAsync());
+        Assert.Empty(await db.LegalAcceptances.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+        await new Weymela.Infrastructure.Persistence.Repositories.LegalAcceptanceGate(db, TimeProvider.System, options)
+            .EnsureCurrentAcceptedAsync(user, role == ActorRole.Business ? LegalRole.Business : LegalRole.Creator,
+                [LegalDocumentType.AntiCircumventionAgreement], default);
+    }
     [Fact]
     public async Task Production_consent_requires_all_four_readable_approved_documents_even_with_existing_acceptance()
     {

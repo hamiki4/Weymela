@@ -9,6 +9,7 @@ using Weymela.Infrastructure.Identity;
 using Weymela.Api.Security;
 using System.Security.Claims;
 using Weymela.Application.Operations;
+using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Api.Endpoints;
 
@@ -26,7 +27,7 @@ internal static class AuthEndpoints
     private sealed record PasswordResetInput(string NewPassword, string ConfirmPassword);
     public static void MapAuthEndpoints(this WebApplication app,bool development)
     {
-        app.MapGet("/api/auth/mode",()=>Results.Ok(new{development,personas=development?new DevelopmentDirectory().Personas.Select(x=>new{x.Alias,x.Name,role=x.Actor.Role.ToString()}):null})).AllowAnonymous();
+        app.MapGet("/api/auth/mode",(RuntimeOptions options)=>Results.Ok(new{development,legalConsentRequired=!options.LegalConsentDeferred,personas=development?new DevelopmentDirectory().Personas.Select(x=>new{x.Alias,x.Name,role=x.Actor.Role.ToString()}):null})).AllowAnonymous();
         app.MapPost("/api/auth/cashier/activate", async (CashierActivationInput input, CashierService service, CancellationToken ct) =>
             Results.Ok(await service.ActivateAsync(input, ct))).AllowAnonymous().AddEndpointFilter<ValidatedInputFilter>();
         app.MapGet("/api/session",async(HttpContext c,WeymelaDbContext db,CancellationToken ct)=>

@@ -561,7 +561,14 @@ export interface FinancialSettings {
   enforceAudienceRequirements: boolean;
 }
 export interface SettingsWorkspace {
-  current: FinancialSettings;
+  current: FinancialSettings | null;
+  inactiveBaseline?: {
+    version: number;
+    customerCashbackPercent: number;
+    creatorCommissionPercent: number;
+    platformPercent: number;
+    effectiveFromUtc: string;
+  } | null;
   version: number;
   versions: {
     id: string;

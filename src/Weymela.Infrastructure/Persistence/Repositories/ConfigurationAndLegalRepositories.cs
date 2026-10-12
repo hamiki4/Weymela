@@ -7,10 +7,13 @@ namespace Weymela.Infrastructure.Persistence.Repositories;
 
 public sealed class FinancialConfigurationResolver(WeymelaDbContext db) : IFinancialConfigurationResolver
 {
-    public async Task<FinancialConfigurationVersion> EffectiveAsync(DateTime at, CancellationToken ct = default) =>
+    public async Task<FinancialConfigurationVersion?> FindEffectiveAsync(DateTime at, CancellationToken ct = default) =>
         await db.FinancialConfigurationVersions.AsNoTracking().Where(x => x.EffectiveFromUtc <= at)
             .OrderByDescending(x => x.EffectiveFromUtc).ThenByDescending(x => x.Version).ThenByDescending(x => x.Id)
-            .FirstOrDefaultAsync(ct) ?? throw new ApplicationFailure(FailureKind.Validation, "No effective Platform pricing configuration exists.");
+            .FirstOrDefaultAsync(ct);
+    public async Task<FinancialConfigurationVersion> EffectiveAsync(DateTime at, CancellationToken ct = default) =>
+        await FindEffectiveAsync(at, ct)
+            ?? throw new ApplicationFailure(FailureKind.Validation, "No effective Platform pricing configuration exists.");
     public async Task<PricingSnapshot> ResolveAsync(PromotionType type, DateTime at, CancellationToken ct)
     {
         var v = await EffectiveAsync(at, ct);

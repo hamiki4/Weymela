@@ -10,6 +10,7 @@ using Weymela.Domain;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Infrastructure.Identity;
 
@@ -18,7 +19,8 @@ namespace Weymela.Infrastructure.Identity;
 /// write passwords/PINs, or create Cashiers. Administrative provisioning only
 /// stores a one-time activation hash and delivers the invitation to the target.
 /// </summary>
-public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvider clock, IEmailCodeDelivery delivery)
+public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvider clock, IEmailCodeDelivery delivery,
+    RuntimeOptions? options = null, AccountLegalDocumentSource? legalSource = null)
 {
     public const int MaxDirectoryResults = 500;
     private static readonly ActorRole[] PreauthorizedRoles =
@@ -318,7 +320,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             throw new ApplicationFailure(FailureKind.Validation, "This account already has a profile for that role.");
         if (row.TargetRole is ActorRole.Customer or ActorRole.Creator or ActorRole.Business)
         {
-            var legalService = new AccountLegalOnboardingService(db, clock);
+            var legalService = new AccountLegalOnboardingService(db, clock, options, legalSource);
             var status = await legalService.StatusAsync(target.UserId, ct);
             if (!status.Current)
                 await legalService.AcceptCurrentAsync(target.UserId, accountLegal, ipReference, userAgentReference, ct);

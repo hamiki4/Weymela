@@ -31,6 +31,13 @@ describe("Pilot legal document pages", () => {
     expect(fetch).toHaveBeenCalledWith("/api/legal/account/privacy?language=en", expect.anything());
   });
 
+  it("explains missing Production publication instead of suggesting an unrelated service outage", async () => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ code: "ApprovedLegalUnavailable" }), { status: 503 }));
+    render(<MemoryRouter><LegalDocumentPage kind="terms" /></MemoryRouter>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The approved legal document is not available yet.");
+  });
+
   it("renders the concise Pilot/Draft Terms without claiming final review", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(

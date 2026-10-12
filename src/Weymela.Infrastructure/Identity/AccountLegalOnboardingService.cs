@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence;
+using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Infrastructure.Identity;
 
@@ -12,7 +13,8 @@ public sealed record AccountLegalDocumentConfirmation(Guid DocumentId, string Co
 public sealed record AccountLegalConfirmation(AccountLegalDocumentConfirmation? TermsOfService,
     AccountLegalDocumentConfirmation? PrivacyPolicy);
 
-public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvider clock)
+public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvider clock,
+    RuntimeOptions? options = null, AccountLegalDocumentSource? legalSource = null)
 {
     private static readonly LegalDocumentType[] Required =
         [LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy];
@@ -58,11 +60,17 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
 
     private async Task<IReadOnlyList<LegalDocumentVersion>> CurrentDocumentsAsync(CancellationToken ct)
         => await EffectiveDocumentsAsync(ct)
-            ?? throw new ApplicationFailure(FailureKind.Validation, "Current legal documents are unavailable.");
+            ?? throw new ApplicationFailure(FailureKind.Validation,
+                "Account activation requires published Terms of Service and Privacy Policy.", code: "ApprovedLegalUnavailable");
 
     private async Task<IReadOnlyList<LegalDocumentVersion>?> EffectiveDocumentsAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow().UtcDateTime;
+        if (options?.EnvironmentName == "Production")
+            foreach (var type in Required)
+                foreach (var language in new[] { "en", "am" })
+                    if (legalSource is null || await legalSource.ReadAsync(db, type, language, now, ct) is null)
+                        return null;
         var effective = await db.LegalDocumentVersions.AsNoTracking()
             .Where(x => Required.Contains(x.Type) && x.EffectiveFromUtc <= now)
             .OrderByDescending(x => x.EffectiveFromUtc).ThenByDescending(x => x.Version).ThenByDescending(x => x.Id)

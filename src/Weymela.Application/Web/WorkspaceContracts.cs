@@ -139,7 +139,10 @@ public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceIn
     DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null, int PromotionLiveDurationDays = 30,
     bool EnforceAudienceRequirements = false);
 public sealed record FinancialVersionInfo(Guid Id, int Version, DateTime EffectiveFromUtc, Guid ChangedBy, FinancialSettingsInput Settings);
-public sealed record FinancialSettingsWorkspace(FinancialSettingsInput Current, int Version, IReadOnlyList<FinancialVersionInfo> Versions);
+public sealed record InactiveFinancialBaselineInfo(int Version, decimal CustomerCashbackPercent,
+    decimal CreatorCommissionPercent, decimal PlatformPercent, DateTime EffectiveFromUtc);
+public sealed record FinancialSettingsWorkspace(FinancialSettingsInput? Current, int Version,
+    IReadOnlyList<FinancialVersionInfo> Versions, InactiveFinancialBaselineInfo? InactiveBaseline = null);
 public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name, decimal Available, decimal Threshold, decimal PayAmount,
     DateTime? EligibleSinceUtc, string Status, string? Method = null, string? Provider = null, string? Account = null);
 public sealed record PayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers,

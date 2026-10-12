@@ -3,6 +3,9 @@ using System.Text;
 using System.Text.Json;
 using Weymela.Domain;
 using Weymela.Infrastructure.Operations;
+using Weymela.Infrastructure.Identity;
+using Weymela.Application;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -10,6 +13,54 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
 {
+    [Fact]
+    public async Task Production_consent_requires_all_four_readable_approved_documents_even_with_existing_acceptance()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var directory = Directory.CreateTempSubdirectory("v3-consent-publication-");
+        try
+        {
+            var now = DateTime.UtcNow.AddMinutes(-1);
+            var user = Guid.NewGuid();
+            var approved = new List<object>();
+            foreach (var type in new[] { LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy })
+                foreach (var language in new[] { "en", "am" })
+                {
+                    var text = $"Isolated consent test: {type}-{language}.\n";
+                    var hash = "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+                    var version = new LegalDocumentVersion(Guid.NewGuid(), type, "test-1-" + language, hash, now);
+                    db.LegalDocumentVersions.Add(version);
+                    approved.Add(new { type = type.ToString(), language, approvedFinalVersion = version.Version,
+                        approvedFinalContentSha256 = hash });
+                    await File.WriteAllTextAsync(Path.Combine(directory.FullName, $"{type}-{language}.txt"), text);
+                }
+            await db.SaveChangesAsync();
+            var service = new AccountLegalOnboardingService(db, TimeProvider.System,
+                new RuntimeOptions { EnvironmentName = "Production" }, new AccountLegalDocumentSource(directory.FullName));
+            Assert.False((await service.StatusAsync(user, default)).Available);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, "publication.json"), JsonSerializer.Serialize(new {
+                environment = "Production", productionApproved = true, attorneyReviewed = true,
+                ownerApprovalReference = "isolated-test-owner", legalApprovalReference = "isolated-test-legal", documents = approved
+            }));
+            var status = await service.StatusAsync(user, default);
+            Assert.True(status.Available);
+            var terms = status.Documents.Single(x => x.Kind == "TermsOfService");
+            var privacy = status.Documents.Single(x => x.Kind == "PrivacyPolicy");
+            var confirmation = new AccountLegalConfirmation(new(terms.DocumentId, terms.ContentHash, true),
+                new(privacy.DocumentId, privacy.ContentHash, true));
+            await service.AcceptCurrentAsync(user, confirmation, null, null, default);
+            await db.SaveChangesAsync();
+            Assert.True((await service.StatusAsync(user, default)).Current);
+            await File.AppendAllTextAsync(Path.Combine(directory.FullName, "PrivacyPolicy-am.txt"), "unapproved change");
+            Assert.False((await service.StatusAsync(user, default)).Available);
+            var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptCurrentAsync(user, confirmation, null, null, default));
+            Assert.Equal("ApprovedLegalUnavailable", failure.Code);
+            Assert.Equal(2, await db.LegalAcceptances.CountAsync());
+            Assert.Equal(2, await db.AuditEvents.CountAsync());
+        }
+        finally { directory.Delete(true); }
+    }
     [Fact]
     public async Task Production_content_requires_owner_legal_approval_exact_bytes_and_published_version()
     {

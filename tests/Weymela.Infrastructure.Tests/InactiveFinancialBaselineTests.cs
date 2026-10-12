@@ -7,6 +7,7 @@ using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Repositories;
+using Weymela.Infrastructure.Web;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -16,6 +17,63 @@ public sealed class InactiveFinancialBaselineTests(PostgresFixture fixture)
 {
     private static readonly DateTime Now = new(2026, 10, 11, 12, 0, 0, DateTimeKind.Utc);
     private static readonly TimeProvider Clock = new FixedClock();
+
+    [Fact]
+    public async Task Platform_admin_can_read_unconfigured_settings_without_creating_a_pricing_version()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var admin = await SeedAdmin(db);
+        await Bootstrap(db).ProvisionInactiveAsync(Request(admin));
+        var workspace = await new WorkspaceQueries(db, null!, Clock, options: new RuntimeOptions
+            { EnvironmentName = "Production", FirebaseProjectId = "weymela-production" })
+            .SettingsAsync(new Actor(admin, ActorRole.PlatformAdmin), default);
+        Assert.Null(workspace.Current);
+        Assert.Equal(0, workspace.Version);
+        Assert.Empty(workspace.Versions);
+        Assert.NotNull(workspace.InactiveBaseline);
+        Assert.Equal(4, workspace.InactiveBaseline.CustomerCashbackPercent);
+        Assert.Equal(5, workspace.InactiveBaseline.CreatorCommissionPercent);
+        Assert.Equal(1, workspace.InactiveBaseline.PlatformPercent);
+        Assert.Empty(await db.FinancialConfigurationVersions.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+        Assert.Equal(1, await db.AuditEvents.CountAsync());
+        Assert.Empty(await new WorkspaceQueries(db, null!, Clock)
+            .CreatorsAsync(new Actor(admin, ActorRole.PlatformAdmin), default));
+        Assert.Empty(await new WorkspaceQueries(db, null!, Clock)
+            .OperationsCreatorsAsync(new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin), default));
+        var payouts = await new WorkspaceQueries(db, null!, Clock)
+            .PayoutsAsync(new Actor(admin, ActorRole.PlatformAdmin), default);
+        Assert.Empty(payouts.Creators);
+        Assert.Empty(payouts.Customers);
+        Assert.Empty(payouts.History);
+    }
+
+    [Fact]
+    public async Task Unconfigured_settings_still_require_platform_admin_and_the_trusted_first_bootstrap()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var queries = new WorkspaceQueries(db, null!, Clock);
+        var commands = new WorkspaceCommands(db, null!, Clock);
+        var input = new Weymela.Application.Web.FinancialSettingsInput(new(1, 1, 1, 0, null), new(1, 1, 1, 0, null),
+            5, 4, 1, 1, 1, null);
+        foreach (var role in new[] { ActorRole.OperationsAdmin, ActorRole.Business, ActorRole.Creator, ActorRole.Customer, ActorRole.Cashier })
+        {
+            var actor = new Actor(Guid.NewGuid(), role);
+            Assert.Equal(FailureKind.Forbidden, (await Assert.ThrowsAsync<ApplicationFailure>(
+                () => queries.SettingsAsync(actor, default))).Kind);
+            Assert.Equal(FailureKind.Forbidden, (await Assert.ThrowsAsync<ApplicationFailure>(
+                () => commands.SettingsAsync(actor, input, 0, "denied-" + role, default))).Kind);
+        }
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => commands.SettingsAsync(
+            new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), input, 0, "not-bootstrapped", default));
+        Assert.Equal("FinancialConfigurationRequired", failure.Code);
+        Assert.Empty(await db.FinancialConfigurations.ToListAsync());
+        Assert.Empty(await db.FinancialConfigurationVersions.ToListAsync());
+        Assert.Empty(await db.AuditEvents.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+    }
 
     [Fact]
     public async Task Approved_baseline_keeps_unknown_prices_absent_and_replays_without_financial_obligations()

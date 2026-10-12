@@ -46,11 +46,25 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
+  const [accepted, setAccepted] = useState(false);
+  const [reviewedDocuments, setReviewedDocuments] = useState<AccountLegalStatus["documents"] | null>(null);
+  const needsConsent = production && legal.data?.available && !legal.data.current;
+  const documentFingerprint = legal.data?.documents.map(document => `${document.documentId}:${document.contentHash}`).join("|");
+  useEffect(() => {
+    setAccepted(false);
+    setReviewedDocuments(null);
+  }, [documentFingerprint]);
   const submit = async () => {
     if (!user) return;
-    const terms = legal.data?.documents.find(document => document.kind === "TermsOfService");
-    const privacy = legal.data?.documents.find(document => document.kind === "PrivacyPolicy");
-    if (!legal.data?.available || !terms || !privacy)
+    if (!legal.data?.available)
+      throw new Error("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.");
+    if (needsConsent && (!accepted || !reviewedDocuments))
+      throw new Error("Review and accept the published policies to finish registration.");
+    const documents = needsConsent ? reviewedDocuments : legal.data.documents;
+    const terms = documents?.find(document => document.kind === "TermsOfService");
+    const privacy = documents?.find(document => document.kind === "PrivacyPolicy");
+    if (!terms || !privacy)
       throw new Error("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.");
     const accountLegal = legal.data.current ? undefined : {
       termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
@@ -76,14 +90,15 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
     setCompleted(true);
   };
   useEffect(() => {
-    if (!user || !legal.data || started.current) return;
+    if (!user || !legal.data || legal.loading || started.current) return;
+    if (needsConsent) { setBusy(false); return; }
     started.current = true;
     setBusy(true);
     void submit().catch(cause => {
       started.current = false;
       setError(cause instanceof Error ? cause.message : "We could not complete registration. Please try again.");
     }).finally(() => setBusy(false));
-  }, [user, legal.data]);
+  }, [user, legal.data, legal.loading, needsConsent]);
   if (!user) return <Navigate to="/sign-in" replace />;
   const continueToWorkspace = async () => {
     await refresh(true);
@@ -95,8 +110,30 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
       <CompactLanguageChoice />
       <BrandStatus role={draft.role} />
       {busy && <><h1>Creating your account…</h1><p role="status">Your verified details are being saved securely.</p></>}
+      {needsConsent && !busy && !error && !completed && <form onSubmit={event => {
+        event.preventDefault();
+        started.current = true;
+        setBusy(true);
+        void submit().catch(cause => {
+          started.current = false;
+          setError(cause instanceof Error ? cause.message : "Try again.");
+        })
+          .finally(() => setBusy(false));
+      }}>
+        <h1>Finish registration</h1>
+        <p>Review and accept the published policies to finish registration.</p>
+        <label className="signup-legal-consent"><input required type="checkbox" checked={accepted}
+          onChange={event => {
+            setAccepted(event.target.checked);
+            setReviewedDocuments(event.target.checked ? legal.data!.documents : null);
+          }} />
+          <span>I agree to Weymela&apos;s <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <div className="actions"><Button type="submit" disabled={!accepted}>Finish registration</Button>
+          <Button type="button" variant="secondary" onClick={() => void signOut()}>Sign out</Button></div>
+      </form>}
       {error && <><h1>Registration needs attention</h1><Notice error>{error}</Notice>
-        <div className="actions"><Button onClick={() => { setError(null); started.current = false; setBusy(true); void submit().then(() => setBusy(false)).catch(cause => { setBusy(false); setError(cause instanceof Error ? cause.message : "Try again."); }); }}>Try again</Button>
+        <div className="actions"><Button onClick={() => { setError(null); setAccepted(false); setReviewedDocuments(null); started.current = false; setBusy(true); legal.reload(); }}>Try again</Button>
           <Button variant="secondary" onClick={() => void signOut()}>Sign out</Button></div></>}
       {completed && <>
         <h1>{draft.role === "Business" ? "Your Business account is ready."
@@ -133,6 +170,7 @@ function LegacyOnboarding() {
   const [region, setRegion] = useState("");
   const [socialUrls, setSocialUrls] = useState(emptySocial);
   const [submittedRole, setSubmittedRole] = useState<"Creator" | "Business" | null>(null);
+  const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
   useEffect(() => { status.reload(); void refresh(); }, []);
   if (loading) return <div className="loading" role="status">Opening your account setup…</div>;
   if (!user) return <Navigate to="/sign-in" replace />;
@@ -149,7 +187,8 @@ function LegacyOnboarding() {
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
     const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
     if (!legal.data?.available || !terms || !privacy || (!legal.data.current && !legalAccepted))
-      throw new Error("Customer setup isn't available yet.");
+      throw new Error(legal.data?.available ? "Accept Weymela's Rules and Regulations before continuing."
+        : "Account activation requires published Terms of Service and Privacy Policy.");
     const accountLegal = !legal.data.current ? {
       termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
       privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },
@@ -170,7 +209,7 @@ function LegacyOnboarding() {
     if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
     const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
-    const requiresAccountLegal = approved.size === 0 && !legal.data?.current;
+    const requiresAccountLegal = !legal.data?.current && (production || approved.size === 0);
     if (requiresAccountLegal && (!legal.data?.available || !terms || !privacy || !legalAccepted))
       throw new Error("Accept Weymela's Rules and Regulations before continuing.");
     const accountLegal = requiresAccountLegal ? {
@@ -265,6 +304,7 @@ function LegacyOnboarding() {
             title={role === "Creator" ? "Creator setup" : "Business setup"}
             description={role === "Creator" ? "Tell us about your Creator profile." : "Tell us about your Business."}>
             <div className="form-grid onboarding-form role-application-form">
+              {production && !legal.loading && !legal.data?.available && <Notice error>Account activation requires published Terms of Service and Privacy Policy.</Notice>}
               <Field label={role === "Creator" ? "Creator name" : "Business name"} wide>
                 <input required maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} /></Field>
               <Field label="Region (optional)"><input maxLength={80} value={region} onChange={event => setRegion(event.target.value)} /></Field>
@@ -276,7 +316,7 @@ function LegacyOnboarding() {
                   onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: { profileUrl: "", audience: "0" } }))}
                 />
               </div>}
-              {approved.size === 0 && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
+              {(production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
                 <input id="profile-legal-accepted" type="checkbox" checked={legalAccepted}
                   onChange={(event) => setLegalAccepted(event.target.checked)}
                   aria-label="I agree to Weymela's Rules and Regulations" required />
@@ -287,7 +327,7 @@ function LegacyOnboarding() {
               </div></div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
-                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (approved.size === 0 && !legal.data?.current && !legalAccepted) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
+                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || ((production || approved.size === 0) && !legal.data?.current && (!legal.data?.available || !legalAccepted)) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
                   {action.busy ? "Submitting…" : role === "Business" ? "Add Business" : "Submit for Review"}</Button></div>
             </div>
           </RoleOnboardingShell>}

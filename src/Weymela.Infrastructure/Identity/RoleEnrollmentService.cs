@@ -72,7 +72,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             .AnyAsync(x => x.UserId == actor.UserId && x.IsActive, ct);
         if (!hasActiveProfile || options?.EnvironmentName == "Production")
         {
-            var accountLegal = new AccountLegalOnboardingService(db, clock);
+            var accountLegal = new AccountLegalOnboardingService(db, clock, options, legalSource);
             var status = await accountLegal.StatusAsync(actor.UserId, ct);
             if (!status.Current)
                 await accountLegal.AcceptCurrentAsync(actor.UserId, request.AccountLegal,

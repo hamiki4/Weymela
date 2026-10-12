@@ -317,6 +317,13 @@ const amharic: Record<string, string> = {
   "Follower and subscriber counts must be whole numbers.": "የተከታይና የተመዝጋቢ ብዛቶች ሙሉ ቁጥሮች መሆን አለባቸው።",
   "Your account is ready.": "መለያዎ ዝግጁ ነው።",
   "Your email is verified.": "ኢሜይልዎ ተረጋግጧል።",
+  "Finish registration": "ምዝገባውን ያጠናቅቁ",
+  "The approved legal document is not available yet.": "የጸደቀው የሕግ ሰነድ ገና አይገኝም።",
+  "Approved inactive baseline": "የጸደቀ ያልነቃ መነሻ ቅንብር",
+  "Financial configuration pending": "የፋይናንስ ቅንብር በመጠባበቅ ላይ ነው",
+  "No financial pricing version is effective yet.": "እስካሁን ተፈጻሚ የሆነ የፋይናንስ ዋጋ ስሪት የለም።",
+  "Complete owner-approved view pricing, UGC rates, payout thresholds, promotion duration and audience rules through the trusted financial bootstrap. Financial products remain disabled until their activation checks pass.": "በባለቤቱ የጸደቁትን የእይታ ዋጋዎች፣ የUGC ተመኖች፣ የክፍያ ገደቦች፣ የማስተዋወቂያ ቆይታ እና የተመልካች ደንቦች በታመነው የፋይናንስ ማስጀመሪያ ያጠናቅቁ። የማንቃት ምርመራዎቻቸው እስኪያልፉ ድረስ የፋይናንስ አገልግሎቶች ዝግ ይቆያሉ።",
+  "Review and accept the published policies to finish registration.": "ምዝገባውን ለማጠናቀቅ የታተሙትን ፖሊሲዎች ያንብቡ እና ይቀበሉ።",
   "Secure your sign-in to continue to Weymela.": "ወደ Weymela ለመቀጠል የመግቢያዎን ደህንነት ያዘጋጁ።",
   "Your Business account is ready.": "የንግድ መለያዎ ዝግጁ ነው።",
   "Your account is under review.": "መለያዎ በግምገማ ላይ ነው።",
@@ -592,6 +599,7 @@ export function translateText(value: string, language = currentLanguage) {
   const exact = amharic[source];
   if (exact) return `${leading}${exact}${trailing}`;
   const patterns: [RegExp, (...matches: string[]) => string][] = [
+    [/^Customer cashback: ([\d.]+)% · Creator commission: ([\d.]+)% · Platform: ([\d.]+)%$/, (customer, creator, platform) => `የደንበኛ ገንዘብ ተመላሽ፦ ${customer}% · የፈጣሪ ኮሚሽን፦ ${creator}% · የመድረክ ድርሻ፦ ${platform}%`],
     [/^(\d+) days left$/, days => `${days} ቀናት ቀርተዋል`],
     [/^(\d+) offers?$/, count => `${count} ቅናሾች`],
     [/^By (.+)$/, name => `በ${name}`],

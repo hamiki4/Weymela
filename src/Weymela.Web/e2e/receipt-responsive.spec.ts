@@ -106,7 +106,7 @@ test("real Business deposits remain pending until Admin approval and rejection n
 
   await login(context, "admin");
   await open(page, "/admin/wallets");
-  const approveRow = page.getByRole("row").filter({ hasText: "17.23 Br" });
+  const approveRow = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "17.23 Br", exact: true }) });
   await expect(approveRow).toContainText("CBE");
   await approveRow.getByRole("button", { name: "Review" }).click();
   let dialog = page.getByRole("dialog", { name: /Review deposit/ });
@@ -115,7 +115,7 @@ test("real Business deposits remain pending until Admin approval and rejection n
   await dialog.getByRole("button", { name: "Approve" }).click();
   await expect(page.getByText("Deposit approved. The wallet balance has been credited.")).toBeVisible();
 
-  const rejectRow = page.getByRole("row").filter({ hasText: "19.87 Br" });
+  const rejectRow = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "19.87 Br", exact: true }) });
   await expect(rejectRow).toContainText("Bank of Abyssinia");
   await rejectRow.getByRole("button", { name: "Review" }).click();
   dialog = page.getByRole("dialog", { name: /Review deposit/ });

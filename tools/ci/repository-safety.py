@@ -13,6 +13,8 @@ PRIVATE = re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-
 
 def inventory(root):
     root = root.resolve()
+    native_manifest = root / 'mobile/native-source-checksums.json'
+    native = json.loads(native_manifest.read_text()) if native_manifest.is_file() else {}
     # Include tracked files even if ignored, preventing accidental `git add -f` bypass.
     if (root / '.git').exists():
         names = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z', '--cached', '--others', '--exclude-standard']).decode().split('\0')
@@ -49,7 +51,14 @@ def inventory(root):
             if '\r' in decoded:
                 errors.append(f'{name}: CRLF; use LF')
         except UnicodeDecodeError:
-            if not name.startswith('src/Weymela.Web/public/') or path.suffix not in ('.png', '.ico'):
+            native_png = (name.startswith('mobile/android/app/src/main/res/') and path.suffix == '.png'
+                and content.startswith(b'\x89PNG\r\n\x1a\n'))
+            native_wrapper = (name == 'mobile/android/gradle/wrapper/gradle-wrapper.jar'
+                and content.startswith(b'PK\x03\x04')
+                and hashlib.sha256(content).hexdigest() == native.get('gradleWrapperOfficialSha256'))
+            approved_native = ((native_png or native_wrapper)
+                and native.get('files', {}).get(name) == hashlib.sha256(content).hexdigest())
+            if not approved_native and (not name.startswith('src/Weymela.Web/public/') or path.suffix not in ('.png', '.ico')):
                 errors.append(f'{name}: unapproved binary source')
         entries.append({'path': name, 'bytes': len(content), 'sha256': hashlib.sha256(content).hexdigest()})
     return {'fileCount': len(entries), 'totalBytes': sum(x['bytes'] for x in entries), 'files': entries, 'errors': errors}

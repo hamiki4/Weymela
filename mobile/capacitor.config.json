@@ -1,0 +1,12 @@
+{
+  "appId": "com.weymela.app",
+  "appName": "Weymela",
+  "webDir": "dist",
+  "loggingBehavior": "none",
+  "server": { "hostname": "localhost", "androidScheme": "https", "cleartext": false },
+  "android": { "allowMixedContent": false, "webContentsDebuggingEnabled": false },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false },
+    "CapacitorCookies": { "enabled": false }
+  }
+}

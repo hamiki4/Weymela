@@ -1,0 +1,94 @@
+apply plugin: 'com.android.application'
+
+def uploadKeystorePath = System.getenv('WEYMELA_ANDROID_UPLOAD_KEYSTORE')
+def uploadPasswordPath = System.getenv('WEYMELA_ANDROID_UPLOAD_PASSWORD_FILE')
+def unsignedValidation = project.findProperty('weymelaUnsignedValidation') == 'true'
+def requestedVersionCode = project.findProperty('weymelaVersionCode')?.toString()
+if (!requestedVersionCode || !(requestedVersionCode ==~ /[0-9]+/) || requestedVersionCode.toLong() <= 9 || requestedVersionCode.toLong() > 2100000000) {
+    throw new GradleException('Provide a verified, unused Android versionCode greater than 9.')
+}
+def services = file('google-services.json')
+if (!services.isFile()) throw new GradleException('Existing Production Firebase Android configuration is required.')
+def firebase = new groovy.json.JsonSlurper().parse(services)
+if (firebase.project_info.project_id != 'weymela-production' || firebase.client.count { it.client_info.android_client_info?.package_name == 'com.weymela.app' } != 1) {
+    throw new GradleException('Firebase configuration must match weymela-production/com.weymela.app.')
+}
+
+android {
+    namespace = "com.weymela.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.weymela.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode requestedVersionCode.toInteger()
+        versionName "3.0.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (!unsignedValidation && uploadKeystorePath && uploadPasswordPath) {
+                def uploadKeystore = file(uploadKeystorePath)
+                def uploadPasswordFile = file(uploadPasswordPath)
+                if (!uploadKeystore.isFile() || !uploadPasswordFile.isFile()) {
+                    throw new GradleException('Weymela Android upload signing files are missing.')
+                }
+                def uploadPassword = uploadPasswordFile.getText('UTF-8').trim()
+                if (!uploadPassword) {
+                    throw new GradleException('Weymela Android upload signing password is empty.')
+                }
+                def expected = System.getenv('WEYMELA_ANDROID_EXPECTED_UPLOAD_SHA256')?.replace(':', '')?.toUpperCase()
+                if (!expected || !(expected ==~ /[0-9A-F]{64}/)) throw new GradleException('Verified Play upload certificate is required before signing.')
+                def keyStore = java.security.KeyStore.getInstance('PKCS12')
+                uploadKeystore.withInputStream { keyStore.load(it, uploadPassword.toCharArray()) }
+                if (!keyStore.isKeyEntry('weymela-upload')) throw new GradleException('Original private-key alias is unavailable.')
+                def digest = java.security.MessageDigest.getInstance('SHA-256').digest(keyStore.getCertificate('weymela-upload').encoded).encodeHex().toString().toUpperCase()
+                if (digest != expected) throw new GradleException('Keystore certificate does not match the verified Play upload certificate.')
+                storeType 'PKCS12'
+                storeFile uploadKeystore
+                storePassword uploadPassword
+                keyAlias 'weymela-upload'
+                keyPassword uploadPassword
+            }
+        }
+    }
+    buildTypes {
+        debug { signingConfig null }
+        release {
+            if (!unsignedValidation && (!uploadKeystorePath || !uploadPasswordPath)) {
+                throw new GradleException('Release builds require the external Weymela upload signing configuration.')
+            }
+            if (!unsignedValidation) signingConfig signingConfigs.release
+            else signingConfig null
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+apply plugin: 'com.google.gms.google-services'

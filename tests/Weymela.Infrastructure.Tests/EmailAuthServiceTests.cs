@@ -26,7 +26,7 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
     [InlineData("incomplete")]
     [InlineData("tampered")]
     [InlineData("approved")]
-    public async Task Production_registration_and_role_enrollment_require_approved_publication_and_consent(string publication)
+    public async Task Production_email_verification_succeeds_before_legal_publication_but_role_activation_requires_consent(string publication)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -57,20 +57,21 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
             if (publication == "tampered")
                 await File.AppendAllTextAsync(Path.Combine(directory.FullName, "PrivacyPolicy-am.txt"), "changed");
             var delivery = new TestDelivery(); var issuer = new TestIssuer();
-            var service = new EmailAuthService(db, delivery, issuer, ProductionOptions(),
-                TimeProvider.System, new AccountLegalDocumentSource(directory.FullName));
+            var service = new EmailAuthService(db, delivery, issuer, ProductionOptions(), TimeProvider.System);
             await service.StartAsync("new@example.test", null, EmailCodePurpose.Signup, default);
-            if (publication == "approved")
-                await service.VerifyAsync("new@example.test", EmailCodePurpose.Signup, delivery.Codes.Single().Code, default);
-            else
-            {
-                await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => service.VerifyAsync(
-                    "new@example.test", EmailCodePurpose.Signup, delivery.Codes.Single().Code, default));
-                db.ChangeTracker.Clear();
-                Assert.Empty(await db.AuthIdentifiers.ToListAsync());
-                Assert.Null((await db.EmailAuthChallenges.SingleAsync()).ConsumedAtUtc);
-            }
-            Assert.Equal(publication == "approved", issuer.Called);
+            var code = delivery.Codes.Single().Code;
+            var wrong = code == "99999" ? "99998" : "99999";
+            await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
+                "new@example.test", EmailCodePurpose.Signup, wrong, default));
+            await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
+                "different@example.test", EmailCodePurpose.Signup, code, default));
+            var result = await service.VerifyAsync("new@example.test", EmailCodePurpose.Signup, code, default);
+            Assert.Equal("custom-token", result.CustomToken);
+            Assert.True(issuer.Called);
+            Assert.True((await db.AuthIdentifiers.SingleAsync()).IsVerified);
+            Assert.NotNull((await db.EmailAuthChallenges.SingleAsync()).ConsumedAtUtc);
+            await Assert.ThrowsAsync<AuthChallengeInvalidException>(() => service.VerifyAsync(
+                "new@example.test", EmailCodePurpose.Signup, code, default));
             // Email verification grants no role or consent; role activation still requires acceptance.
             Assert.Empty(await db.CommercePermissions.ToListAsync());
             Assert.Empty(await db.LegalAcceptances.ToListAsync());
@@ -87,7 +88,11 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
                 RegisteredPhone: "+251900000000");
             var actor = new Actor(admin, ActorRole.PlatformAdmin);
             if (publication != "approved")
-                await Assert.ThrowsAsync<AuthChallengeUnavailableException>(() => enrollment.SubmitAsync(actor, request, "unpublished", default));
+            {
+                var rejected = await Assert.ThrowsAsync<ApplicationFailure>(() => enrollment.SubmitAsync(actor, request, "unpublished", default));
+                Assert.Equal("ApprovedLegalUnavailable", rejected.Code);
+                Assert.Equal("Account activation requires published Terms of Service and Privacy Policy.", rejected.Message);
+            }
             else
             {
                 var rejected = await Assert.ThrowsAsync<ApplicationFailure>(() => enrollment.SubmitAsync(actor, request, "unaccepted", default));
@@ -105,6 +110,23 @@ public sealed class EmailAuthServiceTests(PostgresFixture fixture)
             Assert.Empty(await db.FinancialJournals.ToListAsync());
         }
         finally { directory.Delete(recursive: true); }
+    }
+
+    [Fact]
+    public async Task Production_expired_signup_code_is_rejected_without_legal_documents()
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var clock = new ManualClock(DateTime.UtcNow);
+        var delivery = new TestDelivery(); var issuer = new TestIssuer();
+        var service = new EmailAuthService(db, delivery, issuer, ProductionOptions(), clock);
+        await service.StartAsync("expiry@example.test", null, EmailCodePurpose.Signup, default);
+        clock.Advance(TimeSpan.FromMinutes(11));
+        await Assert.ThrowsAsync<AuthChallengeExpiredException>(() => service.VerifyAsync(
+            "expiry@example.test", EmailCodePurpose.Signup, delivery.Codes.Single().Code, default));
+        Assert.False(issuer.Called);
+        Assert.Empty(await db.AuthIdentifiers.ToListAsync());
+        Assert.Empty(await db.CommercePermissions.ToListAsync());
     }
 
     [Fact]

@@ -50,7 +50,8 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
     if (!user) return;
     const terms = legal.data?.documents.find(document => document.kind === "TermsOfService");
     const privacy = legal.data?.documents.find(document => document.kind === "PrivacyPolicy");
-    if (!legal.data?.available || !terms || !privacy) throw new Error("Account registration is temporarily unavailable.");
+    if (!legal.data?.available || !terms || !privacy)
+      throw new Error("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.");
     const accountLegal = legal.data.current ? undefined : {
       termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
       privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },

@@ -5,7 +5,6 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Operations;
-using Weymela.Domain;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -51,8 +50,7 @@ public sealed class EmailAuthService(
     IEmailCodeDelivery delivery,
     IFirebaseCustomTokenIssuer tokenIssuer,
     RuntimeOptions options,
-    TimeProvider clock,
-    AccountLegalDocumentSource? legalSource = null)
+    TimeProvider clock)
 {
     private static readonly Regex Email = new(
         "^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$",
@@ -218,14 +216,9 @@ public sealed class EmailAuthService(
         var emailIdentifier = existingEmail ?? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == emailHash, ct);
         if (challengePurpose == EmailCodePurpose.Signup)
         {
-            // Validate the code before reporting policy availability, preserving the
-            // identical public challenge response for new and registered mailboxes.
-            // Existing verified identities use DeviceEnrollment and can still sign in.
-            if (options.EnvironmentName == "Production")
-                foreach (var type in new[] { LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy })
-                    foreach (var language in new[] { "en", "am" })
-                        if (legalSource is null || await legalSource.ReadAsync(db, type, language, now, ct) is null)
-                            throw new AuthChallengeUnavailableException("Registration is unavailable until current legal documents are published.");
+            // A valid code verifies mailbox ownership and creates only an account
+            // setup identity. Published policies and consent are required separately
+            // by role activation; no commerce permission is granted here.
             if (emailIdentifier is not null && emailIdentifier.UserId != userId) throw new AuthChallengeInvalidException();
             if (emailIdentifier is null)
                 db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Email", IdentifierHash = emailHash, DeliveryAddress = normalizedIdentifier, IsVerified = true, CreatedAtUtc = now });

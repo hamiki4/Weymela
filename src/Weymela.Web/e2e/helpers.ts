@@ -218,7 +218,7 @@ export async function layout(page: Page) {
       if (style.wordBreak === "break-all")
         problems.push("Single-letter wrapping permitted");
       if (element.matches("input,select,textarea") && rect.width > 850)
-        problems.push("Oversized input");
+        problems.push(`Oversized input on ${location.pathname}: ${element.tagName} ${element.getAttribute("aria-label") ?? element.closest("label")?.textContent?.trim() ?? ""} width=${rect.width.toFixed(1)}px`);
     }
     return problems;
   });

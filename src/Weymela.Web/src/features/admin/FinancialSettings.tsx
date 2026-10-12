@@ -68,10 +68,10 @@ function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () =>
   }}><fieldset disabled={action.busy}>
     <Notice>Unset prices and payout minimums restrict only their dependent operations. Saving settings does not activate financial writes.</Notice>
     <Section title="Audience enforcement" description="Off allows Creators to apply regardless of audience size. On enforces Admin-verified audience requirements.">
-      <Field label="Enforce audience requirements"><select value={settings.enforceAudienceRequirements === null ? "" : String(settings.enforceAudienceRequirements)}
+      <div className="settings-audience"><Field label="Enforce audience requirements"><select value={settings.enforceAudienceRequirements === null ? "" : String(settings.enforceAudienceRequirements)}
         onChange={event => set({ ...settings, enforceAudienceRequirements: event.target.value === "" ? null : event.target.value === "true" })}>
         <option value="">Not configured</option><option value="false">Off</option><option value="true">On</option>
-      </select></Field>
+      </select></Field></div>
     </Section>
     <Section title="View Pricing" description="Business Pays must equal Creator Earns plus Platform Keeps." action={<Currency />}>
       <table className="settings-table"><caption className="sr-only">Admin View Pricing</caption>

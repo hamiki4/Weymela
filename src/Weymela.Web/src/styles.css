@@ -1313,6 +1313,9 @@ td .button {
 .settings-form input {
   font-size: 0.85rem;
 }
+.settings-audience {
+  max-width: 480px;
+}
 .settings-form .settings-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

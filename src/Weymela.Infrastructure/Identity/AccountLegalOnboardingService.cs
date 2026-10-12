@@ -8,7 +8,7 @@ namespace Weymela.Infrastructure.Identity;
 
 public sealed record AccountLegalDocument(Guid DocumentId, string Kind, string Title, string Version,
     string ContentHash, DateTime EffectiveFromUtc, string ViewPath, bool Accepted);
-public sealed record AccountLegalStatus(bool Available, bool Current, IReadOnlyList<AccountLegalDocument> Documents);
+public sealed record AccountLegalStatus(bool Available, bool Current, IReadOnlyList<AccountLegalDocument> Documents, bool Required = true);
 public sealed record AccountLegalDocumentConfirmation(Guid DocumentId, string ContentHash, bool Accepted);
 public sealed record AccountLegalConfirmation(AccountLegalDocumentConfirmation? TermsOfService,
     AccountLegalDocumentConfirmation? PrivacyPolicy);
@@ -22,6 +22,7 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
     public async Task<AccountLegalStatus> StatusAsync(Guid userId, CancellationToken ct)
     {
         if (userId == Guid.Empty) throw new ApplicationFailure(FailureKind.Forbidden, "Sign in to your account.");
+        if (options?.LegalConsentDeferred == true) return new(false, false, [], Required: false);
         var documents = await EffectiveDocumentsAsync(ct);
         if (documents is null)
             return new(false, false, []);
@@ -38,6 +39,7 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
     public async Task AcceptCurrentAsync(Guid userId, AccountLegalConfirmation? confirmation,
         string? ipReference, string? userAgentReference, CancellationToken ct)
     {
+        if (options?.LegalConsentDeferred == true) return;
         if (confirmation?.TermsOfService is null || confirmation.PrivacyPolicy is null
             || !confirmation.TermsOfService.Accepted || !confirmation.PrivacyPolicy.Accepted)
             throw new ApplicationFailure(FailureKind.Validation, "Accept the current Terms of Service and Privacy Policy.");

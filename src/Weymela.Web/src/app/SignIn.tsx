@@ -19,6 +19,7 @@ import {
 
 interface AuthMode {
   development: boolean;
+  legalConsentRequired?: boolean;
   personas: { alias: string; name: string; role: Role }[] | null;
 }
 type AuthView =
@@ -33,9 +34,11 @@ type AuthView =
 function FirebaseSignIn({
   onSignedIn,
   initialView,
+  legalConsentRequired = true,
 }: {
   onSignedIn: () => Promise<void>;
   initialView: AuthView;
+  legalConsentRequired?: boolean;
 }) {
   const [view, setView] = useState<AuthView>(initialView);
   const [error, setError] = useState<string | null>(null);
@@ -250,7 +253,7 @@ function FirebaseSignIn({
           onSignIn={() => changeView("signIn")} onBack={() => changeView("landing")} />
       ) : null}
       {view === "registration" && signupRole ? (
-        <PublicRegistrationForm role={signupRole} busy={authBusy} onComplete={beginRegistration}
+        <PublicRegistrationForm role={signupRole} busy={authBusy} legalConsentRequired={legalConsentRequired} onComplete={beginRegistration}
           onBack={() => changeView("chooseRole")} />
       ) : null}
       {view === "verifySignup" ? (
@@ -403,6 +406,7 @@ function SignupRoleSelection(props: { onChoose: (role: PublicSignupRole) => void
 
 function PublicRegistrationForm(props: {
   role: PublicSignupRole;
+  legalConsentRequired: boolean;
   busy: boolean;
   onComplete: (draft: PublicSignupDraft, password: string, confirmPassword: string) => void;
   onBack: () => void;
@@ -459,7 +463,8 @@ function PublicRegistrationForm(props: {
         ...(props.role === "Business" ? { businessName: businessName.trim(), businessType: businessType.trim() } : {}),
         ...(props.role === "Creator" ? { socialPlatform, socialProfileUrl: socialProfileUrl.trim(),
           followerCount: followers, subscriberCount: subscribers } : {}),
-        legalAccepted: true,
+        legalAccepted: props.legalConsentRequired && legalAccepted,
+        ...(!props.legalConsentRequired ? { legalDeferred: true } : {}),
       }, password, confirmPassword);
     }}>
       <fieldset disabled={props.busy} className="public-registration-fields">
@@ -498,11 +503,11 @@ function PublicRegistrationForm(props: {
         <PasswordField label="Confirm Password" value={confirmPassword} onChange={value => { setConfirmPassword(value); setPasswordError(null); }} autoComplete="new-password" />
         <p className="fine-print">Use at least 8 characters. You can use a passphrase.</p>
         {passwordError ? <Notice error>{passwordError}</Notice> : null}
-        <label className="signup-legal-consent"><input required type="checkbox" checked={legalAccepted} onChange={event => setLegalAccepted(event.target.checked)} />
+        {props.legalConsentRequired && <label className="signup-legal-consent"><input required type="checkbox" checked={legalAccepted} onChange={event => setLegalAccepted(event.target.checked)} />
           <span>I agree to Weymela&apos;s <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
-        </label>
+        </label>}
         <div className="form-footer"><Button type="button" variant="secondary" onClick={props.onBack}>Back</Button>
-          <Button type="submit" disabled={props.busy || !legalAccepted}>{props.busy ? "Sending code…" : "Complete Registration"}</Button></div>
+          <Button type="submit" disabled={props.busy || (props.legalConsentRequired && !legalAccepted)}>{props.busy ? "Sending code…" : "Complete Registration"}</Button></div>
       </fieldset>
     </form>
   </section>;
@@ -833,6 +838,7 @@ export function SignIn() {
               <FirebaseSignIn
                 onSignedIn={() => session.refresh(true)}
                 initialView={initialView}
+                legalConsentRequired={data.legalConsentRequired !== false}
               />
             )
           }

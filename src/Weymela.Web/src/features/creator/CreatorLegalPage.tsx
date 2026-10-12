@@ -37,6 +37,8 @@ function matchingContent(document: LegalDocument, content: LegalContent): boolea
 export function CreatorLegalGate({ children }: { children: ReactNode }) {
   const location = useLocation();
   const legal = useResource<LegalDocument[]>("/legal/current");
+  const mode = useResource<{ legalConsentRequired?: boolean }>("/auth/mode");
+  if (mode.data?.legalConsentRequired === false) return children;
   if (legal.loading) return <p className="loading" role="status">Checking current Creator requirements…</p>;
   if (legal.error) return <Notice error>{legal.error.message}</Notice>;
   return <Resource resource={legal}>{documents => {
@@ -49,6 +51,8 @@ export function CreatorLegalGate({ children }: { children: ReactNode }) {
 export function useCreatorLegalAction() {
   const navigate = useNavigate();
   return async (destination: string): Promise<boolean> => {
+    const mode = await request<{ legalConsentRequired?: boolean }>("/auth/mode").catch(() => null);
+    if (mode?.legalConsentRequired === false) return true;
     const rules = currentRules(await request<LegalDocument[]>("/legal/current"));
     if (!rules) throw new Error("Current Creator requirements could not be verified.");
     if (rules.accepted) return true;
@@ -62,6 +66,7 @@ export function CreatorLegalPage() {
   const destination = creatorLegalReturn(params.get("returnTo"));
   const navigate = useNavigate();
   const legal = useResource<LegalDocument[]>("/legal/current");
+  const mode = useResource<{ legalConsentRequired?: boolean }>("/auth/mode");
   const action = useAction();
   const [acknowledged, setAcknowledged] = useState(false);
   const [content, setContent] = useState<LegalContent | null>(null);
@@ -84,6 +89,7 @@ export function CreatorLegalPage() {
     return () => { active = false; };
   }, [versionKey, rules?.accepted]);
 
+  if (mode.data?.legalConsentRequired === false) return <Navigate to={destination} replace />;
   if (legal.loading) return <p className="loading" role="status">Checking current Creator requirements…</p>;
   if (legal.error) return <Notice error>{legal.error.message}</Notice>;
   if (!rules) return <Notice error>Current Creator requirements could not be verified.</Notice>;

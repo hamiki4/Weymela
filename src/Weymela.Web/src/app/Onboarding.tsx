@@ -49,7 +49,7 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
   const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
   const [accepted, setAccepted] = useState(false);
   const [reviewedDocuments, setReviewedDocuments] = useState<AccountLegalStatus["documents"] | null>(null);
-  const needsConsent = production && legal.data?.available && !legal.data.current;
+  const needsConsent = production && legal.data?.required !== false && legal.data?.available && !legal.data.current;
   const documentFingerprint = legal.data?.documents.map(document => `${document.documentId}:${document.contentHash}`).join("|");
   useEffect(() => {
     setAccepted(false);
@@ -57,18 +57,18 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
   }, [documentFingerprint]);
   const submit = async () => {
     if (!user) return;
-    if (!legal.data?.available)
+    if (!legal.data || (legal.data.required !== false && !legal.data.available))
       throw new Error("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.");
     if (needsConsent && (!accepted || !reviewedDocuments))
       throw new Error("Review and accept the published policies to finish registration.");
     const documents = needsConsent ? reviewedDocuments : legal.data.documents;
     const terms = documents?.find(document => document.kind === "TermsOfService");
     const privacy = documents?.find(document => document.kind === "PrivacyPolicy");
-    if (!terms || !privacy)
+    if (legal.data.required !== false && (!terms || !privacy))
       throw new Error("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.");
-    const accountLegal = legal.data.current ? undefined : {
-      termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
-      privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },
+    const accountLegal = legal.data.required === false || legal.data.current ? undefined : {
+      termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
+      privacyPolicy: { documentId: privacy!.documentId, contentHash: privacy!.contentHash, accepted: true },
     };
     const socialProfiles = draft.role === "Creator" ? [{
       platform: draft.socialPlatform,
@@ -186,12 +186,12 @@ function LegacyOnboarding() {
   const submitCustomer = () => void action.run(async (key) => {
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
     const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
-    if (!legal.data?.available || !terms || !privacy || (!legal.data.current && !legalAccepted))
+    if (legal.data?.required !== false && (!legal.data?.available || !terms || !privacy || (!legal.data.current && !legalAccepted)))
       throw new Error(legal.data?.available ? "Accept Weymela's Rules and Regulations before continuing."
         : "Account activation requires published Terms of Service and Privacy Policy.");
-    const accountLegal = !legal.data.current ? {
-      termsOfService: { documentId: terms.documentId, contentHash: terms.contentHash, accepted: true },
-      privacyPolicy: { documentId: privacy.documentId, contentHash: privacy.contentHash, accepted: true },
+    const accountLegal = legal.data?.required !== false && !legal.data?.current ? {
+      termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
+      privacyPolicy: { documentId: privacy!.documentId, contentHash: privacy!.contentHash, accepted: true },
     } : undefined;
     await post("/onboarding/profile", {
       role: "Customer",
@@ -209,7 +209,7 @@ function LegacyOnboarding() {
     if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
     const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
     const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
-    const requiresAccountLegal = !legal.data?.current && (production || approved.size === 0);
+    const requiresAccountLegal = legal.data?.required !== false && !legal.data?.current && (production || approved.size === 0);
     if (requiresAccountLegal && (!legal.data?.available || !terms || !privacy || !legalAccepted))
       throw new Error("Accept Weymela's Rules and Regulations before continuing.");
     const accountLegal = requiresAccountLegal ? {
@@ -275,14 +275,14 @@ function LegacyOnboarding() {
               <span>Your {item} profile is waiting for approval.</span></div>)}
           {role === "Customer" && <RoleOnboardingShell role="Customer" title="Use as Customer"
             description="Choose the name you'd like to use in Weymela.">
-            <Resource resource={legal}>{(documents) => documents.available ? <form
+            <Resource resource={legal}>{(documents) => documents.available || documents.required === false ? <form
               className="form-grid onboarding-form customer-onboarding-form" onSubmit={(event) => {
                 event.preventDefault();
                 submitCustomer();
               }}>
               <Field label="Preferred name" wide><input required autoComplete="name" maxLength={120}
                 value={preferredName} onChange={(event) => setPreferredName(event.target.value)} /></Field>
-              {!documents.current && <div className="legal-consent form-wide"><div className="check-row">
+              {documents.required !== false && !documents.current && <div className="legal-consent form-wide"><div className="check-row">
                 <input id="customer-legal-accepted" type="checkbox" checked={legalAccepted}
                   onChange={(event) => setLegalAccepted(event.target.checked)}
                   aria-label="I agree to Weymela's Rules and Regulations" required />
@@ -304,7 +304,7 @@ function LegacyOnboarding() {
             title={role === "Creator" ? "Creator setup" : "Business setup"}
             description={role === "Creator" ? "Tell us about your Creator profile." : "Tell us about your Business."}>
             <div className="form-grid onboarding-form role-application-form">
-              {production && !legal.loading && !legal.data?.available && <Notice error>Account activation requires published Terms of Service and Privacy Policy.</Notice>}
+              {production && legal.data?.required !== false && !legal.loading && !legal.data?.available && <Notice error>Account activation requires published Terms of Service and Privacy Policy.</Notice>}
               <Field label={role === "Creator" ? "Creator name" : "Business name"} wide>
                 <input required maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} /></Field>
               <Field label="Region (optional)"><input maxLength={80} value={region} onChange={event => setRegion(event.target.value)} /></Field>
@@ -316,7 +316,7 @@ function LegacyOnboarding() {
                   onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: { profileUrl: "", audience: "0" } }))}
                 />
               </div>}
-              {(production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
+              {legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
                 <input id="profile-legal-accepted" type="checkbox" checked={legalAccepted}
                   onChange={(event) => setLegalAccepted(event.target.checked)}
                   aria-label="I agree to Weymela's Rules and Regulations" required />
@@ -327,7 +327,7 @@ function LegacyOnboarding() {
               </div></div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
-                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || ((production || approved.size === 0) && !legal.data?.current && (!legal.data?.available || !legalAccepted)) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
+                <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && (!legal.data?.available || !legalAccepted)) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>
                   {action.busy ? "Submitting…" : role === "Business" ? "Add Business" : "Submit for Review"}</Button></div>
             </div>
           </RoleOnboardingShell>}

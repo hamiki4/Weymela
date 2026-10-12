@@ -91,6 +91,7 @@ export interface AccountLegalDocument {
 export interface AccountLegalStatus {
   available: boolean;
   current: boolean;
+  required?: boolean;
   documents: AccountLegalDocument[];
 }
 export interface BusinessCard {

@@ -17,6 +17,17 @@ namespace Weymela.Infrastructure.Tests;
 
 public sealed class AdapterSecurityTests
 {
+    [Fact] public void Policy_deferral_requires_the_production_owner_reference_and_never_changes_pilot()
+    {
+        var config = ProductionConfig(); config["V3:Legal:ConsentMode"] = "Deferred";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
+        config["V3:Legal:DeferralAuthorizationReference"] = "isolated-test-owner-deferral";
+        var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.True(options.LegalConsentDeferred);
+        var pilot = Config(); pilot["V3:Legal:ConsentMode"] = "Deferred";
+        pilot["V3:Legal:DeferralAuthorizationReference"] = "isolated-test-owner-deferral";
+        Assert.Throws<InvalidOperationException>(() => RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(pilot).Build(), "Pilot"));
+    }
     private static readonly DirectoryInfo PhotoDirectory = CreatePhotoDirectory();
     private static readonly DirectoryInfo ReviewMediaDirectory = CreateReviewMediaDirectory();
     private static DirectoryInfo CreatePhotoDirectory()

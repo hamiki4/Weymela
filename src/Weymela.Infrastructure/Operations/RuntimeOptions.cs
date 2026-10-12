@@ -34,6 +34,10 @@ public sealed class RuntimeOptions
     public string CreatorPhotoDirectory { get; init; } = "";
     public string ReviewMediaDirectory { get; init; } = "";
     public string SocialMode { get; init; } = "Disabled";
+    public string LegalConsentMode { get; init; } = "Required";
+    public string? LegalConsentAuthorizationReference { get; init; }
+    public bool LegalConsentDeferred => EnvironmentName == "Production" && LegalConsentMode == "Deferred"
+        && Weymela.Infrastructure.Identity.PlatformAdminBootstrapTarget.IsValidProductionAuthorizationReference(LegalConsentAuthorizationReference);
     public bool WorkerEnabled { get; init; }
     public bool FinancialWritesEnabled { get; init; }
     public string PilotFinancialWritesMode { get; init; } = "Disabled";
@@ -208,6 +212,13 @@ public sealed class RuntimeOptions
                     "The private review media directory must have mode 0700.");
         }
         var social = config["V3:Social:Mode"] ?? "Disabled";
+        var legalMode = config["V3:Legal:ConsentMode"] ?? "Required";
+        var legalReference = config["V3:Legal:DeferralAuthorizationReference"];
+        Require(legalMode is "Required" or "Deferred", "Legal consent mode must be explicit.");
+        Require(legalMode == "Required" && string.IsNullOrEmpty(legalReference)
+            || environment == "Production" && legalMode == "Deferred"
+                && Weymela.Infrastructure.Identity.PlatformAdminBootstrapTarget.IsValidProductionAuthorizationReference(legalReference),
+            "Policy deferral requires an explicit Production owner instruction; it is not approval or user consent.");
         Require(social == "Disabled" || dev && social == "Test", "Live social providers require an approved adapter; test providers cannot run outside Development.");
         Require(!config.GetValue<bool>("V3:Push:Enabled"), "Push is not connected; in-app notifications do not require push.");
         var batch = config.GetValue("V3:Worker:BatchSize", 20); var interval = config.GetValue("V3:Worker:IntervalSeconds", 5);
@@ -287,6 +298,7 @@ public sealed class RuntimeOptions
             PilotFinancialWritesUntilUtc = pilotFinancialWritesUntilUtc,
             ProductionFinancialAuthorizationReference = productionReference,
             EnabledProductionFinancialOperations = productionOperations,
+            LegalConsentMode = legalMode, LegalConsentAuthorizationReference = legalReference,
             RecipientBatchSize = recipientBatch, RateLimitMultiplier = multiplier, TrustedProxies = proxies
         };
     }

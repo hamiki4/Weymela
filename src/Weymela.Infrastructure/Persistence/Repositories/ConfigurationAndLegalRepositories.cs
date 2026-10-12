@@ -28,10 +28,12 @@ public sealed class FinancialConfigurationResolver(WeymelaDbContext db) : IFinan
     }
 }
 
-public sealed class LegalAcceptanceGate(WeymelaDbContext db, TimeProvider clock) : ILegalAcceptanceGate
+public sealed class LegalAcceptanceGate(WeymelaDbContext db, TimeProvider clock,
+    Weymela.Infrastructure.Operations.RuntimeOptions? options = null) : ILegalAcceptanceGate
 {
     public async Task EnsureCurrentAcceptedAsync(Guid userId, LegalRole role, IReadOnlyCollection<LegalDocumentType> required, CancellationToken ct)
     {
+        if (options?.LegalConsentDeferred == true) return;
         var now = clock.GetUtcNow().UtcDateTime;
         foreach (var type in required)
         {

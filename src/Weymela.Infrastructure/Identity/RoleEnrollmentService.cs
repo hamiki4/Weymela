@@ -60,7 +60,7 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             throw new ApplicationFailure(FailureKind.Validation, "This profile request is already under review.");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
-        if (options?.EnvironmentName == "Production")
+        if (options?.EnvironmentName == "Production" && !options.LegalConsentDeferred)
             foreach (var type in new[] { LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy })
                 foreach (var language in new[] { "en", "am" })
                     if (legalSource is null || await legalSource.ReadAsync(db, type, language,

@@ -9,7 +9,8 @@ namespace Weymela.Infrastructure.Operations;
 
 public sealed record RequiredLegalDocument(Guid Id, string Type, string Version, string ContentHash, DateTime EffectiveFromUtc, bool Accepted);
 public sealed record RequiredLegalContent(Guid Id, string Type, string Version, string ContentHash, string Content);
-public sealed class LegalWorkspaceService(WeymelaDbContext db, TimeProvider clock, BusinessLegalDocumentSource? contentSource = null)
+public sealed class LegalWorkspaceService(WeymelaDbContext db, TimeProvider clock, BusinessLegalDocumentSource? contentSource = null,
+    RuntimeOptions? options = null)
 {
     private static LegalRole Role(Actor actor) => actor.Role switch { ActorRole.Business => LegalRole.Business, ActorRole.Creator => LegalRole.Creator,
         _ => throw new ApplicationFailure(FailureKind.Forbidden, "This agreement workspace is not available to this role.") };
@@ -17,6 +18,7 @@ public sealed class LegalWorkspaceService(WeymelaDbContext db, TimeProvider cloc
     public async Task<IReadOnlyList<RequiredLegalDocument>> CurrentAsync(Actor actor, CancellationToken ct)
     {
         var role = Role(actor); var now = clock.GetUtcNow().UtcDateTime; List<RequiredLegalDocument> result = [];
+        if (options?.LegalConsentDeferred == true) return result;
         foreach (var type in Types(role))
         {
             var current = await db.LegalDocumentVersions.AsNoTracking().Where(x => x.Type == type && x.EffectiveFromUtc <= now)

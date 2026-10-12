@@ -77,6 +77,16 @@ change these details. This configuration step is separate from verifying actual 
 
 ## Legal policies
 
+The owner may explicitly defer policy prerequisites for Production by setting
+`V3:Legal:ConsentMode=Deferred` with the genuine recorded
+`V3:Legal:DeferralAuthorizationReference`. This owner decision was given on
+2026-10-12: deploy and go live, deferring policy restrictions. It does not publish
+drafts, claim attorney approval, or create consent records. Public policy content
+remains unavailable until actually published. Registration and commerce can proceed
+under the deferred mode; identity, PIN, role permissions and financial transaction
+checks still apply. Pilot keeps the default `Required` mode. Returning Production
+to `Required` restores the existing presentation and exact-version consent flow.
+
 Production Web policy pages read `/api/legal/account/terms?language=en` and the matching Privacy/Amharic paths.
 They require operator-published approved files mounted read-only at `/run/weymela-v3/approved-legal` (or
 `V3:Legal:ApprovedContentDirectory`). The directory contains `TermsOfService-en.txt`, `TermsOfService-am.txt`,

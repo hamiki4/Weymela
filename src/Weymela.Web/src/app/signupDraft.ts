@@ -13,7 +13,8 @@ export type PublicSignupDraft = {
   socialProfileUrl?: string;
   followerCount?: number;
   subscriberCount?: number | null;
-  legalAccepted: true;
+  legalAccepted: boolean;
+  legalDeferred?: boolean;
 };
 
 const key = "weymela.public-signup";
@@ -27,7 +28,8 @@ export function readSignupDraft(): PublicSignupDraft | null {
     const parsed = JSON.parse(window.sessionStorage.getItem(key) ?? "null") as Partial<PublicSignupDraft> | null;
     if (!parsed || parsed.version !== 1 || !parsed.idempotencyKey
         || !["Customer", "Business", "Creator"].includes(parsed.role ?? "")
-        || !parsed.legalName || !parsed.email || !parsed.phone || parsed.legalAccepted !== true)
+        || !parsed.legalName || !parsed.email || !parsed.phone
+        || (parsed.legalAccepted !== true && parsed.legalDeferred !== true))
       return null;
     return parsed as PublicSignupDraft;
   } catch {

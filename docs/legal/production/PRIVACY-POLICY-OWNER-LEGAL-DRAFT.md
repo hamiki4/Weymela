@@ -2,7 +2,10 @@
 
 > **OWNER AND COUNSEL REVIEW DRAFT — NOT APPROVED, EFFECTIVE, OR PUBLISHED.** This working notice must not be shown as Weymela’s approved Production policy or activated until the controller, data inventory, lawful bases, locations, retention schedule, and contact details are confirmed.
 
-**Draft version:** `en-draft-0.1-2026-10-10`
+**Draft version:** `en-draft-0.2-2026-10-12`
+**Owner-confirmed operator name:** Weymela
+**Owner-confirmed location:** Addis Ababa, Ethiopia
+**Support email:** support@weymela.com
 **Effective date:** [OWNER/COUNSEL: assign after approval]
 **Data controller legal name and address:** [OWNER/COUNSEL: supply]
 **Privacy contact / representative / data-protection officer:** [OWNER/COUNSEL: supply as applicable]

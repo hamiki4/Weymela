@@ -52,6 +52,24 @@ The trusted financial console remains available as an authorized operator path f
 
 Keep financial writes disabled, deposits disabled, and external payouts disabled until the separate owner activation process is approved. Never use a bootstrap command to enable them.
 
+Production has separate protected operator controls under `V3:ProductionFinancial:Operations`:
+`DepositRequests`, `WalletFunding`, `PromotionReservations`, `Checkout`, and `Payouts`.
+They require `V3:FinancialWritesEnabled=true` and a genuine recorded
+`V3:ProductionFinancial:AuthorizationReference`. They default to disabled and cannot
+be inherited by Pilot. Unknown operations and view rewards are rejected. Deposit
+requests and wallet funding additionally require `V3:Deposits:Mode=ManualApproval`;
+the API requires its protected durable receipt directory. Checkout records cashback
+and commissions atomically under its existing backed transaction controls.
+
+Authorize only the operation whose real gates have passed. Record the effective
+pricing version, policy publication/consent evidence, verified receiving account
+and settlement evidence for deposits/funding, available funds for reservations and
+checkout, and configured beneficiary thresholds/destinations for payouts. Keep all
+other operations disabled. Saving prices or enabling one operation does not enable
+another, validate an uploaded receipt, or authorize external payment. The API's
+existing ownership, role, session, funding, idempotency, balance, legal, and ledger
+checks remain required. Do not enable a control from a test authorization reference.
+
 Production excludes the receiving accounts inserted as migration examples from Business choices and deposit submissions.
 The Platform Admin must replace example references with actual verified receiving details before activating them.
 Production eligibility requires a non-example reference and the audited Platform Admin update; Operations Admin cannot

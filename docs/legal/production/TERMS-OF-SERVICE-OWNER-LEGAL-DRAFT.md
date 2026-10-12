@@ -2,8 +2,11 @@
 
 > **OWNER AND COUNSEL REVIEW DRAFT — NOT APPROVED, EFFECTIVE, OR PUBLISHED.** This document is a working draft. It must not be presented to users or activated in a Production database before all approval fields are completed and the final text is approved.
 
-**Draft version:** `en-draft-0.1-2026-10-10`
+**Draft version:** `en-draft-0.2-2026-10-12`
 **Proposed service:** Weymela V3
+**Owner-confirmed operator name:** Weymela
+**Owner-confirmed location:** Addis Ababa, Ethiopia
+**Support email:** support@weymela.com
 **Effective date:** [OWNER/COUNSEL: assign after approval]
 **Contracting entity and registered address:** [OWNER/COUNSEL: supply exact legal identity and address]
 **Governing law, territory, age eligibility, support and legal notice contacts:** [OWNER/COUNSEL: decide and supply]
@@ -36,7 +39,7 @@ View Only, View & Sale, UGC, and UGC + Sale use the pricing and conditions displ
 
 Wallet, reservation, reward, cashback, sale, and payout records are maintained in an auditable ledger. A displayed balance may include available and reserved amounts. A reservation is not a completed payout. A payout is complete only when the Service records the authorized external payment confirmation. Deposits, refunds, reversals, and external payouts are available only when expressly enabled and supported by an approved method; users must not rely on placeholder destinations or unconfirmed payment instructions. The Service is not a bank or payment account unless counsel expressly approves that description.
 
-Users should report a suspected financial-record error through [OWNER: approved support channel]. The Service may investigate, correct a proven data or processing error through an auditable adjustment, and restrict an account while investigating suspected abuse. It will not silently erase or rewrite completed ledger history.
+Users should report a suspected financial-record error through support@weymela.com. The Service may investigate, correct a proven data or processing error through an auditable adjustment, and restrict an account while investigating suspected abuse. It will not silently erase or rewrite completed ledger history.
 
 ## 5. Acceptable use and third-party services
 
@@ -46,7 +49,7 @@ Users must comply with applicable law, these terms, feature-specific rules, and 
 
 Weymela may limit a feature, require a security check, suspend access, or close an account when reasonably needed for security, fraud prevention, legal compliance, protection of users, or enforcement of these terms. Where lawful and safe, the user would receive a reason and a way to request review. The final notice and appeal process requires owner and counsel approval.
 
-Users may request account or role closure through the Service or [OWNER: approved support channel]. Closure revokes access and credentials as supported by the Service. It does not automatically cancel an outstanding Promotion, erase another person’s rights, or delete records that must be retained for an applicable legal duty, dispute, security investigation, or financial reconciliation. The approved retention schedule and process for resolving outstanding balances must be supplied before publication. Closure does not authorize a user to avoid an existing lawful obligation.
+Users may request account or role closure through the Service or support@weymela.com. Closure revokes access and credentials as supported by the Service. It does not automatically cancel an outstanding Promotion, erase another person’s rights, or delete records that must be retained for an applicable legal duty, dispute, security investigation, or financial reconciliation. The approved retention schedule and process for resolving outstanding balances must be supplied before publication. Closure does not authorize a user to avoid an existing lawful obligation.
 
 ## 7. Service changes and availability
 

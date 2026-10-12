@@ -191,7 +191,10 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             if(actor.Role!=ActorRole.PlatformAdmin)throw new ApplicationFailure(FailureKind.Forbidden,"Admin access is required.");
             var op=new FinancialOperation(db);var fingerprint=RequestFingerprint.Create(System.Text.Json.JsonSerializer.Serialize(input),expectedVersion.ToString());
             var replay=await op.Replay(actor,"FinancialSettings",key,fingerprint,token);if(replay is not null)return Guid.Parse(replay);
-            var latest=await db.FinancialConfigurationVersions.OrderByDescending(x=>x.Version).FirstAsync(token);
+            var latest=await db.FinancialConfigurationVersions.OrderByDescending(x=>x.Version).FirstOrDefaultAsync(token)
+                ?? throw new ApplicationFailure(FailureKind.Validation,
+                    "Initialize complete owner-approved pricing through the trusted financial bootstrap before editing settings.",
+                    code: "FinancialConfigurationRequired");
             if(latest.Version!=expectedVersion)throw new ApplicationFailure(FailureKind.ConcurrencyConflict,"Financial settings changed. Reload the saved values before continuing.");
             var effective=input.EffectiveFromUtc??Now;
             if(effective.Kind!=DateTimeKind.Utc||input.EffectiveFromUtc is not null&&effective<Now)throw new ApplicationFailure(FailureKind.Validation,"Choose a future effective date or Effective Now.");

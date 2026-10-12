@@ -25,19 +25,27 @@ export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
   const source = production ? `/api/legal/account/${kind}?language=${language}` : document.source;
   const [content, setContent] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [unpublished, setUnpublished] = useState(false);
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     setContent(null);
     setFailed(false);
+    setUnpublished(false);
     void fetch(source, {
       credentials: "same-origin",
       cache: "no-store",
       signal: controller.signal,
     })
-      .then((response) => {
-        if (!response.ok) throw new Error("Legal document unavailable");
+      .then(async (response) => {
+        if (!response.ok) {
+          if (production) {
+            const failure = await response.json().catch(() => null) as { code?: string } | null;
+            if (failure?.code === "ApprovedLegalUnavailable") setUnpublished(true);
+          }
+          throw new Error("Legal document unavailable");
+        }
         return production ? response.json().then((value: { content: string }) => value.content) : response.text();
       })
       .then(setContent)
@@ -67,7 +75,7 @@ export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
         )}
         {failed && (
           <div className="legal-document-error">
-            <Notice error>We couldn't open this document.</Notice>
+            <Notice error>{unpublished ? "The approved legal document is not available yet." : "We couldn't open this document."}</Notice>
             <Button variant="secondary" onClick={() => setGeneration((value) => value + 1)}>
               Try again
             </Button>

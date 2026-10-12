@@ -6,6 +6,7 @@ using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Operations;
 using Xunit;
 
 namespace Weymela.Infrastructure.Tests;
@@ -14,6 +15,43 @@ namespace Weymela.Infrastructure.Tests;
 public sealed class PlatformAdminAccountAuthorityTests(PostgresFixture fixture)
 {
     private static readonly DateTime Now = new(2026, 9, 24, 3, 0, 0, DateTimeKind.Utc);
+
+    [Theory]
+    [InlineData("Customer", ActorRole.Customer)]
+    [InlineData("Creator", ActorRole.Creator)]
+    [InlineData("Business", ActorRole.Business)]
+    public async Task Production_admin_invitation_cannot_activate_unreadable_policies(string role, ActorRole actorRole)
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var admin = new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin);
+        db.CommercePermissions.Add(new(admin.UserId, ActorRole.PlatformAdmin, admin.UserId, null, true, false));
+        await db.SaveChangesAsync();
+        var delivery = new CapturingDelivery();
+        var service = new PlatformAdminAccountService(db, new FixedTime(Now), delivery,
+            new RuntimeOptions { EnvironmentName = "Production" });
+        var preauth = await service.PreauthorizeAsync(admin, new AccountPreauthorizationInput(role,
+            "isolated-invitation@example.test", null, "Isolated invitation", "TEST-INVITATION"), "preauth-isolated", default);
+        var identity = await db.AuthIdentifiers.SingleAsync(x => x.UserId == preauth.UserId && x.Kind == "Email");
+        identity.IsVerified = true;
+        db.PasswordCredentials.Add(new PasswordCredentialRecord { UserId = preauth.UserId, PasswordHash = "isolated-test-hash",
+            WorkFactor = 100000, CreatedAtUtc = Now, ChangedAtUtc = Now, Version = 1 });
+        db.AuthorizedDevices.Add(new AuthorizedDeviceRecord { UserId = preauth.UserId, CredentialKind = "Passkey",
+            CredentialIdHash = "isolated-test-device", PinVerifier = "isolated-test-verifier",
+            EnrolledAtUtc = Now, ExpiresAtUtc = Now.AddDays(30), Version = 1 });
+        var confirmation = await SeedAccountLegalAsync(db);
+        // Even existing acceptance of metadata cannot substitute for approved readable Production text.
+        await new AccountLegalOnboardingService(db, new FixedTime(Now))
+            .AcceptCurrentAsync(preauth.UserId, confirmation, null, null, default);
+        await db.SaveChangesAsync();
+        var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.ActivateAsync(
+            new Actor(preauth.UserId, actorRole), preauth.PreauthorizationId, delivery.Code!, default, confirmation));
+        Assert.Equal("ApprovedLegalUnavailable", failure.Code);
+        Assert.False(await db.CommercePermissions.AnyAsync(x => x.UserId == preauth.UserId));
+        Assert.Null((await db.AccountPreauthorizations.SingleAsync()).ActivatedAtUtc);
+        Assert.Empty(await db.BusinessWallets.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+    }
 
     [Theory]
     [InlineData(AccountLifecycleStatus.Pending, "activate", AccountLifecycleStatus.Active, true)]

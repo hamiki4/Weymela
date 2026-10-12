@@ -25,7 +25,7 @@ function SettingsForm({
   data: SettingsWorkspace;
   reload: () => void;
 }) {
-  const [settings, set] = useState<Settings>(structuredClone(data.current));
+  const [settings, set] = useState<Settings>(structuredClone(data.current!));
   const [scheduled, schedule] = useState(false);
   const [when, setWhen] = useState("");
   const action = useAction();
@@ -374,14 +374,18 @@ export function AdminFinancialSettings() {
                 versions are shown below.
               </Notice>
             )}
-            <SettingsForm
+            {data.current ? <SettingsForm
               key={`${data.version}-${data.versions.length}`}
               data={data}
               reload={() => {
                 setSaved(true);
                 resource.reload();
               }}
-            />
+            /> : <Section title={data.inactiveBaseline ? "Approved inactive baseline" : "Financial configuration pending"}>
+              {data.inactiveBaseline && <p>{`Customer cashback: ${data.inactiveBaseline.customerCashbackPercent}% · Creator commission: ${data.inactiveBaseline.creatorCommissionPercent}% · Platform: ${data.inactiveBaseline.platformPercent}%`}</p>}
+              <Notice>No financial pricing version is effective yet.</Notice>
+              {data.versions.length === 0 && <p>Complete owner-approved view pricing, UGC rates, payout thresholds, promotion duration and audience rules through the trusted financial bootstrap. Financial products remain disabled until their activation checks pass.</p>}
+            </Section>}
             <Section
               title="Saved versions"
               description="Open any version to review its stored values, including scheduled changes."

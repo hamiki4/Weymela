@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -93,6 +93,7 @@ function renderOnboarding() {
 }
 
 describe("shared role-themed onboarding", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     window.sessionStorage.clear();
     mocks.post.mockClear();
@@ -116,6 +117,73 @@ describe("shared role-themed onboarding", () => {
     expect(mocks.post).not.toHaveBeenCalled();
     expect(screen.queryByText("Your Business account is ready.")).not.toBeInTheDocument();
     expect(screen.queryByText("Your account is ready.")).not.toBeInTheDocument();
+  });
+
+  it.each(["Business", "Creator", "Customer"])("does not turn an earlier %s checkbox into acceptance of newly published policies", async role => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "unpublished-checkbox-key", role,
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      businessName: "Isolated business", businessType: "Retail", legalAccepted: true,
+    }));
+    renderOnboarding();
+    expect(await screen.findByText("Review and accept the published policies to finish registration.")).toBeVisible();
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Finish registration" })).toBeDisabled();
+  });
+
+  it("submits exactly the policy versions explicitly reviewed after Production email verification", async () => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "explicit-current-consent", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000", legalAccepted: true,
+    }));
+    renderOnboarding();
+    expect(await screen.findByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/legal/terms-of-service");
+    expect(screen.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/legal/privacy-policy");
+    await userEvent.click(screen.getByRole("checkbox"));
+    expect(mocks.post).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Finish registration" }));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+      accountLegal: {
+        termsOfService: { documentId: "terms-id", contentHash: "terms-hash", accepted: true },
+        privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
+      },
+    }), "explicit-current-consent");
+    expect(await screen.findByRole("heading", { name: "Your account is ready." })).toBeVisible();
+  });
+
+  it("reloads unpublished policies on retry instead of repeatedly submitting stale status", async () => {
+    mocks.legalStatus = { available: false, current: false, documents: [] };
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "policy-retry", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000", legalAccepted: true,
+    }));
+    renderOnboarding();
+    await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(mocks.reload).toHaveBeenCalledTimes(1);
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it("clears explicit confirmation when the published versions change while the form is open", async () => {
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "changed-policy-key", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000", legalAccepted: true,
+    }));
+    const view = renderOnboarding();
+    await userEvent.click(await screen.findByRole("checkbox"));
+    expect(screen.getByRole("button", { name: "Finish registration" })).toBeEnabled();
+    mocks.legalStatus = { ...effectiveLegal, documents: effectiveLegal.documents.map(document => ({
+      ...document, documentId: document.documentId + "-new", contentHash: document.contentHash + "-new",
+    })) };
+    view.rerender(<MemoryRouter initialEntries={["/onboarding"]}><Onboarding /></MemoryRouter>);
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Finish registration" })).toBeDisabled();
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 
   it("completes a PIN-enrolled public Business registration exactly once and opens its workspace", async () => {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { invalidateResourceCache } from "../src/api/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import {
@@ -82,6 +83,7 @@ function LocationProbe() {
 }
 beforeEach(() => {
   vi.restoreAllMocks();
+  invalidateResourceCache(false);
   mockApi();
 });
 
@@ -512,7 +514,7 @@ describe("Business workspace", () => {
       revisionNumber: 1, submittedAtUtc: "2026-09-22T12:00:00Z", reviewStatus: "UnderReview", feedback: null, reviewedAtUtc: null,
     })) });
     mount(<PromotionContentReviewQueue />);
-    await screen.findByText("Mina Creator · Seasonal stories");
+    expect(await screen.findAllByText("Mina Creator · Seasonal stories")).toHaveLength(2);
     await userEvent.click(screen.getAllByRole("button", { name: "Approve" })[0]);
     await waitFor(() => expect(api.writes).toContainEqual(expect.objectContaining({ body: { action: "approve", feedback: null } })));
     await userEvent.click(screen.getAllByRole("button", { name: "Reject" })[1]);
@@ -897,7 +899,7 @@ describe("Creator workspace", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));
     await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
     await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");
-    expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Save Destination" })).toBeEnabled();
     await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
       body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
@@ -940,7 +942,7 @@ describe("Creator workspace", () => {
       await screen.findByText("Eligible for payout · 5,000"),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Request Payout" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Save Destination" })).toBeEnabled();
   });
   it("shows amount remaining and disables payout below threshold", async () => {
     mockCreatorApi({
@@ -958,6 +960,19 @@ describe("Creator workspace", () => {
 });
 
 describe("Admin workspace", () => {
+  it("shows the approved inactive baseline without inventing prices or enabling writes", async () => {
+    const api = mockApi({ "/admin/financial-settings": {
+      current: null, version: 0, versions: [],
+      inactiveBaseline: { version: 1, customerCashbackPercent: 4, creatorCommissionPercent: 5,
+        platformPercent: 1, effectiveFromUtc: "2026-10-11T18:20:00Z" },
+    } });
+    mount(<AdminFinancialSettings />);
+    expect(await screen.findByText("Approved inactive baseline")).toBeVisible();
+    expect(screen.getByText("Customer cashback: 4% · Creator commission: 5% · Platform: 1%")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Save Financial Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("View Only Business Pays")).not.toBeInTheDocument();
+    expect(api.writes).toHaveLength(0);
+  });
   it("filters Campaigns with a designed empty result", async () => {
     mount(<AdminCampaigns />);
     await userEvent.type(

@@ -48,7 +48,7 @@ public sealed partial class WorkspaceQueries
     public async Task<IReadOnlyList<OperationsCreatorView>> OperationsCreatorsAsync(Actor actor, CancellationToken ct)
     {
         DemandCapability(actor, AdministrativeCapability.CreatorOperationalVisibility);
-        var threshold = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, ct)).CreatorPayoutThreshold.Amount;
+        var threshold = (await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now, ct))?.CreatorPayoutThreshold.Amount;
         var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Creator).ToListAsync(ct);
         var emails = await VerifiedAccountEmailsAsync(permissions.Select(x => x.UserId), ct);
         var result = new List<OperationsCreatorView>();
@@ -57,7 +57,7 @@ public sealed partial class WorkspaceQueries
             var available = (await db.CreatorEarningsAccounts.AsNoTracking().SingleOrDefaultAsync(x => x.CreatorId == group.Key, ct))?.AvailableEarnings.Amount ?? 0;
             result.Add(new(await directory.CreatorCardAsync(group.Key, ct), group.Any(x => x.IsActive) ? "Active" : "Inactive",
                 await db.CreatorAllocations.CountAsync(x => x.CreatorId == group.Key && x.Status == CreatorAllocationStatus.Active, ct),
-                available >= threshold, emails.GetValueOrDefault(group.First().UserId)));
+                threshold is { } minimum && available >= minimum, emails.GetValueOrDefault(group.First().UserId)));
         }
         return result;
     }
@@ -142,25 +142,36 @@ public sealed partial class WorkspaceQueries
     }
     public async Task<IReadOnlyList<CreatorOversight>> CreatorsAsync(Actor actor,CancellationToken ct)
     {
-        DemandPlatformAdmin(actor);var threshold=(await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct)).CreatorPayoutThreshold.Amount;
+        DemandPlatformAdmin(actor);var threshold=(await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct))?.CreatorPayoutThreshold.Amount;
         var permissions=await db.CommercePermissions.AsNoTracking().Where(x=>x.Role==ActorRole.Creator).ToListAsync(ct);var result=new List<CreatorOversight>();
         foreach(var group in permissions.GroupBy(x=>x.SubjectId))
         {
             var available=(await db.CreatorEarningsAccounts.SingleOrDefaultAsync(x=>x.CreatorId==group.Key,ct))?.AvailableEarnings.Amount??0;
             result.Add(new(await directory.CreatorCardAsync(group.Key,ct),group.Any(x=>x.IsActive)?"Active":"Inactive",
-                await db.CreatorAllocations.CountAsync(x=>x.CreatorId==group.Key&&x.Status==CreatorAllocationStatus.Active,ct),available,available>=threshold));
+                await db.CreatorAllocations.CountAsync(x=>x.CreatorId==group.Key&&x.Status==CreatorAllocationStatus.Active,ct),available,threshold is { } minimum && available>=minimum));
         }
         return result;
     }
     public async Task<FinancialSettingsWorkspace> SettingsAsync(Actor actor,CancellationToken ct)
     {
-        DemandPlatformAdmin(actor);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
+        DemandPlatformAdmin(actor);
         ViewPriceInput Input(PricingSnapshot p)=>new(p.ViewsPerReward,p.BusinessCharge.Amount,p.CreatorEarning.Amount,p.PlatformEarning.Amount,p.MinimumPromotionBudget?.Amount);
         var saved=await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).ToListAsync(ct);
         FinancialSettingsInput Settings(FinancialConfigurationVersion x)=>new(Input(x.ViewOnly),Input(x.ViewPlusCommission),x.ViewPlusCommission.CreatorCommissionPercent,x.ViewPlusCommission.CustomerCashbackPercent,x.ViewPlusCommission.PlatformPercent,x.CreatorPayoutThreshold.Amount,x.CustomerPayoutThreshold.Amount,x.EffectiveFromUtc,
             x.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent) : null,
             x.PromotionLiveDurationDays,x.EnforceAudienceRequirements);
         var versions=saved.Select(x=>new FinancialVersionInfo(x.Id,x.Version,x.EffectiveFromUtc,x.ChangedBy,Settings(x))).ToArray();
+        var v = saved.Where(x => x.EffectiveFromUtc <= Now).OrderByDescending(x => x.EffectiveFromUtc)
+            .ThenByDescending(x => x.Version).ThenByDescending(x => x.Id).FirstOrDefault();
+        if (v is null)
+        {
+            var baseline = options is null ? null : await InactiveFinancialBaselines.EffectiveAsync(
+                db, options.FirebaseProjectId, Now, ct);
+            var approval = baseline?.Approval;
+            return new(null, 0, versions, approval is null ? null : new(baseline!.Version,
+                approval.CustomerCashbackPercent, approval.CreatorCommissionPercent, approval.PlatformPercent,
+                approval.EffectiveFromUtc));
+        }
         return new(new(Input(v.ViewOnly),Input(v.ViewPlusCommission),v.ViewPlusCommission.CreatorCommissionPercent,v.ViewPlusCommission.CustomerCashbackPercent,
             v.ViewPlusCommission.PlatformPercent,v.CreatorPayoutThreshold.Amount,v.CustomerPayoutThreshold.Amount,v.EffectiveFromUtc,
             v.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent) : null,
@@ -185,10 +196,14 @@ public sealed partial class WorkspaceQueries
 
     private async Task<(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History)> PayoutQueuesAsync(CancellationToken ct)
     {
-        var version=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
+        var version=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
         var records=await db.PayoutRecords.AsNoTracking().ToListAsync(ct);var creators=new List<PayoutQueueRow>();var customers=new List<PayoutQueueRow>();
         var destinations=await db.PayoutDestinations.AsNoTracking().ToDictionaryAsync(x=>(x.Beneficiary,x.SubjectId),ct);
         var history=new List<PayoutItem>();
+        foreach(var p in records.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc))history.Add(new(p.Id,p.Beneficiary.ToString(),p.CreatorId is {} creator?(await directory.CreatorCardAsync(creator,ct)).DisplayName:await CustomerLabel(p.CustomerId!.Value,ct),p.Amount.Amount,p.ThresholdUsed.Amount,p.Status.ToString(),p.EligibleAtUtc,p.PaidAtUtc,p.Reference));
+        // Unknown thresholds cannot establish eligibility. Preserve actual history without
+        // inventing thresholds or placing a beneficiary in an actionable payout queue.
+        if (version is null) return (creators, customers, history);
         foreach(var a in await db.CreatorEarningsAccounts.AsNoTracking().ToListAsync(ct))
         {
             var pending=records.SingleOrDefault(x=>x.CreatorId==a.CreatorId&&x.Status==PayoutStatus.Eligible);
@@ -217,7 +232,6 @@ public sealed partial class WorkspaceQueries
                 pending?.Amount.Amount??version.CustomerPayoutThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,version.CustomerPayoutThreshold.Amount,version.EffectiveFromUtc,ct),
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
-        foreach(var p in records.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc))history.Add(new(p.Id,p.Beneficiary.ToString(),p.CreatorId is {} creator?(await directory.CreatorCardAsync(creator,ct)).DisplayName:await CustomerLabel(p.CustomerId!.Value,ct),p.Amount.Amount,p.ThresholdUsed.Amount,p.Status.ToString(),p.EligibleAtUtc,p.PaidAtUtc,p.Reference));
         return (creators, customers, history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ToArray());
     }
     private async Task<DateTime?> EligibleSince(PayoutBeneficiary kind,Guid id,decimal threshold,DateTime effective,CancellationToken ct)

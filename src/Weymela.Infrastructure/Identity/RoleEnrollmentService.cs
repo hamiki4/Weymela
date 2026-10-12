@@ -65,7 +65,9 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
                 foreach (var language in new[] { "en", "am" })
                     if (legalSource is null || await legalSource.ReadAsync(db, type, language,
                         clock.GetUtcNow().UtcDateTime, ct) is null)
-                        throw new AuthChallengeUnavailableException("Current legal documents are unavailable.");
+                        throw new ApplicationFailure(FailureKind.Validation,
+                            "Account activation requires published Terms of Service and Privacy Policy.",
+                            code: "ApprovedLegalUnavailable");
         var hasActiveProfile = await db.CommercePermissions.AsNoTracking()
             .AnyAsync(x => x.UserId == actor.UserId && x.IsActive, ct);
         if (!hasActiveProfile || options?.EnvironmentName == "Production")

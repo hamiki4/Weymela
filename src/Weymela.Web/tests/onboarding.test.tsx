@@ -104,6 +104,20 @@ describe("shared role-themed onboarding", () => {
     mocks.legalStatus = effectiveLegal;
   });
 
+  it.each(["Business", "Creator", "Customer"])("keeps verified %s registration blocked with an accurate unpublished-policy message", async role => {
+    mocks.legalStatus = { available: false, current: false, documents: [] };
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "policy-pending-key", role,
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      businessName: "Isolated business", businessType: "Retail", legalAccepted: true,
+    }));
+    renderOnboarding();
+    expect(await screen.findByText("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.")).toBeVisible();
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(screen.queryByText("Your Business account is ready.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your account is ready.")).not.toBeInTheDocument();
+  });
+
   it("completes a PIN-enrolled public Business registration exactly once and opens its workspace", async () => {
     window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
       version: 1, idempotencyKey: "public-business-key", role: "Business",

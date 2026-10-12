@@ -7,6 +7,7 @@ using Weymela.Application.Operations;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Web;
 
 namespace Weymela.Infrastructure.Identity;
@@ -24,7 +25,8 @@ public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollme
     IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null, string? FullEmail = null,
     string? FullPhone = null, string? LegalName = null);
 
-public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider clock)
+public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider clock,
+    RuntimeOptions? options = null, AccountLegalDocumentSource? legalSource = null)
 {
     private static readonly ActorRole[] PublicRoles = [ActorRole.Customer, ActorRole.Creator, ActorRole.Business];
 
@@ -58,9 +60,17 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
             throw new ApplicationFailure(FailureKind.Validation, "This profile request is already under review.");
         if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
             throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
+        if (options?.EnvironmentName == "Production")
+            foreach (var type in new[] { LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy })
+                foreach (var language in new[] { "en", "am" })
+                    if (legalSource is null || await legalSource.ReadAsync(db, type, language,
+                        clock.GetUtcNow().UtcDateTime, ct) is null)
+                        throw new ApplicationFailure(FailureKind.Validation,
+                            "Account activation requires published Terms of Service and Privacy Policy.",
+                            code: "ApprovedLegalUnavailable");
         var hasActiveProfile = await db.CommercePermissions.AsNoTracking()
             .AnyAsync(x => x.UserId == actor.UserId && x.IsActive, ct);
-        if (!hasActiveProfile)
+        if (!hasActiveProfile || options?.EnvironmentName == "Production")
         {
             var accountLegal = new AccountLegalOnboardingService(db, clock);
             var status = await accountLegal.StatusAsync(actor.UserId, ct);

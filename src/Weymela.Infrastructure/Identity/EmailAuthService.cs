@@ -216,6 +216,9 @@ public sealed class EmailAuthService(
         var emailIdentifier = existingEmail ?? await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Email" && x.IdentifierHash == emailHash, ct);
         if (challengePurpose == EmailCodePurpose.Signup)
         {
+            // A valid code verifies mailbox ownership and creates only an account
+            // setup identity. Published policies and consent are required separately
+            // by role activation; no commerce permission is granted here.
             if (emailIdentifier is not null && emailIdentifier.UserId != userId) throw new AuthChallengeInvalidException();
             if (emailIdentifier is null)
                 db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = userId, Kind = "Email", IdentifierHash = emailHash, DeliveryAddress = normalizedIdentifier, IsVerified = true, CreatedAtUtc = now });

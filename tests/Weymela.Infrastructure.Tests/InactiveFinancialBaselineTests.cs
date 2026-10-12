@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Domain;
 using Weymela.Infrastructure.Finance;
+using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -51,19 +52,21 @@ public sealed class InactiveFinancialBaselineTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Readiness_requires_legal_admin_and_paused_products_even_with_approved_baseline()
+    public async Task Readiness_is_independent_of_legal_publication_but_requires_admin_and_paused_products()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
         var admin = await SeedAdmin(db);
         await Bootstrap(db).ProvisionInactiveAsync(Request(admin));
         var options = new RuntimeOptions { EnvironmentName = "Production", FirebaseProjectId = "weymela-production" };
-        Assert.False((await new OperationalHealth(db, options, Clock).ReadinessAsync(default)).Ready);
-        db.LegalDocumentVersions.AddRange(
-            new(Guid.NewGuid(), LegalDocumentType.TermsOfService, "test-only", "test-terms-hash", Now),
-            new(Guid.NewGuid(), LegalDocumentType.PrivacyPolicy, "test-only", "test-privacy-hash", Now));
-        await db.SaveChangesAsync();
         Assert.True((await new OperationalHealth(db, options, Clock).ReadinessAsync(default)).Ready);
+        var legal = await new AccountLegalOnboardingService(db, Clock).StatusAsync(admin, default);
+        Assert.False(legal.Available);
+        Assert.False(legal.Current);
+        await Assert.ThrowsAsync<ApplicationFailure>(() => new AccountLegalOnboardingService(db, Clock)
+            .AcceptCurrentAsync(admin, new(new(Guid.NewGuid(), "unpublished", true),
+                new(Guid.NewGuid(), "unpublished", true)), null, null, default));
+        Assert.Empty(await db.LegalAcceptances.ToListAsync());
         Assert.False((await new OperationalHealth(db, new RuntimeOptions
             { FirebaseProjectId = "weymela-production", FinancialWritesEnabled = true }, Clock).ReadinessAsync(default)).Ready);
         Assert.False((await new OperationalHealth(db, new RuntimeOptions

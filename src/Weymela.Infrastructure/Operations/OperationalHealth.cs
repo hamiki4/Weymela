@@ -18,8 +18,7 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
                 || options.FirebaseCustomTokenMode != "FirebaseAdmin")) return new(false, "not_ready");
             if (!await db.Database.CanConnectAsync(bound.Token) || (await db.Database.GetPendingMigrationsAsync(bound.Token)).Any()) return new(false, "not_ready");
             // Policy publication gates consent-dependent operations, not service availability.
-            if (!options.Development && (!await FinancialConfigurationReadyAsync(bound.Token)
-                || !await PlatformAdminReadyAsync(bound.Token)))
+            if (!options.Development && !await PlatformAdminReadyAsync(bound.Token))
                 return new(false, "not_ready");
             if (options.WorkerEnabled)
             {
@@ -33,15 +32,6 @@ public sealed class OperationalHealth(WeymelaDbContext db, RuntimeOptions option
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch { return new(false, "not_ready"); }
-    }
-    private async Task<bool> FinancialConfigurationReadyAsync(CancellationToken ct)
-    {
-        var now = clock.GetUtcNow().UtcDateTime;
-        if (await db.FinancialConfigurationVersions.AnyAsync(x => x.EffectiveFromUtc <= now, ct)) return true;
-        // Only an explicitly approved inactive baseline can serve a paused installation.
-        // Turning on money operations still requires complete effective pricing.
-        return !options.FinancialWritesEnabled && options.DepositMode == "Disabled"
-            && await InactiveFinancialBaselines.EffectiveAsync(db, options.FirebaseProjectId, now, ct) is not null;
     }
     private async Task<bool> PlatformAdminReadyAsync(CancellationToken ct)
     {

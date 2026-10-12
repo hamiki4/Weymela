@@ -354,7 +354,7 @@ function CustomerHomeSummary() {
   const cashback = useResource<CashbackSummary>("/customer/cashback");
   const transactions = useResource<CustomerTransaction[]>("/customer/transactions");
   return <section className="product-home-summary" aria-label="Your account summary">
-    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Cashback</span><strong>{amount(data.availableCashback.amount)} ETB</strong><small>{data.eligible ? "Ready to cash out" : `Cash out at ${amount(data.minimumCashOut.amount)} ETB`}</small></Link>}</Resource>
+    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Cashback</span><strong>{amount(data.availableCashback.amount)} ETB</strong><small>{data.eligible ? "Ready to cash out" : data.minimumCashOut ? `Cash out at ${amount(data.minimumCashOut.amount)} ETB` : "Payout minimum not configured"}</small></Link>}</Resource>
     <Resource resource={transactions}>{(rows) => rows.length ? <Link to="/customer/transactions" className="product-summary-row"><span>Latest purchase</span><strong>{rows[0].business}</strong><small>{dateTime(rows[0].purchasedAtUtc)}</small></Link> : null}</Resource>
   </section>;
 }
@@ -577,6 +577,7 @@ export function CustomerTransactions() {
 }
 
 const cashbackStatusLabel = (status: CashbackSummary["status"]) => {
+  if (status === "ConfigurationRequired") return "Payout minimum not configured";
   if (status === "PayoutPrepared") return "Payout prepared";
   if (status === "Eligible") return "Ready to cash out";
   return "Building cashback";
@@ -590,8 +591,8 @@ export function CustomerCashback() {
       <Resource resource={resource}>
         {(summary) => {
           const available = summary.availableCashback.amount;
-          const threshold = summary.minimumCashOut.amount;
-          const progress = threshold > 0 ? Math.min(100, (available / threshold) * 100) : 0;
+          const threshold = summary.minimumCashOut?.amount ?? null;
+          const progress = threshold !== null && threshold > 0 ? Math.min(100, (available / threshold) * 100) : 0;
           return (
             <>
               <section className="customer-cashback-summary" aria-label="Cashback summary">
@@ -603,12 +604,12 @@ export function CustomerCashback() {
                 <div className="customer-cashback-progress">
                   <div className="customer-cashback-threshold">
                     <span>Cash out at</span>
-                    <strong>{amount(threshold)} ETB</strong>
+                    <strong>{threshold === null ? "Not configured" : `${amount(threshold)} ETB`}</strong>
                   </div>
                   <div className="customer-cashback-track" role="progressbar" aria-label="Progress toward minimum cash-out" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
                     <span style={{ width: `${progress}%` }} />
                   </div>
-                  <p>{summary.eligible ? "Ready to cash out" : `${amount(summary.remainingToCashOut.amount)} ETB to cash out`}</p>
+                  <p>{summary.eligible ? "Ready to cash out" : summary.remainingToCashOut ? `${amount(summary.remainingToCashOut.amount)} ETB to cash out` : "Payout minimum not configured"}</p>
                 </div>
               </section>
               <section className="customer-payout-history"><div className="customer-ledger-section-heading"><div><h2>Payout destination</h2></div></div><PayoutDestinationForm endpoint="/customer/payout-destination" /></section>

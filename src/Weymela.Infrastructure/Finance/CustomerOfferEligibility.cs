@@ -131,7 +131,7 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
         CreatorPlatform platform, long? minimumAudience, CancellationToken ct)
     {
         var enforce = (await new FinancialConfigurationResolver(db)
-            .EffectiveAsync(clock.GetUtcNow().UtcDateTime, ct)).EnforceAudienceRequirements;
+            .EffectiveAsync(clock.GetUtcNow().UtcDateTime, ct)).RequireAudienceRules();
         return SocialAudienceEligibility.Matches(profile, platform, minimumAudience, enforce);
     }
 }

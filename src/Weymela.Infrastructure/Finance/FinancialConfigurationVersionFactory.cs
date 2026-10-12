@@ -10,27 +10,28 @@ public static class FinancialConfigurationVersionFactory
     public static FinancialConfigurationVersion Create(Guid id, Guid configurationId, int version,
         Guid changedBy, DateTime effectiveFromUtc, FinancialSettingsInput input)
     {
-        PricingSnapshot Price(PromotionType type, ViewPriceInput price) => new(type,
+        PricingSnapshot? Price(PromotionType type, ViewPriceInput? price) => price is null ? null : new(type,
             price.ViewsPerReward, Amount(price.BusinessPays), NonNegative(price.CreatorEarns),
             NonNegative(price.PlatformKeeps), input.CreatorCommissionPercent,
             input.CustomerCashbackPercent, input.PlatformPercent, effectiveFromUtc, id,
             price.MinimumCampaignBudget is { } minimum ? Amount(minimum) : null);
 
-        var ugcInput = input.Ugc ?? new UgcSettingsInput(200m, 10m, null);
-        if (ugcInput.PlatformFeePercent is < 0 or > 100 || decimal.Round(ugcInput.PlatformFeePercent, 4) != ugcInput.PlatformFeePercent)
+        var ugcInput = input.Ugc;
+        if (ugcInput is not null && (ugcInput.PlatformFeePercent is < 0 or > 100 || decimal.Round(ugcInput.PlatformFeePercent, 4) != ugcInput.PlatformFeePercent))
             throw new ApplicationFailure(FailureKind.Validation, "Enter a valid UGC Platform fee percentage.");
-        if (ugcInput.CustomerOfferPlatformSalePercent is { } offerPercent
+        if (ugcInput?.CustomerOfferPlatformSalePercent is { } offerPercent
             && (offerPercent is < 0 or > 100 || decimal.Round(offerPercent, 4) != offerPercent))
             throw new ApplicationFailure(FailureKind.Validation, "Enter a valid UGC Customer Offer Platform Sale fee percentage.");
-        var ugc = new UgcPricingSnapshot(Amount(ugcInput.MinimumCreatorPayment), ugcInput.PlatformFeePercent,
+        var ugc = ugcInput is null ? null : new UgcPricingSnapshot(Amount(ugcInput.MinimumCreatorPayment), ugcInput.PlatformFeePercent,
             ugcInput.MinimumUgcBudget is { } minimumUgc ? Amount(minimumUgc) : null, effectiveFromUtc, id,
             ugcInput.CustomerOfferPlatformSalePercent);
-        PromotionLiveDurationPolicy.Validate(input.PromotionLiveDurationDays);
-        return new FinancialConfigurationVersion(id, configurationId, version, changedBy,
+        if (input.PromotionLiveDurationDays is { } days) PromotionLiveDurationPolicy.Validate(days);
+        return FinancialConfigurationVersion.CreatePartial(id, configurationId, version, changedBy,
             effectiveFromUtc, Price(PromotionType.ViewOnly, input.ViewOnly),
             Price(PromotionType.ViewPlusCommission, input.ViewPlusCommission),
-            Amount(input.CreatorThreshold), Amount(input.CustomerThreshold), ugc, input.PromotionLiveDurationDays,
-            input.EnforceAudienceRequirements);
+            input.CreatorThreshold is { } creator ? Amount(creator) : null,
+            input.CustomerThreshold is { } customer ? Amount(customer) : null, ugc, input.PromotionLiveDurationDays,
+            input.EnforceAudienceRequirements, input.CreatorCommissionPercent, input.CustomerCashbackPercent, input.PlatformPercent);
     }
 
     private static Money Amount(decimal value)

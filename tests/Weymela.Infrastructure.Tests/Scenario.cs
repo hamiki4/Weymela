@@ -28,7 +28,7 @@ internal sealed record Scenario(TestDatabase Database, Actor Business, Guid Prom
         var p = new Promotion(business.BusinessId.Value, "Campaign", "Brief", type, new Money(budget),
             new(null, null, "ET", "Content"), Now, Now.AddDays(30),
             (type == PromotionType.ViewOnly ? version.ViewOnly : version.ViewPlusCommission) with { }, Now,
-            null, null, null, [(CreatorPlatform.TikTok, 100, (long?)null)], version.PromotionLiveDurationDays);
+            null, null, null, [(CreatorPlatform.TikTok, 100, (long?)null)], version.RequirePromotionDuration());
         db.Promotions.Add(p);
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         var commands = new FinancialCommands(db);

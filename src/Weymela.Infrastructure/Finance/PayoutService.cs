@@ -14,7 +14,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
     {
         await DemandBeneficiaryAsync(actor, kind, subject, ct);
         var config = await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime, ct);
-        var threshold = kind == PayoutBeneficiary.Creator ? config.CreatorPayoutThreshold : config.CustomerPayoutThreshold;
+        var threshold = config.RequirePayoutThreshold(kind);
         var available = kind == PayoutBeneficiary.Creator
             ? (await db.CreatorEarningsAccounts.SingleOrDefaultAsync(x => x.CreatorId == subject, ct))?.AvailableEarnings ?? Money.Zero()
             : (await db.CustomerCashbackAccounts.SingleOrDefaultAsync(x => x.CustomerId == subject, ct))?.AvailableCashback ?? Money.Zero();
@@ -62,7 +62,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
             DemandPayoutConfirmation(actor, payout.Beneficiary);
             if (payout.Status != PayoutStatus.Eligible) throw new ApplicationFailure(FailureKind.Validation, "Payout has already been paid.");
             var configuration = await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime, token);
-            var threshold = payout.Beneficiary == PayoutBeneficiary.Creator ? configuration.CreatorPayoutThreshold : configuration.CustomerPayoutThreshold;
+            var threshold = configuration.RequirePayoutThreshold(payout.Beneficiary);
             if (payout.Amount.Amount < threshold.Amount)
                 throw new ApplicationFailure(FailureKind.Validation, "Payout amount is below the effective minimum.");
             if (payout.Beneficiary == PayoutBeneficiary.Creator)

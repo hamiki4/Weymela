@@ -50,7 +50,7 @@ public sealed class InactiveFinancialBaselineTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Unconfigured_settings_still_require_platform_admin_and_the_trusted_first_bootstrap()
+    public async Task Initial_settings_require_an_active_platform_admin()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -68,7 +68,7 @@ public sealed class InactiveFinancialBaselineTests(PostgresFixture fixture)
         }
         var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => commands.SettingsAsync(
             new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), input, 0, "not-bootstrapped", default));
-        Assert.Equal("FinancialConfigurationRequired", failure.Code);
+        Assert.Equal(FailureKind.Forbidden, failure.Kind);
         Assert.Empty(await db.FinancialConfigurations.ToListAsync());
         Assert.Empty(await db.FinancialConfigurationVersions.ToListAsync());
         Assert.Empty(await db.AuditEvents.ToListAsync());
@@ -125,9 +125,9 @@ public sealed class InactiveFinancialBaselineTests(PostgresFixture fixture)
             .AcceptCurrentAsync(admin, new(new(Guid.NewGuid(), "unpublished", true),
                 new(Guid.NewGuid(), "unpublished", true)), null, null, default));
         Assert.Empty(await db.LegalAcceptances.ToListAsync());
-        Assert.False((await new OperationalHealth(db, new RuntimeOptions
+        Assert.True((await new OperationalHealth(db, new RuntimeOptions
             { FirebaseProjectId = "weymela-production", FinancialWritesEnabled = true }, Clock).ReadinessAsync(default)).Ready);
-        Assert.False((await new OperationalHealth(db, new RuntimeOptions
+        Assert.True((await new OperationalHealth(db, new RuntimeOptions
             { FirebaseProjectId = "weymela-production", DepositMode = "ManualApproval" }, Clock).ReadinessAsync(default)).Ready);
         Assert.Null(await InactiveFinancialBaselines.EffectiveAsync(db, "weymela-pilot", Now, default));
         await db.CommercePermissions.ExecuteDeleteAsync();

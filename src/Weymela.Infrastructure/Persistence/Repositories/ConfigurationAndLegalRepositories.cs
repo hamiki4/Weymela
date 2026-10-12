@@ -17,14 +17,14 @@ public sealed class FinancialConfigurationResolver(WeymelaDbContext db) : IFinan
     public async Task<PricingSnapshot> ResolveAsync(PromotionType type, DateTime at, CancellationToken ct)
     {
         var v = await EffectiveAsync(at, ct);
-        return type == PromotionType.ViewOnly ? v.ViewOnly : v.ViewPlusCommission;
+        return (type == PromotionType.ViewOnly ? v.ViewOnly : v.ViewPlusCommission)
+            ?? throw new ApplicationFailure(FailureKind.Validation, $"Configure {type} pricing before using this product.", code: "ProductPricingRequired");
     }
 
     public async Task<PromotionConfigurationSnapshot> ResolvePromotionAsync(PromotionType type, DateTime at, CancellationToken ct)
     {
         var v = await EffectiveAsync(at, ct);
-        return new(type == PromotionType.ViewOnly ? v.ViewOnly : v.ViewPlusCommission,
-            v.PromotionLiveDurationDays);
+        return new(await ResolveAsync(type, at, ct), v.RequirePromotionDuration());
     }
 }
 

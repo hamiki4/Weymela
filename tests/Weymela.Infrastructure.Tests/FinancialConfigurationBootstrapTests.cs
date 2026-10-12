@@ -50,8 +50,8 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
         Assert.Equal(3, version.ViewPlusCommission.CreatorCommissionPercent);
         Assert.Equal(4, version.ViewPlusCommission.CustomerCashbackPercent);
         Assert.Equal(3, version.ViewPlusCommission.PlatformPercent);
-        Assert.Equal(3000, version.CreatorPayoutThreshold.Amount);
-        Assert.Equal(4000, version.CustomerPayoutThreshold.Amount);
+        Assert.Equal(3000, version.CreatorPayoutThreshold!.Value.Amount);
+        Assert.Equal(4000, version.CustomerPayoutThreshold!.Value.Amount);
         Assert.Equal(1, await db.IdempotencyRecords.CountAsync());
         Assert.Equal("FinancialConfigurationBootstrapProvisioned",
             (await db.AuditEvents.SingleAsync()).EventType);
@@ -168,8 +168,6 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.ProvisionAsync(
             request with { ProductionAuthorizationReference = null }));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.ProvisionAsync(
-            request with { Settings = request.Settings with { Ugc = null } }));
         Assert.Empty(await db.FinancialConfigurations.ToListAsync());
         Assert.Empty(await db.FinancialConfigurationVersions.ToListAsync());
 
@@ -203,7 +201,7 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
         Assert.Equal(2, versions.Count);
         Assert.Equal(1, versions[0].Version);
         Assert.Equal(2, versions[1].Version);
-        Assert.Equal(3500, versions[1].CreatorPayoutThreshold.Amount);
+        Assert.Equal(3500, versions[1].CreatorPayoutThreshold!.Value.Amount);
         Assert.Equal(2, await db.AuditEvents.CountAsync());
     }
 
@@ -218,7 +216,7 @@ public sealed class FinancialConfigurationBootstrapTests(PostgresFixture fixture
     private static FinancialSettingsInput Settings(DateTime effective) => new(
         new(3000, 300, 200, 100, null),
         new(3000, 150, 100, 50, null),
-        3, 4, 3, 3000, 4000, effective);
+        3, 4, 3, 3000, 4000, effective, new(200, 10, null), 30, false);
 
     private static async Task SeedAdminAsync(WeymelaDbContext db, Guid admin,
         string project = "weymela-pilot")

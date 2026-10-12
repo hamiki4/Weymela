@@ -154,18 +154,18 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
     {
         await access.EnsureCustomerAsync(actor, ct);
         var customerId = actor.CustomerId!.Value;
-        var eligibility = await new PayoutService(db, clock)
-            .EligibilityAsync(actor, PayoutBeneficiary.Customer, customerId, ct);
+        var configuration = await new FinancialConfigurationResolver(db).FindEffectiveAsync(clock.GetUtcNow().UtcDateTime, ct);
+        var threshold = configuration?.CustomerPayoutThreshold;
+        var available = (await db.CustomerCashbackAccounts.AsNoTracking().SingleOrDefaultAsync(x=>x.CustomerId==customerId,ct))?.AvailableCashback ?? Money.Zero();
         var payouts = await db.PayoutRecords.AsNoTracking()
             .Where(x => x.Beneficiary == PayoutBeneficiary.Customer && x.CustomerId == customerId)
             .OrderByDescending(x => x.PaidAtUtc ?? x.EligibleAtUtc)
             .ToListAsync(ct);
-        var eligible = eligibility.EligibleAmount.Amount > 0;
+        var eligible = threshold is { } configured && available.Amount >= configured.Amount;
         var hasPreparedPayout = payouts.Any(x => x.Status == PayoutStatus.Eligible);
-        var status = hasPreparedPayout ? "PayoutPrepared" : eligible ? "Eligible" : "BelowThreshold";
-        var remaining = Math.Max(eligibility.Threshold.Amount - eligibility.Available.Amount, 0m);
-        return new(eligibility.Available, eligibility.Threshold,
-            new Money(remaining, eligibility.Threshold.Currency), eligible, status,
+        var status = threshold is null ? "ConfigurationRequired" : hasPreparedPayout ? "PayoutPrepared" : eligible ? "Eligible" : "BelowThreshold";
+        Money? remaining = threshold is { } minimum ? new Money(Math.Max(minimum.Amount - available.Amount, 0m), minimum.Currency) : null;
+        return new(available, threshold, remaining, eligible, status,
             payouts.Select(x => new CustomerPayoutHistory(x.Amount, x.Status.ToString(),
                 x.EligibleAtUtc, x.PaidAtUtc)).ToArray());
     }

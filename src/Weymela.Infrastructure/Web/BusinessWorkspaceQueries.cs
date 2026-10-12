@@ -32,13 +32,14 @@ public sealed partial class WorkspaceQueries
     }
     public async Task<BusinessPricing> BusinessPricingAsync(Actor actor,CancellationToken ct)
     {
-        await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
-        return new([BusinessPrice(v.ViewOnly),BusinessPrice(v.ViewPlusCommission)],v.EffectiveFromUtc,v.PromotionLiveDurationDays);
+        await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
+        var rows=new[] { v?.ViewOnly, v?.ViewPlusCommission }.OfType<PricingSnapshot>().Select(BusinessPrice).ToArray();
+        return new(rows,v?.EffectiveFromUtc,v?.PromotionLiveDurationDays);
     }
     public async Task<UgcPricing> UgcPricingAsync(Actor actor,CancellationToken ct)
     {
         await DemandBusiness(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
-        var ugc=v.Ugc??throw new InvalidOperationException("The effective financial configuration does not include UGC settings.");
+        var ugc=v.Ugc??throw new ApplicationFailure(FailureKind.Validation,"Configure UGC pricing before using this product.",code:"ProductPricingRequired");
         return new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,
             ugc.CustomerOfferPlatformSalePercent,v.Version,v.EffectiveFromUtc);
     }

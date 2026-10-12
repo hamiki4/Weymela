@@ -44,14 +44,8 @@ public sealed partial class ApiSafetyMiddleware(RequestDelegate next, RuntimeOpt
                 {await Error(context,409,"ProfileContextChanged","This workspace changed in another tab. Refresh before submitting again.");return;}
                 if(!options.Development&&!context.Request.IsHttps){await Error(context,403,"SecureTransportRequired","A secure connection is required.");return;}
                 if(!options.FinancialWritesActive(DateTime.UtcNow)&&EndpointSecurity.Financial(context)){await Error(context,503,"FinancialWritesPaused","Financial actions are currently paused. No funds have moved.");return;}
-                if(EndpointSecurity.Financial(context))
-                {
-                    bool configured;
-                    try { configured=await db.FinancialConfigurationVersions.AnyAsync(x=>x.EffectiveFromUtc<=DateTime.UtcNow,context.RequestAborted); }
-                    catch(OperationCanceledException) when(context.RequestAborted.IsCancellationRequested){throw;}
-                    catch {await Error(context,503,"Unavailable","Financial configuration could not be verified. Please try again.");return;}
-                    if(!configured){await Error(context,503,"FinancialConfigurationRequired","Complete approved financial configuration before enabling this product.");return;}
-                }
+                // Product services validate their own current prices, immutable funding snapshots,
+                // beneficiary thresholds and verified receiving accounts. Unrelated settings do not gate this request.
                 var receiptUpload=context.Request.Path.Equals("/api/business/deposit-requests",StringComparison.OrdinalIgnoreCase)
                     && HttpMethods.IsPost(context.Request.Method);
                 var photoUpload=context.Request.Path.Equals("/api/creator/photo",StringComparison.OrdinalIgnoreCase)

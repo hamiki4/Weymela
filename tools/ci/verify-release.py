@@ -73,6 +73,7 @@ def verify(root):
         '20261001043831_AddAdminVerifiedAudienceAndEnforcement',
         '20261006050542_CompleteCreatorCollaborationWorkflow',
         '20261007041919_AlignFinancialUatFlows',
+        '20261012042110_SeparateProductFinancialConfiguration',
     ]
     expected_count = len(expected_order)
     if (contracts.get('from') != {'sourceCommit':'1c552db44eb196603f56b623082b3cd629a46d91',

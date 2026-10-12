@@ -50,7 +50,7 @@ public sealed partial class FinancialCommands
                 var slot = p.Platforms.SingleOrDefault(x => x.Platform == selectedPlatform);
                 var config = await new FinancialConfigurationResolver(db).EffectiveAsync(clock?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow, token);
                 var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.Id == selectedProfile && x.CreatorId == app.CreatorId, token);
-                if (slot is null || slot.Available <= 0 || profile is null || !SocialAudienceEligibility.Matches(profile, selectedPlatform, slot.MinimumAudience, config.EnforceAudienceRequirements))
+                if (slot is null || slot.Available <= 0 || profile is null || !SocialAudienceEligibility.Matches(profile, selectedPlatform, slot.MinimumAudience, config.RequireAudienceRules()))
                     throw new ApplicationFailure(FailureKind.Validation, "This Creator no longer qualifies for the selected platform under the current requirements.");
             }
             if (app.Status == CreatorApplicationStatus.Pending) app.Approve(actor.UserId, now);
@@ -86,6 +86,6 @@ public sealed partial class FinancialCommands
         if (slot is null || slot.Available <= 0) return false;
         var config = await new FinancialConfigurationResolver(db).EffectiveAsync(clock?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow, ct);
         var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.Id == profileId && x.CreatorId == creatorId, ct);
-        return profile is not null && SocialAudienceEligibility.Matches(profile, platform, slot.MinimumAudience, config.EnforceAudienceRequirements);
+        return profile is not null && SocialAudienceEligibility.Matches(profile, platform, slot.MinimumAudience, config.RequireAudienceRules());
     }
 }

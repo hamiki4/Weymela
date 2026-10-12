@@ -8,10 +8,11 @@ using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Persistence.Transactions;
 using System.Text.Json;
+using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Infrastructure.Web;
 
-public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory directory,TimeProvider clock)
+public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory directory,TimeProvider clock, RuntimeOptions? options = null)
 {
     private DateTime Now=>clock.GetUtcNow().UtcDateTime;
     private FinancialCommands Commands=>new(db,clock);
@@ -191,16 +192,28 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             if(actor.Role!=ActorRole.PlatformAdmin)throw new ApplicationFailure(FailureKind.Forbidden,"Admin access is required.");
             var op=new FinancialOperation(db);var fingerprint=RequestFingerprint.Create(System.Text.Json.JsonSerializer.Serialize(input),expectedVersion.ToString());
             var replay=await op.Replay(actor,"FinancialSettings",key,fingerprint,token);if(replay is not null)return Guid.Parse(replay);
-            var latest=await db.FinancialConfigurationVersions.OrderByDescending(x=>x.Version).FirstOrDefaultAsync(token)
-                ?? throw new ApplicationFailure(FailureKind.Validation,
-                    "Initialize complete owner-approved pricing through the trusted financial bootstrap before editing settings.",
-                    code: "FinancialConfigurationRequired");
-            if(latest.Version!=expectedVersion)throw new ApplicationFailure(FailureKind.ConcurrencyConflict,"Financial settings changed. Reload the saved values before continuing.");
+            var latest=await db.FinancialConfigurationVersions.OrderByDescending(x=>x.Version).FirstOrDefaultAsync(token);
+            if((latest?.Version ?? 0)!=expectedVersion)throw new ApplicationFailure(FailureKind.ConcurrencyConflict,"Financial settings changed. Reload the saved values before continuing.");
+            Guid configurationId;
+            if (latest is null)
+            {
+                if (!await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.SubjectId == actor.UserId
+                    && x.Role == ActorRole.PlatformAdmin && x.IsActive && x.BusinessId == null, token))
+                    throw new ApplicationFailure(FailureKind.Forbidden, "An active Platform Admin must initialize financial settings.");
+                if (options?.EnvironmentName == "Production" && !await db.IdentityBindings.AnyAsync(x =>
+                    x.UserId == actor.UserId && x.IsActive && x.Provider == "Firebase" && x.ProjectId == options.FirebaseProjectId
+                    && x.ExternalSubject != "" && x.Version > 0 && x.ValidAfterUtc <= Now, token))
+                    throw new ApplicationFailure(FailureKind.Forbidden, "A verified Production Platform Admin identity is required.");
+                if (await db.FinancialConfigurations.AnyAsync(token))
+                    throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "Financial settings changed. Reload the saved values before continuing.");
+                configurationId=Guid.NewGuid();db.FinancialConfigurations.Add(new(configurationId,"PlatformPricing"));
+            }
+            else configurationId=latest.ConfigurationId;
             var effective=input.EffectiveFromUtc??Now;
             if(effective.Kind!=DateTimeKind.Utc||input.EffectiveFromUtc is not null&&effective<Now)throw new ApplicationFailure(FailureKind.Validation,"Choose a future effective date or Effective Now.");
             var id=Guid.NewGuid();
-            var version=FinancialConfigurationVersionFactory.Create(id,latest.ConfigurationId,
-                latest.Version+1,actor.UserId,effective,input);
+            var version=FinancialConfigurationVersionFactory.Create(id,configurationId,
+                (latest?.Version ?? 0)+1,actor.UserId,effective,input);
             db.FinancialConfigurationVersions.Add(version);op.Remember(actor,"FinancialSettings",key,fingerprint,id.ToString(),Now);
             op.Audit(actor,"FinancialConfigurationChanged",Guid.NewGuid(),Now);op.Event("FinancialConfigurationChanged",new{VersionId=id,EffectiveFromUtc=effective},Now);return id;
         },ct);

@@ -154,6 +154,7 @@ GRANT SELECT, INSERT ON TABLE v3."UgcPlatformCapacities" TO :"api_role";
 GRANT UPDATE ("Capacity", "ApprovedCount") ON TABLE v3."UgcPlatformCapacities" TO :"api_role";
 
 GRANT SELECT, INSERT ON TABLE
+    v3."FinancialConfigurations",
     v3."CreatorEarningEntries",
     v3."CustomerCashbackEntries",
     v3."FinancialConfigurationVersions",

@@ -74,7 +74,7 @@ export function CreatorHowYouEarn() {
             </div>
             <div className="threshold-note">
               <strong>
-                Minimum to cash out: {amount(p.minimumToCashOut)}
+                Minimum to cash out: {p.minimumToCashOut === null ? "Not configured" : amount(p.minimumToCashOut)}
               </strong>
               <p>
                 Earnings from your Promotions accumulate together. Any balance
@@ -99,19 +99,19 @@ export function Eligibility({ data }: { data: Earnings }) {
       </div>
       <p>
         Minimum to cash out:{" "}
-        <strong>{amount(data.minimumToCashOut)}</strong>
+        <strong>{data.minimumToCashOut === null ? "Not configured" : amount(data.minimumToCashOut)}</strong>
       </p>
-      {data.amountNeeded > 0 ? (
+      {data.amountNeeded === null ? <Notice>Payout minimum not configured</Notice> : data.amountNeeded > 0 ? (
         <p className="muted">Amount remaining: {amount(data.amountNeeded)}</p>
       ) : (
         <Notice>Eligible for payout · {amount(data.eligibleAmount)}</Notice>
       )}
-      <progress
+      {data.minimumToCashOut !== null && <progress
         className="progress"
         value={Math.min(data.availableEarnings, data.minimumToCashOut)}
         max={data.minimumToCashOut}
         aria-label="Progress toward payout threshold"
-      />
+      />}
     </>
   );
 }

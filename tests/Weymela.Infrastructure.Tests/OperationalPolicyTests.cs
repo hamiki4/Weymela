@@ -20,7 +20,7 @@ public sealed class OperationalPolicyTests(PostgresFixture fixture)
         var current=await db.FinancialConfigurationVersions.SingleAsync(); var id=Guid.NewGuid(); var effective=s.Clock.Now.AddHours(1);
         db.FinancialConfigurationVersions.Add(new(id,current.ConfigurationId,2,Phase4Scenario.Admin.UserId,effective,
             current.ViewOnly with { ConfigurationVersionId=id, EffectiveFromUtc=effective }, current.ViewPlusCommission with { ConfigurationVersionId=id, EffectiveFromUtc=effective },
-            current.CreatorPayoutThreshold,new Money(6000)));
+            current.CreatorPayoutThreshold!.Value,new Money(6000)));
         await db.SaveChangesAsync(); db.ChangeTracker.Clear(); await worker.RunOnceAsync(default);
         Assert.False(await db.InAppNotifications.AnyAsync(x=>x.SourceKey=="FinancialConfigurationEffective:"+id));
         s.Clock.Now=effective; await worker.RunOnceAsync(default); await worker.RunOnceAsync(default);

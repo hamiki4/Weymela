@@ -10,6 +10,7 @@ using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Persistence.Transactions;
+using Weymela.Infrastructure.Persistence.Repositories;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Web;
@@ -938,6 +939,22 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         db.ChangeTracker.Clear();
         Assert.Contains(await ugc.DiscoverAsync(state.Creator, default), x => x.Id == opportunity);
         Assert.NotEqual(Guid.Empty, await ugc.RequestAsync(state.Creator, opportunity, "ugc-self-reported-link-request", default));
+    }
+
+    [Fact]
+    public async Task Ugc_can_be_created_and_funded_without_view_prices_or_payout_minimums()
+    {
+        var state=await Setup();await using var db=state.Database.Open();
+        var legacy=await db.FinancialConfigurationVersions.SingleAsync();
+        var input=new FinancialSettingsInput(null,null,5,4,1,null,null,Now,new(200,10,null,3),null,false);
+        db.FinancialConfigurationVersions.Add(FinancialConfigurationVersionFactory.Create(Guid.NewGuid(),legacy.ConfigurationId,2,Guid.NewGuid(),Now,input));
+        await db.SaveChangesAsync();
+        var service=new UgcService(db,new FixedTime(Now));
+        var id=await service.CreateAsync(state.Business,Input(),"ugc-independent-create",default);
+        await service.PublishAsync(state.Business,id,0,"ugc-independent-publish",default);
+        Assert.Single(await db.UgcReservations.Where(x=>x.UgcOpportunityId==id).ToListAsync());
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(new Actor(Guid.NewGuid(),ActorRole.PlatformAdmin),default));
+        Assert.Null((await new FinancialConfigurationResolver(db).EffectiveAsync(Now)).ViewOnly);
     }
 
     private async Task<State> Setup(decimal deposit = 10_000)

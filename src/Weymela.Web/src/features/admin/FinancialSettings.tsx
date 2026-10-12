@@ -18,343 +18,113 @@ import {
 } from "../../ui/components";
 import { amount, dateTime } from "../../ui/format";
 
-function SettingsForm({
-  data,
-  reload,
-}: {
-  data: SettingsWorkspace;
-  reload: () => void;
-}) {
-  const [settings, set] = useState<Settings>(structuredClone(data.current!));
+type PriceDraft = { [K in keyof ViewPriceInput]: number | null };
+type UgcDraft = { [K in keyof UgcSettings]: number | null };
+type SettingsDraft = Omit<Settings, "viewOnly" | "viewPlusCommission" | "ugc" | "creatorCommissionPercent" | "customerCashbackPercent" | "platformPercent"> & {
+  viewOnly: PriceDraft | null; viewPlusCommission: PriceDraft | null; ugc: UgcDraft | null;
+  creatorCommissionPercent: number | null; customerCashbackPercent: number | null; platformPercent: number | null;
+};
+const emptyPrice = (): PriceDraft => ({ viewsPerReward: null, businessPays: null, creatorEarns: null, platformKeeps: null, minimumCampaignBudget: null });
+const numeric = (value: string) => value === "" ? null : Number(value);
+const validAmount = (value: number | null, positive = true) => value !== null && Number.isFinite(value) && (positive ? value > 0 : value >= 0) && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
+const validPercent = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 && value <= 100 && Math.abs(value * 10000 - Math.round(value * 10000)) < 0.000001;
+
+function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () => void }) {
+  const [settings, set] = useState<SettingsDraft>(() => data.current ? structuredClone(data.current) : {
+    viewOnly: null, viewPlusCommission: null, ugc: null,
+    creatorCommissionPercent: data.inactiveBaseline?.creatorCommissionPercent ?? null,
+    customerCashbackPercent: data.inactiveBaseline?.customerCashbackPercent ?? null,
+    platformPercent: data.inactiveBaseline?.platformPercent ?? null,
+    creatorThreshold: null, customerThreshold: null, promotionLiveDurationDays: null,
+    enforceAudienceRequirements: null, effectiveFromUtc: null,
+  });
   const [scheduled, schedule] = useState(false);
   const [when, setWhen] = useState("");
   const action = useAction();
-  const update = (key: keyof Settings, value: number) =>
-    set({ ...settings, [key]: value });
-  const updateUgc = (key: keyof UgcSettings, value: number | null) =>
-    settings.ugc && set({ ...settings, ugc: { ...settings.ugc, [key]: value } });
-  const price = (
-    mode: "viewOnly" | "viewPlusCommission",
-    field: keyof ViewPriceInput,
-    value: string,
-  ) =>
-    set({
-      ...settings,
-      [mode]: {
-        ...settings[mode],
-        [field]:
-          value === "" && field === "minimumCampaignBudget"
-            ? null
-            : Number(value),
-      },
+  const update = (key: "creatorCommissionPercent" | "customerCashbackPercent" | "platformPercent" | "creatorThreshold" | "customerThreshold" | "promotionLiveDurationDays", value: string) => set({ ...settings, [key]: numeric(value) });
+  const validPrice = (price: PriceDraft | null) => price === null || (
+    price.viewsPerReward !== null && Number.isInteger(price.viewsPerReward) && price.viewsPerReward >= 1
+    && validAmount(price.businessPays) && validAmount(price.creatorEarns, false) && validAmount(price.platformKeeps, false)
+    && Math.abs(price.businessPays! - price.creatorEarns! - price.platformKeeps!) < 0.000001
+    && (price.minimumCampaignBudget === null || validAmount(price.minimumCampaignBudget)));
+  const percentages = [settings.creatorCommissionPercent, settings.customerCashbackPercent, settings.platformPercent];
+  const valid = percentages.every(validPercent) && percentages.reduce<number>((sum, value) => sum + (value ?? 0), 0) <= 100
+    && validPrice(settings.viewOnly) && validPrice(settings.viewPlusCommission)
+    && (settings.creatorThreshold === null || validAmount(settings.creatorThreshold))
+    && (settings.customerThreshold === null || validAmount(settings.customerThreshold))
+    && (settings.promotionLiveDurationDays === null || (Number.isInteger(settings.promotionLiveDurationDays) && settings.promotionLiveDurationDays >= 1 && settings.promotionLiveDurationDays <= 365))
+    && (settings.ugc === null || (validAmount(settings.ugc.minimumCreatorPayment) && validPercent(settings.ugc.platformFeePercent)
+      && (settings.ugc.minimumUgcBudget === null || validAmount(settings.ugc.minimumUgcBudget))
+      && (settings.ugc.customerOfferPlatformSalePercent === null || validPercent(settings.ugc.customerOfferPlatformSalePercent))));
+  return <form className="settings-form" onSubmit={event => {
+    event.preventDefault();
+    if (!valid) return;
+    void action.run(async key => {
+      await post("/admin/financial-settings", { settings: {
+        ...settings, effectiveFromUtc: scheduled ? new Date(when).toISOString() : null,
+      }, expectedVersion: Math.max(data.version, ...data.versions.map(version => version.version)) }, key);
+      reload();
     });
-  const validSplit = (p: ViewPriceInput) =>
-    Math.abs(p.businessPays - p.creatorEarns - p.platformKeeps) < 0.000001;
-  const valid =
-    validSplit(settings.viewOnly) &&
-    validSplit(settings.viewPlusCommission) &&
-    settings.creatorCommissionPercent +
-      settings.customerCashbackPercent +
-    settings.platformPercent <=
-      100 &&
-    Number.isInteger(settings.promotionLiveDurationDays) &&
-    settings.promotionLiveDurationDays >= 1 &&
-    settings.promotionLiveDurationDays <= 365 &&
-    (!settings.ugc ||
-      (settings.ugc.minimumCreatorPayment > 0 &&
-        settings.ugc.platformFeePercent >= 0 &&
-        settings.ugc.platformFeePercent <= 100 &&
-        (settings.ugc.minimumUgcBudget === null || settings.ugc.minimumUgcBudget > 0) &&
-        (settings.ugc.customerOfferPlatformSalePercent === null ||
-          (settings.ugc.customerOfferPlatformSalePercent >= 0 && settings.ugc.customerOfferPlatformSalePercent <= 100))));
-  return (
-    <form
-      className="settings-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void action.run(async (key) => {
-          await post(
-            "/admin/financial-settings",
-            {
-              settings: {
-                ...settings,
-                effectiveFromUtc: scheduled
-                  ? new Date(when).toISOString()
-                  : null,
-              },
-              expectedVersion: Math.max(
-                data.version,
-                ...data.versions.map((v) => v.version),
-              ),
-            },
-            key,
-          );
-          reload();
-        });
-      }}
-    >
-      <fieldset disabled={action.busy}>
-        <Section title="Audience enforcement" description="Off allows Creators to apply regardless of audience size. On enforces Admin-verified audience requirements.">
-          <label className="check-row"><input type="checkbox" checked={settings.enforceAudienceRequirements}
-            onChange={e => set({ ...settings, enforceAudienceRequirements: e.target.checked })} />
-            <span>Enforce audience requirements</span></label>
-        </Section>
-        <Section
-          title="View Pricing"
-          description="Business Pays must equal Creator Earns plus Platform Keeps."
-          action={<Currency />}
-        >
-          <table className="settings-table">
-            <caption className="sr-only">Admin View Pricing</caption>
-            <thead>
-              <tr>
-                {[
-                  "Campaign Type",
-                  "Views per Reward",
-                  "Business Pays",
-                  "Creator Earns",
-                  "Platform Keeps",
-                  "Minimum Campaign Budget",
-                ].map((label) => (
-                  <th scope="col" key={label}>
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(["viewOnly", "viewPlusCommission"] as const).map((mode) => (
-                <tr key={mode}>
-                  <th scope="row">
-                    {mode === "viewOnly" ? "View Only" : "View & Sale"}
-                  </th>
-                  {(
-                    [
-                      ["viewsPerReward", "Views per Reward"],
-                      ["businessPays", "Business Pays"],
-                      ["creatorEarns", "Creator Earns"],
-                      ["platformKeeps", "Platform Keeps"],
-                      ["minimumCampaignBudget", "Minimum Campaign Budget"],
-                    ] as [keyof ViewPriceInput, string][]
-                  ).map(([field, label]) => (
-                    <td key={field} data-label={label}>
-                      <input
-                        aria-label={`${mode === "viewOnly" ? "View Only" : "View & Sale"} ${label}`}
-                        type="number"
-                        inputMode={
-                          field === "viewsPerReward" ? "numeric" : "decimal"
-                        }
-                        min={
-                          field === "viewsPerReward" ||
-                          field === "businessPays" ||
-                          field === "minimumCampaignBudget"
-                            ? field === "viewsPerReward"
-                              ? 1
-                              : 0.01
-                            : 0
-                        }
-                        step={field === "viewsPerReward" ? 1 : 0.01}
-                        required={field !== "minimumCampaignBudget"}
-                        value={settings[mode][field] ?? ""}
-                        onChange={(e) => price(mode, field, e.target.value)}
-                        placeholder={
-                          field === "minimumCampaignBudget"
-                            ? "Optional"
-                            : undefined
-                        }
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Section>
-        <div className="two-column">
-          <Section
-            title="Verified Sale Split"
-            description="Only View & Sale Promotions. Rates are saved with each Promotion."
-          >
-            <div className="settings-splits">
-              {(
-                [
-                  ["creatorCommissionPercent", "Creator Commission %"],
-                  ["customerCashbackPercent", "Customer Cashback %"],
-                  ["platformPercent", "Platform %"],
-                ] as const
-              ).map(([key, label]) => (
-                <Field key={key} label={label}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.0001"
-                    value={settings[key]}
-                    onChange={(e) => update(key, Number(e.target.value))}
-                    required
-                  />
-                </Field>
-              ))}
-            </div>
-            <p className="fine-print">
-              Total Business sale cost:{" "}
-              {amount(
-                settings.creatorCommissionPercent +
-                  settings.customerCashbackPercent +
-                  settings.platformPercent,
-              )}
-              %
-            </p>
-          </Section>
-          <Section
-            title="Payout Thresholds"
-            description="Minimum to cash out"
-          >
-            <div className="form-grid">
-              <Field label="Creator">
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={settings.creatorThreshold}
-                  onChange={(e) =>
-                    update("creatorThreshold", Number(e.target.value))
-                  }
-                  required
-                />
-              </Field>
-              <Field label="Customer">
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={settings.customerThreshold}
-                  onChange={(e) =>
-                    update("customerThreshold", Number(e.target.value))
-                  }
-                  required
-                />
-              </Field>
-            </div>
-          </Section>
-          <Section
-            title="Promotion live duration"
-            description="Number of days each new Promotion can remain live after a Creator goes live."
-          >
-            <Field label="Promotion live duration">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                step="1"
-                value={settings.promotionLiveDurationDays}
-                onChange={(e) => update("promotionLiveDurationDays", Number(e.target.value))}
-                required
-              />
-            </Field>
-            <p className="fine-print">Set by Weymela. Existing Promotions keep their saved duration.</p>
-          </Section>
-        </div>
-        {settings.ugc && (
-          <Section
-            title="UGC Pricing"
-            description="Applied to UGC creator payments and optional Customer Offers."
-            action={<Currency />}
-          >
-            <div className="form-grid">
-              <Field label="Minimum Creator Payment">
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={settings.ugc.minimumCreatorPayment}
-                  onChange={(e) => updateUgc("minimumCreatorPayment", Number(e.target.value))}
-                  required
-                />
-              </Field>
-              <Field label="Platform Fee %">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.0001"
-                  value={settings.ugc.platformFeePercent}
-                  onChange={(e) => updateUgc("platformFeePercent", Number(e.target.value))}
-                  required
-                />
-              </Field>
-              <Field label="Minimum UGC Budget">
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={settings.ugc.minimumUgcBudget ?? ""}
-                  onChange={(e) => updateUgc("minimumUgcBudget", e.target.value === "" ? null : Number(e.target.value))}
-                  placeholder="Optional"
-                />
-              </Field>
-              <Field label="Customer Offer Platform Sale Fee %">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.0001"
-                  value={settings.ugc.customerOfferPlatformSalePercent ?? ""}
-                  onChange={(e) => updateUgc("customerOfferPlatformSalePercent", e.target.value === "" ? null : Number(e.target.value))}
-                  placeholder="Optional"
-                />
-              </Field>
-            </div>
-          </Section>
-        )}
-        <Section
-          title="Effective date"
-          description={`Current effective version: ${data.version}. Existing Campaign pricing never changes retroactively.`}
-        >
-          <div className="settings-effective">
-            <label>
-              <input
-                type="radio"
-                name="effective"
-                checked={!scheduled}
-                onChange={() => schedule(false)}
-              />
-              Effective Now
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="effective"
-                checked={scheduled}
-                onChange={() => schedule(true)}
-              />
-              Schedule for Later
-            </label>
-            {scheduled && (
-              <Field label="Effective from">
-                <input
-                  type="datetime-local"
-                  value={when}
-                  onChange={(e) => setWhen(e.target.value)}
-                  required
-                />
-              </Field>
-            )}
-          </div>
-          {!valid && (
-            <Notice error>
-              Check the view pricing splits and total sale percentage before
-              saving.
-            </Notice>
-          )}
-          {action.error && <Notice error>{action.error}</Notice>}
-          <Button type="submit" disabled={action.busy || !valid}>
-            {action.busy ? "Saving…" : "Save Financial Settings"}
-          </Button>
-        </Section>
-      </fieldset>
-    </form>
-  );
+  }}><fieldset disabled={action.busy}>
+    <Notice>Unset prices and payout minimums restrict only their dependent operations. Saving settings does not activate financial writes.</Notice>
+    <Section title="Audience enforcement" description="Off allows Creators to apply regardless of audience size. On enforces Admin-verified audience requirements.">
+      <div className="settings-audience"><Field label="Enforce audience requirements"><select value={settings.enforceAudienceRequirements === null ? "" : String(settings.enforceAudienceRequirements)}
+        onChange={event => set({ ...settings, enforceAudienceRequirements: event.target.value === "" ? null : event.target.value === "true" })}>
+        <option value="">Not configured</option><option value="false">Off</option><option value="true">On</option>
+      </select></Field></div>
+    </Section>
+    <Section title="View Pricing" description="Business Pays must equal Creator Earns plus Platform Keeps." action={<Currency />}>
+      <table className="settings-table"><caption className="sr-only">Admin View Pricing</caption>
+        <thead><tr>{["Campaign Type", "Views per Reward", "Business Pays", "Creator Earns", "Platform Keeps", "Minimum Campaign Budget"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead>
+        <tbody>{(["viewOnly", "viewPlusCommission"] as const).map(mode => {
+          const label = mode === "viewOnly" ? "View Only" : "View & Sale";
+          return <tr key={mode}><th scope="row">{label}<label className="check-row"><input type="checkbox" aria-label={`Configure ${label} pricing`}
+            checked={settings[mode] !== null} onChange={event => set({ ...settings, [mode]: event.target.checked ? emptyPrice() : null })} />Configure</label></th>
+            {([["viewsPerReward", "Views per Reward"], ["businessPays", "Business Pays"], ["creatorEarns", "Creator Earns"], ["platformKeeps", "Platform Keeps"], ["minimumCampaignBudget", "Minimum Campaign Budget"]] as [keyof ViewPriceInput, string][]).map(([field, title]) => <td key={field} data-label={title}>
+              <input aria-label={`${label} ${title}`} type="number" inputMode={field === "viewsPerReward" ? "numeric" : "decimal"}
+                disabled={settings[mode] === null} required={settings[mode] !== null && field !== "minimumCampaignBudget"}
+                min={field === "viewsPerReward" ? 1 : field === "businessPays" || field === "minimumCampaignBudget" ? 0.01 : 0}
+                step={field === "viewsPerReward" ? 1 : 0.01} value={settings[mode]?.[field] ?? ""}
+                onChange={event => set({ ...settings, [mode]: { ...settings[mode]!, [field]: numeric(event.target.value) } })}
+                placeholder={field === "minimumCampaignBudget" ? "Optional" : "Not configured"} />
+            </td>)}
+          </tr>;
+        })}</tbody>
+      </table>
+    </Section>
+    <div className="two-column"><Section title="Verified Sale Split" description="Only View & Sale Promotions. Rates are saved with each Promotion.">
+      <div className="settings-splits">{([["creatorCommissionPercent", "Creator Commission %"], ["customerCashbackPercent", "Customer Cashback %"], ["platformPercent", "Platform %"]] as const).map(([key, label]) => <Field key={key} label={label}>
+        <input type="number" min="0" max="100" step="0.0001" required value={settings[key] ?? ""} onChange={event => update(key, event.target.value)} />
+      </Field>)}</div>
+      <p className="fine-print">Total Business sale cost: {percentages.every(validPercent) ? amount(percentages.reduce<number>((sum, value) => sum + value!, 0)) : "Not configured"}%</p>
+    </Section>
+    <Section title="Payout Thresholds" description="Minimum to cash out"><div className="form-grid">{([["creatorThreshold", "Creator"], ["customerThreshold", "Customer"]] as const).map(([key, label]) => <Field key={key} label={label}>
+      <input type="number" min="0.01" step="0.01" value={settings[key] ?? ""} onChange={event => update(key, event.target.value)} placeholder="Not configured" />
+    </Field>)}</div></Section>
+    <Section title="Promotion live duration" description="Number of days each new Promotion can remain live after a Creator goes live.">
+      <Field label="Promotion live duration"><input type="number" min="1" max="365" step="1" value={settings.promotionLiveDurationDays ?? ""} onChange={event => update("promotionLiveDurationDays", event.target.value)} placeholder="Not configured" /></Field>
+      <p className="fine-print">Set by Weymela. Existing Promotions keep their saved duration.</p>
+    </Section></div>
+    <Section title="UGC Pricing" description="Applied to UGC creator payments and optional Customer Offers." action={<Currency />}>
+      <label className="check-row"><input type="checkbox" aria-label="Configure UGC pricing" checked={settings.ugc !== null}
+        onChange={event => set({ ...settings, ugc: event.target.checked ? { minimumCreatorPayment: null, platformFeePercent: null, minimumUgcBudget: null, customerOfferPlatformSalePercent: null } : null })} />Configure UGC pricing</label>
+      <div className="form-grid">{([["minimumCreatorPayment", "Minimum Creator Payment"], ["platformFeePercent", "Platform Fee %"], ["minimumUgcBudget", "Minimum UGC Budget"], ["customerOfferPlatformSalePercent", "Customer Offer Platform Sale Fee %"]] as [keyof UgcSettings, string][]).map(([key, label]) => <Field key={key} label={label}>
+        <input type="number" disabled={settings.ugc === null} required={settings.ugc !== null && (key === "minimumCreatorPayment" || key === "platformFeePercent")}
+          min={key.includes("Percent") ? 0 : 0.01} max={key.includes("Percent") ? 100 : undefined} step={key.includes("Percent") ? 0.0001 : 0.01}
+          value={settings.ugc?.[key] ?? ""} placeholder={key === "minimumUgcBudget" || key === "customerOfferPlatformSalePercent" ? "Optional" : "Not configured"}
+          onChange={event => set({ ...settings, ugc: { ...settings.ugc!, [key]: numeric(event.target.value) } })} />
+      </Field>)}</div>
+    </Section>
+    <Section title="Effective date" description={`Current effective version: ${data.version}. Existing Campaign pricing never changes retroactively.`}>
+      <div className="settings-effective"><label><input type="radio" name="effective" checked={!scheduled} onChange={() => schedule(false)} />Effective Now</label>
+        <label><input type="radio" name="effective" checked={scheduled} onChange={() => schedule(true)} />Schedule for Later</label>
+        {scheduled && <Field label="Effective from"><input type="datetime-local" value={when} onChange={event => setWhen(event.target.value)} required /></Field>}
+      </div>
+      {!valid && <Notice error>Check the configured pricing, percentages and positive payout minimums before saving.</Notice>}
+      {action.error && <Notice error>{action.error}</Notice>}
+      <Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save Financial Settings"}</Button>
+    </Section>
+  </fieldset></form>;
 }
 export function AdminFinancialSettings() {
   const resource = useResource<SettingsWorkspace>("/admin/financial-settings");
@@ -374,17 +144,18 @@ export function AdminFinancialSettings() {
                 versions are shown below.
               </Notice>
             )}
-            {data.current ? <SettingsForm
+            <SettingsForm
               key={`${data.version}-${data.versions.length}`}
               data={data}
               reload={() => {
                 setSaved(true);
                 resource.reload();
               }}
-            /> : <Section title={data.inactiveBaseline ? "Approved inactive baseline" : "Financial configuration pending"}>
+            />
+            {data.inactiveBaseline && <Section title="Approved inactive baseline">
               {data.inactiveBaseline && <p>{`Customer cashback: ${data.inactiveBaseline.customerCashbackPercent}% · Creator commission: ${data.inactiveBaseline.creatorCommissionPercent}% · Platform: ${data.inactiveBaseline.platformPercent}%`}</p>}
               <Notice>No financial pricing version is effective yet.</Notice>
-              {data.versions.length === 0 && <p>Complete owner-approved view pricing, UGC rates, payout thresholds, promotion duration and audience rules through the trusted financial bootstrap. Financial products remain disabled until their activation checks pass.</p>}
+              <p>Configure approved values above. Unconfigured products remain unavailable for their dependent financial operations.</p>
             </Section>}
             <Section
               title="Saved versions"
@@ -403,21 +174,21 @@ export function AdminFinancialSettings() {
                   <div className="version-details">
                     <p>
                       View Only:{" "}
-                      {v.settings.viewOnly.viewsPerReward.toLocaleString()}{" "}
+                      {v.settings.viewOnly?.viewsPerReward.toLocaleString() ?? "Not configured"}{" "}
                       views · Business{" "}
-                      {amount(v.settings.viewOnly.businessPays)} / Creator{" "}
-                      {amount(v.settings.viewOnly.creatorEarns)} / Platform{" "}
-                      {amount(v.settings.viewOnly.platformKeeps)}
+                      {amount(v.settings.viewOnly?.businessPays)} / Creator{" "}
+                      {amount(v.settings.viewOnly?.creatorEarns)} / Platform{" "}
+                      {amount(v.settings.viewOnly?.platformKeeps)}
                     </p>
                     <p>
                       View &amp; Sale:{" "}
-                      {v.settings.viewPlusCommission.viewsPerReward.toLocaleString()}{" "}
+                      {v.settings.viewPlusCommission?.viewsPerReward.toLocaleString() ?? "Not configured"}{" "}
                       views · Business{" "}
-                      {amount(v.settings.viewPlusCommission.businessPays)} /
+                      {amount(v.settings.viewPlusCommission?.businessPays)} /
                       Creator{" "}
-                      {amount(v.settings.viewPlusCommission.creatorEarns)} /
+                      {amount(v.settings.viewPlusCommission?.creatorEarns)} /
                       Platform{" "}
-                      {amount(v.settings.viewPlusCommission.platformKeeps)}
+                      {amount(v.settings.viewPlusCommission?.platformKeeps)}
                     </p>
                     <p>
                       Sales: Creator {v.settings.creatorCommissionPercent}% /
@@ -428,13 +199,13 @@ export function AdminFinancialSettings() {
                       Thresholds: Creator {amount(v.settings.creatorThreshold)}{" "}
                       / Customer {amount(v.settings.customerThreshold)}
                     </p>
-                    <p>Promotion live duration: {v.settings.promotionLiveDurationDays} days</p>
+                    <p>Promotion live duration: {v.settings.promotionLiveDurationDays ?? "Not configured"} days</p>
                     <p>
                       Minimum Campaign Budgets: View Only{" "}
-                      {v.settings.viewOnly.minimumCampaignBudget ??
+                      {v.settings.viewOnly?.minimumCampaignBudget ??
                         "Not configured"}{" "}
                       / View &amp; Sale{" "}
-                      {v.settings.viewPlusCommission.minimumCampaignBudget ??
+                      {v.settings.viewPlusCommission?.minimumCampaignBudget ??
                         "Not configured"}
                     </p>
                     <code>

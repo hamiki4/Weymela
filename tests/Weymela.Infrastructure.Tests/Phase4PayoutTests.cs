@@ -276,8 +276,8 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         await service.MarkPaidAsync(Phase4Scenario.Admin,creatorPayout,"creator-ref","creator-paid");
         var summary = await s.Queries(db).CustomerCashbackAsync(s.Customer);
         Assert.Equal(400,summary.AvailableCashback.Amount);
-        Assert.Equal(5000,summary.MinimumCashOut.Amount);
-        Assert.Equal(4600,summary.RemainingToCashOut.Amount);
+        Assert.Equal(5000,summary.MinimumCashOut!.Value.Amount);
+        Assert.Equal(4600,summary.RemainingToCashOut!.Value.Amount);
         Assert.False(summary.Eligible);
         Assert.Equal("BelowThreshold",summary.Status);
         var payout = Assert.Single(summary.PayoutHistory);
@@ -304,8 +304,8 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         await using var db=s.Database.Open();
         var before=await s.Queries(db).CustomerCashbackAsync(s.Customer);
         Assert.Equal(5400,before.AvailableCashback.Amount);
-        Assert.Equal(5000,before.MinimumCashOut.Amount);
-        Assert.Equal(0,before.RemainingToCashOut.Amount);
+        Assert.Equal(5000,before.MinimumCashOut!.Value.Amount);
+        Assert.Equal(0,before.RemainingToCashOut!.Value.Amount);
         Assert.True(before.Eligible);
         Assert.Equal("Eligible",before.Status);
         var id=await s.Payouts(db).PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Customer,s.Customer.CustomerId!.Value,new Money(5000),"customer-prepare");

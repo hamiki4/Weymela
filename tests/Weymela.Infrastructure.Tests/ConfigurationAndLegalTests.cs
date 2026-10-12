@@ -39,7 +39,7 @@ public sealed class ConfigurationAndLegalTests(PostgresFixture fixture)
         var s = await Scenario.Create(fixture); await using var db = s.Database.Open();
         var v = await new FinancialConfigurationResolver(db).EffectiveAsync(Scenario.Now);
         Assert.Equal(s.PricingVersionId, v.Id);
-        Assert.Equal(2500, v.CreatorPayoutThreshold.Amount);
+        Assert.Equal(2500, v.CreatorPayoutThreshold!.Value.Amount);
         Assert.Equal(30, v.PromotionLiveDurationDays);
     }
     [Fact] public async Task Future_pricing_does_not_apply_early()
@@ -75,7 +75,7 @@ public sealed class ConfigurationAndLegalTests(PostgresFixture fixture)
         var current = await new FinancialConfigurationResolver(db).EffectiveAsync(Scenario.Now);
         var later = new Promotion(s.Business.BusinessId!.Value, "Later", "Brief", PromotionType.ViewOnly,
             new Money(6000), new(null, null, "ET", "Content"), Scenario.Now, Scenario.Now.AddDays(30),
-            current.ViewOnly, Scenario.Now, current.PromotionLiveDurationDays);
+            current.ViewOnly!, Scenario.Now, current.RequirePromotionDuration());
         db.Promotions.Add(later); await db.SaveChangesAsync();
         var promotions = await db.Promotions.OrderBy(x => x.CreatedAtUtc).ToListAsync();
         Assert.Equal(30, promotions[0].PromotionLiveDurationDays);

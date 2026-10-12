@@ -1,4 +1,4 @@
-export const amount = (value: number) =>
+export const amount = (value: number | null | undefined) =>
   typeof value !== "number" || !Number.isFinite(value) ? "Unavailable" : new Intl.NumberFormat("en-ET", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,

@@ -31,10 +31,11 @@ internal sealed class FinancialOperation(WeymelaDbContext db)
 
     public async Task EmitEligibility(PayoutBeneficiary kind, Guid subject, Money before, Money after, DateTime at, CancellationToken ct)
     {
-        var config = await new FinancialConfigurationResolver(db).EffectiveAsync(at, ct);
-        var threshold = kind == PayoutBeneficiary.Creator ? config.CreatorPayoutThreshold : config.CustomerPayoutThreshold;
+        var config = await new FinancialConfigurationResolver(db).FindEffectiveAsync(at, ct);
+        var configured = kind == PayoutBeneficiary.Creator ? config?.CreatorPayoutThreshold : config?.CustomerPayoutThreshold;
+        if (configured is not { } threshold) return;
         if (before.Amount < threshold.Amount && after.Amount >= threshold.Amount)
             Event(kind == PayoutBeneficiary.Creator ? nameof(CreatorPayoutEligible) : nameof(CustomerPayoutEligible),
-                new { BeneficiaryId = subject, Threshold = threshold, ConfigurationVersionId = config.Id, OccurredAtUtc = at }, at);
+                new { BeneficiaryId = subject, Threshold = threshold, ConfigurationVersionId = config!.Id, OccurredAtUtc = at }, at);
     }
 }

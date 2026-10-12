@@ -75,15 +75,30 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
     }
     [Theory] [InlineData("/api/business/wallet/deposits")][InlineData("/api/business/deposit-requests")]
     [InlineData("/api/admin/deposit-requests/11111111-1111-1111-1111-111111111111/review")]
-    [InlineData("/api/admin/financial-settings")][InlineData("/api/admin/platform/settlements")]
+    [InlineData("/api/admin/platform/settlements")]
     [InlineData("/api/admin/accounts/businesses/11111111-1111-1111-1111-111111111111/promotional-funding")]
     [InlineData("/api/checkout/confirm")][InlineData("/api/customer/offers/11111111-1111-1111-1111-111111111111/qr")]
     [InlineData("/api/creator/participations/11111111-1111-1111-1111-111111111111/refresh")]
+    [InlineData("/api/business/ugc/11111111-1111-1111-1111-111111111111/publish")]
+    [InlineData("/api/business/ugc/11111111-1111-1111-1111-111111111111/cancel")]
+    [InlineData("/api/business/ugc/assignments/11111111-1111-1111-1111-111111111111/review/approve")]
     public async Task Explicit_financial_freeze_blocks_new_and_existing_financial_write_paths(string path)
     {
         await using var host=await ApiFixture.CreateAsync(fixture,b=>b.Configuration.AddInMemoryCollection(new Dictionary<string,string?>{["V3:FinancialWritesEnabled"]="false"})); using var client=await host.Login("admin");
         var response=await client.Post(path,new{}); Assert.Equal(HttpStatusCode.ServiceUnavailable,response.StatusCode);
         Assert.Contains("FinancialWritesPaused",await response.Content.ReadAsStringAsync());
+    }
+    [Fact] public async Task Real_platform_admin_can_edit_settings_while_financial_writes_are_paused()
+    {
+        await using var host=await ApiFixture.CreateAsync(fixture,b=>b.Configuration.AddInMemoryCollection(new Dictionary<string,string?>{["V3:FinancialWritesEnabled"]="false"}));
+        using var admin=await host.Login("admin");
+        var current=await admin.GetJson("/api/admin/financial-settings");
+        current["current"]!["effectiveFromUtc"]=null;
+        var response=await admin.Post("/api/admin/financial-settings",new { settings=current["current"]!.DeepClone(),expectedVersion=current["version"]!.GetValue<int>() });
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        using var operations=await host.Login("operations-admin");
+        Assert.Equal(HttpStatusCode.Forbidden,(await operations.Post("/api/admin/financial-settings",new { settings=current["current"]!.DeepClone(),expectedVersion=2 })).StatusCode);
+        await using var db=host.Database.Open();Assert.Equal(2,await db.FinancialConfigurationVersions.CountAsync());
     }
     [Fact] public async Task Notification_read_route_cannot_mark_another_users_notification()
     {

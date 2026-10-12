@@ -85,6 +85,7 @@ VALUES
     ('api', 'v3', 'CreatorEarningEntries', true, true, false),
     ('api', 'v3', 'CreatorPromotionContentSubmissions', true, true, true),
     ('api', 'v3', 'CustomerCashbackEntries', true, true, false),
+    ('api', 'v3', 'FinancialConfigurations', true, true, false),
     ('api', 'v3', 'FinancialConfigurationVersions', true, true, false),
     ('api', 'v3', 'FinancialJournals', true, true, false),
     ('api', 'v3', 'FinancialJournalLines', true, true, false),

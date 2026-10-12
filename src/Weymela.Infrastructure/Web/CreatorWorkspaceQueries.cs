@@ -45,13 +45,14 @@ public sealed partial class WorkspaceQueries
     }
     public async Task<CreatorPricing> CreatorPricingAsync(Actor actor,CancellationToken ct)
     {
-        await DemandCreator(actor,ct);var v=await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct);
-        return new([CreatorPrice(v.ViewOnly),CreatorPrice(v.ViewPlusCommission)],v.CreatorPayoutThreshold.Amount,v.EffectiveFromUtc);
+        await DemandCreator(actor,ct);var v=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
+        var rows=new[] { v?.ViewOnly, v?.ViewPlusCommission }.OfType<PricingSnapshot>().Select(CreatorPrice).ToArray();
+        return new(rows,v?.CreatorPayoutThreshold?.Amount,v?.EffectiveFromUtc);
     }
     public async Task<IReadOnlyList<CampaignOpportunity>> DiscoverAsync(Actor actor,CancellationToken ct)
     {
         await DemandCreator(actor,ct);var creator=await directory.CreatorCardAsync(actor.CreatorId!.Value,ct);
-        var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now,ct)).EnforceAudienceRequirements;
+        var enforceAudience = (await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct))?.EnforceAudienceRequirements;
         var profile=new CreatorVerifiedProfile(creator.Category,creator.Region,creator.VerifiedFollowers,creator.SocialVerified);
         var campaigns=await db.Promotions.AsNoTracking().Include(x=>x.Allocations).Include(x=>x.Platforms).Where(x=>(x.Status==PromotionStatus.Published||x.Status==PromotionStatus.Active)&&x.EndDateUtc>Now).ToListAsync(ct);
         var socials=await db.CreatorSocialProfiles.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId&&x.IsActive).ToListAsync(ct);
@@ -68,7 +69,7 @@ public sealed partial class WorkspaceQueries
             if(p.ApplicationClosesAtUtc is { } closes && Now>=closes && request is null)continue;
             var allPlatformsFull=p.Platforms.Count>0&&p.Platforms.All(slot=>slot.Available<=0);
             if(p.UnallocatedBudget.Amount<=0&&request is null&&!allPlatformsFull)continue;
-            var eligibleSocials=socials.Where(s=>p.Platforms.Any(slot=>slot.Available>0 && SocialAudienceEligibility.Matches(s,slot.Platform,slot.MinimumAudience,enforceAudience))).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience,s.AudienceVerificationSource)).ToArray();
+            var eligibleSocials=socials.Where(s=>p.Platforms.Any(slot=>slot.Available>0 && SocialAudienceEligibility.Matches(s,slot.Platform,slot.MinimumAudience,enforceAudience ?? true))).Select(s=>new CreatorSocialProfileView(s.Id,s.Platform.ToString(),s.ProfileUrl,s.SelfReportedAudience,s.VerificationStatus,s.VerifiedAudience,s.AudienceVerificationSource)).ToArray();
             if(p.Platforms.Count>0&&eligibleSocials.Length==0&&request is null&&!allPlatformsFull)continue;
             result.Add(new(p.Id,p.PublicPromotionId,businessCards[p.BusinessId],p.Title,p.Description,PromotionTypeLabel(p.PromotionType),
                 p.Eligibility.Requirements,p.Eligibility.Category,p.Eligibility.Market,p.Eligibility.MinimumVerifiedFollowers,p.StartDateUtc,p.EndDateUtc,
@@ -127,7 +128,10 @@ public sealed partial class WorkspaceQueries
     }
     public async Task<EarningsWorkspace> EarningsAsync(Actor actor,CancellationToken ct)
     {
-        await DemandCreator(actor,ct);var eligibility=await new PayoutService(db,clock).EligibilityAsync(actor,PayoutBeneficiary.Creator,actor.CreatorId!.Value,ct);
+        await DemandCreator(actor,ct);
+        var configuration=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
+        var threshold=configuration?.CreatorPayoutThreshold;
+        var available=(await db.CreatorEarningsAccounts.AsNoTracking().SingleOrDefaultAsync(x=>x.CreatorId==actor.CreatorId,ct))?.AvailableEarnings ?? Money.Zero();
         var entries=await db.CreatorEarningEntries.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).OrderByDescending(x=>x.CreatedAtUtc).ToListAsync(ct);
         var promotionIds=entries.Where(x=>x.PromotionId is not null).Select(x=>x.PromotionId!.Value).Distinct().ToArray();
         var promotions=await db.Promotions.AsNoTracking().Where(x=>promotionIds.Contains(x.Id))
@@ -155,7 +159,7 @@ public sealed partial class WorkspaceQueries
         }
         var paid=(await db.PayoutRecords.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).OrderByDescending(x=>x.EligibleAtUtc).ToListAsync(ct))
             .Select(x=>new PayoutItem(x.Id,"Creator","You",x.Amount.Amount,x.ThresholdUsed.Amount,x.Status.ToString(),x.EligibleAtUtc,x.PaidAtUtc,x.Reference)).ToArray();
-        return new(eligibility.Available.Amount,eligibility.Threshold.Amount,Math.Max(0,eligibility.Threshold.Amount-eligibility.Available.Amount),eligibility.EligibleAmount.Amount,history,paid,
+        return new(available.Amount,threshold?.Amount,threshold is { } minimum ? Math.Max(0,minimum.Amount-available.Amount) : null,threshold is { } configured && available.Amount>=configured.Amount ? configured.Amount : 0,history,paid,
             entries.Where(x=>x.Source==EarningSource.ViewReward).Sum(x=>x.Amount.Amount),entries.Where(x=>x.Source==EarningSource.SaleCommission).Sum(x=>x.Amount.Amount),entries.Where(x=>x.Source==EarningSource.Ugc).Sum(x=>x.Amount.Amount));
     }
 }

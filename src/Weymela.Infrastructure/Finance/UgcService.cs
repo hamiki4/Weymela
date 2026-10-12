@@ -38,7 +38,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 throw new ApplicationFailure(FailureKind.Validation, "Posting platforms must match Creator slots.");
             var config = await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token);
             var pricing = config.Ugc
-                ?? throw new InvalidOperationException("The effective financial configuration does not include UGC settings.");
+                ?? throw new ApplicationFailure(FailureKind.Validation,"Configure UGC pricing before using this product.",code:"ProductPricingRequired");
             var opportunity = new UgcOpportunity(actor.BusinessId!.Value, input.Title, input.Slogan, contentType,
                 input.Instructions, JsonSerializer.Serialize(resources), input.Location, input.DueDateUtc,
                 input.ProductProvided, input.CreatorMustPurchase, input.UsageRights, Amount(input.CreatorPayment),
@@ -126,7 +126,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Business
                     && x.SubjectId == opportunity.BusinessId && x.IsActive, token))
                 throw new ApplicationFailure(FailureKind.Validation, "This UGC opportunity is not accepting requests.");
-            var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token)).EnforceAudienceRequirements;
+            var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token)).RequireAudienceRules();
             await EnsureCreatorEligibility(actor.CreatorId.Value, opportunity, enforceAudience, token);
             CreatorPlatform? platform = null;
             if (HasPlatformSlots(opportunity))
@@ -168,7 +168,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 {
                     if (request.SelectedPlatform is not { } chosen || request.VerifiedSocialProfileId is not { } profile)
                         throw new ApplicationFailure(FailureKind.Validation, "This UGC request has no verified platform selection.");
-                    var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token)).EnforceAudienceRequirements;
+                    var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token)).RequireAudienceRules();
                     await EnsureEligibleProfile(request.CreatorId, chosen, profile, opportunity, enforceAudience, token);
                     if (!opportunity.PlatformCapacities.Any(x => x.Platform == chosen && x.Available > 0))
                         throw new ApplicationFailure(FailureKind.Validation, "This UGC platform is full.");
@@ -588,7 +588,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         var offers = await db.UgcCustomerOffers.AsNoTracking()
             .Where(x => businessIds.Contains(x.BusinessId))
             .ToDictionaryAsync(x => x.UgcOpportunityId, ct);
-        var enforceAudience = (await new FinancialConfigurationResolver(db).EffectiveAsync(Now, ct)).EnforceAudienceRequirements;
+        var enforceAudience = (await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now, ct))?.EnforceAudienceRequirements ?? true;
         return rows.Where(x => activeBusinesses.Contains(x.BusinessId)
                 && x.ReservedFunding.Amount + x.UsedFunding.Amount >= x.RequiredFunding.Amount
                 && x.ProductProvided != x.CreatorMustPurchase

@@ -80,7 +80,7 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
                 db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=creatorId,Role=ActorRole.Creator,
                     DisplayName="Bella",PublicId="CR-100",Region="Addis Ababa",Category="Food" });
                 var account=await db.CreatorEarningsAccounts.SingleAsync(x=>x.CreatorId==creatorId,ct);
-                var threshold=(await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).FirstAsync(ct)).CreatorPayoutThreshold.Amount;
+                var threshold=(await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).FirstAsync(ct)).CreatorPayoutThreshold!.Value.Amount;
                 var amount=threshold+125-account.AvailableEarnings.Amount;
                 Assert.True(amount>0);
                 var promotionId=await db.Promotions.Select(x=>x.Id).FirstAsync(ct);var correlation=Guid.NewGuid();var at=DateTime.UtcNow;

@@ -960,6 +960,29 @@ describe("Creator workspace", () => {
 });
 
 describe("Admin workspace", () => {
+  it("saves the approved baseline with unset products and payout minimums", async () => {
+    const api = mockApi({ "/admin/financial-settings": { current: null, version: 0, versions: [],
+      inactiveBaseline: { version: 1, customerCashbackPercent: 4, creatorCommissionPercent: 5, platformPercent: 1, effectiveFromUtc: "2026-10-11T18:20:00Z" } } });
+    mount(<AdminFinancialSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Save Financial Settings" }));
+    await waitFor(() => expect(api.writes).toHaveLength(1));
+    expect(api.writes[0].body).toMatchObject({ expectedVersion: 0, settings: {
+      creatorCommissionPercent: 5, customerCashbackPercent: 4, platformPercent: 1,
+      viewOnly: null, viewPlusCommission: null, ugc: null, creatorThreshold: null, customerThreshold: null,
+      promotionLiveDurationDays: null, enforceAudienceRequirements: null,
+    } });
+  });
+
+  it("does not invent prices when an Admin starts configuring one view product", async () => {
+    mockApi({ "/admin/financial-settings": { current: null, version: 0, versions: [],
+      inactiveBaseline: { version: 1, customerCashbackPercent: 4, creatorCommissionPercent: 5, platformPercent: 1, effectiveFromUtc: "2026-10-11T18:20:00Z" } } });
+    mount(<AdminFinancialSettings />);
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Configure View Only pricing" }));
+    expect(screen.getByLabelText("View Only Business Pays")).toHaveValue(null);
+    expect(screen.getByRole("button", { name: "Save Financial Settings" })).toBeDisabled();
+    expect(screen.getByLabelText("View & Sale Business Pays")).toBeDisabled();
+    expect(screen.getByLabelText("Creator")).toHaveValue(null);
+  });
   it("shows the approved inactive baseline without inventing prices or enabling writes", async () => {
     const api = mockApi({ "/admin/financial-settings": {
       current: null, version: 0, versions: [],
@@ -969,8 +992,9 @@ describe("Admin workspace", () => {
     mount(<AdminFinancialSettings />);
     expect(await screen.findByText("Approved inactive baseline")).toBeVisible();
     expect(screen.getByText("Customer cashback: 4% · Creator commission: 5% · Platform: 1%")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Save Financial Settings" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("View Only Business Pays")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Financial Settings" })).toBeEnabled();
+    expect(screen.getByLabelText("View Only Business Pays")).toBeDisabled();
+    expect(screen.getByLabelText("View Only Business Pays")).toHaveValue(null);
     expect(api.writes).toHaveLength(0);
   });
   it("filters Campaigns with a designed empty result", async () => {

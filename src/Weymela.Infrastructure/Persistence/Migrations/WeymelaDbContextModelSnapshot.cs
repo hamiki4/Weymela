@@ -2976,27 +2976,39 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("ApprovedCreatorCommissionPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<decimal?>("ApprovedCustomerCashbackPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<decimal?>("ApprovedPlatformPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
                     b.Property<Guid>("ChangedBy")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ConfigurationId")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("CreatorPayoutThreshold")
+                    b.Property<decimal?>("CreatorPayoutThreshold")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<decimal>("CustomerPayoutThreshold")
+                    b.Property<decimal?>("CustomerPayoutThreshold")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<DateTime>("EffectiveFromUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("EnforceAudienceRequirements")
+                    b.Property<bool?>("EnforceAudienceRequirements")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("PromotionLiveDurationDays")
+                    b.Property<int?>("PromotionLiveDurationDays")
                         .HasColumnType("integer");
 
                     b.Property<int>("Version")
@@ -3011,6 +3023,10 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.ToTable("FinancialConfigurationVersions", "v3", t =>
                         {
+                            t.HasCheckConstraint("CK_Configuration_ApprovedSaleRates", "(\"ApprovedCreatorCommissionPercent\" IS NOT NULL AND \"ApprovedCustomerCashbackPercent\" IS NOT NULL AND \"ApprovedPlatformPercent\" IS NOT NULL AND \"ApprovedCreatorCommissionPercent\" BETWEEN 0 AND 100 AND \"ApprovedCustomerCashbackPercent\" BETWEEN 0 AND 100 AND \"ApprovedPlatformPercent\" BETWEEN 0 AND 100 AND \"ApprovedCreatorCommissionPercent\"+\"ApprovedCustomerCashbackPercent\"+\"ApprovedPlatformPercent\"<=100) OR (\"ApprovedCreatorCommissionPercent\" IS NULL AND \"ApprovedCustomerCashbackPercent\" IS NULL AND \"ApprovedPlatformPercent\" IS NULL AND \"ViewPlusCommission_CreatorCommissionPercent\" IS NOT NULL AND \"ViewPlusCommission_CustomerCashbackPercent\" IS NOT NULL AND \"ViewPlusCommission_PlatformPercent\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Configuration_OptionalPayoutMinimums", "(\"CreatorPayoutThreshold\" IS NULL OR \"CreatorPayoutThreshold\">0) AND (\"CustomerPayoutThreshold\" IS NULL OR \"CustomerPayoutThreshold\">0)");
+
                             t.HasCheckConstraint("CK_Configuration_PromotionLiveDuration", "\"PromotionLiveDurationDays\" BETWEEN 1 AND 365");
                         });
                 });
@@ -4829,11 +4845,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.Navigation("Ugc");
 
-                    b.Navigation("ViewOnly")
-                        .IsRequired();
+                    b.Navigation("ViewOnly");
 
-                    b.Navigation("ViewPlusCommission")
-                        .IsRequired();
+                    b.Navigation("ViewPlusCommission");
                 });
 
             modelBuilder.Entity("Weymela.Infrastructure.Persistence.Records.PlatformPromotionalFundingRecord", b =>

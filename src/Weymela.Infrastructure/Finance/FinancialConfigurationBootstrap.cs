@@ -132,8 +132,6 @@ public sealed partial class FinancialConfigurationBootstrapper(WeymelaDbContext 
             throw new InvalidOperationException("Production financial bootstrap requires a bounded owner authorization reference.");
         if (!target.RequiresProductionAuthorization && request.ProductionAuthorizationReference is not null)
             throw new InvalidOperationException("A Production authorization reference is valid only for the Production target.");
-        if (target.RequiresProductionAuthorization && request.Settings.Ugc is null)
-            throw new InvalidOperationException("Production financial bootstrap requires explicit UGC pricing values; schema defaults cannot be used.");
         if (request.Settings.EffectiveFromUtc is not { Kind: DateTimeKind.Utc } effective
             || effective > now)
             throw new ArgumentException(

@@ -29,11 +29,11 @@ public sealed record WalletWorkspace(decimal TotalBalance, decimal Available, de
 public sealed record BusinessHome(BusinessCard Business, WalletWorkspace Wallet, int ActiveCampaigns, int CreatorRequests, int ConfirmedSales);
 public sealed record BusinessPrice(string Type, int Views, decimal BusinessPays, decimal SaleCostPercent, decimal? MinimumCampaignBudget);
 public sealed record CreatorPrice(string Type, int Views, decimal YouEarn, decimal SaleCommissionPercent);
-public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime EffectiveFromUtc, int PromotionLiveDurationDays);
+public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime? EffectiveFromUtc, int? PromotionLiveDurationDays);
 public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent,
     int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
-public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal MinimumToCashOut, DateTime EffectiveFromUtc);
+public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal? MinimumToCashOut, DateTime? EffectiveFromUtc);
 public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available, long? MinimumAudience = null);
 public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
     string VerificationStatus, long? VerifiedAudience, string AudienceVerificationSource = "LegacyUnknown");
@@ -87,7 +87,7 @@ public sealed record EarningItem(Guid Id, string Campaign, string Source, decima
     string? Business = null, string? SourceType = null, string Status = "Earned");
 public sealed record PayoutItem(Guid Id, string Kind, string Name, decimal Amount, decimal Threshold, string Status,
     DateTime EligibleAtUtc, DateTime? PaidAtUtc, string? Reference);
-public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal MinimumToCashOut, decimal AmountNeeded, decimal EligibleAmount,
+public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal? MinimumToCashOut, decimal? AmountNeeded, decimal EligibleAmount,
     IReadOnlyList<EarningItem> History, IReadOnlyList<PayoutItem> PayoutHistory, decimal ViewEarnings = 0,
     decimal SaleEarnings = 0, decimal UgcEarnings = 0);
 public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCampaigns, EarningsWorkspace Earnings);
@@ -134,10 +134,12 @@ public sealed record AdminCampaign(CampaignRow Campaign, IReadOnlyList<AdminCrea
 public sealed record ViewPriceInput(int ViewsPerReward, decimal BusinessPays, decimal CreatorEarns, decimal PlatformKeeps, decimal? MinimumCampaignBudget);
 public sealed record UgcSettingsInput(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent = null);
-public sealed record FinancialSettingsInput(ViewPriceInput ViewOnly, ViewPriceInput ViewPlusCommission, decimal CreatorCommissionPercent,
-    decimal CustomerCashbackPercent, decimal PlatformPercent, decimal CreatorThreshold, decimal CustomerThreshold,
-    DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null, int PromotionLiveDurationDays = 30,
-    bool EnforceAudienceRequirements = false);
+public sealed record FinancialSettingsInput(ViewPriceInput? ViewOnly, ViewPriceInput? ViewPlusCommission,
+    [property: System.Text.Json.Serialization.JsonRequired] decimal CreatorCommissionPercent,
+    [property: System.Text.Json.Serialization.JsonRequired] decimal CustomerCashbackPercent,
+    [property: System.Text.Json.Serialization.JsonRequired] decimal PlatformPercent, decimal? CreatorThreshold, decimal? CustomerThreshold,
+    DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null, int? PromotionLiveDurationDays = null,
+    bool? EnforceAudienceRequirements = null);
 public sealed record FinancialVersionInfo(Guid Id, int Version, DateTime EffectiveFromUtc, Guid ChangedBy, FinancialSettingsInput Settings);
 public sealed record InactiveFinancialBaselineInfo(int Version, decimal CustomerCashbackPercent,
     decimal CreatorCommissionPercent, decimal PlatformPercent, DateTime EffectiveFromUtc);

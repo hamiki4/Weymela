@@ -390,7 +390,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
         CancellationToken ct)
     {
         var enforce = (await new FinancialConfigurationResolver(db)
-            .EffectiveAsync(clock.GetUtcNow().UtcDateTime, ct)).EnforceAudienceRequirements;
+            .EffectiveAsync(clock.GetUtcNow().UtcDateTime, ct)).RequireAudienceRules();
         if (!SocialAudienceEligibility.Matches(profile, profile.Platform, minimumAudience, enforce))
             throw new ApplicationFailure(FailureKind.Validation,
                 "The selected social profile no longer meets this Promotion's verified audience requirement.");

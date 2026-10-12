@@ -44,10 +44,10 @@ internal static class AdminEndpoints
                 // Money is a value object. Materialize the small account summaries before
                 // inspecting Amount so this count works consistently across supported EF providers.
                 var readyCreators=(await db.CreatorEarningsAccounts.AsNoTracking().ToListAsync(ct))
-                    .Where(x=>x.AvailableEarnings.Amount>=settings.CreatorPayoutThreshold.Amount&&creatorDestinations.Contains(x.CreatorId))
+                    .Where(x=>settings.CreatorPayoutThreshold is { } creatorThreshold && x.AvailableEarnings.Amount>=creatorThreshold.Amount&&creatorDestinations.Contains(x.CreatorId))
                     .Select(x=>x.CreatorId);
                 var readyCustomers=(await db.CustomerCashbackAccounts.AsNoTracking().ToListAsync(ct))
-                    .Where(x=>x.AvailableCashback.Amount>=settings.CustomerPayoutThreshold.Amount&&customerDestinations.Contains(x.CustomerId))
+                    .Where(x=>settings.CustomerPayoutThreshold is { } customerThreshold && x.AvailableCashback.Amount>=customerThreshold.Amount&&customerDestinations.Contains(x.CustomerId))
                     .Select(x=>x.CustomerId);
                 payouts=preparedCreators.Concat(readyCreators).Distinct().Count()+preparedCustomers.Concat(readyCustomers).Distinct().Count();
             }

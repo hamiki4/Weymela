@@ -42,13 +42,13 @@ The baseline can satisfy the configuration readiness gate only with financial wr
 missing effective pricing if runtime writes are accidentally enabled. Existing financial activity or
 configuration closes inactive bootstrap. Replay requires the same active bound Admin and identical approval.
 
-After the owner approves complete product settings, run the full bootstrap below with a separate idempotency key.
-The immutable inactive approval remains in history. Active pricing still has all existing validation,
-reservations, reconciliation and authorization requirements; subsequent changes use normal audited Admin versioning.
+## Platform Admin financial settings
 
-After a trusted V3 Platform Admin exists, the console supports a separate `financial-configuration-v1` operation. It requires the existing Admin identity and explicit, owner-approved values for both view modes, verified-sale rates, payout thresholds, effective UTC time, and the Production UGC, audience, and duration fields. Production rejects omitted UGC values rather than applying schema defaults. Optional minimum Promotion budgets may be null only when the owner expressly approves that choice.
+The real Platform Admin can initialize and update pricing through `/api/admin/financial-settings` while financial writes are paused. First initialization verifies the active Platform Admin permission and the Production Firebase identity binding. Every save is serializable, versioned, attributed, audited and idempotent; expected-version conflicts reject stale changes. Operations Admin cannot change these settings.
 
-The operation is serializable, audited, and idempotent. It creates only the first pricing root, version, idempotency record, and audit event. It refuses to overwrite existing configuration and does not create wallets, Promotions, payouts, or ledger transactions. Normal Admin financial settings remain the subsequent versioning path. The non-importable Production worksheet records known candidate rules and every unresolved owner value; it is not a runtime configuration.
+The interface starts from the genuinely approved inactive baseline. View Only, View & Sale, UGC, Creator/Customer payout minimums, promotion duration and audience enforcement may remain unset independently. No new UGC prices or thresholds are inferred. Configuring one product does not configure another. Each dependent operation requires its own complete approved settings and existing funding, balance, authorization and ledger controls. Missing payout minimums do not block earned-balance/history reads or backed earnings accrual, and cannot create payout eligibility.
+
+The trusted financial console remains available as an authorized operator path for installations without any pricing versions. It cannot overwrite configuration created through the Admin interface. Financial settings are not a global infrastructure readiness requirement.
 
 Keep financial writes disabled, deposits disabled, and external payouts disabled until the separate owner activation process is approved. Never use a bootstrap command to enable them.
 

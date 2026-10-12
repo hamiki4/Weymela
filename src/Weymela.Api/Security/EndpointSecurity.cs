@@ -39,9 +39,14 @@ public static class EndpointSecurity
     {
         if (HttpMethods.IsGet(c.Request.Method) || HttpMethods.IsOptions(c.Request.Method)) return false;
         var route = Operation(c); var category = Category(c);
-        return category is "checkout" or "qr" or "views" or "deposit" or "payout" or "settings"
+        // Pricing configuration is audited metadata, and must remain editable while money is paused.
+        return category is "checkout" or "qr" or "views" or "deposit" or "payout"
             || route.EndsWith("/fund") || route.EndsWith("/promotional-funding")
-            || route.EndsWith("/approve") || route.EndsWith("/increase");
+            || route.EndsWith("/approve") || route.EndsWith("/increase")
+            || route == "/api/business/ugc/{id:guid}/publish"
+            || route == "/api/business/ugc/{id:guid}/cancel"
+            || route == "/api/business/promotions/{id:guid}/cancel"
+            || route == "/api/business/ugc/assignments/{id:guid}/review/{action}";
     }
     public static void AddLimits(IServiceCollection services, RuntimeOptions config) => services.AddRateLimiter(options =>
     {

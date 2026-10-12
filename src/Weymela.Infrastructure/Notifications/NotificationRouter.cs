@@ -115,7 +115,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 List<NotificationAudience> targets = [];
                 if (prior is null || BusinessRates(current) != BusinessRates(prior)) targets.Add(new(ActorRole.Business));
                 if (prior is null || CreatorRates(current) != CreatorRates(prior)) targets.Add(new(ActorRole.Creator));
-                if (prior is null || current.CustomerPayoutThreshold != prior.CustomerPayoutThreshold || current.ViewPlusCommission.CustomerCashbackPercent != prior.ViewPlusCommission.CustomerCashbackPercent) targets.Add(new(ActorRole.Customer));
+                if (prior is null || current.CustomerPayoutThreshold != prior.CustomerPayoutThreshold || current.CustomerCashbackPercent != prior.CustomerCashbackPercent) targets.Add(new(ActorRole.Customer));
                 return Plan("Financial settings updated", "Current pricing or payout terms have changed. Existing Promotion pricing stays unchanged.", null, null, targets.ToArray()) with { WorkspacePath = "pricing", SourceKey = "FinancialConfigurationEffective:" + current.Id };
             }
             case "DepositSubmitted":
@@ -263,12 +263,13 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         return null;
     }
     private static string BusinessRates(FinancialConfigurationVersion v) => System.Text.Json.JsonSerializer.Serialize(new {
-        only = new { v.ViewOnly.ViewsPerReward, v.ViewOnly.BusinessCharge, v.ViewOnly.MinimumPromotionBudget },
-        hybrid = new { v.ViewPlusCommission.ViewsPerReward, v.ViewPlusCommission.BusinessCharge, v.ViewPlusCommission.MinimumPromotionBudget },
-        total = v.ViewPlusCommission.CreatorCommissionPercent + v.ViewPlusCommission.CustomerCashbackPercent + v.ViewPlusCommission.PlatformPercent });
+        only=v.ViewOnly is null ? null : new { v.ViewOnly.ViewsPerReward,v.ViewOnly.BusinessCharge,v.ViewOnly.MinimumPromotionBudget },
+        hybrid=v.ViewPlusCommission is null ? null : new { v.ViewPlusCommission.ViewsPerReward,v.ViewPlusCommission.BusinessCharge,v.ViewPlusCommission.MinimumPromotionBudget },
+        total=v.CreatorCommissionPercent+v.CustomerCashbackPercent+v.PlatformPercent,ugc=v.Ugc is null ? null : new { v.Ugc.MinimumCreatorPayment,v.Ugc.PlatformFeePercent,v.Ugc.MinimumUgcBudget,v.Ugc.CustomerOfferPlatformSalePercent },v.PromotionLiveDurationDays,v.EnforceAudienceRequirements });
     private static string CreatorRates(FinancialConfigurationVersion v) => System.Text.Json.JsonSerializer.Serialize(new {
-        only = new { v.ViewOnly.ViewsPerReward, v.ViewOnly.CreatorEarning }, hybrid = new { v.ViewPlusCommission.ViewsPerReward, v.ViewPlusCommission.CreatorEarning },
-        v.ViewPlusCommission.CreatorCommissionPercent, v.CreatorPayoutThreshold });
+        only=v.ViewOnly is null ? null : new { v.ViewOnly.ViewsPerReward,v.ViewOnly.CreatorEarning },
+        hybrid=v.ViewPlusCommission is null ? null : new { v.ViewPlusCommission.ViewsPerReward,v.ViewPlusCommission.CreatorEarning },
+        v.CreatorPayoutThreshold,v.CreatorCommissionPercent,ugc=v.Ugc is null ? null : new { v.Ugc.MinimumCreatorPayment,v.Ugc.PlatformFeePercent } });
     public static string Route(NotificationPlan plan, ActorRole role) => role switch
     {
         ActorRole.PlatformAdmin => plan.WorkspacePath=="account-closure"?"/admin/accounts":plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} p ? $"/admin/campaigns/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "creators" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),

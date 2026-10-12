@@ -25,8 +25,8 @@ public sealed record CustomerTransaction(string Source, string Offer, string Bus
     DateTime PurchasedAtUtc);
 public sealed record CustomerPayoutHistory(Money Amount, string Status, DateTime EligibleAtUtc,
     DateTime? PaidAtUtc);
-public sealed record CustomerCashbackSummary(Money AvailableCashback, Money MinimumCashOut,
-    Money RemainingToCashOut, bool Eligible, string Status, IReadOnlyList<CustomerPayoutHistory> PayoutHistory);
+public sealed record CustomerCashbackSummary(Money AvailableCashback, Money? MinimumCashOut,
+    Money? RemainingToCashOut, bool Eligible, string Status, IReadOnlyList<CustomerPayoutHistory> PayoutHistory);
 public interface IAdminFinancialQueries { Task<AdminCampaignFinance> CampaignAsync(Actor actor, Guid campaignId, CancellationToken ct); }
 public sealed record PlatformSettlementInfo(Guid Id, Money Amount, string Reference, DateTime SettledAtUtc, Guid? SettledBy);
 public sealed record PlatformRevenueBreakdown(string Source, Money Accrued);

@@ -818,7 +818,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20260930210000_AddAgreementDeadlines",
             "20261001043831_AddAdminVerifiedAudienceAndEnforcement",
             "20261006050542_CompleteCreatorCollaborationWorkflow",
-            "20261007041919_AlignFinancialUatFlows"
+            "20261007041919_AlignFinancialUatFlows",
+            "20261012042110_SeparateProductFinancialConfiguration"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='v3' AND c.relkind='S' AND c.relname='creator_number_seq'";

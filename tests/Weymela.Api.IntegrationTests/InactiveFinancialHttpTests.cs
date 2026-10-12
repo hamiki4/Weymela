@@ -20,13 +20,13 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
     [InlineData("/api/admin/payouts/{id:guid}/paid")]
     [InlineData("/api/business/checkout")]
     [InlineData("/api/admin/accounts/businesses/{businessId:guid}/promotional-funding")]
-    public async Task Missing_product_configuration_blocks_money_even_when_runtime_writes_are_enabled(string route)
+    public async Task Explicit_financial_pause_blocks_money_regardless_of_product_settings(string route)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
         var called = false;
         var middleware = new ApiSafetyMiddleware(_ => { called = true; return Task.CompletedTask; },
-            new RuntimeOptions { Development = true, FinancialWritesEnabled = true },
+            new RuntimeOptions { Development = true, FinancialWritesEnabled = false },
             new ProductIntegrationOptions(), NullLogger<ApiSafetyMiddleware>.Instance);
         var context = new DefaultHttpContext();
         context.Request.Method = "POST";
@@ -41,6 +41,6 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
         Assert.Equal(503, context.Response.StatusCode);
         context.Response.Body.Position = 0;
         using var body = await JsonDocument.ParseAsync(context.Response.Body);
-        Assert.Equal("FinancialConfigurationRequired", body.RootElement.GetProperty("code").GetString());
+        Assert.Equal("FinancialWritesPaused", body.RootElement.GetProperty("code").GetString());
     }
 }

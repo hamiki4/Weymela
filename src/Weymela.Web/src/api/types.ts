@@ -217,13 +217,13 @@ export interface CreatorPrice {
 }
 export interface BusinessPricing {
   rows: BusinessPrice[];
-  effectiveFromUtc: string;
-  promotionLiveDurationDays: number;
+  effectiveFromUtc: string | null;
+  promotionLiveDurationDays: number | null;
 }
 export interface CreatorPricing {
   rows: CreatorPrice[];
-  minimumToCashOut: number;
-  effectiveFromUtc: string;
+  minimumToCashOut: number | null;
+  effectiveFromUtc: string | null;
 }
 export interface CampaignRow {
   id: string;
@@ -409,8 +409,8 @@ export interface Payout {
 }
 export interface Earnings {
   availableEarnings: number;
-  minimumToCashOut: number;
-  amountNeeded: number;
+  minimumToCashOut: number | null;
+  amountNeeded: number | null;
   eligibleAmount: number;
   history: {
     id: string;
@@ -548,17 +548,17 @@ export interface ViewPriceInput {
   minimumCampaignBudget: number | null;
 }
 export interface FinancialSettings {
-  viewOnly: ViewPriceInput;
-  viewPlusCommission: ViewPriceInput;
+  viewOnly: ViewPriceInput | null;
+  viewPlusCommission: ViewPriceInput | null;
   creatorCommissionPercent: number;
   customerCashbackPercent: number;
   platformPercent: number;
-  creatorThreshold: number;
-  customerThreshold: number;
+  creatorThreshold: number | null;
+  customerThreshold: number | null;
   effectiveFromUtc: string | null;
   ugc: UgcSettings | null;
-  promotionLiveDurationDays: number;
-  enforceAudienceRequirements: boolean;
+  promotionLiveDurationDays: number | null;
+  enforceAudienceRequirements: boolean | null;
 }
 export interface SettingsWorkspace {
   current: FinancialSettings | null;
@@ -789,8 +789,8 @@ export interface CustomerTransaction {
 }
 export interface CustomerCashbackSummary {
   availableCashback: Money;
-  minimumCashOut: Money;
-  remainingToCashOut: Money;
+  minimumCashOut: Money | null;
+  remainingToCashOut: Money | null;
   eligible: boolean;
   status: "BelowThreshold" | "Eligible" | "PayoutPrepared" | string;
   payoutHistory: {

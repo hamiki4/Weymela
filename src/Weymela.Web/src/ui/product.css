@@ -1459,3 +1459,9 @@ div.private-review-media {
   .role-business .page-heading { padding: 14px; border: 1px solid var(--role-border); border-radius: 14px; background: var(--role-soft); }
   .role-business .page-heading-compact { padding: 0; border: 0; background: transparent; }
 }
+
+/* Keep all three Business work groups visible, including larger counts and translations. */
+.product-shell.role-business .business-promotion-tabs { min-width: 0; }
+.product-shell.role-business .business-promotion-tabs .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow-x: visible; }
+.product-shell.role-business .business-promotion-tabs .tabs button { min-width: 0; max-width: 100%; padding-inline: 6px; white-space: normal; overflow-wrap: break-word; }
+.product-shell.role-business .business-promotion-list .business-promotion-card .badge { white-space: normal; }

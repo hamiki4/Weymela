@@ -33,7 +33,8 @@ export function PayoutDestinationForm({ endpoint }: { endpoint: string }) {
   }); }}><fieldset disabled={action.busy}>
     <fieldset className="payout-methods"><legend>Payout method</legend>{[["Telebirr", "Telebirr"], ["Mpesa", "M-PESA"], ["Bank", "Bank account"]].map(([value, label]) => <label key={value}><input type="radio" name="payout-method" value={value} checked={method === value} onChange={() => { setMethod(value); setSaved(false); }} />{label}</label>)}</fieldset>
     {method !== "Bank" ? <>
-      <Field label="Verified Weymela phone"><input value={current.registeredPhone ?? (current.method !== "Bank" ? current.account : "")} placeholder="No verified phone available" readOnly /></Field>
+      <Field label="Verified Weymela phone"><input value={current.registeredPhone ?? ""} placeholder="No verified phone available" readOnly /></Field>
+      {current.isConfigured && current.method !== "Bank" && <p className="fine-print">Saved recipient: <span data-no-translate>{current.account}</span></p>}
       {!current.registeredPhone && <Notice>Your phone needs independent ownership verification for mobile-money payouts. <a href="mailto:support@weymela.com">Contact Weymela support</a> or choose Bank account.</Notice>}
       {method === "Mpesa" && <p className="fine-print">M-PESA currently supports verified Safaricom Ethiopia +2517 numbers. Wallet ownership is checked before payment.</p>}
       {method === "Telebirr" && <p className="fine-print">Telebirr requires an eligible verified Ethiopian phone number.</p>}

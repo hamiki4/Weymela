@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { invalidateResourceCache } from "../src/api/client";
+import { PayoutDestinationForm } from "../src/features/PayoutDestinationForm";
 import { Inbox } from "../src/features/notifications/Inbox";
 import { PromotionManagement, type BusinessPromotionItem } from "../src/features/business/PromotionManagement";
 import { DisplayedNotifications } from "../src/features/notifications/DisplayedNotifications";
@@ -47,4 +48,12 @@ it("only visible, loaded records acknowledge notifications and stale profile res
  window.sessionStorage.setItem("weymela.profile-key","Creator:two");
  changed([{target:container.querySelector("article")!,isIntersecting:true} as unknown as IntersectionObserverEntry],{} as IntersectionObserver);
  await new Promise(resolve=>setTimeout(resolve,120));expect(api.writes).toHaveLength(1);
+});
+
+it("does not present a saved mobile-money recipient as an independently verified identity phone",async()=>{
+ mockApi({"/creator/payout-destination":{method:"Telebirr",provider:"Telebirr",isConfigured:true,account:"••••3344",registeredPhone:null,telebirrEligible:false,mpesaEligible:false,legalName:"Synthetic Creator"}});
+ render(<MemoryRouter><PayoutDestinationForm endpoint="/creator/payout-destination"/></MemoryRouter>);
+ expect(await screen.findByLabelText("Verified Weymela phone")).toHaveValue("");
+ expect(screen.getByText("••••3344")).toBeVisible();expect(screen.getByRole("button",{name:"Save Destination"})).toBeDisabled();
+ expect(screen.getByText(/phone needs independent ownership verification/)).toBeVisible();
 });

@@ -16,6 +16,7 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Saved recipient:": "የተቀመጠ ተቀባይ፦",
   "Reversed": "ተመልሷል",
   "Correction": "ማስተካከያ",
   "Pending correction": "ማስተካከያ ይጠብቃል",

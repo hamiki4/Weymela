@@ -18,8 +18,8 @@ export function PromotionManagement() {
     ?? (resource.data?.some(row => row.group === "Pending") ? "Pending" : "Active");
   return <>
     <PageHeader title="Promotions" compact action={<ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink>} />
-    <Tabs label="Promotion management" value={group} onChange={value => setParams({ tab: value })}
-      items={groups.map(value => ({ value, label: `${value} (${resource.data?.filter(row => row.group === value).length ?? 0})` }))} />
+    <div className="business-promotion-tabs"><Tabs label="Promotion management" value={group} onChange={value => setParams({ tab: value })}
+      items={groups.map(value => ({ value, label: `${value} (${resource.data?.filter(row => row.group === value).length ?? 0})` }))} /></div>
     <Resource resource={resource}>{rows => {
       const visible = rows.filter(row => row.group === group);
       return visible.length ? <div className="card-stack business-promotion-list">

@@ -1115,6 +1115,16 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             await publications.AdminReviewAsync(Phase4Scenario.Admin, publication.Id,
                 new("verify", "test-evidence", null), key + "-verify", default);
         await publications.GoLiveUgcAsync(state.Creator, assignmentId, key + "-go-live", default);
+        var assignment = await db.UgcAssignments.SingleAsync(x => x.Id == assignmentId);
+        var offer = await db.UgcCustomerOffers.SingleOrDefaultAsync(x => x.UgcOpportunityId == assignment.UgcOpportunityId);
+        if (offer is not null && offer.Status == UgcCustomerOfferStatus.Active && offer.EndsAtUtc > Now)
+        {
+            var tracking = await new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),new FixedTime(Now)).BusinessPromotionTrackingAsync(state.Business,default);
+            var campaign = tracking.Single(x => x.Id == assignment.UgcOpportunityId && x.Kind == "UGC campaign");
+            Assert.Equal("Active",campaign.Group); Assert.Equal(offer.EndsAtUtc,campaign.DueAtUtc);
+            Assert.True(campaign.RemainingDays > 0);
+            Assert.Equal("Completed",tracking.Single(x => x.Id == assignmentId).Group);
+        }
     }
 
     private static async Task DrainNotifications(TestDatabase database)

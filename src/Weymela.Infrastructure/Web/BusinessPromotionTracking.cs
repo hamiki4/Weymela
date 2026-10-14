@@ -27,7 +27,8 @@ public sealed partial class WorkspaceQueries
             var group = closed ? "Completed" : campaign.Status is "Draft" or "Funded" ? "Pending" : "Active";
             items.Add(new("campaign-" + campaign.Id, campaign.Id, campaign.Id, campaign.Type, campaign.Title, group,
                 campaign.EndUtc <= Now ? "Expired" : campaign.Status, campaign.CampaignBudget, campaign.Remaining, campaign.ContentDueAtUtc,
-                group == "Pending" ? "Complete setup" : "Manage campaign", $"/business/campaigns/{campaign.Id}"));
+                group == "Pending" ? "Complete setup" : "Manage campaign", $"/business/campaigns/{campaign.Id}",
+                RemainingDays: group == "Active" ? Math.Max(0, (int)Math.Ceiling((campaign.EndUtc - Now).TotalDays)) : null));
             foreach (var application in applications.Where(x => x.PromotionId == campaign.Id))
                 items.Add(new("application-" + application.Id, application.Id, campaign.Id, "Creator application", campaign.Title,
                     "Pending", "Awaiting Business decision", 0, 0, campaign.ApplicationClosesAtUtc,
@@ -66,7 +67,8 @@ public sealed partial class WorkspaceQueries
             items.Add(new("ugc-" + opportunity.Id, opportunity.Id, opportunity.Id, "UGC campaign", opportunity.Title,
                 closed ? "Completed" : opportunity.Status == UgcOpportunityStatus.Draft ? "Pending" : "Active",
                 offerRunning && opportunity.Status == UgcOpportunityStatus.Completed ? "Creator work completed · Customer offer active" : expired ? "Expired" : opportunity.Status.ToString(), opportunity.RequiredFunding.Amount + (offer?.FundedLimit.Amount ?? 0), opportunity.ReservedFunding.Amount + (offer?.RemainingFunding.Amount ?? 0),
-                opportunity.DueDateUtc, opportunity.Status == UgcOpportunityStatus.Draft ? "Complete setup" : "Manage campaign", $"/business/ugc/{opportunity.Id}"));
+                offerRunning ? offer!.EndsAtUtc : opportunity.DueDateUtc, opportunity.Status == UgcOpportunityStatus.Draft ? "Complete setup" : "Manage campaign", $"/business/ugc/{opportunity.Id}",
+                RemainingDays: offerRunning ? Math.Max(0, (int)Math.Ceiling((offer!.EndsAtUtc - Now).TotalDays)) : null));
             foreach (var request in ugcRequests.Where(x => x.UgcOpportunityId == opportunity.Id))
                 items.Add(new("ugc-request-" + request.Id, request.Id, opportunity.Id, "Creator application", opportunity.Title,
                     "Pending", "Awaiting Business decision", opportunity.CreatorPayment.Amount, opportunity.CreatorPayment.Amount,

@@ -37,6 +37,8 @@ internal static class DeviceSessionRequestPolicy
         "/api/integration/product/handoff",
         "/api/integration/product/legal-acceptance",
         "/api/onboarding/profile",
+        "/api/onboarding/registration",
+        "/api/onboarding/profiles",
         "/api/admin/role-enrollments/{id:guid}/review",
         "/api/notifications/{id:guid}/read",
         "/api/notifications/read-all",

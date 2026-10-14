@@ -16,6 +16,21 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "For help, contact": "ለእርዳታ ያነጋግሩ",
+  "Account phone setup could not be completed. Contact Weymela support.": "የመለያ ስልክ ማዘጋጀት አልተጠናቀቀም። የወይሜላ ድጋፍን ያነጋግሩ።",
+  "Choose English or Amharic for the published policies.": "ለታተሙት ፖሊሲዎች እንግሊዝኛ ወይም አማርኛ ይምረጡ።",
+
+  "Continue profile setup": "የመገለጫ ማዘጋጀትዎን ይቀጥሉ",
+  "Edit profile details": "የመገለጫ ዝርዝሮችን ያስተካክሉ",
+  "Return to your workspace": "ወደ ሥራ ቦታዎ ይመለሱ",
+  "Your existing email, phone and credentials will be reused.": "ያለዎት ኢሜይል፣ ስልክ ቁጥር እና የመግቢያ መረጃ ይጠቀማሉ።",
+  "Your verified sign-in and saved profile details are retained. Retry when the requirement is resolved, or edit your profile details.": "የተረጋገጠ መግቢያዎ እና ያስቀመጡት የመገለጫ ዝርዝር ተጠብቀዋል። መስፈርቱ ሲሟላ እንደገና ይሞክሩ ወይም የመገለጫ ዝርዝርዎን ያስተካክሉ።",
+  "These saved details belong to another email. Continue setup with the signed-in account or sign in to the original account.": "እነዚህ የተቀመጡ ዝርዝሮች የሌላ ኢሜይል ናቸው። በገቡበት መለያ ማዘጋጀትዎን ይቀጥሉ ወይም ወደ መጀመሪያው መለያ ይግቡ።",
+  "Your account is already registered. Use Add Profile to continue with the same identity.": "መለያዎ አስቀድሞ ተመዝግቧል። በዚሁ መለያ ለመቀጠል መገለጫ ጨምር የሚለውን ይጠቀሙ።",
+  "Finish your first profile before adding another profile.": "ሌላ መገለጫ ከመጨመርዎ በፊት የመጀመሪያውን መገለጫ ያጠናቅቁ።",
+  "This profile is unavailable. Contact Weymela support for review.": "ይህ መገለጫ አይገኝም። ለግምገማ የወይሜላ ድጋፍን ያነጋግሩ።",
+  "Profile setup changed at the same time. Try again to open the saved profile.": "የመገለጫ ዝግጅቱ በተመሳሳይ ጊዜ ተቀይሯል። የተቀመጠውን መገለጫ ለመክፈት እንደገና ይሞክሩ።",
+
   "Password": "የይለፍ ቃል",
   "Confirm Password": "የይለፍ ቃል ያረጋግጡ",
   "Confirm password": "የይለፍ ቃል ያረጋግጡ",

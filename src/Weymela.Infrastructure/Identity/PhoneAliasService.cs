@@ -20,35 +20,12 @@ public sealed class PhoneAliasService(WeymelaDbContext db, RuntimeOptions option
     public async Task EnsureRegistrationAsync(DeviceSessionIdentity identity, string phone, CancellationToken ct)
     {
         var canonical = PhoneNumberNormalizer.Normalize(phone);
-        var hash = EmailAuthService.HashIdentifier(canonical);
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         try
         {
             await EnsureVerifiedIdentity(identity, "registering", ct);
-            var claimed = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
-                && x.IdentifierHash == hash, ct);
-            if (claimed is not null && claimed.UserId != identity.UserId) throw Collision();
-            var existing = await db.AuthIdentifiers.AsTracking().Where(x => x.UserId == identity.UserId
-                && x.Kind == "Phone").ToListAsync(ct);
-            if (existing.Count > 1)
-                throw new ApplicationFailure(FailureKind.ConcurrencyConflict,
-                    "Account phone setup could not be completed. Contact Weymela support.", code: "PhoneStateConflict");
-            if (existing.Count == 1 && existing[0].IdentifierHash != hash)
-                throw new ApplicationFailure(FailureKind.Validation,
-                    "Use the phone number already registered to this account.", code: "RegisteredPhoneMismatch");
-            if (existing.Count == 0)
-            {
-                db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId = identity.UserId, Kind = "Phone",
-                    IdentifierHash = hash, DeliveryAddress = canonical, IsVerified = false,
-                    CreatedAtUtc = clock.GetUtcNow().UtcDateTime });
-                db.AuditEvents.Add(new AuditEvent(Guid.NewGuid(), "RegistrationPhoneClaimed", identity.UserId,
-                    null, null, null, Guid.NewGuid(), clock.GetUtcNow().UtcDateTime,
-                    $"country={PhoneNumberNormalizer.Region(canonical)};verified=false"));
-            }
-            else
-            {
-                existing[0].DeliveryAddress = canonical;
-            }
+            await RegistrationPhone.EnsureAsync(db, identity.UserId, canonical,
+                clock.GetUtcNow().UtcDateTime, ct);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }

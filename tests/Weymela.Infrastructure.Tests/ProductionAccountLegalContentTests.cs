@@ -69,10 +69,19 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
             }));
             var status = await service.StatusAsync(user, default);
             Assert.True(status.Available);
+            Assert.All(status.Documents, document => Assert.EndsWith("-en", document.Version));
+            var amharic = await service.StatusAsync(user, default, "am");
+            Assert.All(amharic.Documents, document => Assert.EndsWith("-am", document.Version));
+            Assert.All(amharic.Documents, document => Assert.EndsWith("?language=am", document.ViewPath));
             var terms = status.Documents.Single(x => x.Kind == "TermsOfService");
             var privacy = status.Documents.Single(x => x.Kind == "PrivacyPolicy");
             var confirmation = new AccountLegalConfirmation(new(terms.DocumentId, terms.ContentHash, true),
                 new(privacy.DocumentId, privacy.ContentHash, true));
+            var amharicPrivacy = amharic.Documents.Single(x => x.Kind == "PrivacyPolicy");
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptCurrentAsync(user,
+                confirmation with { PrivacyPolicy = new(amharicPrivacy.DocumentId, amharicPrivacy.ContentHash, true) },
+                null, null, default));
+            Assert.Empty(await db.LegalAcceptances.ToListAsync());
             await service.AcceptCurrentAsync(user, confirmation, null, null, default);
             await db.SaveChangesAsync();
             Assert.True((await service.StatusAsync(user, default)).Current);

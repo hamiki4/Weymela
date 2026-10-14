@@ -11,10 +11,12 @@ const mocks = vi.hoisted(() => ({
   resetPassword: vi.fn(),
   cancelPasswordRecovery: vi.fn(),
   post: vi.fn(),
+  request: vi.fn(async () => ({ phoneEnrolled: false, passwordEnrolled: false })),
   refresh: vi.fn(),
 }));
 vi.mock("../src/api/client", () => ({
   post: mocks.post,
+  request: mocks.request,
   useAction: () => ({ busy: false, error: null, run: vi.fn() }),
   useResource: () => ({
     data: { development: false, personas: null },
@@ -80,6 +82,7 @@ beforeEach(() => {
   mocks.resetPassword.mockResolvedValue(undefined);
   mocks.cancelPasswordRecovery.mockResolvedValue(undefined);
   mocks.post.mockResolvedValue(undefined);
+  mocks.request.mockResolvedValue({ phoneEnrolled: false, passwordEnrolled: false });
   mocks.refresh.mockResolvedValue(undefined);
 });
 
@@ -134,7 +137,8 @@ describe("final authentication experience", () => {
     expect(screen.getByRole("button", { name: "Edit details" })).toBeVisible();
   });
 
-  it("composes international registration phones from the selected country before claiming them", async () => {
+  it.each([false, true])("composes international registration phones from the selected country before claiming them (existing identity: %s)", async existing => {
+    mocks.request.mockResolvedValue({ phoneEnrolled: existing, passwordEnrolled: existing });
     renderSignIn();
     await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
     await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
@@ -149,10 +153,13 @@ describe("final authentication experience", () => {
     await userEvent.type(await screen.findByLabelText("Verification code"), "12345");
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
     expect(mocks.verifyEmailCode).toHaveBeenCalledWith("international@example.com", "Signup", "12345");
-    expect(mocks.post).toHaveBeenCalledWith("/account/registration-phone", { phone: "+14045550123" });
-    expect(mocks.post).toHaveBeenCalledWith("/account/password-credential", {
-      phone: null, password: "password8", confirmPassword: "password8",
-    });
+    if (existing) expect(mocks.post).not.toHaveBeenCalled();
+    else {
+      expect(mocks.post).toHaveBeenCalledWith("/account/registration-phone", { phone: "+14045550123" });
+      expect(mocks.post).toHaveBeenCalledWith("/account/password-credential", {
+        phone: null, password: "password8", confirmPassword: "password8",
+      });
+    }
     expect(window.sessionStorage.getItem("weymela.public-signup")).not.toContain("password8");
     expect(mocks.refresh).toHaveBeenCalledOnce();
   });

@@ -9,6 +9,7 @@ using Weymela.Api;
 using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Development;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Tests;
 using Weymela.Application.Web;
@@ -165,7 +166,7 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
         var terms = legal["documents"]!.AsArray().Single(x => x!["kind"]!.GetValue<string>() == "TermsOfService")!;
         var privacy = legal["documents"]!.AsArray().Single(x => x!["kind"]!.GetValue<string>() == "PrivacyPolicy")!;
 
-        var response = await client.Post("/api/onboarding/profile", new
+        var response = await client.Post("/api/onboarding/registration", new
         {
             role = "Customer",
             displayName = "Hana",
@@ -192,6 +193,42 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
         Assert.Equal("+14045550123", phone.DeliveryAddress);
         Assert.False(phone.IsVerified);
         Assert.Single(await verify.CommercePermissions.Where(x => x.UserId == userId && x.Role == ActorRole.Customer).ToListAsync());
+    }
+
+
+    [Fact]
+    public async Task Signed_in_business_adds_customer_with_same_identity_and_retries_across_legacy_contract()
+    {
+        await using var host = await ApiFixture.CreateAsync(fixture);
+        using var business = await host.Login("business");
+        var identity = await business.GetFromJsonAsync<JsonObject>("/api/onboarding/identity");
+        Assert.True(identity!["hasProfiles"]!.GetValue<bool>());
+        var userId = identity["userId"]!.GetValue<Guid>();
+        var request = new { role = "Customer", displayName = "Isolated additional Customer", registeredPhone = "+254712345678" };
+        var added = await business.PostJson("/api/onboarding/profiles", request, "additional-customer");
+        var replay = await business.PostJson("/api/onboarding/profile", request, "additional-customer");
+        var owned = await business.PostJson("/api/onboarding/profiles", request, "different-reference");
+        Assert.Equal(added["id"]!.GetValue<Guid>(), replay["id"]!.GetValue<Guid>());
+        Assert.Equal(added["id"]!.GetValue<Guid>(), owned["id"]!.GetValue<Guid>());
+        Assert.True(owned["alreadyOwned"]!.GetValue<bool>());
+        await using var db = host.Database.Open();
+        Assert.Single(await db.CommercePermissions.Where(x => x.UserId == userId && x.Role == ActorRole.Customer).ToListAsync());
+        Assert.Single(await db.CustomerProfiles.Where(x => x.UserId == userId).ToListAsync());
+        Assert.True(await db.CommercePermissions.AnyAsync(x => x.UserId == userId && x.Role == ActorRole.Business && x.IsActive));
+        Assert.False(await db.AuthIdentifiers.AnyAsync(x => x.UserId == userId && x.Kind == "Phone"));
+    }
+
+    [Theory]
+    [InlineData("/api/onboarding/registration")] [InlineData("/api/onboarding/profiles")]
+    [InlineData("/api/onboarding/profile")]
+    public async Task Public_profile_routes_require_authentication_and_never_enroll_privileged_roles(string path)
+    {
+        await using var host = await ApiFixture.CreateAsync(fixture);
+        using var anonymous = host.Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.Post(path, new { role = "Customer", displayName = "Denied" })).StatusCode);
+        using var business = await host.Login("business");
+        foreach (var role in new[] { "PlatformAdmin", "OperationsAdmin", "Cashier" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await business.Post(path, new { role, displayName = "Denied" })).StatusCode);
     }
 
     private sealed class FakeIdentity : IIdentityTokenVerifier

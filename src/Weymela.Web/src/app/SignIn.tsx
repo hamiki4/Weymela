@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { post, useAction, useResource } from "../api/client";
-import type { Role, SessionProfile } from "../api/types";
+import { post, request, useAction, useResource } from "../api/client";
+import type { AccountSecurityStatus, Role, SessionProfile } from "../api/types";
 import { Button, Field, Notice, Resource } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { PasswordField } from "../ui/PasswordField";
@@ -151,14 +151,18 @@ function FirebaseSignIn({
       if (purpose === "Signup") {
         const draft = readSignupDraft();
         if (!draft) throw new Error("Your registration details expired. Enter them again.");
-        if (!signupPassword || !signupConfirmPassword)
-          throw new Error("Your password was not retained for security. Edit your details and enter it again.");
-        await post("/account/registration-phone", { phone: draft.phone });
-        await post("/account/password-credential", {
-          phone: null,
-          password: signupPassword,
-          confirmPassword: signupConfirmPassword,
-        });
+        const security = await request<AccountSecurityStatus>("/account/security");
+        if (!security.phoneEnrolled)
+          await post("/account/registration-phone", { phone: draft.phone });
+        if (!security.passwordEnrolled) {
+          if (!signupPassword || !signupConfirmPassword)
+            throw new Error("Your password was not retained for security. Edit your details and enter it again.");
+          await post("/account/password-credential", {
+            phone: null,
+            password: signupPassword,
+            confirmPassword: signupConfirmPassword,
+          });
+        }
         setSignupPassword("");
         setSignupConfirmPassword("");
       }

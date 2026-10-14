@@ -3,6 +3,7 @@ export type PublicSignupRole = "Customer" | "Business" | "Creator";
 export type PublicSignupDraft = {
   version: 1;
   idempotencyKey: string;
+  ownerUserId?: string;
   role: PublicSignupRole;
   legalName: string;
   email: string;

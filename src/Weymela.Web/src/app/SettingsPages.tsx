@@ -46,7 +46,7 @@ export function SettingsPage() {
       {user.role === "Creator" && <SettingsLink to="/profile#social-profiles" icon="globe" title="Social Profiles" />}
       {user.role === "Business" && <SettingsLink to="/business/cashiers" icon="people" title="Cashier Management" />}
       {(user.role === "Customer" || user.role === "Creator" || user.role === "Business") &&
-        <SettingsLink to="/onboarding" icon="plus" title="Add Profile" />}
+        <SettingsLink to="/onboarding?intent=add" icon="plus" title="Add Profile" />}
       <SettingsLink to="/settings/help" icon="info" title="Help" />
       <SettingsLink to="/settings/contact" icon="document" title="Contact Us" />
       <SettingsLink to="/settings/delete-account" icon="lock" title="Delete Account" note="Close one account role safely" />

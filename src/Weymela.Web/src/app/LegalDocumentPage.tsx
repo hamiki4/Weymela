@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button, Notice } from "../ui/components";
 
 type LegalDocumentKind = "terms" | "privacy";
@@ -21,7 +21,8 @@ const documents: Record<
 export function LegalDocumentPage({ kind }: { kind: LegalDocumentKind }) {
   const document = documents[kind];
   const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
-  const [language, setLanguage] = useState<"en" | "am">("en");
+  const [params] = useSearchParams();
+  const [language, setLanguage] = useState<"en" | "am">(params.get("language") === "am" ? "am" : "en");
   const source = production ? `/api/legal/account/${kind}?language=${language}` : document.source;
   const [content, setContent] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);

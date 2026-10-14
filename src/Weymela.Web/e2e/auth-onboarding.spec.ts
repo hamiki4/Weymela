@@ -421,7 +421,7 @@ test("verified Customer registration proceeds directly to mandatory PIN and acti
   await page.getByLabel("Preferred name", { exact: true }).fill(`Customer ${account.suffix}`);
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
   await consent.check();
-  const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/profile", { timeout: 7000 });
+  const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/registration", { timeout: 7000 });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await activation).status()).toBe(200);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
@@ -473,15 +473,50 @@ test("public Business signup creates the role only after verified email and devi
   await fillPin(page, "Confirm PIN", "01234");
   const enrolled = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/enrollment");
-  const activated = page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === "/api/onboarding/profile");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await enrolled).status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Finish registration", exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox")).not.toBeChecked();
+  await page.getByRole("checkbox").check();
+  const activated = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/onboarding/registration");
+  await page.getByRole("button", { name: "Finish registration", exact: true }).click();
   expect((await activated).status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL(/\/business/);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Business" });
+  const identityBefore = await (await context.request.get("/api/onboarding/identity")).json() as { userId: string; phone: string };
+  await page.evaluate(() => sessionStorage.setItem("weymela.public-signup", JSON.stringify({ version: 1,
+    idempotencyKey: "isolated-stale-signup", role: "Customer", legalName: "Stale details",
+    email: "another-account@example.test", phone: "+254712345678", legalAccepted: true })));
+  await open(page, "/settings");
+  await page.getByRole("link", { name: "Add Profile", exact: true }).click();
+  await page.getByRole("button", { name: /^Use as Customer/ }).click();
+  await page.getByLabel("Preferred name", { exact: true }).fill(`Customer ${suffix}`);
+  await page.reload();
+  await expect(page.getByLabel("Preferred name", { exact: true })).toHaveValue(`Customer ${suffix}`);
+  const additional = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/onboarding/profiles");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect((await additional).status()).toBe(200);
+  await expect(page).toHaveURL(/\/customer\/offers/);
+  const identityAfter = await (await context.request.get("/api/onboarding/identity")).json();
+  expect(identityAfter).toMatchObject({ userId: identityBefore.userId, phone: identityBefore.phone });
+  const multiple = await (await context.request.get("/api/session")).json() as SessionUser;
+  expect(multiple.profiles?.map(profile => profile.role).sort()).toEqual(["Business", "Customer"]);
+  const legacyRetry = await context.request.post("/api/onboarding/profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": "isolated-legacy-owned-profile" },
+    data: { role: "Customer", displayName: `Customer ${suffix}`, registeredPhone: "+254712345678" },
+  });
+  expect(legacyRetry.status()).toBe(200);
+  expect(await legacyRetry.json()).toMatchObject({ alreadyOwned: true });
+  await open(page, "/onboarding?intent=add");
+  await page.getByRole("button", { name: /Business.*Already added/ }).click();
+  await expect(page).toHaveURL(/\/business/);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Create your PIN" })).toHaveCount(0);
+
 });
 
 test("Platform Admin reviews Creator while verified Business registration activates immediately", async ({ page, context }) => {
@@ -1035,7 +1070,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
       const url = new URL(response.url());
-      return response.request().method() === "POST" && url.pathname === "/api/onboarding/profile";
+      return response.request().method() === "POST" && url.pathname === "/api/onboarding/registration";
     }, { timeout: 7000 });
     await page.getByRole("button", { name: "Continue", exact: true }).click({ timeout: 7000 });
     const response = await activationResponse;

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Data;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Weymela.Application;
 using Weymela.Application.Operations;
 using Weymela.Domain;
@@ -11,6 +12,9 @@ using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Web;
 
 namespace Weymela.Infrastructure.Identity;
+
+public enum ProfileEnrollmentIntent { Compatible, FirstProfile, AdditionalProfile }
+public sealed record RegistrationIdentity(Guid UserId, string? Email, string? Phone, bool HasProfiles);
 
 public sealed record RoleEnrollmentRequest(ActorRole Role, string DisplayName, string? PublicId, string? Region,
     string? Category, string? Submission, Guid? ProposedBusinessId = null,
@@ -23,22 +27,48 @@ public sealed record RoleEnrollmentSummary(Guid Id, ActorRole Role, RoleEnrollme
     string PublicId, DateTime SubmittedAtUtc, DateTime? ReviewedAtUtc, string? DecisionReason, long Version,
     string? Region = null, string? Category = null, string? Submission = null,
     IReadOnlyList<CreatorApplicationSocialProfile>? SocialProfiles = null, string? FullEmail = null,
-    string? FullPhone = null, string? LegalName = null);
+    string? FullPhone = null, string? LegalName = null, bool AlreadyOwned = false);
 
 public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider clock,
     RuntimeOptions? options = null, AccountLegalDocumentSource? legalSource = null)
 {
     private static readonly ActorRole[] PublicRoles = [ActorRole.Customer, ActorRole.Creator, ActorRole.Business];
 
-    public async Task<RoleEnrollmentSummary> SubmitAsync(Actor actor, RoleEnrollmentRequest request, string idempotencyKey, CancellationToken ct)
+    public async Task<RegistrationIdentity> IdentityAsync(Guid userId, CancellationToken ct)
+    {
+        var identifiers = await db.AuthIdentifiers.AsNoTracking().Where(x => x.UserId == userId).ToListAsync(ct);
+        return new(userId, identifiers.SingleOrDefault(x => x.Kind == "Email" && x.IsVerified)?.DeliveryAddress,
+            identifiers.SingleOrDefault(x => x.Kind == "Phone")?.DeliveryAddress,
+            await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.UserId == userId, ct)
+                || await db.RoleEnrollments.AsNoTracking().AnyAsync(x => x.UserId == userId, ct));
+    }
+
+    public async Task<RoleEnrollmentSummary> SubmitAsync(Actor actor, RoleEnrollmentRequest request, string idempotencyKey,
+        CancellationToken ct, ProfileEnrollmentIntent intent = ProfileEnrollmentIntent.Compatible)
+    {
+        try { return await SubmitCoreAsync(actor, request, idempotencyKey, ct, intent); }
+        catch (Exception error) when (HasPostgresCode(error, PostgresErrorCodes.SerializationFailure)
+            || HasPostgresCode(error, PostgresErrorCodes.UniqueViolation))
+        {
+            throw new ApplicationFailure(FailureKind.ConcurrencyConflict,
+                "Profile setup changed at the same time. Try again to open the saved profile.", code: "ProfileSetupConflict");
+        }
+    }
+
+    private async Task<RoleEnrollmentSummary> SubmitCoreAsync(Actor actor, RoleEnrollmentRequest request, string idempotencyKey,
+        CancellationToken ct, ProfileEnrollmentIntent intent)
     {
         if (actor.UserId == Guid.Empty || !PublicRoles.Contains(request.Role)) throw Denied();
         Validate(request, idempotencyKey);
         var socialProfiles = NormalizeSocialProfiles(request);
         var registeredPhone = string.IsNullOrWhiteSpace(request.RegisteredPhone)
             ? null
-            : PhoneNumberNormalizer.Normalize(request.RegisteredPhone);
+            : request.RegisteredPhone;
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        if (await db.AccountLifecycles.AsNoTracking().AnyAsync(x => x.UserId == actor.UserId
+            && (x.Status == AccountLifecycleStatus.Suspended || x.Status == AccountLifecycleStatus.Disabled
+                || x.Status == AccountLifecycleStatus.Revoked || x.Status == AccountLifecycleStatus.Closed), ct))
+            throw Denied();
         var existing = await db.RoleEnrollments.SingleOrDefaultAsync(x => x.UserId == actor.UserId && x.IdempotencyKey == idempotencyKey, ct);
         if (existing is not null)
         {
@@ -50,16 +80,45 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
                 || prior.Submission != request.Submission?.Trim()
                 || !(prior.SocialProfiles ?? []).SequenceEqual(socialProfiles))
                 throw new ApplicationFailure(FailureKind.IdempotencyConflict, "This request reference was already used for another profile request.");
-            await EnsureRegisteredPhoneAsync(actor.UserId, registeredPhone, ct);
-            await db.SaveChangesAsync(ct);
+            // A retry must not re-enroll or replace credentials that may have changed
+            // since the original request committed.
             await tx.CommitAsync(ct);
             return Summary(existing);
         }
         if (request.ProposedBusinessId is not null) throw new ApplicationFailure(FailureKind.Validation, "A new Business is created securely during registration.");
-        if (await db.RoleEnrollments.AnyAsync(x => x.UserId == actor.UserId && x.RequestedRole == request.Role && x.Status == RoleEnrollmentStatus.Pending, ct))
-            throw new ApplicationFailure(FailureKind.Validation, "This profile request is already under review.");
-        if (await db.CommercePermissions.AnyAsync(x => x.UserId == actor.UserId && x.Role == request.Role, ct))
-            throw new ApplicationFailure(FailureKind.Validation, "This profile is already active or has a prior decision requiring review.");
+        var memberships = await db.CommercePermissions.AsNoTracking().Where(x => x.UserId == actor.UserId).ToListAsync(ct);
+        var priorRequests = await db.RoleEnrollments.AsNoTracking().Where(x => x.UserId == actor.UserId).ToListAsync(ct);
+        var hasProfiles = memberships.Count != 0 || priorRequests.Count != 0;
+        if (intent == ProfileEnrollmentIntent.AdditionalProfile && !hasProfiles)
+            throw new ApplicationFailure(FailureKind.Validation,
+                "Finish your first profile before adding another profile.", code: "FirstProfileRequired");
+        var owned = memberships.SingleOrDefault(x => x.Role == request.Role);
+        if (owned is not null)
+        {
+            if (!owned.IsActive)
+                throw new ApplicationFailure(FailureKind.Forbidden,
+                    "This profile is unavailable. Contact Weymela support for review.", code: "ProfileUnavailable");
+            var prior = priorRequests.FirstOrDefault(x => x.RequestedRole == request.Role && x.Status == RoleEnrollmentStatus.Approved);
+            RoleEnrollmentSummary summary;
+            if (prior is not null) summary = Summary(prior) with { AlreadyOwned = true };
+            else
+            {
+                var profile = await db.PublicWorkspaceProfiles.AsNoTracking()
+                    .SingleAsync(x => x.SubjectId == owned.SubjectId && x.Role == request.Role, ct);
+                summary = new(owned.SubjectId, request.Role, RoleEnrollmentStatus.Approved, profile.DisplayName,
+                    profile.PublicId, default, null, null, 1, AlreadyOwned: true);
+            }
+            await tx.CommitAsync(ct);
+            return summary;
+        }
+        var pending = priorRequests.FirstOrDefault(x => x.RequestedRole == request.Role && x.Status == RoleEnrollmentStatus.Pending);
+        if (pending is not null) { await tx.CommitAsync(ct); return Summary(pending); }
+        if (intent == ProfileEnrollmentIntent.FirstProfile && hasProfiles)
+            throw new ApplicationFailure(FailureKind.Validation,
+                "Your account is already registered. Use Add Profile to continue with the same identity.", code: "UseAddProfile");
+        // Old clients used /profile for both flows and may send an old signup phone.
+        // Adding a profile always reuses server-owned identifiers, never form credentials.
+        if (hasProfiles || intent == ProfileEnrollmentIntent.AdditionalProfile) registeredPhone = null;
         if (options?.EnvironmentName == "Production" && !options.LegalConsentDeferred)
             foreach (var type in new[] { LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy })
                 foreach (var language in new[] { "en", "am" })
@@ -267,26 +326,14 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
         if (!await db.AuthIdentifiers.AsNoTracking().AnyAsync(x => x.UserId == userId
                 && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null, ct))
             throw new ApplicationFailure(FailureKind.Forbidden, "Verify your email before registering a phone number.");
-        var hash = EmailAuthService.HashIdentifier(phone);
-        var claimed = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
-            && x.IdentifierHash == hash, ct);
-        if (claimed is not null && claimed.UserId != userId)
-            throw new ApplicationFailure(FailureKind.Validation,
-                "This phone number is already in use. Sign in to the existing account or use a different number.",
-                code: "PhoneUnavailable");
-        var existing = await db.AuthIdentifiers.AsTracking().Where(x => x.UserId == userId && x.Kind == "Phone").ToListAsync(ct);
-        if (existing.Count > 1 || existing.Count == 1 && existing[0].IdentifierHash != hash)
-            throw new ApplicationFailure(FailureKind.Validation, "Use the phone number already registered to this account.");
-        if (existing.Count == 0)
-            db.AuthIdentifiers.Add(new AuthIdentifierRecord
-            {
-                UserId = userId,
-                Kind = "Phone",
-                IdentifierHash = hash,
-                DeliveryAddress = phone,
-                IsVerified = false,
-                CreatedAtUtc = clock.GetUtcNow().UtcDateTime
-            });
+        await RegistrationPhone.EnsureAsync(db, userId, phone, clock.GetUtcNow().UtcDateTime, ct);
+    }
+
+    private static bool HasPostgresCode(Exception error, string code)
+    {
+        for (Exception? current = error; current is not null; current = current.InnerException)
+            if (current is PostgresException postgres && postgres.SqlState == code) return true;
+        return false;
     }
 
     private async Task<string> NewCustomerPublicIdAsync(CancellationToken ct)

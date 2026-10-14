@@ -37,7 +37,8 @@ public sealed class PlatformRevenueRepository(WeymelaDbContext db)
         // Status on old domain entries is descriptive; settlement records determine actual settled amount.
         var entries = await db.PlatformRevenueEntries.AsNoTracking().Select(x => x.Amount).ToListAsync(ct);
         var settlements = await db.PlatformSettlements.AsNoTracking().Select(x => x.Amount).ToListAsync(ct);
-        var accrued = new Money(entries.Sum(x => x.Amount));
+        var corrections = await db.UgcPaymentCorrections.AsNoTracking().Select(x => x.PlatformFee).ToListAsync(ct);
+        var accrued = new Money(entries.Sum(x => x.Amount) - corrections.Sum(x => x.Amount));
         var settled = new Money(settlements.Sum(x => x.Amount));
         return new(accrued, settled, accrued.Subtract(settled));
     }

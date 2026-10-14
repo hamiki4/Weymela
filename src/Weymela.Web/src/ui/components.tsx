@@ -195,6 +195,7 @@ export function Resource<T>({
     loading: boolean;
     error: Error | null;
     reload: () => void;
+    path?: string;
   };
   children: (data: T) => ReactNode;
 }) {
@@ -240,7 +241,8 @@ export function Resource<T>({
       </Section>
     );
   return resource.data === null ? null : (
-    <div aria-busy={resource.loading}>
+    <div aria-busy={resource.loading} data-notification-resource={!resource.loading && !resource.error
+      ? resource.path?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ig)?.join("|") ?? "" : undefined}>
       {resource.error && <Notice error>{resource.error.message}</Notice>}
       {children(resource.data)}
     </div>
@@ -522,7 +524,7 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={rowKey(row)}>
+              <tr key={rowKey(row)} data-notification-resource={rowKey(row)}>
                 {columns.map((c) => (
                   <td key={c.label} className={c.numeric ? "numeric" : ""}>
                     {c.cell(row)}
@@ -535,7 +537,7 @@ export function DataTable<T>({
       </div>
       <div className="mobile-data card-stack">
         {rows.map((row) => (
-          <article className="data-card" key={rowKey(row)}>
+          <article className="data-card" key={rowKey(row)} data-notification-resource={rowKey(row)}>
             {card(row)}
           </article>
         ))}

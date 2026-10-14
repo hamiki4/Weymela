@@ -268,6 +268,7 @@ export const routes: Record<string, unknown> = {
   ],
   "/business/pricing": businessPricing,
   "/business/ugc-pricing": ugcPricing,
+  "/business/promotion-management": [{ key:"campaign-campaign",id:"campaign",campaignId:"campaign",kind:"ViewPlusCommission",title:campaign.title,group:"Active",status:"Active",budget:campaign.campaignBudget,remaining:campaign.remaining,dueAtUtc:campaign.endUtc,primaryAction:"Manage campaign",actionPath:"/business/campaigns/campaign",creator:null,remainingDays:null }],
   "/business/campaigns": [campaign],
   "/business/campaigns/campaign": detail,
   "/business/promotion-content-submissions": [],

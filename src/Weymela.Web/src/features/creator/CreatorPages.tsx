@@ -70,7 +70,7 @@ export function CreatorHowYouEarn() {
                   </dl>
                 </article>
               ))}
-              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Earn the net amount shown on each UGC opportunity when your content is approved.</p></article>
+              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Earn the agreed fixed UGC fee when approved content is verified published and goes live. No minimum views are required for this fixed fee.</p></article>
             </div>
             <div className="threshold-note">
               <strong>
@@ -126,30 +126,34 @@ export function CreatorEarnings() {
             <Section title="Available Earnings" className="creator-earnings-summary">
                 <Eligibility data={data} />
             </Section>
+            <div className="metric-grid"><Section title="Pending Earnings"><strong>{amount(data.pendingEarnings ?? 0)} ETB</strong>
+              <p className="fine-print">Agreed UGC payments awaiting verified Go Live.</p></Section>
+              <Section title="Paid Out"><strong>{amount(data.paidOut ?? 0)} ETB</strong><p className="fine-print">Confirmed external payouts.</p></Section></div>
             <Section title="Payout Destination"><PayoutDestinationForm endpoint="/creator/payout-destination" /></Section>
-            <Section title="Earning History" action={<Currency />}>
+            <Section title="Transaction History" action={<Currency />}>
                 <DataTable
                   rows={data.history}
                   rowKey={(r) => r.id}
-                  label="Earning History"
+                  label="Transaction History"
                   columns={[
                     { label: "Business", cell: (r) => r.business ?? r.campaign },
                     { label: "Earning Type", cell: (r) => r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source },
                     {
-                      label: "Amount Earned",
-                      cell: (r) => `+${amount(r.amount)} ETB`,
+                      label: "Amount",
+                      cell: (r) => `${r.amount >= 0 ? "+" : ""}${amount(r.amount)} ETB`,
                       numeric: true,
                     },
                     { label: "Date/Time", cell: (r) => dateTime(r.atUtc) },
+                    { label: "Status", cell: (r) => r.status ?? "Earned" },
                   ]}
                   card={(r) => (
                     <>
                       <div className="card-head">
                         <strong>{r.business ?? r.campaign}</strong>
-                        <strong>+{amount(r.amount)} ETB</strong>
+                        <strong>{r.amount >= 0 ? "+" : ""}{amount(r.amount)} ETB</strong>
                       </div>
                       <p className="fine-print">
-                        {r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source} · {dateTime(r.atUtc)} · {r.campaign}
+                        {r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source} · {dateTime(r.atUtc)} · {r.status ?? "Earned"} · {r.campaign}
                       </p>
                     </>
                   )}

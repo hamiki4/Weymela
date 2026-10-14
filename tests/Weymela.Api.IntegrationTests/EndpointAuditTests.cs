@@ -110,4 +110,23 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
         using var other=await host.Login("other-creator"); Assert.Equal(HttpStatusCode.NotFound,(await other.Post($"/api/notifications/{id}/read",new{})).StatusCode);
         var list=await other.GetJson("/api/notifications"); Assert.DoesNotContain("Private update",list.ToJsonString());
     }
+    [Fact] public async Task Related_notification_read_and_business_tracking_use_active_role_authority()
+    {
+        await using var host=await ApiFixture.CreateAsync(fixture);
+        var creator=new DevelopmentDirectory().Personas.Single(x=>x.Alias=="creator").Actor;var item=Guid.NewGuid();
+        await using(var db=host.Database.Open()) {
+            db.InAppNotifications.Add(new Weymela.Infrastructure.Persistence.Records.InAppNotification {
+                UserId=creator.UserId,Role=creator.Role,SourceKey="displayed",EventType="Test",Title="Item",Message="Item",Route="/creator/earnings",RelatedResourceIds=[item],CreatedAtUtc=DateTime.UtcNow});await db.SaveChangesAsync();
+        }
+        using var other=await host.Login("other-creator");
+        Assert.Equal(HttpStatusCode.OK,(await other.Post("/api/notifications/read-related",new{displayedIds=new[]{item}})).StatusCode);
+        using var owner=await host.Login("creator");
+        Assert.Equal(1,(await owner.GetJson("/api/notifications"))["unreadCount"]!.GetValue<int>());
+        Assert.Equal(HttpStatusCode.OK,(await owner.Post("/api/notifications/read-related",new{displayedIds=new[]{item}})).StatusCode);
+        Assert.Equal(0,(await owner.GetJson("/api/notifications"))["unreadCount"]!.GetValue<int>());
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.Post("/api/notifications/read-related",new{displayedIds=new[]{Guid.Empty}})).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await owner.GetAsync("/api/business/promotion-management")).StatusCode);
+        using var business=await host.Login("business");Assert.Equal(HttpStatusCode.OK,(await business.GetAsync("/api/business/promotion-management")).StatusCode);
+    }
+
 }

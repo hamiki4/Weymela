@@ -16,7 +16,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
         var config = await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime, ct);
         var threshold = config.RequirePayoutThreshold(kind);
         var available = kind == PayoutBeneficiary.Creator
-            ? (await db.CreatorEarningsAccounts.SingleOrDefaultAsync(x => x.CreatorId == subject, ct))?.AvailableEarnings ?? Money.Zero()
+            ? await CreatorEarnedBalance.AvailableAsync(db, subject, ct)
             : (await db.CustomerCashbackAccounts.SingleOrDefaultAsync(x => x.CustomerId == subject, ct))?.AvailableCashback ?? Money.Zero();
         return new(kind, subject, available, threshold, available.Amount >= threshold.Amount ? threshold : Money.Zero(), config.Id);
     }
@@ -68,7 +68,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
             if (payout.Beneficiary == PayoutBeneficiary.Creator)
             {
                 var account = await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == payout.CreatorId, token);
-                if (account.AvailableEarnings.Amount < payout.Amount.Amount) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds the current available balance.");
+                if ((await CreatorEarnedBalance.AvailableAsync(db, payout.CreatorId!.Value, token)).Amount < payout.Amount.Amount) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds verified available earnings.");
                 account.Pay(payout.Amount, clock.GetUtcNow().UtcDateTime, Guid.NewGuid());
             }
             else

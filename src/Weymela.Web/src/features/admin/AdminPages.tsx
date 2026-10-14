@@ -142,7 +142,7 @@ export function AdminRoleEnrollments() {
   const [reason, setReason] = useState("");
   return <><PageHeader title="Profile requests" compact />
     <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map(row =>
-      <article className="admin-profile-request" key={row.id}>
+      <article className="admin-profile-request" key={row.id} data-notification-resource={row.id}>
         <div><strong>{actorRoleNameFromWire(row.role)} · {row.displayName}</strong>{row.fullEmail && <small className="admin-account-email">{row.fullEmail}</small>}<small>Submitted {date(row.submittedAtUtc)}</small></div>
         {(row.category || row.region || row.submission) && <div className="admin-profile-details">
           {row.category && <span>{actorRoleNameFromWire(row.role) === "Business" ? "Business type" : "Category"}: {row.category}</span>}

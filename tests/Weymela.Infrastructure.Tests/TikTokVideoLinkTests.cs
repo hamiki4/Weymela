@@ -34,14 +34,18 @@ public sealed class TikTokVideoLinkTests
     }
 
     [Theory]
+    [InlineData("https://m.tiktok.com/@creator/video/7412345678901234567?is_from_webapp=1", "https://www.tiktok.com/@creator/video/7412345678901234567")]
+    [InlineData("https://www.tiktok.com/t/ZMabcdef?redirect=https://evil.test", "https://www.tiktok.com/t/ZMabcdef")]
+    public void Share_parameters_are_removed_before_any_network_request(string value, string expected)
+        => Assert.Equal(expected, TikTokVideoLink.Normalize(value));
+
+    [Theory]
     [InlineData("http://www.tiktok.com/@creator/video/7412345678901234567")]
     [InlineData("https://example.com/@creator/video/7412345678901234567")]
     [InlineData("https://www.tiktok.com/@creator/video/123")]
-    [InlineData("https://www.tiktok.com/@creator/video/7412345678901234567?redirect=https://example.com")]
     [InlineData("https://www.tiktok.com/@creator/video/7412345678901234567#fragment")]
     [InlineData("https://www.tiktok.com.evil.test/t/ZMabcdef")]
     [InlineData("https://www.tiktok.com/t/short")]
-    [InlineData("https://www.tiktok.com/t/ZMabcdef?redirect=https://evil.test")]
     [InlineData("https://vm.tiktok.com/@creator/video/7412345678901234567")]
     public void Rejects_unsafe_or_unsupported_links(string value)
     {

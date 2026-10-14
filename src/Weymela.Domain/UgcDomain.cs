@@ -126,6 +126,15 @@ public sealed class UgcOpportunity
         UsedFunding = UsedFunding.Add(amount); Version++;
         if (UsedFunding.Amount == RequiredFunding.Amount) { Status = UgcOpportunityStatus.Completed; CompletedAtUtc = now; }
     }
+    public void RestoreUnpublishedDeliverable(BusinessWallet wallet, Money amount)
+    {
+        if (amount.Amount <= 0 || amount.Amount > UsedFunding.Amount
+            || Status is not (UgcOpportunityStatus.InProgress or UgcOpportunityStatus.Completed))
+            throw new InvalidOperationException("Only an unspent premature UGC payment can return to reserve.");
+        wallet.RestoreConsumedReserve(amount);
+        UsedFunding = UsedFunding.Subtract(amount); ReservedFunding = ReservedFunding.Add(amount);
+        Status = UgcOpportunityStatus.InProgress; CompletedAtUtc = null; Version++;
+    }
     public void UpdateNonMaterial(string? slogan, string instructions, string resourcesJson, string? location,
         string? usageRights)
     {
@@ -309,7 +318,9 @@ public sealed class UgcAssignment
     public void AcceptRevision(int revision) { if (!RevisionAcceptanceRequired || revision <= AcceptedRevisionNumber) throw new InvalidOperationException("No newer UGC revision requires acceptance."); AcceptedRevisionNumber = revision; RevisionAcceptanceRequired = false; Version++; }
     public void Submitted() { if (RevisionAcceptanceRequired || Status is not (UgcAssignmentStatus.InProgress or UgcAssignmentStatus.ChangesRequested)) throw new InvalidOperationException("UGC assignment cannot be submitted."); Status = UgcAssignmentStatus.Submitted; Version++; }
     public void RequestChanges() { if (Status != UgcAssignmentStatus.Submitted) throw new InvalidOperationException("Only submitted UGC can require changes."); Status = UgcAssignmentStatus.ChangesRequested; Version++; }
-    public void Approve(DateTime now) { if (Status != UgcAssignmentStatus.Submitted) throw new InvalidOperationException("Only submitted UGC can be approved."); Status = UgcAssignmentStatus.Approved; CompletedAtUtc = now; Version++; }
+    public void Approve(DateTime now) { if (Status != UgcAssignmentStatus.Submitted) throw new InvalidOperationException("Only submitted UGC can be approved."); Status = UgcAssignmentStatus.Approved; Version++; }
+    public void CompletePublication(DateTime now) { if (Status != UgcAssignmentStatus.Approved) throw new InvalidOperationException("Business approval is required."); CompletedAtUtc = now; Version++; }
+    public void RestorePendingPublication() { if (Status != UgcAssignmentStatus.Approved) throw new InvalidOperationException("Only approved work can await publication."); CompletedAtUtc = null; Version++; }
     public void Reject(DateTime now) { if (Status != UgcAssignmentStatus.Submitted) throw new InvalidOperationException("Only submitted UGC can be rejected."); Status = UgcAssignmentStatus.Rejected; CompletedAtUtc = now; Version++; }
 }
 

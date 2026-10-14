@@ -151,6 +151,9 @@ export async function createPublishedUgc(
   });
 
   await login(context, creatorAlias);
+  const earningsBefore = await apiJson<{ availableEarnings: number; pendingEarnings: number }>(context, "/creator/earnings");
+  const assignmentRows = await apiJson<{ id: string; creatorPayment: number }[]>(context, "/creator/ugc/assignments");
+  const fixedFee = assignmentRows.find(row => row.id === approved.id)!.creatorPayment;
   const upload = await context.request.post(`/api/creator/ugc/assignments/${approved.id}/submit-review`, {
     headers: { ...requestHeaders, "Idempotency-Key": crypto.randomUUID() },
     multipart: {
@@ -163,6 +166,9 @@ export async function createPublishedUgc(
   await apiPost(context, `/business/ugc/assignments/${approved.id}/review/approve`, { reason: null });
 
   await login(context, creatorAlias);
+  const afterApproval = await apiJson<{ availableEarnings: number; pendingEarnings: number }>(context, "/creator/earnings");
+  expect(afterApproval.availableEarnings).toBe(earningsBefore.availableEarnings);
+  expect(afterApproval.pendingEarnings).toBeGreaterThanOrEqual(fixedFee);
   const publicPostId = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
   const publication = await apiPost<{ status: string }>(context, `/creator/ugc/assignments/${approved.id}/publication`, {
     provider: "TikTok",
@@ -170,7 +176,13 @@ export async function createPublishedUgc(
     creatorSocialProfileId: profile!.id,
   });
   expect(publication.status).toBe("Verified");
+  const beforeGoLive = await apiJson<{ availableEarnings: number }>(context, "/creator/earnings");
+  expect(beforeGoLive.availableEarnings).toBe(earningsBefore.availableEarnings);
   await apiPost(context, `/creator/ugc/assignments/${approved.id}/go-live`, {});
+  await apiPost(context, `/creator/ugc/assignments/${approved.id}/go-live`, {});
+  const earned = await apiJson<{ availableEarnings: number; pendingEarnings: number }>(context, "/creator/earnings");
+  expect(earned.availableEarnings).toBeCloseTo(earningsBefore.availableEarnings + fixedFee, 2);
+  expect(earned.pendingEarnings).toBeCloseTo(earningsBefore.pendingEarnings - fixedFee, 2);
   return opportunityId;
 }
 export async function open(page: Page, path: string, allowedAlerts: readonly string[] = []) {

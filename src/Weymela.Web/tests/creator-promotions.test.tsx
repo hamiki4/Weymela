@@ -97,9 +97,10 @@ describe("Creator Promotions work groups", () => {
 
   it("unifies UGC assignments and requests while preserving status, type and submission", async () => {
     const api = mockApi({ "/creator/campaigns": [promotion("Promotion work", "Approved")], "/creator/requests": [],
-      "/creator/ugc/assignments": [assignment("UGC active", "ChangesRequested"), assignment("UGC done", "Approved")],
+      "/creator/ugc/assignments": [assignment("UGC active", "ChangesRequested"), { ...assignment("UGC done", "Approved"), publication: { id:"publication", provider:"TikTok", externalContentId:"7412345678901234567", status:"Verified", verificationLabel:"Verified", requestedAtUtc:"2026-10-01T00:00:00Z", verifiedAtUtc:"2026-10-01T00:00:00Z", wentLiveAtUtc:"2026-10-01T00:00:00Z",watchUrl:null } }],
       "/creator/ugc/requests": [ugcRequest("UGC active", "Approved"), ugcRequest("UGC pending", "Pending"), ugcRequest("UGC declined", "Rejected")],
       "/creator/ugc/UGC active": ugcDetail("UGC active", true),
+      "/creator/social-accounts": [],
       "/creator/ugc/UGC done": ugcDetail("UGC done"),
       "/creator/ugc/UGC pending": ugcDetail("UGC pending"),
       "/creator/ugc/UGC declined": ugcDetail("UGC declined"),
@@ -126,4 +127,20 @@ describe("Creator Promotions work groups", () => {
     await userEvent.click(within(declinedRow).getByText("View details", { exact: true, selector: "summary" }));
     expect(within(declinedRow).getByText("Capacity reached")).toBeVisible();
   });
+  it("keeps approved legacy UGC pending and lets its owner select an existing publication profile", async () => {
+    const api=mockApi({"/creator/campaigns":[],"/creator/requests":[],"/creator/ugc/requests":[],
+      "/creator/ugc/assignments":[assignment("approved-ugc","Approved")],
+      "/creator/ugc/approved-ugc":ugcDetail("approved-ugc"),
+      "/creator/social-accounts":[{id:"own-tiktok",platform:"TikTok",profileUrl:"https://www.tiktok.com/@mimi"}]});
+    mount();const row=(await screen.findByRole("heading",{name:"approved-ugc"})).closest("article")!;
+    expect(within(row).getByText(/Pending earnings 300/)).toBeVisible();
+    await userEvent.click(within(row).getByText("View details",{selector:"summary"}));
+    await userEvent.selectOptions(within(row).getByLabelText("Publication profile"),"own-tiktok");
+    const link=within(row).getByLabelText("TikTok Video Link");expect(link).toHaveAttribute("maxlength","1000");
+    await userEvent.type(link,"https://www.tiktok.com/t/ZMabcdef?share=1");
+    await userEvent.click(within(row).getByRole("button",{name:"Verify Publication"}));
+    await waitFor(()=>expect(api.writes[0]).toMatchObject({path:"/creator/ugc/assignments/approved-ugc/publication",body:{provider:"TikTok",creatorSocialProfileId:"own-tiktok",externalContentId:"https://www.tiktok.com/t/ZMabcdef?share=1"}}));
+    expect(screen.queryByText("Live for Customers.")).not.toBeInTheDocument();
+  });
+
 });

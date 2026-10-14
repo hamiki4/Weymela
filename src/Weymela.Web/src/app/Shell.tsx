@@ -10,6 +10,7 @@ import type { Role, SessionProfile } from "../api/types";
 import { Button } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { adminActionCountsChangedEvent, notificationsChangedEvent, primeResources, useResource } from "../api/client";
+import { DisplayedNotifications } from "../features/notifications/DisplayedNotifications";
 import { roleHome, useSession } from "./Session";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { routeResources } from "./routeResources";
@@ -108,9 +109,11 @@ export function Shell({ children }: { children?: ReactNode }) {
     const refresh = () => notifications.reload();
     window.addEventListener(notificationsChangedEvent, refresh);
     window.addEventListener("focus", refresh);
+    const interval = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 15000);
     return () => {
       window.removeEventListener(notificationsChangedEvent, refresh);
       window.removeEventListener("focus", refresh);
+      window.clearInterval(interval);
     };
   }, [notifications.reload]);
   const navigationSequence = useRef(0);
@@ -184,7 +187,7 @@ export function Shell({ children }: { children?: ReactNode }) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
     const target = event.target;
     const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>("a[href]") : null;
-    if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
+    if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.hasAttribute("data-notification-open")) return;
     const destination = new URL(anchor.href, window.location.href);
     if (destination.origin !== window.location.origin || destination.pathname === location.pathname) return;
     const resources = routeResources(destination.pathname);
@@ -202,6 +205,7 @@ export function Shell({ children }: { children?: ReactNode }) {
   };
   return (
     <div onClickCapture={prepareNavigation} className={`app-shell role-${user.role.toLowerCase()}${isProductRole || user.role === "Cashier" ? " product-shell" : ""}`}>
+      <DisplayedNotifications profileKey={user.activeProfileKey} pathname={location.pathname} />
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>

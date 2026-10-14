@@ -4,7 +4,7 @@ export function normalizeTikTokVideoLink(value: string): string | null {
   if (!raw || raw.length > 1000) return null;
   let url: URL;
   try { url = new URL(raw); } catch { return null; }
-  if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return null;
+  if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) return null;
   const host = url.hostname.toLowerCase();
   if (["www.tiktok.com", "tiktok.com", "m.tiktok.com"].includes(host)) {
     const canonical = url.pathname.match(/^\/@([A-Za-z0-9._-]{1,50})\/video\/([0-9]{6,30})\/?$/);

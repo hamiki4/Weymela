@@ -18,6 +18,7 @@ public sealed class WeymelaDbContext(DbContextOptions<WeymelaDbContext> options)
     public DbSet<UgcRevision> UgcRevisions => Set<UgcRevision>();
     public DbSet<UgcCreatorRequest> UgcCreatorRequests => Set<UgcCreatorRequest>();
     public DbSet<UgcAssignment> UgcAssignments => Set<UgcAssignment>();
+    public DbSet<UgcPaymentCorrection> UgcPaymentCorrections => Set<UgcPaymentCorrection>();
     public DbSet<UgcSubmission> UgcSubmissions => Set<UgcSubmission>();
     public DbSet<PrivateReviewMediaAsset> PrivateReviewMediaAssets => Set<PrivateReviewMediaAsset>();
     public DbSet<CreatorPublicationVerification> CreatorPublicationVerifications => Set<CreatorPublicationVerification>();

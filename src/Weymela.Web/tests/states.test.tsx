@@ -85,13 +85,13 @@ describe("Shared designed states and accessibility", () => {
     ).toBeVisible();
   });
   it("keeps one Promotion creation action above an empty Business list", async () => {
-    mockApi({ "/business/campaigns": [] });
+    mockApi({ "/business/promotion-management": [] });
     render(
       <MemoryRouter>
         <BusinessCampaigns />
       </MemoryRouter>,
     );
-    expect(await screen.findByText("No Promotions yet.")).toBeVisible();
+    expect(await screen.findByText("No active promotions")).toBeVisible();
     expect(
       screen.getAllByRole("link", { name: "Create Promotion" }).length,
     ).toBe(1);

@@ -101,8 +101,9 @@ internal sealed class TestClock : TimeProvider
     public DateTime Now { get; set; } = Scenario.Now;
     public override DateTimeOffset GetUtcNow() => new(Now);
 }
-internal sealed class TestViews(TestClock clock) : IVerifiedViewProvider
+internal sealed class TestViews(TestClock clock) : IVerifiedViewProvider, IVerifiedPublicationProvider
 {
+    public Task<VerifiedViewResult> VerifyPublicationAsync(VerifiedViewRequest request, CancellationToken ct) => VerifyAsync(request, ct);
     public long Count { get; set; } = 1000;
     public Task<VerifiedViewResult> VerifyAsync(VerifiedViewRequest request, CancellationToken ct) =>
         Task.FromResult(new VerifiedViewResult(Count, request.Provider, request.ExternalContentId, clock.Now, "test-evidence"));

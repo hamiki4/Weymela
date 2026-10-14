@@ -15,6 +15,7 @@ namespace Weymela.Api.Endpoints;
 
 internal static class OperationalEndpoints
 {
+    private sealed record NotificationReadInput(IReadOnlyList<Guid> DisplayedIds, string? DisplayedPath = null);
     private sealed record LegalConsent(string ContentHash, bool Confirmed);
     private sealed record BusinessLocationInput(string? Address, string? DirectionsUrl, decimal? Latitude, decimal? Longitude);
     public static void MapOperationalEndpoints(this WebApplication app)
@@ -67,6 +68,8 @@ internal static class OperationalEndpoints
         {await service.ReadAsync(EndpointSupport.Actor(c),id,ct);return Results.NoContent();});
         workspace.MapPost("/notifications/read-all",async(HttpContext c,NotificationService service,CancellationToken ct)=>
         {await service.ReadAllAsync(EndpointSupport.Actor(c),ct);return Results.NoContent();});
+        workspace.MapPost("/notifications/read-related",async(NotificationReadInput input,HttpContext c,NotificationService service,CancellationToken ct)=>
+            Results.Ok(new { unreadCount = await service.ReadRelatedAsync(EndpointSupport.Actor(c), input.DisplayedIds, ct, input.DisplayedPath) }));
         workspace.MapGet("/legal/current",(HttpContext c,LegalWorkspaceService service,CancellationToken ct)=>service.CurrentAsync(EndpointSupport.Actor(c),ct));
         workspace.MapGet("/legal/{id:guid}/content",async(Guid id,HttpContext c,LegalWorkspaceService service,CancellationToken ct)=>
         {

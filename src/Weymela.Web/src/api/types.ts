@@ -382,6 +382,7 @@ export interface PublicationStatus {
   verifiedAtUtc: string | null;
   wentLiveAtUtc: string | null;
   watchUrl: string | null;
+  verificationCode?: string | null;
 }
 export interface AdminPublicationReview {
   id: string;
@@ -410,6 +411,8 @@ export interface Payout {
 }
 export interface Earnings {
   availableEarnings: number;
+  pendingEarnings?: number;
+  paidOut?: number;
   minimumToCashOut: number | null;
   amountNeeded: number | null;
   eligibleAmount: number;

@@ -74,6 +74,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
     v3."RetiredSupportSessions",
+    v3."UgcPaymentCorrections",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
     v3."UgcCustomerOfferBudgetEntries",
@@ -189,6 +190,8 @@ ON TABLE v3."PromotionViewVerifications" TO :"api_role";
 -- verification observations. The API must never update or delete that evidence.
 GRANT INSERT ON TABLE v3."PromotionViewVerifications" TO :"api_role";
 
+GRANT SELECT ON TABLE v3."UgcPaymentCorrections" TO :"api_role";
+
 GRANT SELECT ON TABLE
     v3."WorkerCheckpoints"
 TO :"api_role";
@@ -228,5 +231,8 @@ REVOKE EXECUTE ON FUNCTION v3.assign_creator_number() FROM PUBLIC, :"api_role";
 GRANT EXECUTE ON FUNCTION v3.check_wallet_journal() TO :"api_role";
 GRANT EXECUTE ON FUNCTION v3.check_earned_account() TO :"api_role";
 GRANT EXECUTE ON FUNCTION v3.guard_notification_identity() TO :"api_role";
+
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_payment_correction() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_publication_earning() FROM PUBLIC;
 
 COMMIT;

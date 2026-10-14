@@ -277,7 +277,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(31, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(32, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -819,7 +819,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20261001043831_AddAdminVerifiedAudienceAndEnforcement",
             "20261006050542_CompleteCreatorCollaborationWorkflow",
             "20261007041919_AlignFinancialUatFlows",
-            "20261012042110_SeparateProductFinancialConfiguration"
+            "20261012042110_SeparateProductFinancialConfiguration",
+            "20261014203304_StabilizePublicationPaymentsAndNotificationReads"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='v3' AND c.relkind='S' AND c.relname='creator_number_seq'";
@@ -916,7 +917,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(31L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(32L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

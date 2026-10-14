@@ -114,7 +114,7 @@ public sealed partial class WorkspaceQueries
         DemandPlatformAdmin(actor);var platform=await new PlatformRevenueRepository(db).SummaryAsync(ct);
         return new(await db.BusinessWallets.CountAsync(ct),await db.CommercePermissions.Where(x=>x.Role==ActorRole.Creator).Select(x=>x.SubjectId).Distinct().CountAsync(ct),
             await db.Promotions.CountAsync(x=>x.Status==PromotionStatus.Active,ct),(await db.Promotions.Select(x=>x.UsedBudget).ToListAsync(ct)).Sum(x=>x.Amount),
-            (await db.CreatorEarningEntries.Select(x=>x.Amount).ToListAsync(ct)).Sum(x=>x.Amount),(await db.CustomerCashbackEntries.Select(x=>x.Amount).ToListAsync(ct)).Sum(x=>x.Amount),
+            (await db.CreatorEarningEntries.Select(x=>x.Amount).ToListAsync(ct)).Sum(x=>x.Amount) - (await db.UgcPaymentCorrections.Select(x=>x.CreatorAmount).ToListAsync(ct)).Sum(x=>x.Amount),(await db.CustomerCashbackEntries.Select(x=>x.Amount).ToListAsync(ct)).Sum(x=>x.Amount),
             platform.Accrued.Amount,await History(null,ct));
     }
     public async Task<IReadOnlyList<CampaignRow>> AdminCampaignsAsync(Actor actor,CancellationToken ct)
@@ -205,7 +205,8 @@ public sealed partial class WorkspaceQueries
         {
             if (version.CreatorPayoutThreshold is not { } creatorThreshold) break;
             var pending=records.SingleOrDefault(x=>x.CreatorId==a.CreatorId&&x.Status==PayoutStatus.Eligible);
-            if(a.AvailableEarnings.Amount<creatorThreshold.Amount&&pending is null)continue;
+            var available = (await CreatorEarnedBalance.AvailableAsync(db, a.CreatorId, ct)).Amount;
+            if(available<creatorThreshold.Amount)continue;
             var name=(await directory.CreatorCardAsync(a.CreatorId,ct)).DisplayName;
             var since=await EligibleSince(PayoutBeneficiary.Creator,a.CreatorId,creatorThreshold.Amount,version.EffectiveFromUtc,ct);
             destinations.TryGetValue((PayoutBeneficiary.Creator,a.CreatorId),out var destination);
@@ -213,7 +214,7 @@ public sealed partial class WorkspaceQueries
             var provider=pending?.DestinationProvider??destination?.Provider;
             var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
             var account=protectedAccount is null||payoutProtector is null?null:PayoutDestinationService.DisplayUnprotected(payoutProtector.Unprotect(protectedAccount));
-            creators.Add(new(a.CreatorId,pending?.Id,name,a.AvailableEarnings.Amount,pending?.ThresholdUsed.Amount??creatorThreshold.Amount,
+            creators.Add(new(a.CreatorId,pending?.Id,name,available,pending?.ThresholdUsed.Amount??creatorThreshold.Amount,
                 pending?.Amount.Amount??creatorThreshold.Amount,pending?.EligibleAtUtc??since,
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
@@ -238,6 +239,7 @@ public sealed partial class WorkspaceQueries
         var credits=kind==PayoutBeneficiary.Creator
             ?(await db.CreatorEarningEntries.Where(x=>x.CreatorId==id).ToListAsync(ct)).Select(x=>(At:x.CreatedAtUtc,Amount:x.Amount.Amount)).ToList()
             :(await db.CustomerCashbackEntries.Where(x=>x.CustomerId==id).ToListAsync(ct)).Select(x=>(At:x.CreatedAtUtc,Amount:x.Amount.Amount)).ToList();
+        if(kind==PayoutBeneficiary.Creator) credits.AddRange((await db.UgcPaymentCorrections.Where(x=>x.CreatorId==id).ToListAsync(ct)).Select(x=>(At:x.CreatedAtUtc,Amount:-x.CreatorAmount.Amount)));
         credits.AddRange((await db.PayoutRecords.Where(x=>(x.CreatorId==id||x.CustomerId==id)&&x.Status==PayoutStatus.Paid).ToListAsync(ct)).Select(x=>(x.PaidAtUtc!.Value,-x.Amount.Amount)));
         decimal balance=0;DateTime? since=null;
         foreach(var m in credits.OrderBy(x=>x.At)) { var before=balance;balance+=m.Amount;if(balance<threshold)since=null;else if(before<threshold)since=m.At>effective?m.At:effective; }

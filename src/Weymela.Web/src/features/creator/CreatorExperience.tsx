@@ -527,8 +527,7 @@ function workItems(campaigns: CreatorCampaign[], requests: CreatorRequest[],
     })),
     ...assignments.map((row): CreatorWorkItem => ({
       kind: "ugcAssignment", row, key: `ugc-assignment-${row.id}`,
-      group: row.status === "Rejected" || (row.status === "Approved"
-        && (!row.selectedPlatform || row.publication?.wentLiveAtUtc)) ? "Completed" : "Active",
+      group: row.status === "Rejected" || row.publication?.wentLiveAtUtc ? "Completed" : "Active",
     })),
     ...ugcRequests.filter((row) => !assignedUgcIds.has(row.opportunityId)).map((row): CreatorWorkItem => ({
       kind: "ugcRequest", row, key: `ugc-request-${row.id}`,
@@ -569,7 +568,7 @@ export function CreatorPromotions() {
 }
 
 function PromotionRequestCard({ row }: { row: CreatorRequest }) {
-  return <article className="creator-promotion-row creator-work-row">
+  return <article className="creator-promotion-row creator-work-row" data-notification-resource={row.id}>
     <div className="creator-work-main">
       <div className="creator-work-top">
         <div className="creator-work-copy"><small>{row.business}</small><h3>{row.campaign}</h3></div>
@@ -596,17 +595,23 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
   const [externalContentId, setExternalContentId] = useState("");
   const [linkError, setLinkError] = useState("");
   const status = item.row.status;
+  const profiles = useResource<{ id: string; platform: string; profileUrl: string }[]>(
+    "/creator/social-accounts", assignment?.status === "Approved" && !assignment.publication?.wentLiveAtUtc && !assignment.selectedSocialProfileId);
+  const [chosenProfile, setChosenProfile] = useState("");
+  const selected = profiles.data?.find(profile => profile.id === chosenProfile);
+  const platform = assignment?.selectedPlatform ?? selected?.platform;
+  const profileId = assignment?.selectedSocialProfileId ?? selected?.id;
   const opportunity = detail.data?.opportunity;
-  return <article className="creator-promotion-row creator-work-row">
+  return <article className="creator-promotion-row creator-work-row" data-notification-resource={item.row.id}>
     <div className="creator-work-main">
       <div className="creator-work-top">
         <div className="creator-work-copy"><small>{assignment?.business ?? opportunity?.business ?? "UGC"}</small>
           <h3>{assignment?.opportunity ?? opportunity?.title ?? "Promotion"}</h3>
         </div>
-        <CreatorStatus status={status} />
+        <CreatorStatus status={status} label={status === "Approved" ? assignment?.publication?.wentLiveAtUtc ? "Published · fixed fee earned" : "Approved for publication" : undefined} />
       </div>
       <p className="creator-work-type">{opportunity?.customerOfferEnabled ? "UGC + Sale" : "UGC"}</p>
-      {assignment && <p className="creator-work-summary">Payment {amount(assignment.creatorPayment)} ETB · Due {date(assignment.dueDateUtc)}</p>}
+      {assignment && <p className="creator-work-summary">{assignment.publication?.wentLiveAtUtc ? "Earned" : "Pending earnings"} {amount(assignment.creatorPayment)} ETB · Due {date(assignment.dueDateUtc)}</p>}
       {request && <p className="creator-work-summary">Request {status.toLowerCase()}</p>}
       {detail.error && <div className="creator-work-detail-error"><span>Promotion details unavailable.</span><Button variant="secondary" onClick={detail.reload}>Retry</Button></div>}
       {assignment ? <details className="creator-work-disclosure">
@@ -616,7 +621,7 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
           {assignment.instructions && <p className="preserve-lines">{assignment.instructions}</p>}
           <p className="fine-print">{assignment.platformRequirements.length
             ? `Post on ${assignment.platformRequirements.map((requirement) => requirement.platform).join(", ")}`
-            : "Deliver content to the Business"}</p>
+            : "Publish the approved content on your own social profile"}</p>
           {assignment.feedback && <Notice>{assignment.feedback}</Notice>}
           {request?.rejectionReason && <Notice>{request.rejectionReason}</Notice>}
           {assignment.reviewMediaUrl && <div className="private-review-media">
@@ -643,24 +648,35 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
               <small>Mark review video SAMPLE • WEYMELA REVIEW ONLY. Do not publish it yet.</small>
               <Button type="submit" disabled={action.busy || !media}>{action.busy ? "Submitting…" : status === "ChangesRequested" ? "Submit Revised Content" : "Submit for Review"}</Button>
             </form>}
-          {assignment?.status === "Approved" && assignment.selectedPlatform && (!assignment.publication || ["Failed", "Expired"].includes(assignment.publication.status)) &&
-            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!externalContentId.trim() || !assignment.selectedSocialProfileId) return; void action.run(async (key) => {
+          {assignment?.status === "Approved" && (!assignment.publication || ["Failed", "Expired"].includes(assignment.publication.status)) &&
+            <form className="creator-work-submit" onSubmit={(event) => { event.preventDefault(); if (!externalContentId.trim() || !profileId || !platform) return; void action.run(async (key) => {
               await post(`/creator/ugc/assignments/${assignment.id}/publication`, {
-                provider: assignment.selectedPlatform,
+                provider: platform,
                 externalContentId: externalContentId.trim(),
-                creatorSocialProfileId: assignment.selectedSocialProfileId,
+                creatorSocialProfileId: profileId,
               }, key); setExternalContentId(""); onSubmitted();
             }); }}>
-              <label>{assignment.selectedPlatform === "TikTok" ? "TikTok Video Link" : `${assignment.selectedPlatform} post ID`}
-                <input type={assignment.selectedPlatform === "TikTok" ? "url" : "text"} inputMode={assignment.selectedPlatform === "TikTok" ? "url" : "text"} value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} placeholder={assignment.selectedPlatform === "TikTok" ? "https://www.tiktok.com/@creator/video/…" : undefined} required maxLength={100} /></label>
+              {!assignment.selectedSocialProfileId && <label>Publication profile
+                <select value={chosenProfile} onChange={event => setChosenProfile(event.target.value)} required>
+                  <option value="">Choose your social profile</option>
+                  {profiles.data?.map(profile => <option key={profile.id} value={profile.id}>{profile.platform} · {profile.profileUrl}</option>)}
+                </select>
+                {profiles.error && <Notice error>Social profiles unavailable. <Button variant="secondary" onClick={profiles.reload}>Retry</Button></Notice>}
+                {profiles.data?.length === 0 && <Link to="/creator/profile">Add your social profile</Link>}
+              </label>}
+              <label>{platform === "TikTok" ? "TikTok Video Link" : `${platform ?? "Public"} post ID`}
+                <input type={platform === "TikTok" ? "url" : "text"} inputMode={platform === "TikTok" ? "url" : "text"} value={externalContentId} onChange={(event) => setExternalContentId(event.target.value)} placeholder={platform === "TikTok" ? "https://www.tiktok.com/@creator/video/…" : undefined} required maxLength={1000} /></label>
               {assignment.selectedSocialProfileUrl && <a href={assignment.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">Selected social profile</a>}
-              <Button type="submit" disabled={action.busy || !externalContentId.trim()}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
+              <Button type="submit" disabled={action.busy || !externalContentId.trim() || !profileId}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
             </form>}
-          {assignment?.publication?.status === "VerificationPending" && <Notice>Publication verification pending.</Notice>}
+          {assignment?.publication?.status === "Failed" && <Notice error>{assignment.publication.verificationCode === "WrongCreator"
+            ? "This post does not belong to your selected Creator profile." : assignment.publication.verificationCode === "PostInaccessible"
+            ? "This post is inaccessible. Check that it is public, then try again." : "Publication verification failed. Check the post and try again."}</Notice>}
+          {assignment?.publication?.status === "VerificationPending" && <Notice>{assignment.publication.verificationLabel ?? "Publication verification pending."}</Notice>}
           {assignment?.publication?.status === "Verified" && !assignment.publication.wentLiveAtUtc && <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
             await post(`/creator/ugc/assignments/${assignment.id}/go-live`, {}, key); onSubmitted();
           })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
-          {assignment?.publication?.wentLiveAtUtc && <Notice>Live for Customers.</Notice>}
+          {assignment?.publication?.wentLiveAtUtc && <Notice>Published · fixed fee earned. External payouts are recorded separately.</Notice>}
           {action.error && <Notice error>{action.error}</Notice>}
         </div>
       </details> : request?.rejectionReason ? <details className="creator-work-disclosure">
@@ -677,8 +693,7 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
       {request?.status === "Approved" && <span>Preparing your Promotion</span>}
       {assignment?.revisionAcceptanceRequired && <span>Review updated requirements with the Business before submitting</span>}
       {assignment?.status === "ChangesRequested" && <span>Submit the requested revision</span>}
-      {assignment?.status === "Approved" && !assignment.selectedPlatform && <span>Content approved</span>}
-      {assignment?.status === "Approved" && assignment.selectedPlatform && !assignment.publication && <span>Publish the approved content, then verify it</span>}
+      {assignment?.status === "Approved" && !assignment.publication && <span>Publish the approved content, then verify it</span>}
       {assignment?.publication?.status === "VerificationPending" && <span>Waiting for publication verification</span>}
       {assignment?.publication?.status === "Verified" && !assignment.publication.wentLiveAtUtc && <span>Ready to Go Live</span>}
     </div>
@@ -689,7 +704,7 @@ function PromotionParticipationCard({ row, onChanged }: { row: CreatorCampaign; 
   const action = useAction();
   const state = row.status;
   const canGoLive = state === "ReadyToGoLive" && row.contentReviewStatus === "Approved" && !row.participationId;
-  return <article className="creator-promotion-row creator-work-row">
+  return <article className="creator-promotion-row creator-work-row" data-notification-resource={row.budgetId}>
     <div className="creator-work-main">
       <div className="creator-work-top">
         <div className="creator-work-copy"><small>{row.business.displayName}</small><h3>{row.title}</h3></div>

@@ -55,6 +55,7 @@ public sealed class OutboxProcessor(WeymelaDbContext db, RuntimeOptions options,
             foreach (var recipient in recipients.Where(r => !existing.Contains(r)))
                 db.InAppNotifications.Add(new() { UserId = recipient.UserId, Role = recipient.Role, SourceKey = plan.SourceKey, EventType = row.EventType,
                     Title = plan.Title, Message = plan.Message, Route = NotificationRouter.Route(plan, recipient.Role), CreatedAtUtc = now,
+                    RelatedResourceIds = NotificationRouter.ResourceIds(plan, row.Payload),
                     PushState = push.Enabled ? PushDeliveryState.Pending : PushDeliveryState.NotRequested, NextPushAtUtc = push.Enabled ? now : null });
             if (users.Count < options.RecipientBatchSize) row.ProcessedAtUtc = now;
             else row.RecipientCursor = users[^1];

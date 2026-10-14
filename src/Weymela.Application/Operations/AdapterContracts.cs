@@ -18,6 +18,10 @@ public interface ISocialVerificationAdapter
     Task<VerifiedContentEvidence> VerifyAsync(VerifiedViewRequest request, CancellationToken ct);
     Task<ProviderHealth> HealthAsync(CancellationToken ct);
 }
+public interface IVerifiedPublicationProvider
+{
+    Task<VerifiedViewResult> VerifyPublicationAsync(VerifiedViewRequest request, CancellationToken ct);
+}
 
 public enum DepositReviewStatus { Pending, Approved, Rejected }
 public sealed record DepositSubmission(decimal Amount, string ExternalReference, string? ProofReference, Guid? ReceivingDestinationId = null);

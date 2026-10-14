@@ -17,6 +17,14 @@ internal static class EarningsConfiguration
         ce.HasOne<Promotion>().WithMany().HasForeignKey(x => x.PromotionId).OnDelete(DeleteBehavior.Restrict);
         ce.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
         JournalLink<CreatorEarningEntry>(model);
+        var correction = model.Entity<UgcPaymentCorrection>(); Mapping.Scalars(correction); correction.HasKey(x => x.Id);
+        correction.ToTable("UgcPaymentCorrections", t => t.HasCheckConstraint("CK_UgcCorrection_Amounts", "\"CreatorAmount\" > 0 AND \"PlatformFee\" >= 0"));
+        correction.HasIndex(x => x.UgcAssignmentId).IsUnique();
+        correction.HasIndex(x => x.OriginalEarningEntryId).IsUnique();
+        correction.HasOne<UgcAssignment>().WithMany().HasForeignKey(x => x.UgcAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        correction.HasOne<CreatorEarningEntry>().WithMany().HasForeignKey(x => x.OriginalEarningEntryId).OnDelete(DeleteBehavior.Restrict);
+        correction.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.OriginalJournalId).OnDelete(DeleteBehavior.Restrict);
+        correction.HasOne<FinancialJournal>().WithMany().HasForeignKey(x => x.CorrectionJournalId).OnDelete(DeleteBehavior.Restrict);
 
         var customers = model.Entity<CustomerCashbackAccount>();
         Mapping.Scalars(customers); customers.HasKey(x => x.CustomerId);

@@ -191,7 +191,7 @@ export function useResource<T>(path: string, enabled = true) {
     };
   }, []);
   const data = enabled && saved?.path === path && saved.generation === resourceContextGeneration ? saved.value : null;
-  return { data, error, loading: enabled && (loading || (data === null && !error)), reload };
+  return { data, error, loading: enabled && (loading || (data === null && !error)), reload, path };
 }
 export function useAction() {
   const [busy, setBusy] = useState(false);

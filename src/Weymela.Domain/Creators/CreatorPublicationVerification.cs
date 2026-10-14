@@ -24,6 +24,8 @@ public sealed class CreatorPublicationVerification
     public Guid? UgcSubmissionId { get; private set; }
     public string Provider { get; private set; }
     public string ExternalContentId { get; private set; }
+    public string? CanonicalUrl { get; private set; }
+    public string? VerificationCode { get; private set; }
     public PublicationVerificationStatus Status { get; private set; } = PublicationVerificationStatus.VerificationPending;
     public PublicationVerificationMethod? VerificationMethod { get; private set; }
     public string? EvidenceReference { get; private set; }
@@ -34,6 +36,9 @@ public sealed class CreatorPublicationVerification
     public DateTime? WentLiveAtUtc { get; private set; }
     public DateTime? EndedAtUtc { get; private set; }
     public long Version { get; private set; }
+
+    public void RecordPublicLink(string url) { CanonicalUrl = url; Version++; }
+    public void RecordProviderFailure(string code) { VerificationCode = code; Version++; }
 
     public CreatorPublicationVerification(Guid creatorId, Guid socialProfileId,
         Guid? creatorAllocationId, Guid? ugcAssignmentId,
@@ -79,6 +84,7 @@ public sealed class CreatorPublicationVerification
         if (verifiedAtUtc.Kind != DateTimeKind.Utc || verifiedAtUtc < RequestedAtUtc)
             throw new ArgumentException("Publication verification time is invalid.");
         Status = PublicationVerificationStatus.Verified;
+        VerificationCode = "Verified";
         VerificationMethod = method;
         EvidenceReference = evidenceReference.Trim();
         BaselineViews = baselineViews;

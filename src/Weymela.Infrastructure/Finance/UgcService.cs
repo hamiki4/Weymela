@@ -297,32 +297,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             }
             else
             {
-                var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == opportunity.BusinessId, token);
-                opportunity.RecognizeApprovedDeliverable(wallet, Now, correlation);
                 assignment.Approve(Now); submission.Approve(actor.UserId, Now);
-                var total = assignment.CreatorPayment.Add(assignment.PlatformFee);
-                var journal = new FinancialJournal(Guid.NewGuid().ToString("N"), correlation, actor.UserId, JournalSourceType.UgcApproval, Now, key);
-                journal.AddLine(JournalLineType.Debit, total, "UgcAllocatedReserve");
-                journal.AddLine(JournalLineType.Credit, assignment.CreatorPayment, "CreatorPayable");
-                if (assignment.PlatformFee.Amount > 0) journal.AddLine(JournalLineType.Credit, assignment.PlatformFee, "PlatformRevenue");
-                journal.Post(); db.FinancialJournals.Add(journal); JournalContext(journal, opportunity, assignment);
-                db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, total, "UgcConsumed", journal.Id, Now, opportunity.Id));
-                db.UgcBudgetEntries.Add(new(Guid.NewGuid(), opportunity.Id, assignment.Id, total, "Approved", journal.Id, Now));
-                var earnings = await db.CreatorEarningsAccounts.SingleOrDefaultAsync(x => x.CreatorId == assignment.CreatorId, token);
-                if (earnings is null) { earnings = new CreatorEarningsAccount(assignment.CreatorId); db.CreatorEarningsAccounts.Add(earnings); }
-                var before = earnings.AvailableEarnings;
-                earnings.EarnUgc(assignment.CreatorPayment, assignment.Id, Now, correlation);
-                var earning = earnings.Entries.Last(); db.CreatorEarningEntries.Add(earning); db.Entry(earning).Property("JournalId").CurrentValue = journal.Id;
-                if (assignment.PlatformFee.Amount > 0)
-                {
-                    var revenue = new PlatformRevenueEntry(Guid.NewGuid(), null, PlatformRevenueSource.UgcFee,
-                        assignment.PlatformFee, RevenueStatus.Accrued, Now, correlation, assignment.Id);
-                    db.PlatformRevenueEntries.Add(revenue); db.Entry(revenue).Property("JournalId").CurrentValue = journal.Id;
-                }
-                await operation.EmitEligibility(PayoutBeneficiary.Creator, assignment.CreatorId, before, earnings.AvailableEarnings, Now, token);
                 Record(actor, "UgcContentApproved", opportunity.Id, assignment.CreatorId, correlation,
                     new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id, CreatorId = assignment.CreatorId,
-                        CreatorPayment = assignment.CreatorPayment.Amount, PlatformFee = assignment.PlatformFee.Amount, JournalId = journal.Id });
+                        CreatorPayment = assignment.CreatorPayment.Amount, PlatformFee = assignment.PlatformFee.Amount });
             }
             operation.Remember(actor, "ReviewUgcSubmission", key, fingerprint, assignment.Id.ToString(), Now);
             return assignment.Id;

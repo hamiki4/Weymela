@@ -62,6 +62,7 @@ internal static class OperationalReadinessConfiguration
         notification.Property(x => x.SourceKey).HasMaxLength(160); notification.Property(x => x.EventType).HasMaxLength(100);
         notification.Property(x => x.Title).HasMaxLength(160); notification.Property(x => x.Message).HasMaxLength(500);
         notification.Property(x => x.Route).HasMaxLength(200); notification.Property(x => x.LastPushErrorCode).HasMaxLength(80);
+        notification.Property(x => x.RelatedResourceIds).HasDefaultValue(Array.Empty<Guid>());
         notification.HasIndex(x => new { x.UserId, x.Role, x.SourceKey }).IsUnique();
         notification.HasIndex(x => new { x.UserId, x.Role, x.CreatedAtUtc }); notification.HasIndex(x => x.NextPushAtUtc).HasFilter("\"PushState\"='Pending'"); Mapping.Version(notification);
         var checkpoint = model.Entity<WorkerCheckpoint>(); Mapping.Scalars(checkpoint); checkpoint.HasKey(x => x.Name);

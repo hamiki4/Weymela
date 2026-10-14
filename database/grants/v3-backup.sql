@@ -71,6 +71,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
     v3."RetiredSupportSessions",
+    v3."UgcPaymentCorrections",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
     v3."UgcCustomerOfferBudgetEntries",
@@ -144,6 +145,7 @@ GRANT SELECT ON TABLE
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
     v3."RetiredSupportSessions",
+    v3."UgcPaymentCorrections",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
     v3."UgcCustomerOfferBudgetEntries",
@@ -166,5 +168,8 @@ TO :"backup_role";
 -- The sequence state must be present in backup/restore so Creator IDs are never reused.
 REVOKE ALL PRIVILEGES ON SEQUENCE v3.creator_number_seq FROM :"backup_role";
 GRANT SELECT ON SEQUENCE v3.creator_number_seq TO :"backup_role";
+
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_payment_correction() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_publication_earning() FROM PUBLIC;
 
 COMMIT;

@@ -34,6 +34,21 @@ public sealed class NotificationService(WeymelaDbContext db, TimeProvider clock)
         await db.InAppNotifications.Where(x => x.UserId == actor.UserId && x.Role == actor.Role && x.ReadAtUtc == null && x.CreatedAtUtc <= through)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReadAtUtc, through).SetProperty(x => x.Version, x => x.Version + 1), ct);
     }
+
+    public async Task<int> ReadRelatedAsync(Actor actor, IReadOnlyList<Guid> displayedIds, CancellationToken ct, string? displayedPath = null)
+    {
+        await Demand(actor, ct);
+        if (displayedIds is null || displayedIds.Count > 100 || displayedIds.Any(x => x == Guid.Empty)
+            || displayedPath is not null && (displayedPath.Length > 500 || !displayedPath.StartsWith('/') || displayedPath.StartsWith("//")))
+            throw new ApplicationFailure(FailureKind.Validation, "Choose valid displayed items.");
+        var ids = displayedIds.Distinct().ToArray();
+        var query = db.InAppNotifications.Where(x => x.UserId == actor.UserId && x.Role == actor.Role && x.ReadAtUtc == null);
+        var now = clock.GetUtcNow().UtcDateTime;
+        await query.Where(x => (x.RelatedResourceIds.Any(id => ids.Contains(id)) || displayedPath != null && x.RelatedResourceIds.Length == 0 && x.Route == displayedPath) && x.CreatedAtUtc <= now)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReadAtUtc, now).SetProperty(x => x.Version, x => x.Version + 1), ct);
+        return await query.CountAsync(ct);
+    }
+
 }
 
 public sealed class DisabledPushProvider : INotificationPushProvider

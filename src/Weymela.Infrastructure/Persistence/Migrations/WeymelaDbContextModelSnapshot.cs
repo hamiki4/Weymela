@@ -432,6 +432,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<long?>("BaselineViews")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("CanonicalUrl")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("CreatorAllocationId")
                         .HasColumnType("uuid");
 
@@ -474,6 +477,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("UgcSubmissionId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("VerificationCode")
+                        .HasColumnType("text");
 
                     b.Property<string>("VerificationMethod")
                         .HasMaxLength(32)
@@ -1789,6 +1795,63 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_UgcOpportunity_Capacity", "\"CreatorCapacity\" > 0 AND \"ApprovedCreatorCount\" >= 0 AND \"ApprovedCreatorCount\" <= \"CreatorCapacity\"");
 
                             t.HasCheckConstraint("CK_UgcOpportunity_Funding", "\"RequiredFunding\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"RequiredFunding\"");
+                        });
+                });
+
+            modelBuilder.Entity("Weymela.Domain.UgcPaymentCorrection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorizationReference")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AuthorizedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CorrectionJournalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("CreatorAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OriginalEarningEntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OriginalJournalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("PlatformFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("UgcAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrectionJournalId");
+
+                    b.HasIndex("OriginalEarningEntryId")
+                        .IsUnique();
+
+                    b.HasIndex("OriginalJournalId");
+
+                    b.HasIndex("UgcAssignmentId")
+                        .IsUnique();
+
+                    b.ToTable("UgcPaymentCorrections", "v3", t =>
+                        {
+                            t.HasCheckConstraint("CK_UgcCorrection_Amounts", "\"CreatorAmount\" > 0 AND \"PlatformFee\" >= 0");
                         });
                 });
 
@@ -3118,6 +3181,12 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("ReadAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<Guid[]>("RelatedResourceIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasDefaultValue(new Guid[0]);
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -4570,6 +4639,33 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("PricingSnapshot")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Weymela.Domain.UgcPaymentCorrection", b =>
+                {
+                    b.HasOne("Weymela.Domain.FinancialJournal", null)
+                        .WithMany()
+                        .HasForeignKey("CorrectionJournalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Weymela.Domain.CreatorEarningEntry", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalEarningEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Weymela.Domain.FinancialJournal", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalJournalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Weymela.Domain.UgcAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("UgcAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

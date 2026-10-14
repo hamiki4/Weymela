@@ -136,6 +136,43 @@ public sealed class NotificationDeliveryTests(PostgresFixture fixture)
         Assert.Equal(1, (await new NotificationService(db, s.Clock).GetAsync(s.Creator, default)).UnreadCount);
         Assert.True(await db.InAppNotifications.AnyAsync(x => x.UserId == s.Seed.Business.UserId && x.ReadAtUtc == null));
     }
+    [Fact] public async Task Displayed_item_acknowledgement_is_concurrent_idempotent_and_profile_scoped()
+    {
+        var database = await fixture.CreateAsync(); var user = Guid.NewGuid(); var another = Guid.NewGuid();
+        var item = Guid.NewGuid(); var unrelated = Guid.NewGuid(); var clock = new TestClock();
+        var actor = new Actor(user, ActorRole.Customer, CustomerId: Guid.NewGuid());
+        await using var db = database.Open();
+        db.CommercePermissions.AddRange(new(user, ActorRole.Customer, actor.CustomerId!.Value, null, true, false),
+            new(user, ActorRole.Creator, Guid.NewGuid(), null, true, false));
+        InAppNotification Notification(Guid owner, ActorRole role, string key, Guid resource, string route="/customer", bool screenOnly=false) => new() {
+            UserId=owner, Role=role, SourceKey=key, EventType="test", Title="test", Message="test", Route=route,
+            RelatedResourceIds=screenOnly?[]:[resource], CreatedAtUtc=clock.Now };
+        db.InAppNotifications.AddRange(Notification(user, ActorRole.Customer, "one", item),
+            Notification(user, ActorRole.Customer, "two", item), Notification(user, ActorRole.Customer, "unrelated", unrelated),
+            Notification(user, ActorRole.Creator, "other-profile", item), Notification(another, ActorRole.Customer, "other-user", item));
+        await db.SaveChangesAsync();
+        await using var one=database.Open(); await using var two=database.Open();
+        await Task.WhenAll(new NotificationService(one,clock).ReadRelatedAsync(actor,[item,item],default),
+            new NotificationService(two,clock).ReadRelatedAsync(actor,[item],default));
+        await new NotificationService(db,clock).ReadRelatedAsync(actor,[item],default); db.ChangeTracker.Clear();
+        var read=await db.InAppNotifications.Where(x=>x.ReadAtUtc!=null).ToListAsync();
+        Assert.Equal(2,read.Count); Assert.All(read,x=>Assert.Equal(1,x.Version));
+        Assert.Equal(1,(await new NotificationService(db,clock).GetAsync(actor,default)).UnreadCount);
+        Assert.Equal(1,await new NotificationService(db,clock).ReadRelatedAsync(actor,[],default));
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>new NotificationService(db,clock).ReadRelatedAsync(actor,[Guid.Empty],default));
+        await new NotificationService(db,clock).ReadRelatedAsync(actor,[unrelated],default);
+        await using var refreshed=database.Open();
+        Assert.Equal(0,(await new NotificationService(refreshed,clock).GetAsync(actor,default)).UnreadCount);
+        Assert.Equal(2,await refreshed.InAppNotifications.CountAsync(x=>x.ReadAtUtc==null));
+        var screenOnly = Notification(user, ActorRole.Customer, "screen-only", item, "/customer/wallet", true);
+        var leafOnSameScreen = Notification(user, ActorRole.Customer, "leaf", unrelated, "/customer/wallet");
+        db.InAppNotifications.AddRange(screenOnly,leafOnSameScreen); await db.SaveChangesAsync();
+        Assert.Equal(1,await new NotificationService(db,clock).ReadRelatedAsync(actor,[],default,"/customer/wallet"));
+        db.ChangeTracker.Clear();
+        Assert.NotNull((await db.InAppNotifications.SingleAsync(x=>x.Id==screenOnly.Id)).ReadAtUtc);
+        Assert.Null((await db.InAppNotifications.SingleAsync(x=>x.Id==leafOnSameScreen.Id)).ReadAtUtc);
+    }
+
     [Fact] public async Task Concurrent_workers_deliver_one_notification_per_event_recipient()
     {
         var s = await Phase4Scenario.Create(fixture); await s.Refresh(3000);

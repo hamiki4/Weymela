@@ -31,7 +31,7 @@ public static class TikTokVideoLink
         if (string.IsNullOrWhiteSpace(value) || value.Length > 1000
             || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
             || uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo)
-            || uri.Port is not (-1 or 443) || !string.IsNullOrEmpty(uri.Query)
+            || uri.Port is not (-1 or 443)
             || !string.IsNullOrEmpty(uri.Fragment))
             return false;
 
@@ -70,5 +70,12 @@ public static class TikTokVideoLink
         if (!TryNormalize(value, out var normalized)) return null;
         var match = CreatorVideoPath.Match(new Uri(normalized).AbsolutePath);
         return match.Success ? match.Groups["id"].Value : null;
+    }
+
+    public static string? CreatorHandle(string? value)
+    {
+        if (!TryNormalize(value, out var normalized)) return null;
+        var match = CreatorVideoPath.Match(new Uri(normalized).AbsolutePath);
+        return match.Success ? match.Groups["creator"].Value : null;
     }
 }

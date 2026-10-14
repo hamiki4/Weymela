@@ -1,3 +1,4 @@
+import { PromotionManagement } from "./PromotionManagement";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
@@ -38,7 +39,6 @@ import {
 import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 import { DepositSubmission, type DepositRequest } from "./DepositSubmission";
-import { BusinessUgcCard } from "./UgcPages";
 
 export function WalletMetrics({ wallet, pendingDeposits }: { wallet: Wallet; pendingDeposits: number }) {
   return (
@@ -486,66 +486,7 @@ export function CampaignTable({
   );
 }
 
-function BusinessPromotionCard({ row }: { row: CampaignRow }) {
-  return (
-    <article className="campaign-card business-promotion-card" data-status={row.status}>
-      <div className="card-head">
-        <div>
-          <p className="card-eyebrow">{promotionTypeLabel(row.type)}</p>
-          <h3>{row.title}</h3>
-        </div>
-        <Badge status={row.status} label={promotionStatusLabel(row.status)} />
-      </div>
-      <dl className="promotion-summary-list">
-        {row.contentDueAtUtc && <div><dt>Content due</dt><dd>{date(row.contentDueAtUtc)}</dd></div>}
-        <div><dt>Creators</dt><dd>{row.creatorCount}</dd></div>
-      </dl>
-      <Link className="button secondary business-promotion-manage" to={`/business/campaigns/${row.id}`}>
-        Manage <Icon name="arrow" />
-      </Link>
-    </article>
-  );
-}
-
-export function BusinessCampaigns() {
-  const campaigns = useResource<CampaignRow[]>("/business/campaigns");
-  const ugc = useResource<UgcCard[]>("/business/ugc");
-  const [params] = useSearchParams();
-  const activeOnly = params.get("filter") === "Active";
-
-  return (
-    <>
-      <PageHeader
-        title="Promotions"
-        compact
-        action={
-          <span className="business-create-action">
-            <ActionLink to="/business/campaigns/new" icon="plus">
-              Create Promotion
-            </ActionLink>
-          </span>
-        }
-      />
-
-      <Resource resource={campaigns}>
-        {(campaignRows) => <Resource resource={ugc}>
-          {(ugcRows) => {
-            const visibleCampaigns = campaignRows.filter((row) => !activeOnly || ["Active", "Published"].includes(row.status));
-            const visibleUgc = ugcRows.filter((item) => !activeOnly || item.status === "Open");
-            const hasPromotions = visibleCampaigns.length > 0 || visibleUgc.length > 0;
-            return <Section title={activeOnly ? "Active Promotions" : "Promotions"} action={activeOnly ? <Link className="text-link" to="/business/campaigns">Show all</Link> : <Currency />}>
-              {hasPromotions ? <div className="card-stack business-promotion-list">
-                {visibleCampaigns.map((row) => <BusinessPromotionCard key={`views-${row.id}`} row={row} />)}
-                {visibleUgc.map((item) => <BusinessUgcCard key={`ugc-${item.id}`} item={item} onChanged={ugc.reload} />)}
-              </div> : <Empty title={activeOnly ? "No active Promotions." : "No Promotions yet."} />}
-            </Section>;
-          }}
-        </Resource>}
-      </Resource>
-
-    </>
-  );
-}
+export function BusinessCampaigns() { return <PromotionManagement />; }
 
 export function BusinessRequests() {
   const resource = useResource<CampaignRow[]>("/business/campaigns");

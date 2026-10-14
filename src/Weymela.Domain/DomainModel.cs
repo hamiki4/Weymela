@@ -22,7 +22,7 @@ public enum CashbackSource { VerifiedSale, UgcCustomerOfferSale, AuthorizedAdjus
 public enum PlatformRevenueSource { ViewRewardPlatformShare, SalePlatformShare, UgcFee, UgcCustomerOfferSaleFee, AuthorizedAdjustment }
 public enum RevenueStatus { Accrued, Settled }
 public enum JournalLineType { Debit, Credit }
-public enum JournalSourceType { Deposit, PromotionReservation, UgcReservation, UgcCustomerOfferReservation, Allocation, UgcApproval, ViewReward, VerifiedSale, UgcCustomerOfferSale, Payout, Adjustment, Settlement, AdminPromotionalFunding }
+public enum JournalSourceType { Deposit, PromotionReservation, UgcReservation, UgcCustomerOfferReservation, Allocation, UgcApproval, ViewReward, VerifiedSale, UgcCustomerOfferSale, Payout, Adjustment, Settlement, AdminPromotionalFunding, UgcPublication }
 public enum LegalRole { Account, Business, Creator }
 public enum LegalDocumentType { TermsOfService, BusinessAgreement, CreatorAgreement, AntiCircumventionAgreement, PrivacyPolicy }
 
@@ -60,6 +60,7 @@ public sealed class BusinessWallet
     public void ReserveForPromotion(Money amount, DateTime at, Guid correlation) { Positive(amount); AvailableBalance = AvailableBalance.Subtract(amount); ReservedBalance = ReservedBalance.Add(amount); }
     public void ReleasePromotionReserve(Money amount, DateTime at, Guid correlation) { Positive(amount); ReservedBalance = ReservedBalance.Subtract(amount); AvailableBalance = AvailableBalance.Add(amount); }
     public void ConsumeReservedFunds(Money amount, DateTime at, Guid correlation) { Positive(amount); ReservedBalance = ReservedBalance.Subtract(amount); }
+    public void RestoreConsumedReserve(Money amount) { Positive(amount); ReservedBalance = ReservedBalance.Add(amount); Version++; }
     public void Reserve(Money amount, DateTime at, Guid correlation) => ReserveForPromotion(amount, at, correlation);
     public void ReleaseReserve(Money amount, DateTime at, Guid correlation) => ReleasePromotionReserve(amount, at, correlation);
     public void ApplyAuthorizedAdjustment(Money amount, bool credit, DateTime at, Guid correlation) { Positive(amount); if (credit) AvailableBalance = AvailableBalance.Add(amount); else AvailableBalance = AvailableBalance.Subtract(amount); }

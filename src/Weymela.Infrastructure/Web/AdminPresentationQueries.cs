@@ -86,6 +86,7 @@ public sealed partial class WorkspaceQueries
         var sales = await db.VerifiedSales.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end && x.Status == VerifiedSaleStatus.Recorded).ToListAsync(ct);
         var ugcSales = await db.UgcCustomerOfferSales.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);
         var earnings = await db.CreatorEarningEntries.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);
+        var corrections = await db.UgcPaymentCorrections.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);
         var cashback = await db.CustomerCashbackEntries.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);
         var revenue = await db.PlatformRevenueEntries.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end).ToListAsync(ct);
         var payouts = await db.PayoutRecords.AsNoTracking().Where(x => x.PaidAtUtc >= start && x.PaidAtUtc < end && x.Status == PayoutStatus.Paid).ToListAsync(ct);
@@ -102,10 +103,10 @@ public sealed partial class WorkspaceQueries
         var platform = await new PlatformRevenueRepository(db).SummaryAsync(ct);
         decimal SumEntries(string movement) => entries.Where(x => x.Movement == movement).Sum(x => x.Amount.Amount);
         var period = new AdminReportPeriod(SumEntries("Deposit"), funding.Sum(x => x.Amount.Amount), SumEntries("Consumed"),
-            ugcEntries.Where(x => x.Movement == "Approved").Sum(x => x.Amount.Amount),
+            ugcEntries.Where(x => x.Movement is "Approved" or "VerifiedPublicationEarned").Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount + x.PlatformFee.Amount),
             offerEntries.Where(x => x.Movement == "Sale").Sum(x => x.Amount.Amount),
-            earnings.Where(x => x.Source == EarningSource.Ugc).Sum(x => x.Amount.Amount), earnings.Sum(x => x.Amount.Amount),
-            cashback.Sum(x => x.Amount.Amount), ugcSales.Where(x => x.BenefitMode == CustomerBenefitMode.LegacyDiscount).Sum(x => x.CustomerDiscountAmount.Amount), revenue.Sum(x => x.Amount.Amount),
+            earnings.Where(x => x.Source == EarningSource.Ugc).Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount), earnings.Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount),
+            cashback.Sum(x => x.Amount.Amount), ugcSales.Where(x => x.BenefitMode == CustomerBenefitMode.LegacyDiscount).Sum(x => x.CustomerDiscountAmount.Amount), revenue.Sum(x => x.Amount.Amount) - corrections.Sum(x => x.PlatformFee.Amount),
             payouts.Where(x => x.Beneficiary == PayoutBeneficiary.Creator).Sum(x => x.Amount.Amount),
             payouts.Where(x => x.Beneficiary == PayoutBeneficiary.Customer).Sum(x => x.Amount.Amount),
             views.Sum(x => Math.Max(0, x.CurrentVerifiedViews - x.PreviousVerifiedViews)), sales.Count, ugcSales.Count);
@@ -126,13 +127,15 @@ public sealed partial class WorkspaceQueries
             return new AdminReportType(hasOffer ? "UGC + Sale" : "UGC Only",
                 ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement == "Reserved").Sum(x => x.Amount.Amount)
                   + offerEntries.Where(x => matchingOffers.Contains(x.UgcCustomerOfferId) && x.Movement == "Reserved").Sum(x => x.Amount.Amount),
-                ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement == "Approved").Sum(x => x.Amount.Amount)
+                ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement is "Approved" or "VerifiedPublicationEarned").Sum(x => x.Amount.Amount)
+                  - corrections.Where(x => assignmentUgc.TryGetValue(x.UgcAssignmentId, out var correctionUgc) && ids.Contains(correctionUgc)).Sum(x => x.CreatorAmount.Amount + x.PlatformFee.Amount)
                   + offerEntries.Where(x => matchingOffers.Contains(x.UgcCustomerOfferId) && x.Movement == "Sale").Sum(x => x.Amount.Amount),
                 0, ugcSales.Count(x => ids.Contains(x.UgcOpportunityId)),
                 ugc.Where(x => ids.Contains(x.Id) && x.Status is UgcOpportunityStatus.Open or UgcOpportunityStatus.InProgress).Sum(x => x.RemainingFunding.Amount)
                   + offers.Where(x => matchingOffers.Contains(x.Id) && x.Status == UgcCustomerOfferStatus.Active).Sum(x => x.RemainingFunding.Amount),
                 earnings.Where(x => x.Source == EarningSource.Ugc && x.UgcAssignmentId is { } assignmentId
-                    && assignmentUgc.TryGetValue(assignmentId, out var opportunityId) && ids.Contains(opportunityId)).Sum(x => x.Amount.Amount),
+                    && assignmentUgc.TryGetValue(assignmentId, out var opportunityId) && ids.Contains(opportunityId)).Sum(x => x.Amount.Amount)
+                  - corrections.Where(x => assignmentUgc.TryGetValue(x.UgcAssignmentId, out var correctionUgc) && ids.Contains(correctionUgc)).Sum(x => x.CreatorAmount.Amount),
                 ugcSales.Where(x => ids.Contains(x.UgcOpportunityId)).Sum(x => x.CustomerDiscountAmount.Amount));
         }).ToArray();
         var accounts = new AdminReportAccounts(

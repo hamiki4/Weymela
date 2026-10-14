@@ -66,7 +66,7 @@ function ProductArrangementChoice({ value, onChange, name = "product-arrangement
   </fieldset>;
 }
 
-export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged: () => void }) {
+export function BusinessUgcCard({ item, onChanged, initiallyEditing = false }: { item: UgcCard; onChanged: () => void; initiallyEditing?: boolean }) {
   const action = useAction();
   const editAction = useAction();
   const [creatorDetail, setCreatorDetail] = useState<UgcDetail | null>(null);
@@ -87,9 +87,9 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
   const [editDiscount, setEditDiscount] = useState("");
   const [editOfferBudget, setEditOfferBudget] = useState("");
   const [creatorError, setCreatorError] = useState("");
-  const [manageOpen, setManageOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(initiallyEditing);
   return (
-    <article className="data-card business-promotion-card" data-status={item.status}>
+    <article className="data-card business-promotion-card" data-status={item.status} data-notification-resource={item.id}>
       <div className="card-head"><div><small>{item.customerOfferEnabled ? "UGC + Sale" : "UGC"}</small><h3>{item.title}</h3></div><Badge status={item.status} label={promotionStatusLabel(item.status)} /></div>
       <dl className="promotion-summary-list">
         <div><dt>Creator payment</dt><dd>{amount(item.creatorPayment)} ETB</dd></div>
@@ -163,7 +163,7 @@ export function BusinessUgcCard({ item, onChanged }: { item: UgcCard; onChanged:
               <Field label="Application closes"><input type="datetime-local" value={editCloses} onChange={event => setEditCloses(event.target.value)} required /></Field>
               <Field label="Content due"><input type="datetime-local" value={editDue} onChange={event => setEditDue(event.target.value)} required /></Field>
               <ProductArrangementChoice value={editArrangement} onChange={setEditArrangement} name="edit-product-arrangement" />
-              <fieldset className="field wide ugc-posting-choice"><legend>Posting</legend><label><input type="radio" name="edit-ugc-posting" checked={!editMustPost} onChange={() => setEditMustPost(false)} /> Deliver content only</label><label><input type="radio" name="edit-ugc-posting" checked={editMustPost} onChange={() => setEditMustPost(true)} /> Creator must post</label></fieldset>
+              <fieldset className="field wide ugc-posting-choice"><legend>Publication platforms</legend><label><input type="radio" name="edit-ugc-posting" checked={!editMustPost} onChange={() => setEditMustPost(false)} /> Choose publication platform later</label><label><input type="radio" name="edit-ugc-posting" checked={editMustPost} onChange={() => setEditMustPost(true)} /> Set publication platforms now</label></fieldset>
               {editMustPost && <PlatformCapacityPicker value={editPlatforms} onChange={setEditPlatforms} />}
               <label className="field wide"><span><input type="checkbox" checked={editOffer} onChange={event => setEditOffer(event.target.checked)} /> Customer cashback sale</span></label>
               {editOffer && <><Field label="Customer Cashback %"><input type="number" min="0.01" max="100" step="0.0001" value={editDiscount} onChange={event => setEditDiscount(event.target.value)} required /></Field><Field label="Cashback funding"><input type="number" min="0.01" step="0.01" value={editOfferBudget} onChange={event => setEditOfferBudget(event.target.value)} required /></Field></>}
@@ -188,7 +188,7 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
     await post(`/business/ugc/assignments/${row.id}/review/${decision}`, { reason: feedback.trim() || null }, key);
     setFeedback(""); reload();
   });
-  return <article className="business-collaboration-card">
+  return <article className="business-collaboration-card" data-notification-resource={row.id}>
     <div className="card-head"><div className="business-ugc-creator-row"><CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} /><div><strong>{row.creator}</strong><small>Revision {row.contentRevisionNumber ?? 1}</small></div></div><Badge status={row.status} /></div>
     {row.selectedPlatform && <p className="fine-print"><strong>{row.selectedPlatform}</strong>{row.selectedSocialProfileUrl && <> · <a href={row.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">View selected profile</a></>}</p>}
     {row.watchUrl && <a className="button secondary" href={row.watchUrl} target="_blank" rel="noopener noreferrer">Watch Sample on TikTok</a>}
@@ -200,8 +200,7 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
       <Field label="Feedback (required for changes)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
       <div className="actions"><Button disabled={action.busy || !row.watchUrl && !row.reviewMediaUrl} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("changes")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
     </div>}
-    {row.status === "Approved" && !row.selectedPlatform && <Notice>Content approved. Delivery-only work is complete and has no Customer offer.</Notice>}
-    {row.status === "Approved" && row.selectedPlatform && !row.publication && <Notice>Content approved. Waiting for the Creator to publish.</Notice>}
+    {row.status === "Approved" && !row.publication?.wentLiveAtUtc && <Notice>Approved for publication. The fixed payment remains pending verified Go Live.</Notice>}
     {row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
     {row.publication && <p className="fine-print">Publication: {row.publication.wentLiveAtUtc ? "Live" : row.publication.verificationLabel}</p>}
     {action.error && <Notice error>{action.error}</Notice>}
@@ -227,7 +226,7 @@ export function BusinessUgcDetail() {
     const required = item.requiredFunding ?? 0;
     const shortfall = Math.max(0, required - (wallet.data?.available ?? 0));
     return <>
-      <Link className="back-link" to="/business/campaigns">← Promotions</Link>
+      <Link className="back-link" to="/business/campaigns">Promotions</Link>
       <PageHeader eyebrow={item.customerOfferEnabled ? "UGC + Sale" : "UGC"} title={item.title}
         description={`Content due ${date(item.dueDateUtc)}`}
         action={<Badge status={item.status} label={promotionStatusLabel(item.status)} />} />
@@ -251,7 +250,7 @@ export function BusinessUgcDetail() {
           </dl>
         </Section>
         <Section title="Creator requests">
-          {data.requests.length ? <div className="card-stack">{data.requests.map(row => <article className="business-collaboration-card" key={row.id}>
+          {data.requests.length ? <div className="card-stack">{data.requests.map(row => <article className="business-collaboration-card" key={row.id} data-notification-resource={row.id}>
             <div className="card-head"><div className="business-ugc-creator-row"><CreatorAvatar name={row.creator} path={`/business/creator-photos/${row.creatorId}`} /><strong>{row.creator}</strong></div><Badge status={row.status} /></div>
             {row.socialProfile ? <div className="creator-social-review"><a href={row.socialProfile.profileUrl} target="_blank" rel="noopener noreferrer">{row.socialProfile.platform} profile</a>
               <small>{row.socialProfile.verificationStatus === "Verified" && row.socialProfile.verifiedAudience != null
@@ -281,8 +280,8 @@ export function BusinessUgcPage() {
   return <>
     <PageHeader title="Promotions" compact action={<span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink></span>} />
     <Section title={openOnly ? "Active Promotions" : "Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
-      const visible = rows.filter((item) => !openOnly || item.status === "Open");
-      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No active Promotions." : "No Promotions yet."} />;
+      const visible = rows.filter((item) => params.get("edit") ? item.id === params.get("edit") : !openOnly || item.status === "Open");
+      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} initiallyEditing={params.get("edit") === item.id} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No active Promotions." : "No Promotions yet."} />;
     }}</Resource></Section>
   </>;
 }
@@ -352,9 +351,9 @@ export function CreateBusinessUgcPage() {
                   <Field label="Location"><input value={form.location} onChange={(e) => set("location", e.target.value)} /></Field>
                   <Field label="Instructions" wide><textarea value={form.instructions} onChange={(e) => set("instructions", e.target.value)} required /></Field>
                   <ProductArrangementChoice value={form.productArrangement} onChange={(value) => set("productArrangement", value)} />
-                  <fieldset className="field wide ugc-posting-choice"><legend>Posting</legend>
-                    <label><input type="radio" name="ugc-posting" checked={!form.mustPost} onChange={() => set("mustPost", false)} /> Deliver content only</label>
-                    <label><input type="radio" name="ugc-posting" checked={form.mustPost} onChange={() => set("mustPost", true)} /> Creator must post</label>
+                  <fieldset className="field wide ugc-posting-choice"><legend>Publication platforms</legend>
+                    <label><input type="radio" name="ugc-posting" checked={!form.mustPost} onChange={() => set("mustPost", false)} /> Choose publication platform later</label>
+                    <label><input type="radio" name="ugc-posting" checked={form.mustPost} onChange={() => set("mustPost", true)} /> Set publication platforms now</label>
                   </fieldset>
                   {form.mustPost ? <PlatformCapacityPicker value={form.platforms} onChange={(value) => set("platforms", value)} />
                     : <Field label="Creators needed"><input type="number" min="1" max="100" step="1" value={form.creatorsNeeded} onChange={(e) => set("creatorsNeeded", e.target.value)} required /></Field>}

@@ -34,9 +34,12 @@ public sealed class ReconciliationService(WeymelaDbContext db)
               UNION ALL SELECT 'CustomerCashbackPayable', c."CustomerId",
                 coalesce((SELECT sum(CASE WHEN e."Type"='Credit' THEN e."Amount" ELSE -e."Amount" END) FROM entries e WHERE e."CustomerId"=c."CustomerId" AND e."Account"='CustomerCashbackPayable'),0), c."AvailableCashback" FROM v3."CustomerCashbackAccounts" c
               UNION ALL SELECT 'PlatformAccrued', NULL::uuid,
-                coalesce((SELECT sum("Amount") FROM entries WHERE "Account"='PlatformRevenue' AND "Type"='Credit'),0), coalesce((SELECT sum("Amount") FROM v3."PlatformRevenueEntries"),0)
+                coalesce((SELECT sum("Amount") FROM entries WHERE "Account"='PlatformRevenue' AND "Type"='Credit'),0)
+                  -coalesce((SELECT sum(c."PlatformFee") FROM v3."UgcPaymentCorrections" c),0),
+                coalesce((SELECT sum("Amount") FROM v3."PlatformRevenueEntries"),0)-coalesce((SELECT sum("PlatformFee") FROM v3."UgcPaymentCorrections"),0)
               UNION ALL SELECT 'PlatformSettled', NULL::uuid,
-                coalesce((SELECT sum("Amount") FROM entries WHERE "Account"='PlatformRevenue' AND "Type"='Debit'),0), coalesce((SELECT sum("Amount") FROM v3."PlatformSettlements"),0)
+                coalesce((SELECT sum("Amount") FROM entries WHERE "Account"='PlatformRevenue' AND "Type"='Debit'),0)
+                  -coalesce((SELECT sum("PlatformFee") FROM v3."UgcPaymentCorrections"),0), coalesce((SELECT sum("Amount") FROM v3."PlatformSettlements"),0)
               UNION ALL SELECT 'PlatformPromotionalFundingDebit', NULL::uuid,
                 coalesce((SELECT sum("Amount") FROM v3."PlatformPromotionalFundings"),0),
                 coalesce((SELECT sum(l."Amount") FROM v3."FinancialJournalLines" l JOIN v3."FinancialJournals" j ON j."Id"=l."JournalId"

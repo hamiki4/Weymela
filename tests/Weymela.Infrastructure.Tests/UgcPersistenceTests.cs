@@ -285,7 +285,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Complete_ugc_flow_reserves_1650_and_approval_posts_creator_earning_and_platform_fee_once()
+    public async Task Approval_preserves_reserved_obligation_until_verified_go_live_earns_fixed_fee_once()
     {
         var state = await Setup();
         await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
@@ -299,6 +299,25 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(assignmentId, replay);
 
         db.ChangeTracker.Clear();
+        Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+        Assert.Empty(await db.PlatformRevenueEntries.ToListAsync());
+        Assert.Equal(1500m, (await db.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
+        Assert.Null((await db.UgcAssignments.SingleAsync()).CompletedAtUtc);
+        var tracking = new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),new FixedTime(Now));
+        var pendingWork=(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Single(x=>x.Id==assignmentId);
+        Assert.Equal("Active",pendingWork.Group); Assert.Equal("Approved for publication",pendingWork.Status);
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>tracking.BusinessPromotionTrackingAsync(state.Creator,default));
+        var profile = await db.CreatorSocialProfiles.SingleAsync();
+        var clock = new TestClock { Now = Now };
+        var publications = new CreatorPublicationService(db, new TestViews(clock), new CommerceAccessPolicy(db), new TestDirectory(), clock);
+        var publication = await publications.RequestUgcAsync(state.Creator, assignmentId,
+            new("TikTok", "7412345678901234567", profile.Id), "fixed-publication", default);
+        Assert.Equal("Verified", publication.Status);
+        Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+        await publications.GoLiveUgcAsync(state.Creator, assignmentId, "fixed-live", default);
+        await publications.GoLiveUgcAsync(state.Creator, assignmentId, "fixed-live", default);
+        await publications.GoLiveUgcAsync(state.Creator, assignmentId, "fixed-live-retry", default);
+        db.ChangeTracker.Clear();
         var opportunity = await db.UgcOpportunities.SingleAsync(x => x.Id == opportunityId);
         var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId);
         Assert.Equal(1500m, opportunity.RequiredFunding.Amount); Assert.Equal(500m, opportunity.UsedFunding.Amount);
@@ -310,6 +329,72 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(50m, fee.Amount.Amount);
         Assert.Equal(2, await db.FinancialJournals.CountAsync(x => EF.Property<Guid?>(x, "UgcOpportunityId") == opportunityId));
         Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == opportunityId).ToListAsync());
+        Assert.Equal("Completed",(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Single(x=>x.Id==assignmentId).Group);
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin,default));
+    }
+
+    [Fact]
+    public async Task Legacy_premature_credit_is_preserved_then_balanced_correction_restores_reserve_and_later_earns_once()
+    {
+        var state = await Setup(targetMigration: "20261012042110_SeparateProductFinancialConfiguration");
+        await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
+        var opportunityId=await service.CreateAsync(state.Business,Input(creators:1),"legacy-create",default);
+        await service.PublishAsync(state.Business,opportunityId,0,"legacy-publish",default);
+        var requestId=await service.RequestAsync(state.Creator,opportunityId,"legacy-request",default);
+        var assignmentId=await service.ReviewRequestAsync(state.Business,requestId,true,null,"legacy-accept",default);
+        await service.SubmitAsync(state.Creator,assignmentId,new("https://www.tiktok.com/@mimi/video/7412345678901234567"),"legacy-submit",default);
+        await service.ReviewSubmissionAsync(state.Business,assignmentId,"approve",null,"legacy-approve",default);
+        var assignment=await db.UgcAssignments.SingleAsync(); var opportunity=await db.UgcOpportunities.SingleAsync();
+        var wallet=await db.BusinessWallets.SingleAsync(); var correlation=Guid.NewGuid();
+        opportunity.RecognizeApprovedDeliverable(wallet,Now,correlation);
+        var journal=new FinancialJournal("legacy-approval",correlation,state.Business.UserId,JournalSourceType.UgcApproval,Now,"legacy-credit");
+        journal.AddLine(JournalLineType.Debit,new Money(500),"UgcAllocatedReserve");
+        journal.AddLine(JournalLineType.Credit,new Money(450),"CreatorPayable");
+        journal.AddLine(JournalLineType.Credit,new Money(50),"PlatformRevenue");journal.Post();db.FinancialJournals.Add(journal);
+        db.Entry(journal).Property("BusinessId").CurrentValue=state.Business.BusinessId;
+        db.Entry(journal).Property("CreatorId").CurrentValue=state.Creator.CreatorId;
+        db.Entry(journal).Property("UgcOpportunityId").CurrentValue=opportunityId;
+        db.Entry(journal).Property("UgcAssignmentId").CurrentValue=assignmentId;
+        var account=new CreatorEarningsAccount(state.Creator.CreatorId!.Value);account.EarnUgc(new Money(450),assignmentId,Now,correlation);
+        db.CreatorEarningsAccounts.Add(account);var earning=account.Entries.Single();db.CreatorEarningEntries.Add(earning);db.Entry(earning).Property("JournalId").CurrentValue=journal.Id;
+        var revenue=new PlatformRevenueEntry(Guid.NewGuid(),null,PlatformRevenueSource.UgcFee,new Money(50),RevenueStatus.Accrued,Now,correlation,assignmentId);
+        db.PlatformRevenueEntries.Add(revenue);db.Entry(revenue).Property("JournalId").CurrentValue=journal.Id;
+        db.WalletEntries.Add(new(Guid.NewGuid(),state.Business.BusinessId!.Value,null,new Money(500),"UgcConsumed",journal.Id,Now,opportunityId));
+        db.UgcBudgetEntries.Add(new(Guid.NewGuid(),opportunityId,assignmentId,new Money(500),"Approved",journal.Id,Now));
+        var admin=Phase4Scenario.Admin;db.CommercePermissions.Add(new(admin.UserId,admin.Role,admin.UserId,null,true,false));
+        await db.SaveChangesAsync();db.ChangeTracker.Clear();
+        await db.Database.MigrateAsync();
+        Assert.Equal(450,(await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        Assert.Equal(0,(await CreatorEarnedBalance.AvailableAsync(db,state.Creator.CreatorId!.Value,default)).Amount);
+        var corrections=new UgcPaymentCorrectionService(db,new FixedTime(Now));
+        await Assert.ThrowsAsync<ApplicationFailure>(()=>corrections.CorrectAsync(state.Business,assignmentId,journal.Id,"owner directive","no-authority",default));
+        var corrected=await corrections.CorrectAsync(admin,assignmentId,journal.Id,"isolated owner-authorized correction","correction",default);
+        Assert.Equal(corrected,await corrections.CorrectAsync(admin,assignmentId,journal.Id,"isolated owner-authorized correction","correction-retry",default));
+        db.ChangeTracker.Clear();
+        Assert.Equal(0,(await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        Assert.Equal(500,(await db.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
+        Assert.Equal(UgcOpportunityStatus.InProgress,(await db.UgcOpportunities.SingleAsync()).Status);
+        Assert.Single(await db.UgcPaymentCorrections.ToListAsync()); Assert.Single(await db.CreatorEarningEntries.ToListAsync());
+        await Assert.ThrowsAsync<PostgresException>(()=>db.Database.ExecuteSqlRawAsync("UPDATE v3.\"UgcPaymentCorrections\" SET \"AuthorizationReference\"='altered'"));
+        Assert.Equal(earning.Id,(await db.CreatorEarningEntries.SingleAsync()).Id);
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(admin,default));
+        var profile=await db.CreatorSocialProfiles.SingleAsync();var clock=new TestClock{Now=Now};
+        var publications=new CreatorPublicationService(db,new TestViews(clock),new CommerceAccessPolicy(db),new TestDirectory(),clock);
+        await publications.RequestUgcAsync(state.Creator,assignmentId,new("TikTok","7412345678901234567",profile.Id),"corrected-publication",default);
+        await using var parallel=state.Database.Open();
+        async Task Attempt(CreatorPublicationService target,string key) {
+            try { await target.GoLiveUgcAsync(state.Creator,assignmentId,key,default); }
+            catch(ApplicationFailure error) when(error.Kind==FailureKind.ConcurrencyConflict) { }
+        }
+        await Task.WhenAll(Attempt(publications,"corrected-live"),
+            Attempt(new CreatorPublicationService(parallel,new TestViews(clock),new CommerceAccessPolicy(parallel),new TestDirectory(),clock),"corrected-live-concurrent"));
+        db.ChangeTracker.Clear();
+        await publications.GoLiveUgcAsync(state.Creator,assignmentId,"corrected-live-retry",default);
+        db.ChangeTracker.Clear();
+        Assert.Equal(450,(await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        Assert.Equal(2,await db.CreatorEarningEntries.CountAsync());Assert.Single(await db.UgcPaymentCorrections.ToListAsync());
+        Assert.Single(await db.OutboxMessages.Where(x=>x.EventType=="UgcFixedPaymentEarned").ToListAsync());
+        Assert.Empty(await db.PayoutRecords.ToListAsync()); Assert.Empty(await new ReconciliationService(db).CheckAsync(admin,default));
     }
 
     [Fact]
@@ -957,9 +1042,9 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Null((await new FinancialConfigurationResolver(db).EffectiveAsync(Now)).ViewOnly);
     }
 
-    private async Task<State> Setup(decimal deposit = 10_000)
+    private async Task<State> Setup(decimal deposit = 10_000, string? targetMigration = null)
     {
-        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var database = await fixture.CreateAsync(targetMigration); await using var db = database.Open();
         var business = new Actor(Guid.NewGuid(), ActorRole.Business, Guid.NewGuid());
         var creator = new Actor(Guid.NewGuid(), ActorRole.Creator, CreatorId: Guid.NewGuid());
         var configurationId = Guid.NewGuid(); var versionId = Guid.NewGuid();

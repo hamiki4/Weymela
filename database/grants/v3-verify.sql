@@ -76,6 +76,7 @@ VALUES
     ('api', 'v3', 'PlatformReceivingDestinations', true, true, true),
     ('api', 'v3', 'PromotionPlatforms', true, true, true),
     ('api', 'v3', 'Promotions', true, true, true),
+    ('api', 'v3', 'UgcPaymentCorrections', true, false, false),
     ('api', 'v3', 'UgcAssignments', true, true, true),
     ('api', 'v3', 'UgcCustomerOffers', true, true, true),
     ('api', 'v3', 'UgcCreatorRequests', true, true, true),

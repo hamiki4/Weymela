@@ -11,10 +11,24 @@ namespace Weymela.Infrastructure.Notifications;
 
 public sealed record NotificationAudience(ActorRole Role, Guid? SubjectId = null, Guid? UserId = null);
 public sealed record NotificationPlan(string SourceKey, string Title, string Message, Guid? CampaignId, Guid? BudgetId,
-    IReadOnlyList<NotificationAudience> Audiences, string? WorkspacePath = null, Guid? UgcId = null);
+    IReadOnlyList<NotificationAudience> Audiences, string? WorkspacePath = null, Guid? UgcId = null, Guid? RelatedItemId = null);
 
 public sealed class NotificationRouter(WeymelaDbContext db)
 {
+    public static Guid[] ResourceIds(NotificationPlan plan, string payload)
+    {
+        var ids = new HashSet<Guid>();
+        using var document = JsonDocument.Parse(payload);
+        foreach (var item in document.RootElement.EnumerateObject())
+            if (item.Name is "Id" or "AssignmentId" or "CreatorAllocationId"
+                or "AllocationId" or "ParticipationId" or "RequestId" or "SubmissionId" or "PublicationId"
+                or "DepositId" or "PayoutId" or "SaleId" or "PurchaseId" or "EnrollmentId" or "GrantId" or "PreauthorizationId")
+                if (item.Value.ValueKind == JsonValueKind.String && item.Value.TryGetGuid(out var id)) ids.Add(id);
+        if (plan.BudgetId is { } budget) ids.Add(budget);
+        if (plan.RelatedItemId is { } itemId) ids.Add(itemId);
+        if (ids.Count == 0) foreach (var id in new[] { plan.UgcId, plan.CampaignId }) if (id is { } value) ids.Add(value);
+        return ids.ToArray();
+    }
     public async Task<NotificationPlan?> ResolveAsync(OutboxMessage row, CancellationToken ct)
     {
         // Audit and domain events can describe the same operation. Each event below has one canonical producer.
@@ -29,7 +43,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             "PublicationVerificationRequested", "UgcPublicationVerificationRequested", "PublicationVerified", "PublicationVerificationFailed",
             "CreatorParticipationActivated", "UgcPublicationActivated",
             "UgcRequestReceived", "UgcRequestApproved", "UgcRequestRejected", "UgcContentSubmitted",
-            "UgcChangesRequested", "UgcContentApproved", "UgcContentRejected", "UgcMaterialRevision" };
+            "UgcChangesRequested", "UgcContentApproved", "UgcContentRejected", "UgcMaterialRevision", "UgcFixedPaymentEarned", "UgcPaymentCorrected" };
         if (!supported.Contains(row.EventType, StringComparer.Ordinal)) return null;
         using var document = JsonDocument.Parse(row.Payload); var data = document.RootElement;
         Guid Id(string name) => data.GetProperty(name).GetGuid();
@@ -193,7 +207,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan("UGC content submitted","A Creator submitted content for your review.",null,null,new NotificationAudience(ActorRole.Business,Id("BusinessId"))) with { UgcId=Id("OpportunityId") };
             case "UgcChangesRequested": case "UgcContentApproved": case "UgcContentRejected":
                 return Plan(row.EventType switch{"UgcChangesRequested"=>"UGC changes requested","UgcContentApproved"=>"UGC content approved",_=>"UGC content reviewed"},
-                    row.EventType switch{"UgcChangesRequested"=>"Review the Business feedback and resubmit your content.","UgcContentApproved"=>"Your UGC content was approved and your earning was recorded.",_=>"The Business did not approve this content."},null,null,
+                    row.EventType switch{"UgcChangesRequested"=>"Review the Business feedback and resubmit your content.","UgcContentApproved"=>"Approved for publication. Your fixed payment remains pending until verified Go Live.",_=>"The Business did not approve this content."},null,null,
                     new NotificationAudience(ActorRole.Creator,Id("CreatorId"))) with { UgcId=Id("OpportunityId") };
             case "UgcMaterialRevision":
             {
@@ -229,7 +243,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                     ugcId=await db.UgcAssignments.AsNoTracking().Where(x=>x.Id==assignmentId).Select(x=>x.UgcOpportunityId).SingleAsync(ct);
                 return Plan(row.EventType=="PublicationVerified"?"Publication verified":"Publication verification failed",
                     row.EventType=="PublicationVerified"?"Your verified publication is ready to Go Live.":"Check the public post and submit it again.",
-                    promotionId,budgetId,new NotificationAudience(ActorRole.Creator,publication.CreatorId)) with { UgcId=ugcId };
+                    promotionId,budgetId,new NotificationAudience(ActorRole.Creator,publication.CreatorId)) with { UgcId=ugcId, RelatedItemId=publication.UgcAssignmentId };
             }
             case "CreatorParticipationActivated":
             {
@@ -245,6 +259,11 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                     new NotificationAudience(ActorRole.Business,promotion.BusinessId),
                     new NotificationAudience(ActorRole.PlatformAdmin));
             }
+            case "UgcFixedPaymentEarned": case "UgcPaymentCorrected":
+                return Plan(row.EventType=="UgcFixedPaymentEarned"?"UGC payment earned":"UGC payment returned to pending",
+                    row.EventType=="UgcFixedPaymentEarned"?"Verified Go Live succeeded. The agreed fixed fee is now available earnings.":"The premature approval credit was reversed to campaign reserve. The agreed fee remains pending verified Go Live.",
+                    null,null,new NotificationAudience(ActorRole.Creator,Id("CreatorId")),
+                    new NotificationAudience(ActorRole.Business,Id("BusinessId"))) with { UgcId=Id("OpportunityId") };
             case "UgcPublicationActivated":
             {
                 var publicationId=Id("PublicationId");

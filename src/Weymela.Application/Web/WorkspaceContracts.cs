@@ -46,6 +46,9 @@ public sealed record CampaignRow(Guid Id, string PublicId, Guid BusinessId, stri
     int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version, int PromotionLiveDurationDays, string? Slogan = null,
     string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null,
     DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
+public sealed record BusinessPromotionItem(string Key, Guid Id, Guid CampaignId, string Kind, string Title,
+    string Group, string Status, decimal Budget, decimal Remaining, DateTime? DueAtUtc,
+    string PrimaryAction, string ActionPath, string? Creator = null, int? RemainingDays = null);
 public sealed record ApplicantCard(Guid Id, CreatorCard Creator, string Message, string? ContentConcept, string Status, DateTime AppliedAtUtc,
     string? Platform = null, CreatorSocialProfileView? SocialProfile = null);
 public sealed record CreatorBudgetCard(Guid Id, CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining,
@@ -78,7 +81,7 @@ public sealed record PrivateReviewMediaInput(string StorageKey, string ContentTy
 public sealed record PublicationInput(string Provider, string ExternalContentId, Guid CreatorSocialProfileId);
 public sealed record PublicationStatusView(Guid Id, string Provider, string ExternalContentId,
     string Status, string VerificationLabel, DateTime RequestedAtUtc, DateTime? VerifiedAtUtc,
-    DateTime? WentLiveAtUtc, string? WatchUrl);
+    DateTime? WentLiveAtUtc, string? WatchUrl, string? VerificationCode = null);
 public sealed record AdminPublicationReviewCard(Guid Id, string Creator, string Business, string Work,
     string WorkType, string Provider, string ExternalContentId, string SocialProfileUrl,
     string Status, DateTime RequestedAtUtc, string WatchUrl, DateTime? WentLiveAtUtc = null);
@@ -89,7 +92,7 @@ public sealed record PayoutItem(Guid Id, string Kind, string Name, decimal Amoun
     DateTime EligibleAtUtc, DateTime? PaidAtUtc, string? Reference);
 public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal? MinimumToCashOut, decimal? AmountNeeded, decimal EligibleAmount,
     IReadOnlyList<EarningItem> History, IReadOnlyList<PayoutItem> PayoutHistory, decimal ViewEarnings = 0,
-    decimal SaleEarnings = 0, decimal UgcEarnings = 0);
+    decimal SaleEarnings = 0, decimal UgcEarnings = 0, decimal PendingEarnings = 0, decimal PaidOut = 0);
 public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCampaigns, EarningsWorkspace Earnings);
 public sealed record AdminHome(int Businesses, int Creators, int ActiveCampaigns, decimal CampaignSpend, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> Activity);

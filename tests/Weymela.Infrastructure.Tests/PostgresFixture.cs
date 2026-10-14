@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using DotNet.Testcontainers.Images;
@@ -33,17 +34,17 @@ public sealed class PostgresFixture : IAsyncLifetime
         return (result.ExitCode, result.Stdout, result.Stderr);
     }
 
-    public async Task<TestDatabase> CreateAsync()
+    public async Task<TestDatabase> CreateAsync(string? targetMigration = null)
     {
         // Every test uses a fresh database inside this disposable container.
         var name = "v3_test_" + Guid.NewGuid().ToString("N");
-        return await CreateDatabaseAsync(name);
+        return await CreateDatabaseAsync(name, targetMigration);
     }
 
     public Task<TestDatabase> CreatePilotLegalPublicationAsync()
         => CreateDatabaseAsync("weymela_v3_pilot");
 
-    private async Task<TestDatabase> CreateDatabaseAsync(string name)
+    private async Task<TestDatabase> CreateDatabaseAsync(string name, string? targetMigration = null)
     {
         await using var connection = new NpgsqlConnection(postgres.GetConnectionString());
         await connection.OpenAsync();
@@ -55,7 +56,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         var cs = new NpgsqlConnectionStringBuilder(postgres.GetConnectionString()) { Database = name, Pooling = false }.ConnectionString;
         var result = new TestDatabase(cs);
         await using var db = result.Open();
-        await db.Database.MigrateAsync();
+        await db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync(targetMigration);
         return result;
     }
 }

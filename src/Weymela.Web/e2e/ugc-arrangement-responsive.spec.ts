@@ -13,6 +13,12 @@ const opportunity = {
 for (const width of [320, 360, 375, 390, 393, 430]) {
   test(`UGC arrangement and shared icon readability at ${width}px`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 844 });
+    await page.route("**/api/business/promotion-management", route => route.fulfill({ json: [{
+      key: "ugc-" + opportunity.id, id: opportunity.id, campaignId: opportunity.id, kind: "UGC campaign",
+      title: opportunity.title, group: "Active", status: "Open", budget: 550, remaining: 550,
+      dueAtUtc: opportunity.dueDateUtc, primaryAction: "Manage campaign", actionPath: `/business/ugc/${opportunity.id}`,
+      creator: null, remainingDays: null,
+    }] }));
     await page.route("**/api/business/ugc", route => route.fulfill({ json: [opportunity] }));
     await page.route("**/api/creator/ugc", route => route.fulfill({ json: [opportunity] }));
     await page.route(`**/api/business/ugc/${opportunity.id}`, route => route.fulfill({ json: {
@@ -51,8 +57,8 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await layout(page);
     if (width === 390) await screenshot(page, "390-business-ugc-arrangement");
     await open(page, "/business/campaigns");
-    const businessCard = page.locator(".data-card").filter({ hasText: opportunity.title });
-    await businessCard.getByRole("link", { name: "Manage" }).click();
+    const businessCard = page.locator(".business-promotion-card").filter({ hasText: opportunity.title });
+    await businessCard.getByRole("link", { name: "Manage campaign" }).click();
     await expect(page.getByText("Creator purchases", { exact: true })).toBeVisible();
     await layout(page);
 

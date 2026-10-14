@@ -49,6 +49,8 @@ public static class ApiHost
         builder.Services.AddScoped<WorkspaceQueries>();builder.Services.AddScoped<WorkspaceCommands>();builder.Services.AddScoped<CreatorSocialProfileLinks>();builder.Services.AddScoped<AdminSocialProfileReviewService>();
         builder.Services.AddScoped<UgcService>();
         builder.Services.AddScoped<CreatorPublicationService>();
+        builder.Services.AddHttpClient<TikTokLinkResolver>(c => c.Timeout = TimeSpan.FromSeconds(12))
+            .ConfigurePrimaryHttpMessageHandler(TikTokLinkResolver.SecureHandler);
         builder.Services.AddScoped<NotificationService>();builder.Services.AddScoped<WorkerPump>();builder.Services.AddScoped<DepositService>();
         builder.Services.AddSingleton<PrivateReceiptStore>();
         builder.Services.AddSingleton<CreatorPhotoStore>();builder.Services.AddScoped<CreatorPhotoService>();

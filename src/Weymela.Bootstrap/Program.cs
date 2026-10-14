@@ -41,7 +41,7 @@ if (targetName is not ("pilot" or "production-test" or "production"))
 var targetConfiguration = V3BootstrapTargetConfiguration.FromEnvironment();
 var selectedTarget = PlatformAdminBootstrapTarget.Select(targetName, targetConfiguration);
 var operation = values.GetValueOrDefault("operation") ?? "platform-admin";
-if (operation is not ("platform-admin" or "financial-configuration-v1"))
+if (operation is not ("platform-admin" or "financial-configuration-v1" or "ugc-payment-correction"))
     throw new ArgumentException("Unsupported bootstrap operation.");
 var productionAuthorizationReference = values.GetValueOrDefault("production-authorization-reference");
 if (selectedTarget.RequiresProductionAuthorization && string.IsNullOrWhiteSpace(productionAuthorizationReference))
@@ -59,6 +59,17 @@ if (operation == "platform-admin"
 var options = new DbContextOptionsBuilder<WeymelaDbContext>().UseNpgsql(connection).Options;
 await using var db = new WeymelaDbContext(options);
 await PlatformAdminBootstrapTarget.VerifyAsync(db, target, CancellationToken.None);
+
+if (operation == "ugc-payment-correction")
+{
+    var journal = await new UgcPaymentCorrectionService(db, TimeProvider.System).CorrectAsync(
+        new Weymela.Application.Actor(Guid.Parse(Required(values, "platform-admin-user-id")), Weymela.Application.ActorRole.PlatformAdmin),
+        Guid.Parse(Required(values, "assignment-id")), Guid.Parse(Required(values, "original-journal-id")),
+        target.RequiresProductionAuthorization ? productionAuthorizationReference! : Required(values, "operator-reference"),
+        Required(values, "idempotency-key"), CancellationToken.None);
+    Console.WriteLine($"Auditable UGC correction journal: {journal:D}");
+    return;
+}
 
 if (string.Equals(operation, "financial-configuration-v1", StringComparison.Ordinal))
 {

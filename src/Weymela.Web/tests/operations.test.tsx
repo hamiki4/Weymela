@@ -24,7 +24,7 @@ describe("Operational states", () => {
   });
   it("marks one notification read using the scoped API", async () => {
     const api = mockApi({ "/notifications": { items: [notification], unreadCount: 1 } }); wrap(<Inbox />);
-    await userEvent.click(await screen.findByRole("button", { name: "Mark read" }));
+    await userEvent.click(await screen.findByRole("link", { name: "Open" }));
     expect(api.writes[0].path).toBe("/notifications/one/read"); expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/creator/earnings");
   });
   it("marks all read without submitting a client-selected user or role", async () => {
@@ -33,7 +33,7 @@ describe("Operational states", () => {
   });
   it("shows offline state and does not queue a notification mutation", async () => {
     const api = mockApi({ "/notifications": { items: [notification], unreadCount: 1 } }); vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    wrap(<><ConnectionStatus /><Inbox /></>); await userEvent.click(await screen.findByRole("button", { name: "Mark read" }));
+    wrap(<><ConnectionStatus /><Inbox /></>); await userEvent.click(await screen.findByRole("link", { name: "Open" }));
     expect(screen.getAllByText(/Nothing.*queued/).length).toBeGreaterThan(0); expect(api.writes).toHaveLength(0);
   });
   it("does not interrupt an active session when an update becomes available", () => {

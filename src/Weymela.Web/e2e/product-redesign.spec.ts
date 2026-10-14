@@ -326,7 +326,7 @@ test("Business visual review captures operational surfaces at approved widths", 
 
   await page.setViewportSize({ width: 320, height: 800 });
   await open(page, "/business/campaigns");
-  const promotionsHeading = page.locator("main h2").filter({ hasText: /^Promotions$/ });
+  const promotionsHeading = page.locator("main h1").filter({ hasText: /^Promotions$/ });
   await expect(promotionsHeading).toHaveCount(1);
   await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
   await layout(page);

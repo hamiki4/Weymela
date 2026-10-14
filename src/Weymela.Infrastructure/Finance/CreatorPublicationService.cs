@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
+using Weymela.Application.Operations;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -27,12 +28,13 @@ public static class PublicContentLink
 }
 
 public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedViewProvider provider,
-    ICommerceAccessPolicy access, IWorkspaceDirectory directory, TimeProvider clock)
+    ICommerceAccessPolicy access, IWorkspaceDirectory directory, TimeProvider clock, TikTokLinkResolver? linkResolver = null)
 {
     public async Task<PublicationStatusView> RequestPromotionAsync(Actor actor, Guid allocationId,
         PublicationInput input, string key, CancellationToken ct)
     {
-        input = NormalizePublicationInput(input);
+        var resolved = await NormalizePublicationInputAsync(input, ct);
+        input = resolved.Input;
         var publicationId = await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             var allocation = await db.CreatorAllocations.SingleOrDefaultAsync(x => x.Id == allocationId, token)
@@ -60,6 +62,15 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             var publication = new CreatorPublicationVerification(allocation.CreatorId, profile.Id,
                 allocation.Id, null, submission.Id, null, input.Provider, input.ExternalContentId,
                 clock.GetUtcNow().UtcDateTime);
+            if (resolved.Url is { } canonical)
+            {
+                var handle = TikTokVideoLink.CreatorHandle(canonical);
+                var profileHandle = Uri.TryCreate(profile.ProfileUrl, UriKind.Absolute, out var profileUrl)
+                    ? profileUrl.AbsolutePath.Trim('/').TrimStart('@') : null;
+                if (handle is not null && !string.Equals(handle, profileHandle, StringComparison.OrdinalIgnoreCase))
+                    throw new ApplicationFailure(FailureKind.Validation, "This TikTok video belongs to another Creator profile.", code: "WrongCreator");
+                publication.RecordPublicLink(canonical);
+            }
             db.CreatorPublicationVerifications.Add(publication);
             operation.Remember(actor, "RequestPromotionPublication", key, fingerprint, publication.Id.ToString(),
                 clock.GetUtcNow().UtcDateTime);
@@ -76,7 +87,8 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
     public async Task<PublicationStatusView> RequestUgcAsync(Actor actor, Guid assignmentId,
         PublicationInput input, string key, CancellationToken ct)
     {
-        input = NormalizePublicationInput(input);
+        var resolved = await NormalizePublicationInputAsync(input, ct);
+        input = resolved.Input;
         var publicationId = await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             var assignment = await db.UgcAssignments.SingleOrDefaultAsync(x => x.Id == assignmentId, token)
@@ -88,16 +100,14 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             await access.EnsureBusinessAsync(opportunity.BusinessId, token);
             var submission = await CurrentApprovedUgcSubmission(assignment.Id, token);
             var request = await db.UgcCreatorRequests.AsNoTracking().SingleAsync(x => x.Id == assignment.UgcCreatorRequestId, token);
-            if (request.SelectedPlatform is null || request.VerifiedSocialProfileId is null)
-                throw new ApplicationFailure(FailureKind.Validation, "This delivery-only UGC work does not require social publication.");
             var profile = await EligibleSocialProfile(assignment.CreatorId, request.VerifiedSocialProfileId, input, token);
             var capacity = await db.UgcPlatformCapacities.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.UgcOpportunityId == opportunity.Id && x.Platform == profile.Platform && x.Capacity > 0, token);
             var requirement = await db.UgcPlatformRequirements.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.UgcOpportunityId == opportunity.Id && x.Platform == profile.Platform, token);
-            if (capacity is null || requirement is null)
+            if (request.SelectedPlatform is not null && (capacity is null || requirement is null))
                 throw new ApplicationFailure(FailureKind.Validation, "The selected publication platform is no longer required for this work.");
-            await EnsureAudienceAsync(profile, requirement.MinimumAudience, token);
+            if (requirement is not null) await EnsureAudienceAsync(profile, requirement.MinimumAudience, token);
             var fingerprint = RequestFingerprint.Create(assignment.Id.ToString(), submission.Id.ToString(),
                 profile.Id.ToString(), input.Provider, input.ExternalContentId);
             var operation = new FinancialOperation(db);
@@ -110,6 +120,15 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             var publication = new CreatorPublicationVerification(assignment.CreatorId, profile.Id,
                 null, assignment.Id, null, submission.Id, input.Provider, input.ExternalContentId,
                 clock.GetUtcNow().UtcDateTime);
+            if (resolved.Url is { } canonical)
+            {
+                var handle = TikTokVideoLink.CreatorHandle(canonical);
+                var profileHandle = Uri.TryCreate(profile.ProfileUrl, UriKind.Absolute, out var profileUrl)
+                    ? profileUrl.AbsolutePath.Trim('/').TrimStart('@') : null;
+                if (handle is not null && !string.Equals(handle, profileHandle, StringComparison.OrdinalIgnoreCase))
+                    throw new ApplicationFailure(FailureKind.Validation, "This TikTok video belongs to another Creator profile.", code: "WrongCreator");
+                publication.RecordPublicLink(canonical);
+            }
             db.CreatorPublicationVerifications.Add(publication);
             operation.Remember(actor, "RequestUgcPublication", key, fingerprint, publication.Id.ToString(),
                 clock.GetUtcNow().UtcDateTime);
@@ -199,14 +218,16 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
                 new(publication.Provider, publication.ExternalContentId, publication.CreatorSocialProfileId), token);
             var requirement = await db.UgcPlatformRequirements.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.UgcOpportunityId == assignment.UgcOpportunityId && x.Platform == publicationProfile.Platform, token);
-            if (requirement is null) throw new ApplicationFailure(FailureKind.Validation,
+            if (request.SelectedPlatform is not null && requirement is null) throw new ApplicationFailure(FailureKind.Validation,
                 "The selected publication platform is no longer required for this work.");
-            await EnsureAudienceAsync(publicationProfile, requirement.MinimumAudience, token);
+            if (requirement is not null) await EnsureAudienceAsync(publicationProfile, requirement.MinimumAudience, token);
             var fingerprint = RequestFingerprint.Create(assignment.Id.ToString(), publication.Id.ToString());
             var operation = new FinancialOperation(db);
             if (await operation.Replay(actor, "GoLiveUgcPublication", key, fingerprint, token) is { } replay)
                 return Guid.Parse(replay);
             publication.GoLive(clock.GetUtcNow().UtcDateTime);
+            var opportunity = await db.UgcOpportunities.Include(x => x.PlatformCapacities).SingleAsync(x => x.Id == assignment.UgcOpportunityId, token);
+            await UgcPublicationPayment.ReleaseAsync(db, actor, assignment, opportunity, publication, key, clock.GetUtcNow().UtcDateTime, token);
             operation.Remember(actor, "GoLiveUgcPublication", key, fingerprint, publication.Id.ToString(),
                 clock.GetUtcNow().UtcDateTime);
             operation.Audit(actor, "UgcPublicationActivated", Guid.NewGuid(), clock.GetUtcNow().UtcDateTime,
@@ -251,7 +272,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             }
             result.Add(new(row.Id, creator.DisplayName, business, work, workType, row.Provider,
                 row.ExternalContentId, profile.ProfileUrl, row.Status.ToString(), row.RequestedAtUtc,
-                PublicContentLink.Create(row.Provider, row.ExternalContentId)
+                row.CanonicalUrl ?? PublicContentLink.Create(row.Provider, row.ExternalContentId)
                     ?? throw new ApplicationFailure(FailureKind.Validation, "The publication link is invalid."),
                 row.WentLiveAtUtc));
         }
@@ -339,13 +360,23 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
         VerifiedViewResult evidence;
         try
         {
-            evidence = await provider.VerifyAsync(new(publication.CreatorId, workId,
-                publication.Provider, publication.ExternalContentId), ct);
+            var request = new VerifiedViewRequest(publication.CreatorId, workId, publication.Provider, publication.ExternalContentId);
+            evidence = publication.UgcAssignmentId is null ? await provider.VerifyAsync(request, ct)
+                : provider is IVerifiedPublicationProvider publications ? await publications.VerifyPublicationAsync(request, ct)
+                : throw new ApplicationFailure(FailureKind.Validation, "Publication ownership verification is unavailable.", code: "ProviderUnavailable");
         }
-        catch (ApplicationFailure)
+        catch (ApplicationFailure failure)
         {
-            // The provider may be unsupported or temporarily unavailable. The
-            // record remains explicitly pending for governed Admin review.
+            await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
+            {
+                var pending = await db.CreatorPublicationVerifications.SingleAsync(x => x.Id == id, token);
+                if (pending.Status == PublicationVerificationStatus.VerificationPending)
+                {
+                    pending.RecordProviderFailure(failure.Code ?? "ProviderUnavailable");
+                    if (failure.Code is "WrongCreator" or "PostInaccessible") pending.Fail(false, clock.GetUtcNow().UtcDateTime);
+                }
+                return id;
+            }, ct);
             return;
         }
         await new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
@@ -378,12 +409,16 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             "Choose your active social profile for this platform.");
     }
 
-    private static PublicationInput NormalizePublicationInput(PublicationInput input)
+    private async Task<(PublicationInput Input, string? Url)> NormalizePublicationInputAsync(PublicationInput input, CancellationToken ct)
     {
-        if (string.Equals(input.Provider, "TikTok", StringComparison.OrdinalIgnoreCase)
-            && TikTokVideoLink.VideoId(input.ExternalContentId) is { } videoId)
-            return input with { Provider = "TikTok", ExternalContentId = videoId };
-        return input;
+        if (!string.Equals(input.Provider, "TikTok", StringComparison.OrdinalIgnoreCase)) return (input, null);
+        if (input.ExternalContentId.Length is >= 6 and <= 30 && input.ExternalContentId.All(char.IsAsciiDigit))
+            return (input with { Provider = "TikTok" }, null);
+        var canonical = TikTokVideoLink.VideoId(input.ExternalContentId) is not null
+            ? TikTokVideoLink.Normalize(input.ExternalContentId)
+            : linkResolver is not null ? await linkResolver.ResolveAsync(input.ExternalContentId, ct)
+            : throw new ApplicationFailure(FailureKind.Validation, "TikTok link resolution is unavailable. Use the canonical video link.", code: "ProviderUnavailable");
+        return (input with { Provider = "TikTok", ExternalContentId = TikTokVideoLink.VideoId(canonical)! }, canonical);
     }
 
     private async Task EnsureAudienceAsync(CreatorSocialProfileRecord profile, long? minimumAudience,
@@ -422,13 +457,14 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
     internal static PublicationStatusView View(CreatorPublicationVerification row) => new(row.Id,
         row.Provider, row.ExternalContentId, row.Status.ToString(), row.Status switch
         {
+            PublicationVerificationStatus.VerificationPending when row.VerificationCode == "ProviderUnavailable" => "Provider unavailable · awaiting authorized publication review",
             PublicationVerificationStatus.VerificationPending => "Verification pending",
             PublicationVerificationStatus.Verified when row.VerificationMethod == PublicationVerificationMethod.Provider => "Provider verified",
             PublicationVerificationStatus.Verified => "Manually verified",
             PublicationVerificationStatus.Expired => "Verification expired",
             _ => "Verification failed"
         }, row.RequestedAtUtc, row.VerifiedAtUtc, row.WentLiveAtUtc,
-        PublicContentLink.Create(row.Provider, row.ExternalContentId));
+        row.CanonicalUrl ?? PublicContentLink.Create(row.Provider, row.ExternalContentId), row.VerificationCode);
 
     private static void DemandPlatformAdmin(Actor actor)
     {

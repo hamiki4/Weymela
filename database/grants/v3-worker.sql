@@ -69,6 +69,7 @@ REVOKE ALL PRIVILEGES ON TABLE
     v3."PublicWorkspaceProfiles",
     v3."RoleEnrollments",
     v3."RetiredSupportSessions",
+    v3."UgcPaymentCorrections",
     v3."UgcAssignments",
     v3."UgcBudgetEntries",
     v3."UgcCustomerOfferBudgetEntries",
@@ -152,5 +153,8 @@ REVOKE EXECUTE ON FUNCTION v3.assign_creator_number() FROM PUBLIC, :"worker_role
 GRANT EXECUTE ON FUNCTION v3.guard_outbox_envelope() TO :"worker_role";
 GRANT EXECUTE ON FUNCTION v3.guard_notification_identity() TO :"worker_role";
 GRANT EXECUTE ON FUNCTION v3.guard_qr_use() TO :"worker_role";
+
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_payment_correction() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION v3.check_ugc_publication_earning() FROM PUBLIC;
 
 COMMIT;

@@ -23,6 +23,7 @@ internal static class BusinessEndpoints
         g.MapPost("/cashiers/{id:guid}/{state}",async(Guid id,string state,HttpContext c,CashierService service,CancellationToken ct)=>
             Results.Ok(await service.SetStateAsync(EndpointSupport.Actor(c),id,state,EndpointSupport.Key(c),ct)));
         g.MapGet("/campaigns",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignsAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/promotion-management",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessPromotionTrackingAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/campaigns/{id:guid}",(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignAsync(EndpointSupport.Actor(c),id,ct));
         g.MapGet("/promotions",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignsAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/promotions/{id:guid}",(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.BusinessCampaignAsync(EndpointSupport.Actor(c),id,ct));

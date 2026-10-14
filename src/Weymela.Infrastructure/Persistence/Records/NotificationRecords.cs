@@ -13,6 +13,7 @@ public sealed class InAppNotification
     public string Title { get; init; } = "";
     public string Message { get; init; } = "";
     public string Route { get; init; } = "";
+    public Guid[] RelatedResourceIds { get; init; } = [];
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? ReadAtUtc { get; set; }
     public PushDeliveryState PushState { get; set; }

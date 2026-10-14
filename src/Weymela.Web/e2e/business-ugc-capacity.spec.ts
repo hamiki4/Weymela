@@ -7,10 +7,10 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await login(context, "business");
     if (width === 320) await ensureBusinessFunds(context, 1500);
     await open(page, "/business/campaigns/new?type=ugc");
-    await expect(page.getByRole("radio", { name: "Deliver content only" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Choose publication platform later" })).toBeChecked();
     await expect(page.getByLabel("Creators needed")).toBeVisible();
 
-    await page.getByRole("radio", { name: "Creator must post" }).check();
+    await page.getByRole("radio", { name: "Set publication platforms now" }).check();
     await expect(page.getByRole("group", { name: "Creators / platforms" })).toBeVisible();
     await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();
     await page.getByRole("button", { name: "Add TikTok Creator slot" }).click();

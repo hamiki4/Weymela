@@ -162,9 +162,9 @@ describe("Business workspace", () => {
     expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
   });
   it("does not repeat the Create Promotion action on an empty Promotions page", async () => {
-    mockApi({ "/business/campaigns": [] });
+    mockApi({ "/business/promotion-management": [] });
     mount(<BusinessCampaigns />);
-    expect(await screen.findByText("No Promotions yet.")).toBeVisible();
+    expect(await screen.findByText("No active promotions")).toBeVisible();
     expect(screen.getAllByRole("link", { name: /Create Promotion/ })).toHaveLength(1);
   });
   it("keeps the legacy UGC workspace represented as Promotions", async () => {
@@ -451,10 +451,10 @@ describe("Business workspace", () => {
   });
   it("has no destructive End Campaign action", async () => {
     mount(<BusinessCampaigns />);
-    await screen.findByRole("heading", { name: "Promotions", level: 2 });
+    await screen.findByRole("tablist", { name: "Promotion management" });
     expect(screen.queryByRole("heading", { name: "UGC Promotions", level: 2 })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Promotions", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Manage" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "Manage campaign" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /End Campaign|End Promotion/ }),
     ).not.toBeInTheDocument();
@@ -926,7 +926,7 @@ describe("Creator workspace", () => {
         sourceType: "UGC", amount: 4500, atUtc: "2026-09-28T12:00:00Z" },
     ] } });
     const rendered = mount(<CreatorEarnings />);
-    await screen.findByRole("heading", { name: "Earning History" });
+    await screen.findByRole("heading", { name: "Transaction History" });
     const cards = rendered.container.querySelectorAll(".mobile-data .data-card");
     expect(cards).toHaveLength(2);
     expect(cards[0]).toHaveTextContent("Bella Restaurant");

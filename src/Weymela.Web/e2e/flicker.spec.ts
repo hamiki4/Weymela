@@ -56,7 +56,7 @@ test("iPhone first visit keeps Business Home visible until Promotions data arriv
   await open(page, "/business");
   let release!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route("**/api/business/campaigns", async route => { await held; await route.continue(); });
+  await page.route("**/api/business/promotion-management", async route => { await held; await route.continue(); });
   await page.evaluate(() => {
     const shell = document.querySelector(".app-shell") as HTMLElement & { pilotMarker?: string };
     shell.pilotMarker = "retained";

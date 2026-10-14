@@ -38,6 +38,35 @@ for (var i = 0; i < args.Length; i++)
 var targetName = values.GetValueOrDefault("target");
 if (targetName is not ("pilot" or "production-test" or "production"))
     throw new InvalidOperationException("An explicit bootstrap target is required: pilot, production-test, or production.");
+// Financial corrections are a separate maintenance operation. They use the existing
+// migrator identity, never the identity-provisioning bootstrap role or a public API.
+if (values.GetValueOrDefault("operation") == "ugc-payment-correction")
+{
+    var names = new Dictionary<string, string?> {
+        ["pilot"] = Environment.GetEnvironmentVariable("V3_BOOTSTRAP_PILOT_DATABASE"),
+        ["production-test"] = Environment.GetEnvironmentVariable("V3_BOOTSTRAP_PRODUCTION_TEST_DATABASE"),
+        ["production"] = Environment.GetEnvironmentVariable("V3_BOOTSTRAP_PRODUCTION_DATABASE") };
+    if (names.Values.Any(name => name is null || !PlatformAdminBootstrapTarget.IsV3DatabaseName(name))
+        || names.Values.Distinct(StringComparer.Ordinal).Count() != 3)
+        throw new InvalidOperationException("Protected, distinct correction target databases are required.");
+    var reference = targetName == "production"
+        ? Required(values, "production-authorization-reference") : Required(values, "operator-reference");
+    var correctionConnection = new Npgsql.NpgsqlConnectionStringBuilder(
+        Environment.GetEnvironmentVariable("V3_BOOTSTRAP_CONNECTION")
+            ?? throw new InvalidOperationException("The correction connection must be supplied outside source control."));
+    if (correctionConnection.Database != names[targetName] || correctionConnection.Username != "weymela_v3_migrator"
+        || !string.IsNullOrEmpty(correctionConnection.Password) || !Path.IsPathFullyQualified(correctionConnection.Passfile ?? ""))
+        throw new InvalidOperationException("Correction requires the exact selected V3 database, existing migrator role and protected passfile.");
+    await using var correctionDb = new WeymelaDbContext(new DbContextOptionsBuilder<WeymelaDbContext>().UseNpgsql(correctionConnection.ConnectionString).Options);
+    await PlatformAdminBootstrapTarget.VerifyAsync(correctionDb, names[targetName]!, "weymela_v3_migrator");
+    var correctionJournal = await new UgcPaymentCorrectionService(correctionDb, TimeProvider.System).CorrectAsync(
+        new Weymela.Application.Actor(Guid.Parse(Required(values, "platform-admin-user-id")), Weymela.Application.ActorRole.PlatformAdmin),
+        Guid.Parse(Required(values, "assignment-id")), Guid.Parse(Required(values, "original-journal-id")),
+        reference, Required(values, "idempotency-key"), CancellationToken.None);
+    Console.WriteLine($"Auditable UGC correction journal: {correctionJournal:D}");
+    return;
+}
+
 var targetConfiguration = V3BootstrapTargetConfiguration.FromEnvironment();
 var selectedTarget = PlatformAdminBootstrapTarget.Select(targetName, targetConfiguration);
 var operation = values.GetValueOrDefault("operation") ?? "platform-admin";
@@ -59,17 +88,6 @@ if (operation == "platform-admin"
 var options = new DbContextOptionsBuilder<WeymelaDbContext>().UseNpgsql(connection).Options;
 await using var db = new WeymelaDbContext(options);
 await PlatformAdminBootstrapTarget.VerifyAsync(db, target, CancellationToken.None);
-
-if (operation == "ugc-payment-correction")
-{
-    var journal = await new UgcPaymentCorrectionService(db, TimeProvider.System).CorrectAsync(
-        new Weymela.Application.Actor(Guid.Parse(Required(values, "platform-admin-user-id")), Weymela.Application.ActorRole.PlatformAdmin),
-        Guid.Parse(Required(values, "assignment-id")), Guid.Parse(Required(values, "original-journal-id")),
-        target.RequiresProductionAuthorization ? productionAuthorizationReference! : Required(values, "operator-reference"),
-        Required(values, "idempotency-key"), CancellationToken.None);
-    Console.WriteLine($"Auditable UGC correction journal: {journal:D}");
-    return;
-}
 
 if (string.Equals(operation, "financial-configuration-v1", StringComparison.Ordinal))
 {

@@ -84,7 +84,7 @@ for (const width of [375, 1366])
     const creatorBudgetId = page.url().split("/").pop()!;
     await page
       .getByLabel("TikTok Video Link", { exact: true })
-      .fill("https://www.tiktok.com/@weymela.creator/video/7412345678901234567");
+      .fill("https://www.tiktok.com/@elias/video/7412345678901234567");
     await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
     const initialReviewStatus = page.getByText(/under Business review/i);
     await expect(initialReviewStatus).toBeVisible({ timeout: 12000 });
@@ -103,7 +103,7 @@ for (const width of [375, 1366])
     await changesRequested.getByRole("link", { name: "Update Content", exact: true }).click();
     await page
       .getByLabel("TikTok Video Link", { exact: true })
-      .fill("https://www.tiktok.com/@weymela.creator/video/7412345678901234568");
+      .fill("https://www.tiktok.com/@elias/video/7412345678901234568");
     await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
     await expect(page.getByText(/under Business review/i)).toBeVisible();
     await login(context, "business");
@@ -118,7 +118,7 @@ for (const width of [375, 1366])
     await open(page, `/creator/promotions/${creatorBudgetId}`);
     await page
       .getByLabel("TikTok Video Link", { exact: true })
-      .fill(`https://www.tiktok.com/@weymela.creator/video/${Date.now()}${width}`);
+      .fill(`https://www.tiktok.com/@elias/video/${Date.now()}${width}`);
     await page.getByRole("button", { name: "Verify Publication", exact: true }).click();
     await expect(page.getByRole("button", { name: "Go Live", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Go Live", exact: true }).click();

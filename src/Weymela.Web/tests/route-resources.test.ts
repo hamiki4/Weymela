@@ -4,7 +4,9 @@ import { routeResources } from "../src/app/routeResources";
 describe("authenticated route resource contracts", () => {
   it.each([
     ["/business/campaigns/new", ["/business/wallet", "/business/pricing", "/business/ugc-pricing"]],
-    ["/business/ugc", ["/business/campaigns", "/business/ugc", "/business/promotion-content-submissions"]],
+    ["/business/ugc", ["/business/ugc"]],
+    ["/business/campaigns", ["/business/promotion-management"]],
+    ["/business/ugc/item", ["/business/ugc/item"]],
     ["/business/ugc/new", ["/business/wallet", "/business/ugc-pricing"]],
     ["/creator", ["/creator/home", "/creator/campaigns", "/creator/discover", "/creator/ugc"]],
     ["/creator/ugc", ["/creator/discover", "/creator/ugc"]],

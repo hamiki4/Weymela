@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { notifyNotificationsChanged, post } from "../../api/client";
+import { notifyNotificationsChanged, request } from "../../api/client";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,7 +20,8 @@ export function DisplayedNotifications({ profileKey, pathname }: { profileKey: s
       const displayedPath = routePending ? pathname : undefined;
       routePending = false;
       if (!ids.length && !displayedPath || window.sessionStorage.getItem("weymela.profile-key") !== profileKey) return;
-      void post("/notifications/read-related", { displayedIds: ids, ...(displayedPath ? { displayedPath } : {}) }).then(() => {
+      void request("/notifications/read-related", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ displayedIds: ids, ...(displayedPath ? { displayedPath } : {}) }) }).then(() => {
         if (!active || window.sessionStorage.getItem("weymela.profile-key") !== profileKey) return;
         ids.forEach(id => acknowledged.set(id, Date.now()));
         notifyNotificationsChanged();

@@ -277,7 +277,8 @@ test("Business keeps funding, Checkout and Cashier Management within reach", asy
   await expect(page.getByRole("link", { name: /Available funds/i })).toHaveAttribute("href", "/business/wallet");
   await page.getByRole("link", { name: /Active Promotions/ }).click();
   await expect(page).toHaveURL(/\/business\/campaigns\?filter=Active$/);
-  await expect(page.getByRole("heading", { name: "Active Promotions", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Promotions", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /^Active \(\d+\)$/ })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("link", { name: "Create Promotion" }).click();
   await expect(page).toHaveURL(/\/business\/campaigns\/new$/);
   await expect(page.getByText("UGC + Sale", { exact: true })).toBeVisible();
@@ -325,17 +326,17 @@ test("Business visual review captures operational surfaces at approved widths", 
   await screenshot(page, "business-home-390");
 
   await page.setViewportSize({ width: 320, height: 800 });
-  await open(page, "/business/campaigns");
+  await open(page, "/business/campaigns?tab=Active");
   const promotionsHeading = page.locator("main h1").filter({ hasText: /^Promotions$/ });
   await expect(promotionsHeading).toHaveCount(1);
-  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC campaign" }) })).toHaveCount(1);
   await layout(page);
   await screenshot(page, "business-promotions-320");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await open(page, "/business/campaigns");
+  await open(page, "/business/campaigns?tab=Active");
   await expect(promotionsHeading).toHaveCount(1);
-  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC campaign" }) })).toHaveCount(1);
   await layout(page);
   await screenshot(page, "business-promotions-390");
 
@@ -385,8 +386,8 @@ test("Business visual review captures operational surfaces at approved widths", 
   await layout(page);
   await screenshot(page, "business-home-1366");
 
-  await open(page, "/business/campaigns");
-  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title })).toHaveCount(1);
+  await open(page, "/business/campaigns?tab=Active");
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC campaign" }) })).toHaveCount(1);
   await layout(page);
   await screenshot(page, "business-promotions-1366");
 

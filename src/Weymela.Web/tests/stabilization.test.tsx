@@ -42,6 +42,8 @@ it("only visible, loaded records acknowledge notifications and stale profile res
  await waitFor(()=>expect(observed).toHaveLength(1));
  changed([{target:container.querySelector("article")!,isIntersecting:true} as unknown as IntersectionObserverEntry],{} as IntersectionObserver);
  await waitFor(()=>expect(api.writes[0]).toMatchObject({path:"/notifications/read-related",body:{displayedIds:[id]}}));
+ const acknowledgement=api.fetch.mock.calls.find(call=>String(call[0]).endsWith("/notifications/read-related"))!;
+ expect(new Headers(acknowledgement[1]?.headers).get("X-Weymela-Activity")).toBeNull();
  window.sessionStorage.setItem("weymela.profile-key","Creator:two");
  changed([{target:container.querySelector("article")!,isIntersecting:true} as unknown as IntersectionObserverEntry],{} as IntersectionObserver);
  await new Promise(resolve=>setTimeout(resolve,120));expect(api.writes).toHaveLength(1);

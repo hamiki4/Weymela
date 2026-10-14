@@ -321,8 +321,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         if (row.TargetRole is ActorRole.Customer or ActorRole.Creator or ActorRole.Business)
         {
             var legalService = new AccountLegalOnboardingService(db, clock, options, legalSource);
-            var status = await legalService.StatusAsync(target.UserId, ct);
-            if (!status.Current)
+            if (!await legalService.HasCurrentAcceptanceAsync(target.UserId, ct))
                 await legalService.AcceptCurrentAsync(target.UserId, accountLegal, ipReference, userAgentReference, ct);
         }
         now = Now; var correlation = Guid.NewGuid();

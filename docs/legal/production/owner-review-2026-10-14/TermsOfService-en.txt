@@ -1,0 +1,50 @@
+WEYMELA TERMS OF SERVICE
+Version: production-2026-10-14.1-en
+
+1. Weymela and these terms
+
+Weymela connects Customers, Creators and Businesses through its application and website. Weymela's confirmed service location is Addis Ababa, Ethiopia. Contact support@weymela.com for service questions, complaints or account assistance. These terms cover use of Weymela; the Privacy Policy explains personal-data handling. The policy version presented for your agreement is recorded with your acceptance.
+
+2. Eligibility, identity and account security
+
+Use Weymela only when you have the legal capacity and authority required for your activities. Provide accurate information, use contact details you are authorized to use, and complete the verification and role requirements shown in the application. An organization’s representative must have authority to act for that organization. Do not impersonate another person, use another person's credentials, or claim another person's phone number or email.
+
+One verified identity may own more than one permitted profile. Use Add Profile to request another profile under that identity. Adding a profile does not create a new identity or replace existing credentials. Creator access requires review. Business Cashiers must use the Business-scoped enrollment process. Platform Admin and Operations Admin access requires privileged provisioning and the applicable approval process.
+
+Keep passwords, PINs, verification codes and signed-in devices secure. Do not share these secrets with support or other users. Report suspected unauthorized access promptly. A PIN protects access on an enrolled device; it does not replace required account authentication or authorize access to somebody else's profile.
+
+3. Offers, campaigns and content
+
+Customers must follow the eligibility, validity, purchase and redemption conditions displayed for an offer. Businesses are responsible for their products, services, prices, offer descriptions, fulfillment and authorized Cashier activity. Creators must provide accurate profile information, use content they are authorized to provide, and follow the agreed campaign, submission, review and publication requirements.
+
+Do not submit forged receipts, false purchase confirmations, misleading audience claims, prohibited content, or information intended to evade review. Do not manipulate referrals, views, rewards, approvals or transaction records. A submitted link, file, receipt or application is not itself proof that a purchase, service, settlement or approval occurred.
+
+4. Money, rewards and settlement
+
+The application displays the applicable configured rates, campaign conditions, reservation amounts, eligibility and transaction status. Rewards and commissions depend on qualifying activity and the required verification and approval. A requested, pending, reserved or under-review amount is not the same as an available amount. Weymela does not promise profit, a minimum income, a particular audience result, or a reward for unverified activity.
+
+For manual Business deposits, use a receiving destination currently displayed by Weymela and check its details before transferring. Submitting a receipt creates a request for review. It does not automatically credit a wallet. Credit requires verified settlement and an authorized approval recorded in the financial ledger. A reviewer may reject a request or seek clarification. Do not make duplicate transfers because a review is still pending; contact support with the transaction reference instead.
+
+Payouts and other financial operations are subject to the displayed availability, eligibility, destination checks and settlement process. External payment providers apply their own terms. A Weymela balance is a record of the relevant application transactions and obligations; these terms do not represent it as an interest-bearing savings account or a guarantee from a payment provider. Report an incorrect amount or suspected duplicate transaction promptly. Financial corrections must preserve the transaction and audit history.
+
+5. Content rights and privacy
+
+You retain the rights you hold in your content. By submitting content for a Weymela activity, you permit Weymela and the authorized participants to store, review, display and use it as needed for that activity, the agreed promotion, support, security and necessary records. A broader ownership transfer or exclusive license requires a separate agreement. Obtain permission for other people's work, images, personal information and trademarks before submitting them.
+
+Public profile links and approved promotional material may be visible to the participants and audiences for which they are provided. Private receipts, credentials and review information are not intended for public publication. The Privacy Policy explains the information processed, service providers, visibility, retention and privacy requests. Agreement to these terms does not create unlimited consent for unrelated processing or marketing.
+
+6. Restrictions, review and account closure
+
+Weymela may restrict activity to address suspected fraud, security problems, unlawful use, policy breaches or unmet approval requirements. A restriction or rejected request does not grant another identity access to the account. Contact support to request an explanation or review and include the relevant profile or transaction reference. Do not send passwords, PINs or verification codes.
+
+Use the application's Delete Account process or contact support about closure. A profile with unsettled obligations or other displayed blockers may require resolution first. Closing one profile does not automatically close every profile owned by the identity. Closing an account does not erase legitimate financial, approval, consent or audit records, cancel outstanding obligations, or authorize an automatic wallet adjustment.
+
+7. Availability, responsibility and disputes
+
+Service availability can be affected by maintenance, network conditions, verification providers and external payment services. Contact support when an interruption or error affects an account or transaction. Weymela remains responsible for obligations imposed by applicable law. Nothing in these terms excludes a responsibility, consumer protection, privacy right or remedy that cannot lawfully be excluded.
+
+For a complaint, contact support@weymela.com with a clear description and relevant reference. If a matter remains unresolved, the rights and remedies available under applicable law remain available. Nothing in these terms requires you to give up a right or remedy that applicable law protects.
+
+8. Updates and language
+
+Weymela publishes policy changes as identifiable versions. Where acceptance of a new version is required, the application asks you to review and agree to the applicable published documents. Your earlier agreement is not rewritten as agreement to a different document. English and Amharic versions are provided. If a difference in wording affects your understanding, contact support for clarification; your rights under applicable law remain protected. Required terms that have not been published cannot be accepted on your behalf. Verified identity and saved setup progress should be retained while a publication requirement is resolved.

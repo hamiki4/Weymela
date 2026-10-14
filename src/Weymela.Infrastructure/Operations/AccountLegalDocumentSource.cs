@@ -26,9 +26,7 @@ public sealed class AccountLegalDocumentSource(string directory)
             var root = manifest.RootElement;
             if (root.GetProperty("environment").GetString() != "Production"
                 || !root.GetProperty("productionApproved").GetBoolean()
-                || !root.GetProperty("attorneyReviewed").GetBoolean()
-                || string.IsNullOrWhiteSpace(root.GetProperty("ownerApprovalReference").GetString())
-                || string.IsNullOrWhiteSpace(root.GetProperty("legalApprovalReference").GetString())) return null;
+                || string.IsNullOrWhiteSpace(root.GetProperty("ownerApprovalReference").GetString())) return null;
             var documents = root.GetProperty("documents").EnumerateArray().Where(x =>
                 x.GetProperty("type").GetString() == type.ToString()
                 && x.GetProperty("language").GetString() == language).ToList();

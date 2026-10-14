@@ -48,6 +48,9 @@ const mocks = vi.hoisted(() => ({
     decisionReason: string | null;
   }>,
   activeProfiles: [] as Array<{ role: string }>,
+  identityEmail: "test@example.test",
+  identityUserId: "isolated-user",
+  identityPhone: null as string | null,
 }));
 
 vi.mock("../src/api/client", () => ({
@@ -59,8 +62,9 @@ vi.mock("../src/api/client", () => ({
   }),
   useResource: (path: string) => ({
     data:
-      path === "/onboarding/legal"
-        ? mocks.legalStatus
+      path.startsWith("/onboarding/legal") ? mocks.legalStatus
+        : path === "/onboarding/identity" ? { userId: mocks.identityUserId, email: mocks.identityEmail,
+            phone: mocks.identityPhone, hasProfiles: mocks.activeProfiles.length > 0 || mocks.statusProfiles.length > 0 }
         : { profiles: mocks.statusProfiles },
     loading: false,
     error: null,
@@ -103,6 +107,9 @@ describe("shared role-themed onboarding", () => {
     mocks.statusProfiles = [];
     mocks.activeProfiles = [];
     mocks.legalStatus = effectiveLegal;
+    mocks.identityEmail = "test@example.test";
+    mocks.identityUserId = "isolated-user";
+    mocks.identityPhone = null;
   });
   it.each(["Customer", "Creator", "Business"])("completes owner-deferred %s signup without claiming policy acceptance", async role => {
     vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "weymela-production");
@@ -112,7 +119,7 @@ describe("shared role-themed onboarding", () => {
       businessName: "Isolated business", businessType: "Retail", socialPlatform: "TikTok",
       socialProfileUrl: "https://www.tiktok.com/@isolated_creator", legalAccepted: false, legalDeferred: true }));
     renderOnboarding();
-    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile",
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration",
       expect.objectContaining({ role }), "deferred-" + role));
     expect(mocks.post.mock.calls[0][1]).not.toHaveProperty("accountLegal");
   });
@@ -159,13 +166,42 @@ describe("shared role-themed onboarding", () => {
     expect(mocks.post).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Finish registration" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
-    expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+    expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
       accountLegal: {
         termsOfService: { documentId: "terms-id", contentHash: "terms-hash", accepted: true },
         privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
       },
     }), "explicit-current-consent");
     expect(await screen.findByRole("heading", { name: "Your account is ready." })).toBeVisible();
+  });
+
+  it("reuses genuine agreement to unchanged versions from the registration form", async () => {
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "same-published-consent", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      legalAccepted: true, policyLanguage: "en", acceptedPolicies: effectiveLegal.documents,
+    }));
+    renderOnboarding();
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
+      accountLegal: {
+        termsOfService: { documentId: "terms-id", contentHash: "terms-hash", accepted: true },
+        privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
+      },
+    }), "same-published-consent"));
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("retains verified setup progress while a required policy is unpublished", async () => {
+    mocks.legalStatus = { available: false, current: false, required: true, documents: [] };
+    const draft = { version: 1, idempotencyKey: "pending-publication", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      legalAccepted: false, policyPending: true };
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify(draft));
+    renderOnboarding();
+    expect(await screen.findByText("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.")).toBeVisible();
+    expect(JSON.parse(window.sessionStorage.getItem("weymela.public-signup")!)).toEqual(expect.objectContaining(draft));
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Edit profile details" })).toBeEnabled();
   });
 
   it("reloads unpublished policies on retry instead of repeatedly submitting stale status", async () => {
@@ -199,6 +235,8 @@ describe("shared role-themed onboarding", () => {
   });
 
   it("completes a PIN-enrolled public Business registration exactly once and opens its workspace", async () => {
+    mocks.identityEmail = "owner@example.test";
+    mocks.legalStatus = { ...effectiveLegal, current: true };
     window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
       version: 1, idempotencyKey: "public-business-key", role: "Business",
       legalName: "Abebe Kebede", email: "owner@example.test", phone: "+251911111111",
@@ -206,7 +244,7 @@ describe("shared role-themed onboarding", () => {
     }));
     renderOnboarding();
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
-    expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+    expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
       role: "Business", displayName: "ABC Trading", legalName: "Abebe Kebede",
       registeredPhone: "+251911111111", category: "Retail",
     }), "public-business-key");
@@ -268,7 +306,7 @@ describe("shared role-themed onboarding", () => {
   it("shows an already-added Customer without legacy handoff", () => {
     mocks.activeProfiles = [{ role: "Customer" }];
     renderOnboarding();
-    expect(screen.getByRole("button", { name: /Customer.*Already added/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Customer.*Already added/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Become a Creator/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add a Business/ })).toBeEnabled();
   });
@@ -294,17 +332,17 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByLabelText(/Creator category|About your work/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Not added")).toHaveLength(4);
     expect(screen.getAllByRole("button", { name: "Add profile" })).toHaveLength(4);
-    expect(screen.getByLabelText("I agree to Weymela's Rules and Regulations")).not.toBeChecked();
+    expect(screen.getByLabelText("I agree to Weymela's Terms of Service and Privacy Policy.")).not.toBeChecked();
     await userEvent.type(screen.getByLabelText("Creator name"), "Bella Creates");
     await userEvent.click(screen.getAllByRole("button", { name: "Add profile" })[0]);
     await userEvent.type(screen.getByLabelText("TikTok profile URL"), "https://www.tiktok.com/@bella");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
+    await userEvent.click(screen.getByLabelText("I agree to Weymela's Terms of Service and Privacy Policy."));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
-    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
       role: "Creator", displayName: "Bella Creates", region: null,
       socialProfiles: [{ platform: "TikTok", profileUrl: "https://www.tiktok.com/@bella", audienceCount: 0 }],
-    }), "enroll-key"));
+    }), expect.any(String)));
     expect(mocks.post.mock.calls[0][1]).toMatchObject({ category: null });
     expect(mocks.post.mock.calls[0][1]).not.toHaveProperty("publicId");
     expect(screen.getByText("Your Creator profile is waiting for approval.")).toBeVisible();
@@ -319,11 +357,11 @@ describe("shared role-themed onboarding", () => {
     expect(screen.getByLabelText("Region (optional)")).toBeVisible();
     expect(screen.queryByLabelText(/Business type|About your Business/)).not.toBeInTheDocument();
     expect(screen.queryByText(/receipt|payment reference|funding/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
+    await userEvent.click(screen.getByLabelText("I agree to Weymela's Terms of Service and Privacy Policy."));
     await userEvent.click(screen.getByRole("button", { name: "Add Business" }));
-    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profile", expect.objectContaining({
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
       role: "Business", displayName: "Bella Restaurant", category: null, submission: null,
-    }), "enroll-key"));
+    }), expect.any(String)));
     expect(mocks.refresh).toHaveBeenCalled();
     expect(screen.queryByText("Your Business profile is waiting for approval.")).not.toBeInTheDocument();
   });
@@ -352,4 +390,60 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
     expect(mocks.post).not.toHaveBeenCalled();
   });
+  it("Business Add Customer ignores an unrelated saved signup phone and reuses the authenticated identity", async () => {
+    mocks.activeProfiles = [{ role: "Business" }];
+    mocks.identityPhone = "+14045550123";
+    mocks.legalStatus = { ...effectiveLegal, current: true };
+    sessionStorage.setItem("weymela.public-signup", JSON.stringify({ version: 1, idempotencyKey: "old-signup",
+      role: "Customer", legalName: "Old details", email: "other@example.test", phone: "+254712345678", legalAccepted: true }));
+    renderOnboarding();
+    expect(mocks.post).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
+    await userEvent.type(screen.getByLabelText("Preferred name"), "Same account customer");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+    expect(mocks.post.mock.calls[0][0]).toBe("/onboarding/profiles");
+    expect(mocks.post.mock.calls[0][1]).toEqual({ role: "Customer", displayName: "Same account customer" });
+    expect(mocks.post.mock.calls.some(call => String(call[0]).includes("password") || String(call[0]).includes("registration-phone"))).toBe(false);
+  });
+
+  it("does not submit another identity's saved signup and offers recovery under the current identity", async () => {
+    mocks.legalStatus = { required: false, available: false, current: false, documents: [] };
+    sessionStorage.setItem("weymela.public-signup", JSON.stringify({ version: 1, idempotencyKey: "wrong-identity",
+      role: "Customer", legalName: "Other account", email: "other@example.test", phone: "+254712345678", legalDeferred: true }));
+    renderOnboarding();
+    expect(await screen.findByText(/These saved details belong to another email/)).toBeVisible();
+    expect(mocks.post).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Edit profile details" }));
+    expect(screen.getByRole("heading", { name: "How do you want to use Weymela?" })).toBeVisible();
+    expect(sessionStorage.getItem("weymela.public-signup")).toContain("wrong-identity");
+  });
+
+  it("preserves profile setup across refresh and isolates it by account", async () => {
+    mocks.activeProfiles = [{ role: "Business" }];
+    mocks.legalStatus = { ...effectiveLegal, current: true };
+    const view = renderOnboarding();
+    await userEvent.click(screen.getByRole("button", { name: /Use as Customer/ }));
+    await userEvent.type(screen.getByLabelText("Preferred name"), "Saved customer");
+    const saved = JSON.parse(sessionStorage.getItem("weymela.profile-setup.isolated-user")!);
+    view.unmount();
+    const refreshed = renderOnboarding();
+    expect(screen.getByLabelText("Preferred name")).toHaveValue("Saved customer");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/profiles",
+      { role: "Customer", displayName: "Saved customer" }, saved.idempotencyKey));
+    refreshed.unmount();
+    mocks.identityUserId = "another-user";
+    renderOnboarding();
+    expect(screen.queryByLabelText("Preferred name")).not.toBeInTheDocument();
+  });
+
+  it("opens an already-owned profile without creating another record", async () => {
+    mocks.activeProfiles = [{ role: "Customer" }];
+    renderOnboarding();
+    await userEvent.click(screen.getByRole("button", { name: /Customer.*Already added/ }));
+    expect(mocks.switchProfile).toHaveBeenCalledWith(mocks.activeProfiles[0]);
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
 });

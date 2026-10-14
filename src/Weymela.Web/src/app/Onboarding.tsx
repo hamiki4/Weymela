@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { post, useAction, useResource } from "../api/client";
 import { actorRoleNameFromWire } from "../api/actorRoleContract";
 import type { AccountLegalStatus, SessionProfile } from "../api/types";
 import { Button, Empty, Field, Notice, PageHeader, Resource, Section } from "../ui/components";
 import { RoleOnboardingShell, type OnboardingRole } from "./RoleOnboardingShell";
+import { PolicyConsent } from "./PolicyConsent";
 import { useSession } from "./Session";
 import { CreatorSocialProfilesEditor } from "../features/creator/CreatorProfile";
-import { clearSignupDraft, readSignupDraft, type PublicSignupDraft } from "./signupDraft";
-import { CompactLanguageChoice } from "../localization/Language";
+import { clearSignupDraft, readSignupDraft, saveSignupDraft, type PublicSignupDraft } from "./signupDraft";
+import { CompactLanguageChoice, useLanguage } from "../localization/Language";
 
 type Enrollment = {
   id: string;
@@ -33,23 +34,45 @@ function publicRole(role: Enrollment["role"]): OnboardingRole | null {
   return name === "Customer" || name === "Creator" || name === "Business" ? name : null;
 }
 
+type RegistrationIdentity = { userId: string; email: string | null; phone: string | null; hasProfiles: boolean };
+
 export function Onboarding() {
-  const [draft] = useState<PublicSignupDraft | null>(readSignupDraft);
-  return draft ? <PublicSignupCompletion draft={draft} /> : <LegacyOnboarding />;
+  const { user, loading } = useSession();
+  const [params] = useSearchParams();
+  const [draft, setDraft] = useState<PublicSignupDraft | null>(readSignupDraft);
+  const [recover, setRecover] = useState(false);
+  const identity = useResource<RegistrationIdentity>("/onboarding/identity");
+  if (loading && !user) return <div role="status">Opening your account setup…</div>;
+  if (!user) return <Navigate to="/sign-in" replace />;
+  return <Resource resource={identity}>{account => {
+    const matching = draft && draft.email.trim().toLowerCase() === account.email?.trim().toLowerCase()
+      && (!draft.ownerUserId || draft.ownerUserId === account.userId);
+    const completing = !recover && params.get("intent") !== "add" && !account.hasProfiles && draft;
+    return completing ? <PublicSignupCompletion draft={draft} identity={account}
+      identityMatches={!!matching} onRecover={() => setRecover(true)}
+      onFinished={() => { setDraft(null); identity.reload(); }} />
+      : <ProfileSetup key={account.userId} identity={account} initialDraft={recover && matching ? draft : null} onSaved={() => identity.reload()} />;
+  }}</Resource>;
 }
 
-function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
+function PublicSignupCompletion({ draft, identity, identityMatches, onRecover, onFinished }: {
+  draft: PublicSignupDraft; identity: RegistrationIdentity; identityMatches: boolean; onRecover: () => void; onFinished: () => void;
+}) {
   const navigate = useNavigate();
   const { user, refresh, signOut } = useSession();
-  const legal = useResource<AccountLegalStatus>("/onboarding/legal");
+  const { language } = useLanguage();
+  const legal = useResource<AccountLegalStatus>(language === "am" ? "/onboarding/legal?language=am" : "/onboarding/legal");
   const started = useRef(false);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
-  const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
   const [accepted, setAccepted] = useState(false);
   const [reviewedDocuments, setReviewedDocuments] = useState<AccountLegalStatus["documents"] | null>(null);
-  const needsConsent = production && legal.data?.required !== false && legal.data?.available && !legal.data.current;
+  const draftConsentCurrent = draft.legalAccepted && draft.policyLanguage === language
+    && draft.acceptedPolicies?.length === 2 && legal.data?.documents.every(document =>
+      draft.acceptedPolicies?.some(acceptedDocument => acceptedDocument.documentId === document.documentId
+        && acceptedDocument.contentHash === document.contentHash));
+  const needsConsent = identityMatches && legal.data?.required !== false && legal.data?.available && !legal.data.current && !draftConsentCurrent;
   const documentFingerprint = legal.data?.documents.map(document => `${document.documentId}:${document.contentHash}`).join("|");
   useEffect(() => {
     setAccepted(false);
@@ -57,6 +80,8 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
   }, [documentFingerprint]);
   const submit = async () => {
     if (!user) return;
+    if (!identityMatches) throw new Error("These saved details belong to another email. Continue setup with the signed-in account or sign in to the original account.");
+    saveSignupDraft({ ...draft, ownerUserId: identity.userId });
     if (!legal.data || (legal.data.required !== false && !legal.data.available))
       throw new Error("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.");
     if (needsConsent && (!accepted || !reviewedDocuments))
@@ -77,11 +102,11 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
       followerCount: draft.followerCount ?? 0,
       subscriberCount: draft.subscriberCount,
     }] : [];
-    await post("/onboarding/profile", {
+    await post("/onboarding/registration", {
       role: draft.role,
       displayName: draft.role === "Business" ? draft.businessName : draft.legalName,
       legalName: draft.legalName,
-      registeredPhone: draft.phone,
+      registeredPhone: identity.phone ? undefined : draft.phone,
       category: draft.role === "Business" ? draft.businessType : null,
       socialProfiles,
       ...(accountLegal ? { accountLegal } : {}),
@@ -90,7 +115,7 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
     setCompleted(true);
   };
   useEffect(() => {
-    if (!user || !legal.data || legal.loading || started.current) return;
+    if (!user || !legal.data || legal.loading || started.current || completed || error) return;
     if (needsConsent) { setBusy(false); return; }
     started.current = true;
     setBusy(true);
@@ -98,10 +123,11 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
       started.current = false;
       setError(cause instanceof Error ? cause.message : "We could not complete registration. Please try again.");
     }).finally(() => setBusy(false));
-  }, [user, legal.data, legal.loading, needsConsent]);
+  }, [user, legal.data, legal.loading, needsConsent, completed, error]);
   if (!user) return <Navigate to="/sign-in" replace />;
   const continueToWorkspace = async () => {
     await refresh(true);
+    onFinished();
     navigate(draft.role === "Business" ? "/business"
       : draft.role === "Customer" ? "/customer/offers" : "/onboarding", { replace: true });
   };
@@ -122,18 +148,16 @@ function PublicSignupCompletion({ draft }: { draft: PublicSignupDraft }) {
       }}>
         <h1>Finish registration</h1>
         <p>Review and accept the published policies to finish registration.</p>
-        <label className="signup-legal-consent"><input required type="checkbox" checked={accepted}
-          onChange={event => {
-            setAccepted(event.target.checked);
-            setReviewedDocuments(event.target.checked ? legal.data!.documents : null);
-          }} />
-          <span>I agree to Weymela&apos;s <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
-        </label>
+        <PolicyConsent id="registration-completion-legal" checked={accepted} documents={legal.data?.documents}
+          onChange={value => { setAccepted(value); setReviewedDocuments(value ? legal.data!.documents : null); }} />
         <div className="actions"><Button type="submit" disabled={!accepted}>Finish registration</Button>
           <Button type="button" variant="secondary" onClick={() => void signOut()}>Sign out</Button></div>
       </form>}
-      {error && <><h1>Registration needs attention</h1><Notice error>{error}</Notice>
+      {error && <><h1>Continue profile setup</h1><Notice error>{error}</Notice>
+        <p>Your verified sign-in and saved profile details are retained. Retry when the requirement is resolved, or edit your profile details.</p>
+        <p>For help, contact <a href="mailto:support@weymela.com">support@weymela.com</a>.</p>
         <div className="actions"><Button onClick={() => { setError(null); setAccepted(false); setReviewedDocuments(null); started.current = false; setBusy(true); legal.reload(); }}>Try again</Button>
+          <Button variant="secondary" onClick={onRecover}>Edit profile details</Button>
           <Button variant="secondary" onClick={() => void signOut()}>Sign out</Button></div></>}
       {completed && <>
         <h1>{draft.role === "Business" ? "Your Business account is ready."
@@ -157,18 +181,49 @@ function statusLabel(status: Enrollment["status"]) {
   return "Rejected";
 }
 
-function LegacyOnboarding() {
+type ProfileSetupDraft = {
+  role: OnboardingRole | null; preferredName: string; displayName: string; region: string;
+  socialUrls: Record<SocialPlatform, OnboardingSocial>; idempotencyKey: string;
+  legalName?: string; category?: string;
+};
+function readProfileDraft(userId: string, initial: PublicSignupDraft | null): ProfileSetupDraft {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(`weymela.profile-setup.${userId}`) ?? "null") as ProfileSetupDraft | null;
+    if (saved && [null, "Customer", "Creator", "Business"].includes(saved.role) && saved.idempotencyKey && saved.socialUrls) return saved;
+  } catch { /* Keep verified identity when local progress is unavailable. */ }
+  const socialUrls = emptySocial();
+  if (initial?.role === "Creator" && socialPlatforms.includes(initial.socialPlatform as SocialPlatform))
+    socialUrls[initial.socialPlatform as SocialPlatform] = { profileUrl: initial.socialProfileUrl ?? "", audience: String(initial.followerCount ?? 0) };
+  return { role: initial?.role ?? null, preferredName: initial?.legalName ?? "",
+    displayName: initial?.role === "Business" ? initial.businessName ?? "" : initial?.legalName ?? "",
+    region: "", socialUrls, idempotencyKey: crypto.randomUUID(), legalName: initial?.legalName, category: initial?.businessType };
+}
+
+function ProfileSetup({ identity, initialDraft, onSaved }: {
+  identity: RegistrationIdentity; initialDraft: PublicSignupDraft | null; onSaved: () => void;
+}) {
   const navigate = useNavigate();
-  const { user, loading, refresh, signOut } = useSession();
+  const { user, loading, refresh, signOut, switchProfile } = useSession();
   const status = useResource<{ profiles: Enrollment[] }>("/onboarding/status");
-  const legal = useResource<AccountLegalStatus>("/onboarding/legal");
+  const { language } = useLanguage();
+  const legal = useResource<AccountLegalStatus>(language === "am" ? "/onboarding/legal?language=am" : "/onboarding/legal");
   const action = useAction();
-  const [role, setRole] = useState<OnboardingRole | null>(null);
-  const [preferredName, setPreferredName] = useState("");
+  const [saved] = useState(() => readProfileDraft(identity.userId, initialDraft));
+  const [role, setRole] = useState<OnboardingRole | null>(saved.role);
+  const [preferredName, setPreferredName] = useState(saved.preferredName);
   const [legalAccepted, setLegalAccepted] = useState(false);
-  const [displayName, setDisplayName] = useState("");
-  const [region, setRegion] = useState("");
-  const [socialUrls, setSocialUrls] = useState(emptySocial);
+  const [displayName, setDisplayName] = useState(saved.displayName);
+  const [region, setRegion] = useState(saved.region);
+  const [socialUrls, setSocialUrls] = useState(saved.socialUrls);
+  const requestKey = useRef(saved.idempotencyKey);
+  const [reviewedDocuments, setReviewedDocuments] = useState<AccountLegalStatus["documents"] | null>(null);
+  const fingerprint = legal.data?.documents.map(document => `${document.documentId}:${document.contentHash}`).join("|");
+  useEffect(() => { setLegalAccepted(false); setReviewedDocuments(null); }, [fingerprint]);
+  useEffect(() => {
+    sessionStorage.setItem(`weymela.profile-setup.${identity.userId}`, JSON.stringify({ role, preferredName,
+      displayName, region, socialUrls, idempotencyKey: requestKey.current, legalName: saved.legalName, category: saved.category }));
+  }, [identity.userId, role, preferredName, displayName, region, socialUrls, saved]);
+  const endpoint = identity.hasProfiles ? "/onboarding/profiles" : "/onboarding/registration";
   const [submittedRole, setSubmittedRole] = useState<"Creator" | "Business" | null>(null);
   const production = import.meta.env.VITE_FIREBASE_PROJECT_ID === "weymela-production";
   useEffect(() => { status.reload(); void refresh(); }, []);
@@ -183,43 +238,55 @@ function LegacyOnboarding() {
     setDisplayName(""); setRegion("");
     setSocialUrls(emptySocial());
   };
-  const submitCustomer = () => void action.run(async (key) => {
-    const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
-    const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
+  const submitCustomer = () => void action.run(async () => {
+    const documents = reviewedDocuments ?? legal.data?.documents;
+    const terms = documents?.find((document) => document.kind === "TermsOfService");
+    const privacy = documents?.find((document) => document.kind === "PrivacyPolicy");
     if (legal.data?.required !== false && (!legal.data?.available || !terms || !privacy || (!legal.data.current && !legalAccepted)))
-      throw new Error(legal.data?.available ? "Accept Weymela's Rules and Regulations before continuing."
+      throw new Error(legal.data?.available ? "Accept the current Terms of Service and Privacy Policy."
         : "Account activation requires published Terms of Service and Privacy Policy.");
     const accountLegal = legal.data?.required !== false && !legal.data?.current ? {
       termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
       privacyPolicy: { documentId: privacy!.documentId, contentHash: privacy!.contentHash, accepted: true },
     } : undefined;
-    await post("/onboarding/profile", {
+    await post(endpoint, {
       role: "Customer",
       displayName: preferredName,
+      ...(saved.legalName ? { legalName: saved.legalName } : {}),
       ...(accountLegal ? { accountLegal } : {}),
-    }, key);
+    }, requestKey.current);
+    const signup = readSignupDraft();
+    if (signup?.ownerUserId === identity.userId || signup?.email.toLowerCase() === identity.email?.toLowerCase()) clearSignupDraft();
+    onSaved();
+    requestKey.current = crypto.randomUUID();
     cancel();
     status.reload();
     await refresh();
     navigate("/customer/offers", { replace: true });
   });
-  const submitAdditional = (selected: "Creator" | "Business") => void action.run(async key => {
+  const submitAdditional = (selected: "Creator" | "Business") => void action.run(async () => {
     const socialProfiles = socialPlatforms.filter(platform => socialUrls[platform].profileUrl.trim())
       .map(platform => ({ platform, profileUrl: socialUrls[platform].profileUrl.trim(), audienceCount: Number(socialUrls[platform].audience) || 0 }));
     if (selected === "Creator" && socialProfiles.length === 0) throw new Error("Add at least one social profile.");
-    const terms = legal.data?.documents.find((document) => document.kind === "TermsOfService");
-    const privacy = legal.data?.documents.find((document) => document.kind === "PrivacyPolicy");
+    const documents = reviewedDocuments ?? legal.data?.documents;
+    const terms = documents?.find((document) => document.kind === "TermsOfService");
+    const privacy = documents?.find((document) => document.kind === "PrivacyPolicy");
     const requiresAccountLegal = legal.data?.required !== false && !legal.data?.current && (production || approved.size === 0);
     if (requiresAccountLegal && (!legal.data?.available || !terms || !privacy || !legalAccepted))
-      throw new Error("Accept Weymela's Rules and Regulations before continuing.");
+      throw new Error("Accept the current Terms of Service and Privacy Policy.");
     const accountLegal = requiresAccountLegal ? {
       termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
       privacyPolicy: { documentId: privacy!.documentId, contentHash: privacy!.contentHash, accepted: true },
     } : undefined;
-    await post("/onboarding/profile", { role: selected, displayName: displayName.trim(),
-      region: region.trim() || null, category: null, submission: null,
+    await post(endpoint, { role: selected, displayName: displayName.trim(),
+      region: region.trim() || null, category: saved.category ?? null, submission: null,
+      ...(saved.legalName ? { legalName: saved.legalName } : {}),
       socialProfiles: selected === "Creator" ? socialProfiles : [],
-      ...(accountLegal ? { accountLegal } : {}) }, key);
+      ...(accountLegal ? { accountLegal } : {}) }, requestKey.current);
+    const signup = readSignupDraft();
+    if (signup?.ownerUserId === identity.userId || signup?.email.toLowerCase() === identity.email?.toLowerCase()) clearSignupDraft();
+    onSaved();
+    requestKey.current = crypto.randomUUID();
     cancel();
     if (selected === "Business") {
       await refresh(true);
@@ -233,6 +300,7 @@ function LegacyOnboarding() {
   return <main className="main-content page-shell section-kicker-space onboarding-page">
     <PageHeader eyebrow="Your Weymela account" title="How do you want to use Weymela?"
       action={<Button variant="quiet" onClick={() => void signOut()}>Sign out</Button>} />
+    {identity.hasProfiles && <p><Link to="/">Return to your workspace</Link>. Your existing email, phone and credentials will be reused.</p>}
     <p>Received an invitation from Weymela? <Link to="/account/activate">Activate your account</Link>.</p>
     <Resource resource={status}>{(data) => {
       const pending = new Set(data.profiles.filter((item) => item.status === "Pending" || item.status === 0)
@@ -255,10 +323,16 @@ function LegacyOnboarding() {
             {choices.map(([choice, description, actionLabel, className]) => {
               const state = approved.has(choice) ? "Already added" : pending.has(choice) ? "Under review"
                 : unavailable.has(choice) ? "Unavailable" : actionLabel;
-              const disabled = state !== actionLabel;
+              const disabled = state !== actionLabel && state !== "Already added";
               return <button key={choice} className={`profile-choice ${className}${role === choice ? " selected" : ""}`}
-                type="button" aria-label={disabled ? `${choice} — ${state}` : `${actionLabel} — ${description}`}
+                type="button" aria-label={state !== actionLabel ? `${choice} — ${state}` : `${actionLabel} — ${description}`}
                 aria-pressed={role === choice} disabled={disabled} onClick={() => {
+                  if (approved.has(choice)) {
+                    const owned = user.profiles?.find(profile => profile.role === choice);
+                    if (owned) void switchProfile(owned);
+                    return;
+                  }
+                  requestKey.current = crypto.randomUUID();
                   setRole(choice);
                   setPreferredName("");
                   setLegalAccepted(false);
@@ -282,29 +356,29 @@ function LegacyOnboarding() {
               }}>
               <Field label="Preferred name" wide><input required autoComplete="name" maxLength={120}
                 value={preferredName} onChange={(event) => setPreferredName(event.target.value)} /></Field>
-              {documents.required !== false && !documents.current && <div className="legal-consent form-wide"><div className="check-row">
-                <input id="customer-legal-accepted" type="checkbox" checked={legalAccepted}
-                  onChange={(event) => setLegalAccepted(event.target.checked)}
-                  aria-label="I agree to Weymela's Rules and Regulations" required />
-                <span id="customer-legal-consent-text"><label htmlFor="customer-legal-accepted">I agree to Weymela&apos;s <strong>Rules and Regulations</strong>.</label><br />
-                  <small>By continuing, you also accept the current </small>
-                  <a href={documents.documents.find((document) => document.kind === "TermsOfService")!.viewPath}
-                    target="_blank" rel="noreferrer">Terms of Service</a><small> and acknowledge the </small>
-                  <a href={documents.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath}
-                    target="_blank" rel="noreferrer">Privacy Policy</a><small>.</small></span>
-              </div></div>}
+              {documents.required !== false && !documents.current && <div className="legal-consent form-wide">
+                <PolicyConsent id="customer-legal-accepted" checked={legalAccepted} documents={documents.documents}
+                  onChange={value => { setLegalAccepted(value); setReviewedDocuments(value ? documents.documents : null); }} />
+              </div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
                 <Button type="submit" disabled={action.busy}>{action.busy ? "Saving…" : "Continue"}</Button></div>
             </form> : <div className="onboarding-unavailable" role="status"><Empty icon="lock"
               title="Customer setup isn't available yet." message="Required terms and privacy information have not been published."
-              action={<Button variant="secondary" onClick={cancel}>Back</Button>} /></div>}</Resource>
+              action={<div className="actions"><Button variant="secondary" onClick={() => legal.reload()}>Try again</Button>
+                <Button variant="secondary" onClick={cancel}>Back</Button>
+                <a href="mailto:support@weymela.com">Contact support</a></div>} /></div>}</Resource>
           </RoleOnboardingShell>}
           {(role === "Creator" || role === "Business") && !pending.has(role) && <RoleOnboardingShell role={role}
             title={role === "Creator" ? "Creator setup" : "Business setup"}
             description={role === "Creator" ? "Tell us about your Creator profile." : "Tell us about your Business."}>
             <div className="form-grid onboarding-form role-application-form">
-              {production && legal.data?.required !== false && !legal.loading && !legal.data?.available && <Notice error>Account activation requires published Terms of Service and Privacy Policy.</Notice>}
+              {legal.data?.required !== false && !legal.loading && !legal.data?.available && <Notice error>
+                <p>Account activation requires published Terms of Service and Privacy Policy.</p>
+                <p>Your verified sign-in and saved profile details are retained. Retry when the requirement is resolved, or edit your profile details.</p>
+                <Button variant="secondary" onClick={() => legal.reload()}>Try again</Button>{" "}
+                <a href="mailto:support@weymela.com">Contact support</a>
+              </Notice>}
               <Field label={role === "Creator" ? "Creator name" : "Business name"} wide>
                 <input required maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} /></Field>
               <Field label="Region (optional)"><input maxLength={80} value={region} onChange={event => setRegion(event.target.value)} /></Field>
@@ -316,15 +390,10 @@ function LegacyOnboarding() {
                   onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: { profileUrl: "", audience: "0" } }))}
                 />
               </div>}
-              {legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
-                <input id="profile-legal-accepted" type="checkbox" checked={legalAccepted}
-                  onChange={(event) => setLegalAccepted(event.target.checked)}
-                  aria-label="I agree to Weymela's Rules and Regulations" required />
-                <span><label htmlFor="profile-legal-accepted">I agree to Weymela&apos;s <strong>Rules and Regulations</strong>.</label><br />
-                  <small>By continuing, you also accept the current </small>
-                  <a href={legal.data.documents.find((document) => document.kind === "TermsOfService")!.viewPath} target="_blank" rel="noreferrer">Terms of Service</a><small> and acknowledge the </small>
-                  <a href={legal.data.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath} target="_blank" rel="noreferrer">Privacy Policy</a><small>.</small></span>
-              </div></div>}
+              {legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide">
+                <PolicyConsent id="profile-legal-accepted" checked={legalAccepted} documents={legal.data.documents}
+                  onChange={value => { setLegalAccepted(value); setReviewedDocuments(value ? legal.data!.documents : null); }} />
+              </div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
                 <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && (!legal.data?.available || !legalAccepted)) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>

@@ -11,13 +11,19 @@ const mocks = vi.hoisted(() => ({
   resetPassword: vi.fn(),
   cancelPasswordRecovery: vi.fn(),
   post: vi.fn(),
+  request: vi.fn(async () => ({ phoneEnrolled: false, passwordEnrolled: false })),
   refresh: vi.fn(),
+  policyAvailable: true,
 }));
 vi.mock("../src/api/client", () => ({
   post: mocks.post,
+  request: mocks.request,
   useAction: () => ({ busy: false, error: null, run: vi.fn() }),
-  useResource: () => ({
-    data: { development: false, personas: null },
+  useResource: (path: string) => ({
+    data: path.startsWith("/legal/account/status") ? { available: mocks.policyAvailable, required: true, current: false, documents: mocks.policyAvailable ? [
+      { documentId: "terms-id", kind: "TermsOfService", contentHash: "terms-hash", viewPath: "/legal/terms-of-service" },
+      { documentId: "privacy-id", kind: "PrivacyPolicy", contentHash: "privacy-hash", viewPath: "/legal/privacy-policy" },
+    ] : [] } : { development: false, personas: null },
     loading: false,
     error: null,
     reload: vi.fn(),
@@ -80,7 +86,9 @@ beforeEach(() => {
   mocks.resetPassword.mockResolvedValue(undefined);
   mocks.cancelPasswordRecovery.mockResolvedValue(undefined);
   mocks.post.mockResolvedValue(undefined);
+  mocks.request.mockResolvedValue({ phoneEnrolled: false, passwordEnrolled: false });
   mocks.refresh.mockResolvedValue(undefined);
+  mocks.policyAvailable = true;
 });
 
 describe("final authentication experience", () => {
@@ -122,6 +130,11 @@ describe("final authentication experience", () => {
     await userEvent.type(screen.getByLabelText("Confirm Password"), "password8");
     await userEvent.click(screen.getByRole("checkbox"));
     await userEvent.click(screen.getByRole("button", { name: "Complete Registration" }));
+    const draft = JSON.parse(window.sessionStorage.getItem("weymela.public-signup")!);
+    expect(draft).toMatchObject({ legalAccepted: true, policyLanguage: "en", acceptedPolicies: [
+      { documentId: "terms-id", contentHash: "terms-hash", accepted: true },
+      { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
+    ] });
     expect(mocks.startEmailCode).toHaveBeenCalledWith(
       "owner@example.com",
       "Signup",
@@ -134,7 +147,29 @@ describe("final authentication experience", () => {
     expect(screen.getByRole("button", { name: "Edit details" })).toBeVisible();
   });
 
-  it("composes international registration phones from the selected country before claiming them", async () => {
+  it("preserves email-verification progress without inventing consent when policies are unavailable", async () => {
+    mocks.policyAvailable = false;
+    renderSignIn();
+    await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
+    await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByRole("checkbox", { name: "I agree to Weymela's Terms of Service and Privacy Policy." })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/legal/terms-of-service");
+    expect(screen.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/legal/privacy-policy");
+    await userEvent.type(screen.getByLabelText("Full legal name"), "Isolated policy wait");
+    await userEvent.type(screen.getByLabelText("Email address"), "policy-wait@example.test");
+    await userEvent.type(screen.getByLabelText("Phone number"), "+251911111111");
+    await userEvent.type(screen.getByLabelText("Password"), "password8");
+    await userEvent.type(screen.getByLabelText("Confirm Password"), "password8");
+    await userEvent.click(screen.getByRole("button", { name: "Complete Registration" }));
+    expect(await screen.findByRole("heading", { name: "Verify your email" })).toBeVisible();
+    const draft = JSON.parse(window.sessionStorage.getItem("weymela.public-signup")!);
+    expect(draft).toMatchObject({ legalAccepted: false, policyPending: true });
+    expect(draft).not.toHaveProperty("acceptedPolicies");
+  });
+
+  it.each([false, true])("composes international registration phones from the selected country before claiming them (existing identity: %s)", async existing => {
+    mocks.request.mockResolvedValue({ phoneEnrolled: existing, passwordEnrolled: existing });
     renderSignIn();
     await userEvent.click(screen.getByRole("button", { name: "Create Account" }));
     await userEvent.click(screen.getByRole("button", { name: /Customer/ }));
@@ -149,10 +184,13 @@ describe("final authentication experience", () => {
     await userEvent.type(await screen.findByLabelText("Verification code"), "12345");
     await userEvent.click(screen.getByRole("button", { name: "Verify" }));
     expect(mocks.verifyEmailCode).toHaveBeenCalledWith("international@example.com", "Signup", "12345");
-    expect(mocks.post).toHaveBeenCalledWith("/account/registration-phone", { phone: "+14045550123" });
-    expect(mocks.post).toHaveBeenCalledWith("/account/password-credential", {
-      phone: null, password: "password8", confirmPassword: "password8",
-    });
+    if (existing) expect(mocks.post).not.toHaveBeenCalled();
+    else {
+      expect(mocks.post).toHaveBeenCalledWith("/account/registration-phone", { phone: "+14045550123" });
+      expect(mocks.post).toHaveBeenCalledWith("/account/password-credential", {
+        phone: null, password: "password8", confirmPassword: "password8",
+      });
+    }
     expect(window.sessionStorage.getItem("weymela.public-signup")).not.toContain("password8");
     expect(mocks.refresh).toHaveBeenCalledOnce();
   });

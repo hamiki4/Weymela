@@ -41,7 +41,6 @@ public sealed class PasswordCredentialService(
         PasswordCredentialHasher.ValidateNew(password, confirmPassword);
         var verifier = PasswordCredentialHasher.Hash(password);
         var canonicalPhone = string.IsNullOrWhiteSpace(phone) ? null : NormalizePhone(phone);
-        var phoneHash = canonicalPhone is null ? null : EmailAuthService.HashIdentifier(canonicalPhone);
         var now = clock.GetUtcNow().UtcDateTime;
 
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -60,28 +59,10 @@ public sealed class PasswordCredentialService(
                 .Where(x => x.UserId == identity.UserId && x.Kind == "Phone").ToListAsync(ct);
             if (phones.Count > 1)
                 throw new ApplicationFailure(FailureKind.ConcurrencyConflict, "Account security setup could not be completed.");
-            if (phones.Count == 0 && phoneHash is null)
+            if (phones.Count == 0 && canonicalPhone is null)
                 throw new ApplicationFailure(FailureKind.Validation, "Enter a valid phone number.");
-            if (phones.Count == 1 && phoneHash is not null && phones[0].IdentifierHash != phoneHash)
-                throw new ApplicationFailure(FailureKind.Validation, "Use the phone number already registered to this account.");
-            if (phoneHash is not null)
-            {
-                var claimed = await db.AuthIdentifiers.AsTracking().SingleOrDefaultAsync(x => x.Kind == "Phone"
-                    && x.IdentifierHash == phoneHash, ct);
-                if (claimed is not null && claimed.UserId != identity.UserId) throw PhoneCollision();
-                if (phones.Count == 0)
-                    db.AuthIdentifiers.Add(new AuthIdentifierRecord
-                    {
-                        UserId = identity.UserId,
-                        Kind = "Phone",
-                        IdentifierHash = phoneHash,
-                        DeliveryAddress = canonicalPhone,
-                        IsVerified = false,
-                        CreatedAtUtc = now
-                    });
-                else if (claimed is not null)
-                    claimed.DeliveryAddress = canonicalPhone;
-            }
+            if (canonicalPhone is not null)
+                await RegistrationPhone.EnsureAsync(db, identity.UserId, canonicalPhone, now, ct);
 
             var existing = await db.PasswordCredentials.AsTracking()
                 .SingleOrDefaultAsync(x => x.UserId == identity.UserId, ct);

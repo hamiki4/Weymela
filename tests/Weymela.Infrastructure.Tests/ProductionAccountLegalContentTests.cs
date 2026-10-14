@@ -64,29 +64,56 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
                 new RuntimeOptions { EnvironmentName = "Production" }, new AccountLegalDocumentSource(directory.FullName));
             Assert.False((await service.StatusAsync(user, default)).Available);
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, "publication.json"), JsonSerializer.Serialize(new {
-                environment = "Production", productionApproved = true, attorneyReviewed = true,
-                ownerApprovalReference = "isolated-test-owner", legalApprovalReference = "isolated-test-legal", documents = approved
+                environment = "Production", productionApproved = true, attorneyReviewed = false,
+                ownerApprovalReference = "isolated-test-owner", documents = approved
             }));
             var status = await service.StatusAsync(user, default);
             Assert.True(status.Available);
+            Assert.All(status.Documents, document => Assert.EndsWith("-en", document.Version));
+            var amharic = await service.StatusAsync(user, default, "am");
+            Assert.All(amharic.Documents, document => Assert.EndsWith("-am", document.Version));
+            Assert.All(amharic.Documents, document => Assert.EndsWith("?language=am", document.ViewPath));
             var terms = status.Documents.Single(x => x.Kind == "TermsOfService");
             var privacy = status.Documents.Single(x => x.Kind == "PrivacyPolicy");
             var confirmation = new AccountLegalConfirmation(new(terms.DocumentId, terms.ContentHash, true),
                 new(privacy.DocumentId, privacy.ContentHash, true));
+            var amharicPrivacy = amharic.Documents.Single(x => x.Kind == "PrivacyPolicy");
+            await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptCurrentAsync(user,
+                confirmation with { PrivacyPolicy = new(amharicPrivacy.DocumentId, amharicPrivacy.ContentHash, true) },
+                null, null, default));
+            Assert.Empty(await db.LegalAcceptances.ToListAsync());
             await service.AcceptCurrentAsync(user, confirmation, null, null, default);
             await db.SaveChangesAsync();
             Assert.True((await service.StatusAsync(user, default)).Current);
+            var amharicUser = Guid.NewGuid();
+            var amharicTerms = amharic.Documents.Single(x => x.Kind == "TermsOfService");
+            await service.AcceptCurrentAsync(amharicUser,
+                new(new(amharicTerms.DocumentId, amharicTerms.ContentHash, true),
+                    new(amharicPrivacy.DocumentId, amharicPrivacy.ContentHash, true)), null, null, default);
+            await db.SaveChangesAsync();
+            Assert.False((await service.StatusAsync(amharicUser, default, "en")).Current);
+            Assert.True((await service.StatusAsync(amharicUser, default, "am")).Current);
+            Assert.True(await service.HasCurrentAcceptanceAsync(amharicUser, default));
+            var enrollment = new RoleEnrollmentService(db, TimeProvider.System,
+                new RuntimeOptions { EnvironmentName = "Production" }, new AccountLegalDocumentSource(directory.FullName));
+            await enrollment.SubmitAsync(new Actor(amharicUser, ActorRole.Customer, CustomerId: Guid.Empty),
+                new(ActorRole.Customer, "Isolated Amharic customer", null, null, null, null), "amharic-first", default,
+                ProfileEnrollmentIntent.FirstProfile);
+            await enrollment.SubmitAsync(new Actor(amharicUser, ActorRole.Customer, CustomerId: Guid.Empty),
+                new(ActorRole.Business, "Isolated Amharic business", null, null, "Retail", null), "amharic-add", default,
+                ProfileEnrollmentIntent.AdditionalProfile);
+            Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == amharicUser));
             await File.AppendAllTextAsync(Path.Combine(directory.FullName, "PrivacyPolicy-am.txt"), "unapproved change");
             Assert.False((await service.StatusAsync(user, default)).Available);
             var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptCurrentAsync(user, confirmation, null, null, default));
             Assert.Equal("ApprovedLegalUnavailable", failure.Code);
-            Assert.Equal(2, await db.LegalAcceptances.CountAsync());
-            Assert.Equal(2, await db.AuditEvents.CountAsync());
+            Assert.Equal(4, await db.LegalAcceptances.CountAsync());
+            Assert.Equal(4, await db.AuditEvents.CountAsync(x => x.EventType == "AccountLegalVersionAccepted"));
         }
         finally { directory.Delete(true); }
     }
     [Fact]
-    public async Task Production_content_requires_owner_legal_approval_exact_bytes_and_published_version()
+    public async Task Production_content_requires_owner_approval_exact_bytes_and_published_version_without_attorney_gate()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -103,8 +130,8 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
             await File.WriteAllTextAsync(policy, text);
             async Task Manifest(bool approved) => await File.WriteAllTextAsync(Path.Combine(directory, "publication.json"), JsonSerializer.Serialize(new
             {
-                environment = "Production", productionApproved = approved, attorneyReviewed = approved,
-                ownerApprovalReference = "isolated-test-owner", legalApprovalReference = "isolated-test-legal",
+                environment = "Production", productionApproved = approved, attorneyReviewed = false,
+                ownerApprovalReference = "isolated-test-owner",
                 documents = new[] { new { type = "TermsOfService", language = "en", approvedFinalVersion = "test-en", approvedFinalContentSha256 = hash } }
             }));
             await Manifest(false);

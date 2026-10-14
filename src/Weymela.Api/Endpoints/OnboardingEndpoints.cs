@@ -25,6 +25,8 @@ internal static class OnboardingEndpoints
 
     public static void MapOnboardingEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/legal/account/status", async (string? language, AccountLegalOnboardingService service,
+            CancellationToken ct) => Results.Ok(await service.PublicationAsync(ct, language ?? "en"))).AllowAnonymous();
         app.MapGet("/api/legal/account/{kind}", async (string kind, string? language,
             AccountLegalDocumentSource source, WeymelaDbContext db, TimeProvider clock, CancellationToken ct) =>
         {
@@ -43,14 +45,22 @@ internal static class OnboardingEndpoints
             var userId = UserId(c);
             return Results.Ok(new { profiles = await service.MineAsync(userId, ct) });
         });
-        account.MapGet("/legal", async (HttpContext c, AccountLegalOnboardingService service, CancellationToken ct) =>
-            Results.Ok(await service.StatusAsync(UserId(c), ct)));
+        account.MapGet("/legal", async (string? language, HttpContext c, AccountLegalOnboardingService service, CancellationToken ct) =>
+            Results.Ok(await service.StatusAsync(UserId(c), ct, language ?? "en")));
         account.MapPost("/account-preauthorizations/{id:guid}/activate", async (Guid id, AccountActivationInput input,
             HttpContext c, PlatformAdminAccountService service, CancellationToken ct) =>
             Results.Ok(await service.ActivateAsync(EndpointSupport.Actor(c), id, input.ActivationSecret, ct,
                 input.AccountLegal, c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString())));
-        account.MapPost("/profile", async (ProfileRequest input, HttpContext c, RoleEnrollmentService service,
-            WeymelaDbContext db, TrustedIdentityService identities, TimeProvider clock, CancellationToken ct) =>
+        account.MapGet("/identity", async (HttpContext c, RoleEnrollmentService service, CancellationToken ct) =>
+            Results.Ok(await service.IdentityAsync(UserId(c), ct)));
+        MapProfile("/registration", ProfileEnrollmentIntent.FirstProfile);
+        MapProfile("/profiles", ProfileEnrollmentIntent.AdditionalProfile);
+        // VersionCode 11 and older web sessions use this existing contract.
+        MapProfile("/profile", ProfileEnrollmentIntent.Compatible);
+
+        void MapProfile(string path, ProfileEnrollmentIntent intent) => account.MapPost(path,
+            async (ProfileRequest input, HttpContext c, RoleEnrollmentService service,
+                WeymelaDbContext db, TrustedIdentityService identities, TimeProvider clock, CancellationToken ct) =>
         {
             var userId = UserId(c);
             if (!Enum.TryParse<ActorRole>(input.Role, true, out var role))
@@ -60,8 +70,8 @@ internal static class OnboardingEndpoints
                 new RoleEnrollmentRequest(role, input.DisplayName, role == ActorRole.Customer ? input.PublicId : null, input.Region, input.Category,
                     input.Submission, input.ProposedBusinessId, input.AccountLegal,
                     c.Connection.RemoteIpAddress?.ToString(), c.Request.Headers.UserAgent.ToString(), input.SocialProfiles,
-                    input.LegalName, input.RegisteredPhone),
-                EndpointSupport.Key(c), ct);
+                    input.LegalName, intent == ProfileEnrollmentIntent.AdditionalProfile ? null : input.RegisteredPhone),
+                EndpointSupport.Key(c), ct, intent);
             if (role is ActorRole.Customer or ActorRole.Business && result.Status == RoleEnrollmentStatus.Approved)
             {
                 // Real verified identities carry binding claims and can be moved

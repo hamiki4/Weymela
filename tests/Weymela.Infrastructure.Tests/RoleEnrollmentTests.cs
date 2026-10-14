@@ -408,7 +408,8 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var legal = await SeedAccountLegalAsync(db);
         var first = new RoleEnrollmentRequest(ActorRole.Creator, "Bella", "CR-3", null, null, null, AccountLegal: legal);
         await service.SubmitAsync(new Actor(user, ActorRole.Customer, CustomerId: Guid.NewGuid()), first, "same-key", default);
-        await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer), first, "another-key", default));
+        Assert.Equal((await service.MineAsync(user, default)).Single().Id,
+            (await service.SubmitAsync(new Actor(user, ActorRole.Customer), first, "another-key", default)).Id);
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer), first with { DisplayName = "Other" }, "same-key", default));
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(user, ActorRole.Customer), first with { ProposedBusinessId = Guid.NewGuid() }, "other-key", default));
     }
@@ -431,7 +432,7 @@ public sealed class RoleEnrollmentTests(PostgresFixture fixture)
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
         var service = new RoleEnrollmentService(db, TimeProvider.System);
-        foreach (var role in new[] { ActorRole.Cashier, ActorRole.PlatformAdmin })
+        foreach (var role in new[] { ActorRole.Cashier, ActorRole.PlatformAdmin, ActorRole.OperationsAdmin })
             await Assert.ThrowsAsync<ApplicationFailure>(() => service.SubmitAsync(new Actor(Guid.NewGuid(), ActorRole.Customer), new RoleEnrollmentRequest(role, "No", "NO", null, null, null), Guid.NewGuid().ToString("N"), default));
     }
 

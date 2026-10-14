@@ -219,7 +219,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         )}
         {renderNavigation(items, "Main navigation")}
         {user.role === "Customer" && (
-          <Link className="nav-link add-profile-link" to="/onboarding">
+          <Link className="nav-link add-profile-link" to="/onboarding?intent=add">
             <Icon name="people" />
             Add a profile
           </Link>

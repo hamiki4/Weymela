@@ -1,0 +1,60 @@
+WEYMELA PRIVACY POLICY
+Version: production-2026-10-14.1-en
+
+1. Scope and contact
+
+This policy describes personal-data handling in the Weymela application and website. Weymela's confirmed service location is Addis Ababa, Ethiopia. Contact support@weymela.com about privacy, account information, correction, closure, deletion or a complaint.
+
+2. Information processed
+
+Account and identity information includes the name and contact details you provide, verified email status, phone lookup details, the authentication identity linking your profiles, role applications, approvals and account status. Providing a phone lookup number does not by itself mean SMS ownership has been verified. Password and PIN protection uses protected one-way verifiers rather than storing the passwords or PINs as readable text.
+
+Profile and activity information can include preferred names, Business names and categories, voluntarily supplied Business location and directions, Creator social-profile links, self-reported follower or subscriber counts, application submissions, reviews, offers, campaigns, promotional media, purchase confirmations and support requests. Self-reported audience information is not represented as independently verified merely because it was submitted.
+
+Financial information can include application wallet entries, available and reserved amounts, commission and cashback records, receiving and payout destination details, payment references, receipts, deposit requests, reviews and settlement records. A receipt is evidence for review, not an automatic wallet-credit instruction.
+
+Security and technical information can include account and device identifiers, session and device-enrollment information, IP addresses, user-agent information, request and security events, access restrictions and audit records. Verification codes and recovery transactions are short-lived. Browser or device storage is used for sign-in, device protection, language, profile context and saved registration progress.
+
+3. Purposes and processing grounds
+
+Weymela uses this information to verify account access, create and switch authorized profiles, operate offers and campaigns, process eligible transactions and reviews, maintain financial accuracy, deliver service messages, respond to requests, prevent misuse and protect account security. Processing must have an applicable lawful ground, such as carrying out the requested service, a legal obligation, a justified security interest, or consent where consent is required. This policy does not turn the registration checkbox into permission for every possible future use.
+
+Policy acceptance records identify the actual published documents agreed to, their content fingerprints, the time of acceptance and relevant accountability information. An absent policy, an unchecked checkbox, a saved draft or an operator's deployment instruction is not recorded as your acceptance.
+
+4. Visibility and recipients
+
+Information is available to the participants whose role and activity require it. A Business can manage its own authorized Cashiers and relevant Business activity. Creators and Customers receive the information needed for their own permitted activities. Authorized administrative and operational staff can review applications, receipts, settlement evidence, reports and support matters within their permissions. Access to one profile does not authorize another person's account or unrelated Business.
+
+Public social links and promotional material intended for publication may be shown to Businesses, Customers or other intended audiences. Private credentials, receipt files and internal review information are subject to access controls. Do not upload someone else's private information without authority.
+
+Firebase Authentication supports authentication and identity sessions. Resend delivers account verification and recovery email, processing the destination email, message content and delivery information. Application hosting and protected backup services support storage and operation. Relevant financial information may be supplied to a payment provider or authorized settlement participant when necessary for the transaction or review. Information may also be disclosed when required by law or necessary to address fraud, security incidents or legal claims. Weymela does not sell personal data or treat verification messages as advertising permission.
+
+Provider information is available at https://firebase.google.com/support/privacy and https://resend.com/legal/dpa. Opening a third-party social link, payment service or embedded content can involve that provider's own information practices.
+
+5. Storage, international processing and protection
+
+Weymela uses protected service databases, private file storage and backups. Authentication and email providers can process information internationally, including outside Ethiopia. International processing must respect applicable transfer requirements and provider processing terms. Contact support for information about a particular transfer or provider affecting your account.
+
+Controls include encrypted network connections, account and role permissions, protected credentials, device and PIN controls, private receipt access and audit records. These controls reduce risk; no internet service can promise absolute security. Report a suspected breach or unauthorized account activity promptly without sending passwords, PINs or verification codes.
+
+6. Retention and account deletion
+
+Active account and profile information supports the service you use. Verification and recovery records have their own expiry and consumption rules. Session storage can retain setup progress within your browser session; sign-out or a change of account does not authorize the saved details to be submitted for another identity.
+
+Closing a profile restricts that profile and may leave other profiles on the same identity active. Entire-account deletion uses the supported review and identity-deletion process. When that process completes, authentication identifiers are released or replaced with non-contact identifiers and the external identity is deleted through the configured provider process.
+
+Financial, consent, review, closure and security audit history can remain after closure to preserve legitimate transaction evidence, resolve obligations and disputes, investigate misuse and meet applicable retention duties. These records are currently preserved rather than automatically erased after a single fixed number of days. A closure request does not automatically delete all backups, cancel an unsettled transaction or reset a wallet. Contact support about the records retained for your account and any applicable deletion or restriction request; retention must remain justified by its purpose and applicable law.
+
+7. Choices, requests and complaints
+
+You may request access, correction, deletion, restriction or other available personal-data rights, and may withdraw consent where processing depends on it. Some requests require identity verification or are limited by legitimate financial, security or legal-retention obligations. Withdrawing optional consent does not make earlier lawful processing invalid. A feature that needs particular information may not be available if that information is not provided.
+
+Use account settings and the Delete Account process where available, or contact support@weymela.com. Explain the request and identify the relevant account using information you are authorized to provide. Do not send a password, PIN or verification code. You may complain to the competent data-protection authority or pursue a remedy available under applicable law.
+
+Role approvals and financial settlement reviews involve authorized review. Identity matching, validation, duplicate-request protection and security restrictions also use automated checks. A receipt upload does not automatically decide settlement or create wallet credit. Contact support if a restriction or decision needs review.
+
+8. Eligibility and policy changes
+
+Use the service only if you meet the legal capacity, authority and role requirements applicable to you. Do not submit information about a child or another person without the authority and safeguards required by law. If you cannot lawfully use the service without additional consent or representation, contact support before creating an account.
+
+Policy updates are published with identifiable versions. Required acceptance is tied to the applicable published English or Amharic documents. If the required documents are unavailable, the application must explain the requirement and retain verified identity and profile-setup progress. Saving registration details does not record acceptance of an unavailable document.

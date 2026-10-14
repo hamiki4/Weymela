@@ -22,8 +22,9 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
         {
             var path=route.RoutePattern.RawText!;
             // Prospective users must be able to read approved policies before signing up.
-            // This exact route exposes only GET; publication and byte/hash checks remain mandatory.
-            if(path == "/api/legal/account/{kind}")
+            // These exact routes expose only GET content or public version metadata;
+            // publication, byte/hash checks and per-user consent authorization remain mandatory.
+            if(path is "/api/legal/account/{kind}" or "/api/legal/account/status")
             {
                 Assert.NotNull(route.Metadata.GetMetadata<IAllowAnonymous>());
                 Assert.Equal(new[] { "GET" }, route.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods);
@@ -51,6 +52,7 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync("/api/legal/account/accounts?language=en")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync("/api/legal/account/terms?language=unknown")).StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed,(await client.Post("/api/legal/account/terms",new{})).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed,(await client.Post("/api/legal/account/status",new{})).StatusCode);
     }
     [Fact] public async Task Creator_cannot_refresh_another_creators_participation()
     {

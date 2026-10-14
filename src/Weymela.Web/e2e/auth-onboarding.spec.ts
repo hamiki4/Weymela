@@ -399,7 +399,7 @@ test("verified Customer registration proceeds directly to mandatory PIN and acti
   expect((await deviceEnrollment).status()).toBe(200);
   await expect(page).toHaveURL(/\/onboarding/);
   await page.getByRole("button", { name: /^Use as Customer/ }).click();
-  const consent = page.getByRole("checkbox", { name: "I agree to Weymela's Rules and Regulations" });
+  const consent = page.getByRole("checkbox", { name: "I agree to Weymela's Terms of Service and Privacy Policy." });
   await expect(consent).not.toBeChecked();
   for (const [name, heading, marker] of [
     ["Terms of Service", "Terms of Service", "Weymela Pilot Terms of Service"],
@@ -421,7 +421,7 @@ test("verified Customer registration proceeds directly to mandatory PIN and acti
   await page.getByLabel("Preferred name", { exact: true }).fill(`Customer ${account.suffix}`);
   await expect(page.getByLabel("Public ID", { exact: true })).toHaveCount(0);
   await consent.check();
-  const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/profile", { timeout: 7000 });
+  const activation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/onboarding/registration", { timeout: 7000 });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await activation).status()).toBe(200);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Customer" });
@@ -474,7 +474,7 @@ test("public Business signup creates the role only after verified email and devi
   const enrolled = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/enrollment");
   const activated = page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === "/api/onboarding/profile");
+    && new URL(response.url()).pathname === "/api/onboarding/registration");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await enrolled).status()).toBe(200);
   expect((await activated).status()).toBe(200);
@@ -482,6 +482,37 @@ test("public Business signup creates the role only after verified email and devi
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL(/\/business/);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Business" });
+  const identityBefore = await (await context.request.get("/api/onboarding/identity")).json() as { userId: string; phone: string };
+  await page.evaluate(() => sessionStorage.setItem("weymela.public-signup", JSON.stringify({ version: 1,
+    idempotencyKey: "isolated-stale-signup", role: "Customer", legalName: "Stale details",
+    email: "another-account@example.test", phone: "+254712345678", legalAccepted: true })));
+  await open(page, "/settings");
+  await page.getByRole("link", { name: "Add Profile", exact: true }).click();
+  await page.getByRole("button", { name: /^Use as Customer/ }).click();
+  await page.getByLabel("Preferred name", { exact: true }).fill(`Customer ${suffix}`);
+  await page.reload();
+  await expect(page.getByLabel("Preferred name", { exact: true })).toHaveValue(`Customer ${suffix}`);
+  const additional = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/onboarding/profiles");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect((await additional).status()).toBe(200);
+  await expect(page).toHaveURL(/\/customer\/offers/);
+  const identityAfter = await (await context.request.get("/api/onboarding/identity")).json();
+  expect(identityAfter).toMatchObject({ userId: identityBefore.userId, phone: identityBefore.phone });
+  const multiple = await (await context.request.get("/api/session")).json() as SessionUser;
+  expect(multiple.profiles?.map(profile => profile.role).sort()).toEqual(["Business", "Customer"]);
+  const legacyRetry = await context.request.post("/api/onboarding/profile", {
+    headers: { "X-Weymela-Request": "1", "Idempotency-Key": "isolated-legacy-owned-profile" },
+    data: { role: "Customer", displayName: `Customer ${suffix}`, registeredPhone: "+254712345678" },
+  });
+  expect(legacyRetry.status()).toBe(200);
+  expect(await legacyRetry.json()).toMatchObject({ alreadyOwned: true });
+  await open(page, "/onboarding?intent=add");
+  await page.getByRole("button", { name: /Business.*Already added/ }).click();
+  await expect(page).toHaveURL(/\/business/);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Create your PIN" })).toHaveCount(0);
+
 });
 
 test("Platform Admin reviews Creator while verified Business registration activates immediately", async ({ page, context }) => {
@@ -845,7 +876,7 @@ test("customer-to-creator choice uses a phase-safe purple shell", async ({ page,
   await open(page, "/onboarding");
   await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Add a Business/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
   await creatorChoiceDiagnostics(page, context, signals, marker);
   const creatorChoice = page.getByRole("button", { name: /^Become a Creator/ });
   await expect(creatorChoice).toHaveCount(1);
@@ -923,7 +954,7 @@ test("customer-to-business choice uses a phase-safe blue shell", async ({ page, 
   await open(page, "/onboarding");
   await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Become a Creator/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
   const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
   await expect(businessChoice).toHaveCount(1);
   await businessChoice.click();
@@ -1031,11 +1062,11 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     await captureCustomerFormFailure(page, context, signals, marker, steps, error);
     throw error;
   }
-  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: "I agree to Weymela's Rules and Regulations" }).check({ timeout: 7000 }), 8000);
+  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: "I agree to Weymela's Terms of Service and Privacy Policy." }).check({ timeout: 7000 }), 8000);
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
       const url = new URL(response.url());
-      return response.request().method() === "POST" && url.pathname === "/api/onboarding/profile";
+      return response.request().method() === "POST" && url.pathname === "/api/onboarding/registration";
     }, { timeout: 7000 });
     await page.getByRole("button", { name: "Continue", exact: true }).click({ timeout: 7000 });
     const response = await activationResponse;
@@ -1061,7 +1092,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   expect(phoneToken).toBe(token);
   await runStep(steps, "firebase-phone-session", () => establishFirebaseSession(context, phoneToken), 12000);
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);
-  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
   await expect(page.getByRole("checkbox", { name: /Terms of Service/ })).toHaveCount(0);
   await creatorChoiceDiagnostics(page, context, signals, marker);
   await runStep(steps, "creator-choice", () => page.getByRole("button", { name: /^Become a Creator/ }).click({ timeout: 7000 }), 8000);

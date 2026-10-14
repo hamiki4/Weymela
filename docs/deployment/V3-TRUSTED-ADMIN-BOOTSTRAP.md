@@ -91,13 +91,13 @@ Production Web policy pages read `/api/legal/account/terms?language=en` and the 
 They require operator-published approved files mounted read-only at `/run/weymela-v3/approved-legal` (or
 `V3:Legal:ApprovedContentDirectory`). The directory contains `TermsOfService-en.txt`, `TermsOfService-am.txt`,
 `PrivacyPolicy-en.txt`, `PrivacyPolicy-am.txt`, and `publication.json`. The manifest must record
-`environment=Production`, actual `productionApproved`/`attorneyReviewed` evidence, owner/legal approval references,
+`environment=Production`, actual `productionApproved` evidence and an `ownerApprovalReference`,
 and exactly one document per type/language with `approvedFinalVersion` and `approvedFinalContentSha256`.
 Each version/hash must match its effective database record and the exact UTF-8 file bytes. Missing approval,
 missing content, future effectiveness or a hash mismatch returns unavailable. No Pilot content is used as a
 Production fallback. Populate this protected directory only after the real approvals are supplied.
 
-English and Amharic Production Terms and Privacy drafts are review material only. Their draft versions and content hashes are recorded in `docs/legal/production/approval-plan.json`; they are not approved policy records and cannot be imported or activated. Do not seed test policies into live Production. Legal approval, owner approval, final versioning, and a separately reviewed publication process are required before readiness can advance.
+English and Amharic Production Terms and Privacy drafts are review material only. Their draft versions and content hashes are recorded in `docs/legal/production/approval-plan.json`; they are not approved policy records and cannot be imported or activated. Do not seed test policies into live Production. Owner approval of accurate final content, final versioning, and supported publication are required before enabling required policy consent. Attorney-review flags are not mandatory and policy publication is not an infrastructure health check. The current complete bilingual candidates are in `docs/legal/production/owner-review-2026-10-14`; they remain unpublished pending the operator-identity and final-publication decision.
 
 ## Audit and cleanup
 

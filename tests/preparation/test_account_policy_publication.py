@@ -25,8 +25,8 @@ class AccountPolicyPublicationTests(unittest.TestCase):
                 documents.append({'type': kind, 'language': language, 'approvedFinalVersion': f'isolated-1-{language}',
                                   'approvedFinalContentSha256': 'sha256:' + hashlib.sha256(content).hexdigest(),
                                   'effectiveFromUtc': '2026-01-01T00:00:00Z'})
-        self.manifest = {'environment': 'Production', 'productionApproved': True, 'attorneyReviewed': True,
-                         'ownerApprovalReference': "isolated owner ' reference", 'legalApprovalReference': 'isolated legal reference',
+        self.manifest = {'environment': 'Production', 'productionApproved': True, 'attorneyReviewed': False,
+                         'ownerApprovalReference': "isolated owner ' reference", 'legalApprovalReference': None,
                          'documents': documents}
         self.operator = str(uuid.uuid4())
 
@@ -48,7 +48,7 @@ class AccountPolicyPublicationTests(unittest.TestCase):
         self.assertNotIn('Financial', first)
 
     def test_rejects_unapproved_incomplete_or_changed_content(self):
-        for field in ['productionApproved', 'attorneyReviewed', 'ownerApprovalReference', 'legalApprovalReference']:
+        for field in ['productionApproved', 'ownerApprovalReference']:
             original = self.manifest[field]
             self.manifest[field] = False if isinstance(original, bool) else ''
             with self.assertRaises(ValueError):

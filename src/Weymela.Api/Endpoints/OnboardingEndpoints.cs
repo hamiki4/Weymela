@@ -25,6 +25,8 @@ internal static class OnboardingEndpoints
 
     public static void MapOnboardingEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/legal/account/status", async (string? language, AccountLegalOnboardingService service,
+            CancellationToken ct) => Results.Ok(await service.PublicationAsync(ct, language ?? "en"))).AllowAnonymous();
         app.MapGet("/api/legal/account/{kind}", async (string kind, string? language,
             AccountLegalDocumentSource source, WeymelaDbContext db, TimeProvider clock, CancellationToken ct) =>
         {

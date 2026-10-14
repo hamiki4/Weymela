@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { post, request, useAction, useResource } from "../api/client";
-import type { AccountSecurityStatus, Role, SessionProfile } from "../api/types";
+import type { AccountLegalStatus, AccountSecurityStatus, Role, SessionProfile } from "../api/types";
 import { Button, Field, Notice, Resource } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { PasswordField } from "../ui/PasswordField";
+import { PolicyConsent } from "./PolicyConsent";
 import { Brand } from "./Shell";
 import { SessionLoadFailure, useSession } from "./Session";
 import { CompactLanguageChoice, translateText, useLanguage } from "../localization/Language";
@@ -416,6 +417,9 @@ function PublicRegistrationForm(props: {
   onBack: () => void;
 }) {
   const { language } = useLanguage();
+  const policies = useResource<AccountLegalStatus>(`/legal/account/status?language=${language}`);
+  const policyAvailable = policies.data?.available === true;
+  const fingerprint = policies.data?.documents.map(document => `${document.documentId}:${document.contentHash}`).join("|");
   const saved = readSignupDraft();
   const sameRole = saved?.role === props.role ? saved : null;
   const [legalName, setLegalName] = useState(sameRole?.legalName ?? "");
@@ -433,6 +437,7 @@ function PublicRegistrationForm(props: {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  useEffect(() => setLegalAccepted(false), [fingerprint]);
   const title = props.role === "Business" ? "Business Owner registration"
     : props.role === "Creator" ? "Content Creator registration" : "Customer registration";
   return <section className={`public-registration signup-${props.role.toLowerCase()}`} aria-labelledby="public-registration-title">
@@ -467,8 +472,10 @@ function PublicRegistrationForm(props: {
         ...(props.role === "Business" ? { businessName: businessName.trim(), businessType: businessType.trim() } : {}),
         ...(props.role === "Creator" ? { socialPlatform, socialProfileUrl: socialProfileUrl.trim(),
           followerCount: followers, subscriberCount: subscribers } : {}),
-        legalAccepted: props.legalConsentRequired && legalAccepted,
+        legalAccepted: policyAvailable && legalAccepted,
+        ...(policyAvailable && legalAccepted ? { acceptedPolicies: policies.data!.documents.map(document => ({ ...document, accepted: true })), policyLanguage: language } : {}),
         ...(!props.legalConsentRequired ? { legalDeferred: true } : {}),
+        ...(props.legalConsentRequired && !policyAvailable ? { policyPending: true } : {}),
       }, password, confirmPassword);
     }}>
       <fieldset disabled={props.busy} className="public-registration-fields">
@@ -507,11 +514,11 @@ function PublicRegistrationForm(props: {
         <PasswordField label="Confirm Password" value={confirmPassword} onChange={value => { setConfirmPassword(value); setPasswordError(null); }} autoComplete="new-password" />
         <p className="fine-print">Use at least 8 characters. You can use a passphrase.</p>
         {passwordError ? <Notice error>{passwordError}</Notice> : null}
-        {props.legalConsentRequired && <label className="signup-legal-consent"><input required type="checkbox" checked={legalAccepted} onChange={event => setLegalAccepted(event.target.checked)} />
-          <span>I agree to Weymela&apos;s <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
-        </label>}
+        <PolicyConsent id="public-registration-legal" checked={legalAccepted} disabled={!policyAvailable || policies.loading}
+          documents={policies.data?.documents} onChange={setLegalAccepted} />
+        {!policies.loading && !policyAvailable && <Notice>Policies are awaiting publication. You can verify your email and keep your profile setup progress. Policy acceptance will be requested when the published documents are available.</Notice>}
         <div className="form-footer"><Button type="button" variant="secondary" onClick={props.onBack}>Back</Button>
-          <Button type="submit" disabled={props.busy || (props.legalConsentRequired && !legalAccepted)}>{props.busy ? "Sending code…" : "Complete Registration"}</Button></div>
+          <Button type="submit" disabled={props.busy || (props.legalConsentRequired && policyAvailable && !legalAccepted)}>{props.busy ? "Sending code…" : "Complete Registration"}</Button></div>
       </fieldset>
     </form>
   </section>;

@@ -24,8 +24,10 @@ conflicts ask the caller to retry without creating another profile or wallet.
 The Web Add Profile links explicitly select additional-profile setup. Saved signup
 details are checked against the authenticated account and never automatically
 submitted for another account. Additional-profile progress and request references
-are stored per account in session storage. Policy confirmations are not retained
-across refresh or a published-version change.
+are stored per account in session storage. Unsubmitted profile-form confirmations reset on refresh or a published-version change.
+The initial registration checkbox records the displayed document IDs and hashes;
+completion after email verification reuses that genuine confirmation only if both
+versions and the language still match.
 
 ## Actual Production policy publication
 
@@ -33,13 +35,18 @@ The repository's `docs/legal/production/*OWNER-LEGAL-DRAFT*` files are incomplet
 review drafts. This change does not approve or publish them. Production must not
 use Pilot text or create acceptance records from an earlier generic checkbox.
 
+Complete English and Amharic candidates and their exact hashes are in
+[`owner-review-2026-10-14`](../legal/production/owner-review-2026-10-14/README.md).
+They are not published or approved. Actual legal operator identity/service address
+and approval of the final texts/effective date remain an owner publication decision.
+An attorney letter is not a publication validator or an infrastructure health check.
+
 Prepare a protected approved bundle containing:
 
 1. `TermsOfService-en.txt`, `TermsOfService-am.txt`, `PrivacyPolicy-en.txt`, and
    `PrivacyPolicy-am.txt`, containing the exact approved UTF-8 bytes.
 2. `publication.json`, following the existing `AccountLegalDocumentSource` contract:
-   `environment: Production`, actual `productionApproved` and `attorneyReviewed`
-   decisions, actual `ownerApprovalReference` and `legalApprovalReference`, and
+   `environment: Production`, actual `productionApproved` decision and `ownerApprovalReference`, and
    exactly four document entries. Each entry contains `type`, `language`,
    `approvedFinalVersion` ending in `-en` or `-am`,
    `approvedFinalContentSha256` prefixed with `sha256:`, and the actual approved
@@ -70,5 +77,7 @@ is inferred from a draft, deployment authorization, or a previous generic checkb
 There is no schema or financial configuration change. Deploy only the checked API
 and Web correction after protected-main CI. Preserve the current Worker, deposit
 activation and storage, financial history, Pilot, V1 rollback, and signing files.
-Use synthetic identities for live smoke tests and retain an accurate distinction
-between live email submission, actual mailbox verification, and isolated tests.
+Automated suites use isolated synthetic identities. The owner performs live
+Production email verification and registration smoke tests; no inbox access,
+password or verification-code sharing is required. Deployment evidence must
+distinguish public endpoint verification from authenticated owner smoke tests.

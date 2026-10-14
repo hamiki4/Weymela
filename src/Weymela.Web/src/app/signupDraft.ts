@@ -1,3 +1,5 @@
+import type { AccountLegalStatus } from "../api/types";
+
 export type PublicSignupRole = "Customer" | "Business" | "Creator";
 
 export type PublicSignupDraft = {
@@ -16,6 +18,9 @@ export type PublicSignupDraft = {
   subscriberCount?: number | null;
   legalAccepted: boolean;
   legalDeferred?: boolean;
+  policyPending?: boolean;
+  acceptedPolicies?: AccountLegalStatus["documents"];
+  policyLanguage?: "en" | "am";
 };
 
 const key = "weymela.public-signup";
@@ -30,7 +35,7 @@ export function readSignupDraft(): PublicSignupDraft | null {
     if (!parsed || parsed.version !== 1 || !parsed.idempotencyKey
         || !["Customer", "Business", "Creator"].includes(parsed.role ?? "")
         || !parsed.legalName || !parsed.email || !parsed.phone
-        || (parsed.legalAccepted !== true && parsed.legalDeferred !== true))
+        || (parsed.legalAccepted !== true && parsed.legalDeferred !== true && parsed.policyPending !== true))
       return null;
     return parsed as PublicSignupDraft;
   } catch {

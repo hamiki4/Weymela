@@ -23,6 +23,29 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
     private static readonly string PinPepper = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
     [Fact]
+    public async Task Anonymous_policy_status_exposes_current_versions_without_recording_acceptance()
+    {
+        await using var host = await ApiFixture.CreateAsync(fixture);
+        using var client = host.Anonymous();
+        var response = await client.GetAsync("/api/legal/account/status?language=en");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var status = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.True(status!["available"]!.GetValue<bool>());
+        Assert.False(status["current"]!.GetValue<bool>());
+        var documents = status["documents"]!.AsArray();
+        Assert.Equal(2, documents.Count);
+        Assert.All(documents, document =>
+        {
+            Assert.False(document!["accepted"]!.GetValue<bool>());
+            Assert.NotEmpty(document["contentHash"]!.GetValue<string>());
+            Assert.NotEmpty(document["documentId"]!.GetValue<string>());
+        });
+        await using var db = host.Database.Open();
+        Assert.Empty(await db.LegalAcceptances.ToListAsync());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/onboarding/identity")).StatusCode);
+    }
+
+    [Fact]
     public async Task Development_firebase_session_projects_all_persisted_active_profiles()
     {
         var userId = Guid.NewGuid();

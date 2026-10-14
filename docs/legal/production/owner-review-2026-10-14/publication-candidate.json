@@ -1,0 +1,38 @@
+{
+  "environment": "Production",
+  "classification": "OwnerReviewCandidate",
+  "importable": false,
+  "productionApproved": false,
+  "ownerApprovalReference": null,
+  "effectiveFromUtc": null,
+  "documents": [
+    {
+      "type": "TermsOfService",
+      "language": "en",
+      "proposedVersion": "production-2026-10-14.1-en",
+      "contentPath": "TermsOfService-en.txt",
+      "contentSha256": "sha256:9d0d421fb15a4ff4cd0262ed6c699651a7d82838e78bc801c33824b04b8a8de3"
+    },
+    {
+      "type": "TermsOfService",
+      "language": "am",
+      "proposedVersion": "production-2026-10-14.1-am",
+      "contentPath": "TermsOfService-am.txt",
+      "contentSha256": "sha256:990852930eb6b6850f19b4b1f9e4085bcf30a8c62932cf4808cc65bde5fd17e8"
+    },
+    {
+      "type": "PrivacyPolicy",
+      "language": "en",
+      "proposedVersion": "production-2026-10-14.1-en",
+      "contentPath": "PrivacyPolicy-en.txt",
+      "contentSha256": "sha256:cbea573928c37afc09f7b7bee6195f8559aea15b4040f1537a074cb44cd78388"
+    },
+    {
+      "type": "PrivacyPolicy",
+      "language": "am",
+      "proposedVersion": "production-2026-10-14.1-am",
+      "contentPath": "PrivacyPolicy-am.txt",
+      "contentSha256": "sha256:aeebaacfb144da9f4e42e8bb6787cbe6162441868d07b55ba5cab07af315e117"
+    }
+  ]
+}

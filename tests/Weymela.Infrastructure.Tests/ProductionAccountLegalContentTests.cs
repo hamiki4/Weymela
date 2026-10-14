@@ -64,8 +64,8 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
                 new RuntimeOptions { EnvironmentName = "Production" }, new AccountLegalDocumentSource(directory.FullName));
             Assert.False((await service.StatusAsync(user, default)).Available);
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, "publication.json"), JsonSerializer.Serialize(new {
-                environment = "Production", productionApproved = true, attorneyReviewed = true,
-                ownerApprovalReference = "isolated-test-owner", legalApprovalReference = "isolated-test-legal", documents = approved
+                environment = "Production", productionApproved = true, attorneyReviewed = false,
+                ownerApprovalReference = "isolated-test-owner", documents = approved
             }));
             var status = await service.StatusAsync(user, default);
             Assert.True(status.Available);
@@ -95,7 +95,7 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
         finally { directory.Delete(true); }
     }
     [Fact]
-    public async Task Production_content_requires_owner_legal_approval_exact_bytes_and_published_version()
+    public async Task Production_content_requires_owner_approval_exact_bytes_and_published_version_without_attorney_gate()
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -112,8 +112,8 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
             await File.WriteAllTextAsync(policy, text);
             async Task Manifest(bool approved) => await File.WriteAllTextAsync(Path.Combine(directory, "publication.json"), JsonSerializer.Serialize(new
             {
-                environment = "Production", productionApproved = approved, attorneyReviewed = approved,
-                ownerApprovalReference = "isolated-test-owner", legalApprovalReference = "isolated-test-legal",
+                environment = "Production", productionApproved = approved, attorneyReviewed = false,
+                ownerApprovalReference = "isolated-test-owner",
                 documents = new[] { new { type = "TermsOfService", language = "en", approvedFinalVersion = "test-en", approvedFinalContentSha256 = hash } }
             }));
             await Manifest(false);

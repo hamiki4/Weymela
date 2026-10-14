@@ -16,6 +16,11 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "I agree to Weymela's Terms of Service and Privacy Policy.": "በወይሜላ የአገልግሎት ውሎች እና በግላዊነት ፖሊሲ እስማማለሁ።",
+  "I agree to Weymela's": "በወይሜላ",
+  "and": "እና",
+  "Policies are awaiting publication. You can verify your email and keep your profile setup progress. Policy acceptance will be requested when the published documents are available.": "ፖሊሲዎቹ ለህትመት በመጠባበቅ ላይ ናቸው። ኢሜይልዎን ማረጋገጥ እና የመገለጫ ዝግጅት ሂደትዎን ማስቀመጥ ይችላሉ። የታተሙት ሰነዶች ሲገኙ ስምምነትዎ ይጠየቃል።",
+
   "For help, contact": "ለእርዳታ ያነጋግሩ",
   "Account phone setup could not be completed. Contact Weymela support.": "የመለያ ስልክ ማዘጋጀት አልተጠናቀቀም። የወይሜላ ድጋፍን ያነጋግሩ።",
   "Choose English or Amharic for the published policies.": "ለታተሙት ፖሊሲዎች እንግሊዝኛ ወይም አማርኛ ይምረጡ።",

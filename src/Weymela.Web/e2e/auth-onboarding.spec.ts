@@ -399,7 +399,7 @@ test("verified Customer registration proceeds directly to mandatory PIN and acti
   expect((await deviceEnrollment).status()).toBe(200);
   await expect(page).toHaveURL(/\/onboarding/);
   await page.getByRole("button", { name: /^Use as Customer/ }).click();
-  const consent = page.getByRole("checkbox", { name: "I agree to Weymela's Rules and Regulations" });
+  const consent = page.getByRole("checkbox", { name: "I agree to Weymela's Terms of Service and Privacy Policy." });
   await expect(consent).not.toBeChecked();
   for (const [name, heading, marker] of [
     ["Terms of Service", "Terms of Service", "Weymela Pilot Terms of Service"],
@@ -473,14 +473,10 @@ test("public Business signup creates the role only after verified email and devi
   await fillPin(page, "Confirm PIN", "01234");
   const enrolled = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/device/enrollment");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  expect((await enrolled).status()).toBe(200);
-  await expect(page.getByRole("heading", { name: "Finish registration", exact: true })).toBeVisible();
-  await expect(page.getByRole("checkbox")).not.toBeChecked();
-  await page.getByRole("checkbox").check();
   const activated = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/api/onboarding/registration");
-  await page.getByRole("button", { name: "Finish registration", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  expect((await enrolled).status()).toBe(200);
   expect((await activated).status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -1066,7 +1062,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
     await captureCustomerFormFailure(page, context, signals, marker, steps, error);
     throw error;
   }
-  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: "I agree to Weymela's Rules and Regulations" }).check({ timeout: 7000 }), 8000);
+  await runStep(steps, "customer-legal-acceptance", () => page.getByRole("checkbox", { name: "I agree to Weymela's Terms of Service and Privacy Policy." }).check({ timeout: 7000 }), 8000);
   await runStep(steps, "customer-submit", async () => {
     const activationResponse = page.waitForResponse(response => {
       const url = new URL(response.url());

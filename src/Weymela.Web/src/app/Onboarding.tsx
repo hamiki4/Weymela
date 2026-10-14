@@ -5,6 +5,7 @@ import { actorRoleNameFromWire } from "../api/actorRoleContract";
 import type { AccountLegalStatus, SessionProfile } from "../api/types";
 import { Button, Empty, Field, Notice, PageHeader, Resource, Section } from "../ui/components";
 import { RoleOnboardingShell, type OnboardingRole } from "./RoleOnboardingShell";
+import { PolicyConsent } from "./PolicyConsent";
 import { useSession } from "./Session";
 import { CreatorSocialProfilesEditor } from "../features/creator/CreatorProfile";
 import { clearSignupDraft, readSignupDraft, saveSignupDraft, type PublicSignupDraft } from "./signupDraft";
@@ -67,7 +68,11 @@ function PublicSignupCompletion({ draft, identity, identityMatches, onRecover, o
   const [completed, setCompleted] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [reviewedDocuments, setReviewedDocuments] = useState<AccountLegalStatus["documents"] | null>(null);
-  const needsConsent = identityMatches && legal.data?.required !== false && legal.data?.available && !legal.data.current;
+  const draftConsentCurrent = draft.legalAccepted && draft.policyLanguage === language
+    && draft.acceptedPolicies?.length === 2 && legal.data?.documents.every(document =>
+      draft.acceptedPolicies?.some(acceptedDocument => acceptedDocument.documentId === document.documentId
+        && acceptedDocument.contentHash === document.contentHash));
+  const needsConsent = identityMatches && legal.data?.required !== false && legal.data?.available && !legal.data.current && !draftConsentCurrent;
   const documentFingerprint = legal.data?.documents.map(document => `${document.documentId}:${document.contentHash}`).join("|");
   useEffect(() => {
     setAccepted(false);
@@ -143,13 +148,8 @@ function PublicSignupCompletion({ draft, identity, identityMatches, onRecover, o
       }}>
         <h1>Finish registration</h1>
         <p>Review and accept the published policies to finish registration.</p>
-        <label className="signup-legal-consent"><input required type="checkbox" checked={accepted}
-          onChange={event => {
-            setAccepted(event.target.checked);
-            setReviewedDocuments(event.target.checked ? legal.data!.documents : null);
-          }} />
-          <span>I agree to Weymela&apos;s <a href={language === "am" ? "/legal/terms-of-service?language=am" : "/legal/terms-of-service"} target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href={language === "am" ? "/legal/privacy-policy?language=am" : "/legal/privacy-policy"} target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
-        </label>
+        <PolicyConsent id="registration-completion-legal" checked={accepted} documents={legal.data?.documents}
+          onChange={value => { setAccepted(value); setReviewedDocuments(value ? legal.data!.documents : null); }} />
         <div className="actions"><Button type="submit" disabled={!accepted}>Finish registration</Button>
           <Button type="button" variant="secondary" onClick={() => void signOut()}>Sign out</Button></div>
       </form>}
@@ -243,7 +243,7 @@ function ProfileSetup({ identity, initialDraft, onSaved }: {
     const terms = documents?.find((document) => document.kind === "TermsOfService");
     const privacy = documents?.find((document) => document.kind === "PrivacyPolicy");
     if (legal.data?.required !== false && (!legal.data?.available || !terms || !privacy || (!legal.data.current && !legalAccepted)))
-      throw new Error(legal.data?.available ? "Accept Weymela's Rules and Regulations before continuing."
+      throw new Error(legal.data?.available ? "Accept the current Terms of Service and Privacy Policy."
         : "Account activation requires published Terms of Service and Privacy Policy.");
     const accountLegal = legal.data?.required !== false && !legal.data?.current ? {
       termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
@@ -273,7 +273,7 @@ function ProfileSetup({ identity, initialDraft, onSaved }: {
     const privacy = documents?.find((document) => document.kind === "PrivacyPolicy");
     const requiresAccountLegal = legal.data?.required !== false && !legal.data?.current && (production || approved.size === 0);
     if (requiresAccountLegal && (!legal.data?.available || !terms || !privacy || !legalAccepted))
-      throw new Error("Accept Weymela's Rules and Regulations before continuing.");
+      throw new Error("Accept the current Terms of Service and Privacy Policy.");
     const accountLegal = requiresAccountLegal ? {
       termsOfService: { documentId: terms!.documentId, contentHash: terms!.contentHash, accepted: true },
       privacyPolicy: { documentId: privacy!.documentId, contentHash: privacy!.contentHash, accepted: true },
@@ -356,17 +356,10 @@ function ProfileSetup({ identity, initialDraft, onSaved }: {
               }}>
               <Field label="Preferred name" wide><input required autoComplete="name" maxLength={120}
                 value={preferredName} onChange={(event) => setPreferredName(event.target.value)} /></Field>
-              {documents.required !== false && !documents.current && <div className="legal-consent form-wide"><div className="check-row">
-                <input id="customer-legal-accepted" type="checkbox" checked={legalAccepted}
-                  onChange={(event) => { setLegalAccepted(event.target.checked); setReviewedDocuments(event.target.checked ? legal.data!.documents : null); }}
-                  aria-label="I agree to Weymela's Rules and Regulations" required />
-                <span id="customer-legal-consent-text"><label htmlFor="customer-legal-accepted">I agree to Weymela&apos;s <strong>Rules and Regulations</strong>.</label><br />
-                  <small>By continuing, you also accept the current </small>
-                  <a href={documents.documents.find((document) => document.kind === "TermsOfService")!.viewPath}
-                    target="_blank" rel="noreferrer">Terms of Service</a><small> and acknowledge the </small>
-                  <a href={documents.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath}
-                    target="_blank" rel="noreferrer">Privacy Policy</a><small>.</small></span>
-              </div></div>}
+              {documents.required !== false && !documents.current && <div className="legal-consent form-wide">
+                <PolicyConsent id="customer-legal-accepted" checked={legalAccepted} documents={documents.documents}
+                  onChange={value => { setLegalAccepted(value); setReviewedDocuments(value ? documents.documents : null); }} />
+              </div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
                 <Button type="submit" disabled={action.busy}>{action.busy ? "Saving…" : "Continue"}</Button></div>
@@ -397,15 +390,10 @@ function ProfileSetup({ identity, initialDraft, onSaved }: {
                   onRemove={platform => setSocialUrls(current => ({ ...current, [platform]: { profileUrl: "", audience: "0" } }))}
                 />
               </div>}
-              {legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide"><div className="check-row">
-                <input id="profile-legal-accepted" type="checkbox" checked={legalAccepted}
-                  onChange={(event) => { setLegalAccepted(event.target.checked); setReviewedDocuments(event.target.checked ? legal.data!.documents : null); }}
-                  aria-label="I agree to Weymela's Rules and Regulations" required />
-                <span><label htmlFor="profile-legal-accepted">I agree to Weymela&apos;s <strong>Rules and Regulations</strong>.</label><br />
-                  <small>By continuing, you also accept the current </small>
-                  <a href={legal.data.documents.find((document) => document.kind === "TermsOfService")!.viewPath} target="_blank" rel="noreferrer">Terms of Service</a><small> and acknowledge the </small>
-                  <a href={legal.data.documents.find((document) => document.kind === "PrivacyPolicy")!.viewPath} target="_blank" rel="noreferrer">Privacy Policy</a><small>.</small></span>
-              </div></div>}
+              {legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && legal.data?.available && <div className="legal-consent form-wide">
+                <PolicyConsent id="profile-legal-accepted" checked={legalAccepted} documents={legal.data.documents}
+                  onChange={value => { setLegalAccepted(value); setReviewedDocuments(value ? legal.data!.documents : null); }} />
+              </div>}
               {action.error && <Notice error>{action.error}</Notice>}
               <div className="form-footer"><Button type="button" variant="secondary" onClick={cancel}>Back</Button>
                 <Button type="button" onClick={() => submitAdditional(role)} disabled={action.busy || (legal.data?.required !== false && (production || approved.size === 0) && !legal.data?.current && (!legal.data?.available || !legalAccepted)) || (role === "Creator" && !socialPlatforms.some(platform => socialUrls[platform].profileUrl.trim()))}>

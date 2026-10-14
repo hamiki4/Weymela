@@ -22,10 +22,9 @@ def prepare(directory, operator):
     manifest = json.loads((directory / 'publication.json').read_text(encoding='utf-8'))
     if (manifest.get('environment') != 'Production'
             or manifest.get('productionApproved') is not True
-            or manifest.get('attorneyReviewed') is not True
             or not all(isinstance(manifest.get(k), str) and manifest[k].strip()
-                       for k in ['ownerApprovalReference', 'legalApprovalReference'])):
-        raise ValueError('Actual owner and legal approvals are required; drafts cannot be published.')
+                       for k in ['ownerApprovalReference'])):
+        raise ValueError('Actual owner approval of final content is required; drafts cannot be published.')
     expected = {(kind, language) for kind in ['TermsOfService', 'PrivacyPolicy'] for language in ['en', 'am']}
     documents = manifest.get('documents', [])
     if len(documents) != 4 or {(d.get('type'), d.get('language')) for d in documents} != expected:
@@ -54,7 +53,6 @@ def prepare(directory, operator):
     values = ',\n'.join('(' + ', '.join(quote(v) for v in row) + ')' for row in rows)
     audit_id = str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(rows)))
     detail = json.dumps({'ownerApprovalReference': manifest['ownerApprovalReference'],
-                        'legalApprovalReference': manifest['legalApprovalReference'],
                         'documents': [r[0] for r in rows]}, separators=(',', ':'))
     return f'''-- Prepared from exact approved bytes. Review before applying with the protected operator role.
 BEGIN;

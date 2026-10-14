@@ -175,6 +175,35 @@ describe("shared role-themed onboarding", () => {
     expect(await screen.findByRole("heading", { name: "Your account is ready." })).toBeVisible();
   });
 
+  it("reuses genuine agreement to unchanged versions from the registration form", async () => {
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "same-published-consent", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      legalAccepted: true, policyLanguage: "en", acceptedPolicies: effectiveLegal.documents,
+    }));
+    renderOnboarding();
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
+      accountLegal: {
+        termsOfService: { documentId: "terms-id", contentHash: "terms-hash", accepted: true },
+        privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
+      },
+    }), "same-published-consent"));
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("retains verified setup progress while a required policy is unpublished", async () => {
+    mocks.legalStatus = { available: false, current: false, required: true, documents: [] };
+    const draft = { version: 1, idempotencyKey: "pending-publication", role: "Customer",
+      legalName: "Isolated signup", email: "test@example.test", phone: "+251900000000",
+      legalAccepted: false, policyPending: true };
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify(draft));
+    renderOnboarding();
+    expect(await screen.findByText("Your email is verified. Account activation requires published Terms of Service and Privacy Policy.")).toBeVisible();
+    expect(JSON.parse(window.sessionStorage.getItem("weymela.public-signup")!)).toEqual(expect.objectContaining(draft));
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Edit profile details" })).toBeEnabled();
+  });
+
   it("reloads unpublished policies on retry instead of repeatedly submitting stale status", async () => {
     mocks.legalStatus = { available: false, current: false, documents: [] };
     window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
@@ -303,12 +332,12 @@ describe("shared role-themed onboarding", () => {
     expect(screen.queryByLabelText(/Creator category|About your work/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Not added")).toHaveLength(4);
     expect(screen.getAllByRole("button", { name: "Add profile" })).toHaveLength(4);
-    expect(screen.getByLabelText("I agree to Weymela's Rules and Regulations")).not.toBeChecked();
+    expect(screen.getByLabelText("I agree to Weymela's Terms of Service and Privacy Policy.")).not.toBeChecked();
     await userEvent.type(screen.getByLabelText("Creator name"), "Bella Creates");
     await userEvent.click(screen.getAllByRole("button", { name: "Add profile" })[0]);
     await userEvent.type(screen.getByLabelText("TikTok profile URL"), "https://www.tiktok.com/@bella");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
+    await userEvent.click(screen.getByLabelText("I agree to Weymela's Terms of Service and Privacy Policy."));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
       role: "Creator", displayName: "Bella Creates", region: null,
@@ -328,7 +357,7 @@ describe("shared role-themed onboarding", () => {
     expect(screen.getByLabelText("Region (optional)")).toBeVisible();
     expect(screen.queryByLabelText(/Business type|About your Business/)).not.toBeInTheDocument();
     expect(screen.queryByText(/receipt|payment reference|funding/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText("I agree to Weymela's Rules and Regulations"));
+    await userEvent.click(screen.getByLabelText("I agree to Weymela's Terms of Service and Privacy Policy."));
     await userEvent.click(screen.getByRole("button", { name: "Add Business" }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/onboarding/registration", expect.objectContaining({
       role: "Business", displayName: "Bella Restaurant", category: null, submission: null,

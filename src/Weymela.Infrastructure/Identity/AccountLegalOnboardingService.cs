@@ -19,6 +19,11 @@ public sealed class AccountLegalOnboardingService(WeymelaDbContext db, TimeProvi
     private static readonly LegalDocumentType[] Required =
         [LegalDocumentType.TermsOfService, LegalDocumentType.PrivacyPolicy];
 
+    public async Task<bool> HasCurrentAcceptanceAsync(Guid userId, CancellationToken ct)
+        => options?.LegalConsentDeferred == true
+            || (await StatusAsync(userId, ct, "en")).Current
+            || (await StatusAsync(userId, ct, "am")).Current;
+
     public async Task<AccountLegalStatus> PublicationAsync(CancellationToken ct, string language = "en")
     {
         var documents = await EffectiveDocumentsAsync(ct, language);

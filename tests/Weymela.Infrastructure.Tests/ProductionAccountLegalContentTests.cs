@@ -85,12 +85,30 @@ public sealed class ProductionAccountLegalContentTests(PostgresFixture fixture)
             await service.AcceptCurrentAsync(user, confirmation, null, null, default);
             await db.SaveChangesAsync();
             Assert.True((await service.StatusAsync(user, default)).Current);
+            var amharicUser = Guid.NewGuid();
+            var amharicTerms = amharic.Documents.Single(x => x.Kind == "TermsOfService");
+            await service.AcceptCurrentAsync(amharicUser,
+                new(new(amharicTerms.DocumentId, amharicTerms.ContentHash, true),
+                    new(amharicPrivacy.DocumentId, amharicPrivacy.ContentHash, true)), null, null, default);
+            await db.SaveChangesAsync();
+            Assert.False((await service.StatusAsync(amharicUser, default, "en")).Current);
+            Assert.True((await service.StatusAsync(amharicUser, default, "am")).Current);
+            Assert.True(await service.HasCurrentAcceptanceAsync(amharicUser, default));
+            var enrollment = new RoleEnrollmentService(db, TimeProvider.System,
+                new RuntimeOptions { EnvironmentName = "Production" }, new AccountLegalDocumentSource(directory.FullName));
+            await enrollment.SubmitAsync(new Actor(amharicUser, ActorRole.Customer, CustomerId: Guid.Empty),
+                new(ActorRole.Customer, "Isolated Amharic customer", null, null, null, null), "amharic-first", default,
+                ProfileEnrollmentIntent.FirstProfile);
+            await enrollment.SubmitAsync(new Actor(amharicUser, ActorRole.Customer, CustomerId: Guid.Empty),
+                new(ActorRole.Business, "Isolated Amharic business", null, null, "Retail", null), "amharic-add", default,
+                ProfileEnrollmentIntent.AdditionalProfile);
+            Assert.Equal(2, await db.LegalAcceptances.CountAsync(x => x.UserId == amharicUser));
             await File.AppendAllTextAsync(Path.Combine(directory.FullName, "PrivacyPolicy-am.txt"), "unapproved change");
             Assert.False((await service.StatusAsync(user, default)).Available);
             var failure = await Assert.ThrowsAsync<ApplicationFailure>(() => service.AcceptCurrentAsync(user, confirmation, null, null, default));
             Assert.Equal("ApprovedLegalUnavailable", failure.Code);
-            Assert.Equal(2, await db.LegalAcceptances.CountAsync());
-            Assert.Equal(2, await db.AuditEvents.CountAsync());
+            Assert.Equal(4, await db.LegalAcceptances.CountAsync());
+            Assert.Equal(4, await db.AuditEvents.CountAsync(x => x.EventType == "AccountLegalVersionAccepted"));
         }
         finally { directory.Delete(true); }
     }

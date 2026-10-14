@@ -31,6 +31,7 @@ export function routeResources(pathname: string): string[] {
     case "/notifications": return ["/notifications"];
     default:
       if (/^\/business\/campaigns\/[^/]+$/.test(pathname)) return [pathname, "/business/wallet"];
+      if (/^\/business\/ugc\/[^/]+\/edit$/.test(pathname)) return ["/business/ugc"];
       if (/^\/business\/ugc\/[^/]+$/.test(pathname)) return [pathname];
       if (/^\/creator\/discover\/[^/]+$/.test(pathname)) return [pathname];
       if (/^\/creator\/ugc\/[^/]+$/.test(pathname)) return [pathname];

@@ -97,7 +97,7 @@ export function BusinessUgcCard({ item, onChanged, initiallyEditing = false }: {
         {item.creatorsNeeded > 0 && <div><dt>Creators</dt><dd>{item.approvedCreators}/{item.creatorsNeeded}</dd></div>}
       </dl>
       <div className="actions"><Link className="button secondary business-promotion-manage" to={`/business/ugc/${item.id}`}>Manage</Link>
-        <Button variant="quiet" aria-expanded={manageOpen} onClick={() => setManageOpen(value => !value)}>Edit</Button></div>
+        {!initiallyEditing && <Button variant="quiet" aria-expanded={manageOpen} onClick={() => setManageOpen(value => !value)}>Edit</Button>}</div>
       {manageOpen && <section className="business-promotion-management" aria-label={`${item.title} management`}>
         <ProductArrangement provided={item.productProvided} purchase={item.creatorMustPurchase} />
         {item.customerOfferEnabled && item.customerDiscountPercent !== undefined && <p className="fine-print">Customer earns {amount(item.customerDiscountPercent)}% cashback.</p>}
@@ -273,15 +273,21 @@ export function BusinessUgcDetail() {
   }}</Resource>;
 }
 
-export function BusinessUgcPage() {
+export function BusinessUgcEditPage() {
+  const { id } = useParams();
+  return <BusinessUgcPage editId={id} />;
+}
+
+export function BusinessUgcPage({ editId }: { editId?: string } = {}) {
   const [params] = useSearchParams();
   const openOnly = params.get("filter") === "Open";
+  const selectedEdit = editId ?? params.get("edit");
   const opportunities = useResource<UgcCard[]>("/business/ugc");
   return <>
-    <PageHeader title="Promotions" compact action={<span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink></span>} />
-    <Section title={openOnly ? "Active Promotions" : "Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
-      const visible = rows.filter((item) => params.get("edit") ? item.id === params.get("edit") : !openOnly || item.status === "Open");
-      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} initiallyEditing={params.get("edit") === item.id} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No active Promotions." : "No Promotions yet."} />;
+    <PageHeader title={selectedEdit ? "Edit Promotion" : "Promotions"} compact action={<span className="business-create-action"><ActionLink to="/business/campaigns/new" icon="plus">Create Promotion</ActionLink></span>} />
+    <Section title={selectedEdit ? "Promotion details" : openOnly ? "Active Promotions" : "Promotions"} action={openOnly ? <Link className="text-link" to="/business/ugc">Show all</Link> : undefined}><Resource resource={opportunities}>{(rows) => {
+      const visible = rows.filter((item) => selectedEdit ? item.id === selectedEdit : !openOnly || item.status === "Open");
+      return visible.length ? <div className="card-stack">{visible.map((item) => <BusinessUgcCard key={item.id} item={item} initiallyEditing={selectedEdit === item.id} onChanged={() => opportunities.reload()} />)}</div> : <Empty title={openOnly ? "No active Promotions." : "No Promotions yet."} />;
     }}</Resource></Section>
   </>;
 }

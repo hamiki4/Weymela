@@ -12,7 +12,7 @@ import {
 } from "../features/business/BusinessPages";
 import { CreateCampaign } from "../features/business/CreateCampaign";
 import { BusinessCampaignDetail } from "../features/business/CampaignDetail";
-import { BusinessUgcDetail } from "../features/business/UgcPages";
+import { BusinessUgcDetail, BusinessUgcEditPage } from "../features/business/UgcPages";
 import {
   CreatorEarnings,
   CreatorHowYouEarn,
@@ -158,6 +158,7 @@ export function App() {
           <Route path="/business/requests" element={<BusinessRequests />} />
           <Route path="/business/pricing" element={<BusinessPricingPage />} />
           <Route path="/business/ugc" element={<Navigate to="/business/campaigns" replace />} />
+          <Route path="/business/ugc/:id/edit" element={<BusinessUgcEditPage />} />
           <Route path="/business/ugc/:id" element={<BusinessUgcDetail />} />
           <Route path="/business/ugc/new" element={<Navigate to="/business/campaigns/new?type=ugc" replace />} />
           <Route path="/business/cashiers" element={<BusinessCashiers />} />

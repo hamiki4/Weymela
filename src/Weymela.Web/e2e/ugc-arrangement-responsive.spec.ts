@@ -61,6 +61,14 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await businessCard.getByRole("link", { name: "Manage campaign" }).click();
     await expect(page.getByText("Creator purchases", { exact: true })).toBeVisible();
     await layout(page);
+    await open(page,"/business/campaigns");
+    await page.getByRole("link",{name:"Edit details"}).click();
+    await expect(page).toHaveURL(new RegExp(`/business/ugc/${opportunity.id}/edit$`));
+    await page.getByRole("button",{name:"Edit",exact:true}).click();
+    const editor=page.getByRole("dialog",{name:"Edit Promotion details"});
+    await expect(editor).toBeVisible();
+    await expect(editor.getByLabel("Promotion title",{exact:true})).toHaveValue(opportunity.title);
+    await layout(page);
 
     for (const [alias, path] of [["creator", "/creator/discover"], ["customer", "/customer/offers"],
       ["cashier", "/checkout"], ["admin", "/admin"], ["operations-admin", "/admin/operations"]] as const) {

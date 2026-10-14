@@ -34,7 +34,7 @@ export function PromotionManagement() {
             {row.remainingDays != null && <div><dt>Remaining duration</dt><dd>{row.remainingDays} days</dd></div>}
           </dl>
           <div className="actions"><Link className="button secondary business-promotion-manage" to={row.actionPath}>{row.primaryAction}</Link>
-            {row.kind === "UGC campaign" && row.group !== "Completed" && <Link className="text-link" to={`/business/ugc?edit=${row.campaignId}`}>Edit details</Link>}</div>
+            {row.kind === "UGC campaign" && row.group !== "Completed" && <Link className="text-link" to={`/business/ugc/${row.campaignId}/edit`}>Edit details</Link>}</div>
         </article>)}
       </div> : <Empty title={`No ${group.toLowerCase()} promotions`} />;
     }}</Resource>

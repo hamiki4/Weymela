@@ -7,6 +7,7 @@ describe("authenticated route resource contracts", () => {
     ["/business/ugc", ["/business/ugc"]],
     ["/business/campaigns", ["/business/promotion-management"]],
     ["/business/ugc/item", ["/business/ugc/item"]],
+    ["/business/ugc/item/edit", ["/business/ugc"]],
     ["/business/ugc/new", ["/business/wallet", "/business/ugc-pricing"]],
     ["/creator", ["/creator/home", "/creator/campaigns", "/creator/discover", "/creator/ugc"]],
     ["/creator/ugc", ["/creator/discover", "/creator/ugc"]],

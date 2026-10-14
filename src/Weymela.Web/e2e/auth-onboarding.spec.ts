@@ -880,7 +880,7 @@ test("customer-to-creator choice uses a phase-safe purple shell", async ({ page,
   await open(page, "/onboarding");
   await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Add a Business/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
   await creatorChoiceDiagnostics(page, context, signals, marker);
   const creatorChoice = page.getByRole("button", { name: /^Become a Creator/ });
   await expect(creatorChoice).toHaveCount(1);
@@ -958,7 +958,7 @@ test("customer-to-business choice uses a phase-safe blue shell", async ({ page, 
   await open(page, "/onboarding");
   await expect(page.locator("main h1")).toHaveText(/How do you want to use Weymela\?/);
   await expect(page.getByRole("button", { name: /^Become a Creator/ })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
   const businessChoice = page.getByRole("button", { name: /^Add a Business/ });
   await expect(businessChoice).toHaveCount(1);
   await businessChoice.click();
@@ -1096,7 +1096,7 @@ test("multi-role onboarding full-chain smoke", async ({ page, context }) => {
   expect(phoneToken).toBe(token);
   await runStep(steps, "firebase-phone-session", () => establishFirebaseSession(context, phoneToken), 12000);
   await runStep(steps, "creator-onboarding-open", () => open(page, "/onboarding"), 15000);
-  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
   await expect(page.getByRole("checkbox", { name: /Terms of Service/ })).toHaveCount(0);
   await creatorChoiceDiagnostics(page, context, signals, marker);
   await runStep(steps, "creator-choice", () => page.getByRole("button", { name: /^Become a Creator/ }).click({ timeout: 7000 }), 8000);

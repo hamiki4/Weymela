@@ -35,7 +35,7 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await open(page, "/onboarding");
-    await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Customer — Already added/ })).toBeEnabled();
     await page.getByRole("button", { name: /^Become a Creator/ }).click();
     await expect(page.getByRole("heading", { name: "Creator setup" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
@@ -121,8 +121,8 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
   await expect(page.getByRole("heading", { name: "Creator profile approved" })).toBeVisible();
   await page.locator(".notification-item").filter({ hasText: "Creator profile approved" }).getByRole("link", { name: "Open" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
-  await expect(page.getByRole("button", { name: /^Creator — Already added/ })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /^Business — Already added/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Creator — Already added/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Business — Already added/ })).toBeEnabled();
   const session = await (await context.request.get("/api/session")).json() as { profiles: { role: string }[] };
   expect(session.profiles.map(profile => profile.role)).toContain("Creator");
   expect(session.profiles.map(profile => profile.role)).toContain("Business");

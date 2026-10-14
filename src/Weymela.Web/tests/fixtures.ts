@@ -349,6 +349,8 @@ export const routes: Record<string, unknown> = {
       },
     ],
   },
+  "/admin/deposit-method": { mode: "ManualApproval", canSubmit: true, code: "Ready", activeDestinationCount: 3,
+    message: "Receipts can be submitted for review. Wallets are credited only after an Admin verifies settlement and approves the deposit." },
   "/admin/receiving-destinations": [
     { id: "10000000-0000-0000-0000-000000000001", method: "Telebirr", name: "Telebirr", accountReference: "0911111111", isActive: true, sortOrder: 1, version: 0 },
     { id: "10000000-0000-0000-0000-000000000002", method: "Bank", name: "CBE", accountReference: "1000000000", isActive: true, sortOrder: 2, version: 0 },

@@ -17,13 +17,39 @@ public sealed class ReceivingDestinationService(WeymelaDbContext db, TimeProvide
         && !Placeholder(row.AccountReference);
     private static bool Placeholder(string account) => account is "0911111111" or "1000000000" or "123456789";
 
+    private IQueryable<PlatformReceivingDestination> AvailableRows()
+    {
+        var rows = db.PlatformReceivingDestinations.AsNoTracking().Where(x => x.IsActive);
+        return Production ? rows.Where(x => x.UpdatedBy != null && x.UpdatedBy != Guid.Empty && x.Version > 0
+            && x.AccountReference != "0911111111" && x.AccountReference != "1000000000" && x.AccountReference != "123456789") : rows;
+    }
+
+    public async Task<DepositAvailability> AvailabilityAsync(Actor actor, CancellationToken ct = default)
+    {
+        if (actor.Role != ActorRole.PlatformAdmin && (actor.Role != ActorRole.Business || actor.BusinessId is null))
+            throw new ApplicationFailure(FailureKind.Forbidden, "Business or Platform Admin access is required.");
+        var mode = options?.DevelopmentIdentity == true ? "Development" : options?.DepositMode ?? "Disabled";
+        var count = await AvailableRows().CountAsync(ct);
+        if (count == 0)
+            return new(mode, false, "ReceivingDestinationVerificationRequired",
+                "Deposits are paused. Platform Admin must verify a Weymela-controlled receiving account, replace any example account details, and save the destination as active before deposits can be enabled. No funds have been credited.", count);
+        if (mode != "ManualApproval")
+            return new(mode, false, "DepositActivationRequired",
+                "Deposits are paused. Platform Admin must confirm ownership of the receiving accounts, then an operator must enable receipt submission and manual settlement review. Active destinations alone do not enable deposits. No funds have been credited.", count);
+        var now = clock.GetUtcNow().UtcDateTime;
+        if (options is null || !options.FinancialOperationActive(ProductionFinancialOperations.DepositRequests, now)
+            || !options.FinancialOperationActive(ProductionFinancialOperations.WalletFunding, now))
+            return new(mode, false, "DepositReviewPaused",
+                "Deposits are paused. Receipt submission and Admin settlement review must both be enabled before you send money or upload a receipt. No funds have been credited.", count);
+        return new(mode, true, "Ready",
+            "Receipts can be submitted for review. Wallets are credited only after an Admin verifies settlement and approves the deposit.", count);
+    }
+
     public async Task<IReadOnlyList<ReceivingDestinationView>> ActiveAsync(Actor actor, CancellationToken ct = default)
     {
         if (actor.Role != ActorRole.Business || actor.BusinessId is null)
             throw new ApplicationFailure(FailureKind.Forbidden, "Business access is required.");
-        var rows = db.PlatformReceivingDestinations.AsNoTracking().Where(x => x.IsActive);
-        if (Production) rows = rows.Where(x => x.UpdatedBy != null && x.UpdatedBy != Guid.Empty && x.Version > 0
-            && x.AccountReference != "0911111111" && x.AccountReference != "1000000000" && x.AccountReference != "123456789");
+        var rows = AvailableRows();
         return await rows.OrderBy(x => x.SortOrder)
             .Select(x => new ReceivingDestinationView(x.Id, x.Method, x.Name, x.AccountReference, x.IsActive, x.SortOrder, x.Version)).ToListAsync(ct);
     }

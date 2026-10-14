@@ -115,7 +115,7 @@ internal static class OperationalEndpoints
             await transaction.CommitAsync(ct);
             return Results.Ok(new { address, directionsUrl, input.Latitude, input.Longitude });
         });
-        business.MapGet("/deposit-method",(RuntimeOptions options)=>Results.Ok(new{mode=options.DevelopmentIdentity?"Development":options.DepositMode}));
+        business.MapGet("/deposit-method",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.AvailabilityAsync(EndpointSupport.Actor(c),ct));
         business.MapGet("/receiving-destinations",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.ActiveAsync(EndpointSupport.Actor(c),ct));
         business.MapGet("/deposit-requests",(HttpContext c,DepositService service,CancellationToken ct)=>service.OwnAsync(EndpointSupport.Actor(c),ct));
         business.MapPost("/deposit-requests",async(HttpContext c,WeymelaDbContext db,PrivateReceiptStore receipts,DepositService service,CancellationToken ct)=>
@@ -180,6 +180,7 @@ internal static class OperationalEndpoints
                 status=x.Status.ToString(),hasReceipt=x.ProofReference!=null,x.DestinationNameSnapshot,x.DestinationAccountSnapshot,
                 x.ReceivingDestinationId,x.SubmittedAtUtc,x.ReviewedAtUtc,x.Version});
         });
+        admin.MapGet("/deposit-method",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.AvailabilityAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         admin.MapGet("/receiving-destinations",(HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>service.AdminAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         admin.MapPost("/receiving-destinations/{id:guid}",(Guid id,ReceivingDestinationInput input,HttpContext c,ReceivingDestinationService service,CancellationToken ct)=>
             service.UpdateAsync(EndpointSupport.Actor(c),id,input,ct)).RequireAuthorization("PlatformAdmin");

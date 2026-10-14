@@ -131,6 +131,9 @@ public sealed class ReceiptDepositHttpTests(PostgresFixture fixture)
                 using var business = await host.Login("business");
                 using var admin = await host.Login("admin");
                 using var operations = await host.Login("operations-admin");
+                Assert.Equal((await business.GetJson("/api/business/deposit-method")).ToJsonString(),
+                    (await admin.GetJson("/api/admin/deposit-method")).ToJsonString());
+                Assert.Equal(HttpStatusCode.Forbidden, (await operations.GetAsync("/api/admin/deposit-method")).StatusCode);
                 var rows = (await business.GetJson("/api/business/receiving-destinations")).AsArray();
                 Assert.Equal(new[] { "Telebirr", "CBE", "Bank of Abyssinia" }, rows.Select(x => x!["name"]!.GetValue<string>()));
                 Assert.Equal(new[] { "0911111111", "1000000000", "123456789" }, rows.Select(x => x!["accountReference"]!.GetValue<string>()));

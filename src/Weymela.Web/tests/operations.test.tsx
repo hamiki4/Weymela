@@ -50,7 +50,15 @@ describe("Operational states", () => {
   });
   it("never pretends disconnected deposit processing credited funds", async () => {
     mockApi({ "/business/deposit-method": { mode: "Disabled" } }); wrap(<DepositSubmission />);
-    expect(await screen.findByText(/Deposits are not connected/)).toBeVisible(); expect(screen.queryByRole("button", { name: /Submit|Add Funds/ })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Deposits are paused/)).toBeVisible(); expect(screen.queryByRole("button", { name: /Submit|Add Funds/ })).not.toBeInTheDocument();
+  });
+  it.each(["Disabled", "ManualApproval"])("shows the authoritative deposit restriction even in %s mode", async mode => {
+    const api = mockApi({ "/business/deposit-method": { mode, canSubmit: false,
+      code: "ReceivingDestinationVerificationRequired", message: "Platform Admin must verify a Weymela-controlled receiving account." } });
+    wrap(<DepositSubmission />);
+    expect(await screen.findByText("Platform Admin must verify a Weymela-controlled receiving account.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Submit for Review" })).not.toBeInTheDocument();
+    expect(api.writes).toHaveLength(0);
   });
   it("rejects receipts over 4 MiB before sending a request", async () => {
     const api = mockApi({ "/business/deposit-requests": [] }); wrap(<ManualDeposit />);

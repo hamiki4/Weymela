@@ -960,6 +960,13 @@ describe("Creator workspace", () => {
 });
 
 describe("Admin workspace", () => {
+  it("shows deposit activation requirements alongside saved active destinations", async () => {
+    mockApi({ "/admin/deposit-method": { mode: "Disabled", canSubmit: false, code: "DepositActivationRequired",
+      message: "Confirm ownership of receiving accounts and enable receipt submission and manual settlement review." } });
+    mount(<AdminFinancialSettings />);
+    expect(await screen.findByText("Confirm ownership of receiving accounts and enable receipt submission and manual settlement review.")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Telebirr active" })).toBeChecked();
+  });
   it("saves the approved baseline with unset products and payout minimums", async () => {
     const api = mockApi({ "/admin/financial-settings": { current: null, version: 0, versions: [],
       inactiveBaseline: { version: 1, customerCashbackPercent: 4, creatorCommissionPercent: 5, platformPercent: 1, effectiveFromUtc: "2026-10-11T18:20:00Z" } } });

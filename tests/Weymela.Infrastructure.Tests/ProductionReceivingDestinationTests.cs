@@ -12,6 +12,42 @@ public sealed class ProductionReceivingDestinationTests(PostgresFixture fixture)
 {
     private static readonly RuntimeOptions Production = new() { EnvironmentName = "Production" };
 
+    [Theory]
+    [InlineData(false, "Disabled", true, true, true, "ReceivingDestinationVerificationRequired")]
+    [InlineData(true, "Disabled", true, true, true, "DepositActivationRequired")]
+    [InlineData(true, "ManualApproval", false, true, true, "DepositReviewPaused")]
+    [InlineData(true, "ManualApproval", true, false, true, "DepositReviewPaused")]
+    [InlineData(true, "ManualApproval", true, true, false, "DepositReviewPaused")]
+    [InlineData(true, "ManualApproval", true, true, true, "Ready")]
+    public async Task Admin_and_business_share_readiness_from_destinations_mode_and_both_operation_gates(
+        bool configured, string mode, bool writes, bool submissions, bool reviews, string code)
+    {
+        var database = await fixture.CreateAsync();
+        await using var db = database.Open();
+        var options = new RuntimeOptions { EnvironmentName = "Production", DepositMode = mode,
+            FinancialWritesEnabled = writes, ProductionFinancialAuthorizationReference = "isolated-authorization",
+            EnabledProductionFinancialOperations = new[] {
+                submissions ? ProductionFinancialOperations.DepositRequests : ProductionFinancialOperations.Checkout,
+                reviews ? ProductionFinancialOperations.WalletFunding : ProductionFinancialOperations.Payouts } };
+        var service = new ReceivingDestinationService(db, TimeProvider.System, options);
+        if (configured)
+        {
+            var row = await db.PlatformReceivingDestinations.OrderBy(x => x.SortOrder).FirstAsync();
+            await service.UpdateAsync(Phase4Scenario.Admin, row.Id,
+                new(row.Method, row.Name, "isolated-owner-confirmed-account", true, row.SortOrder, row.Version));
+        }
+        var business = new Actor(Guid.NewGuid(), ActorRole.Business, Guid.NewGuid());
+        var availability = await service.AvailabilityAsync(business);
+        Assert.Equal(availability, await service.AvailabilityAsync(Phase4Scenario.Admin));
+        Assert.Equal(code, availability.Code);
+        Assert.Equal(code == "Ready", availability.CanSubmit);
+        Assert.Equal((await service.ActiveAsync(business)).Count, availability.ActiveDestinationCount);
+        Assert.Empty(await db.DepositRequests.ToListAsync());
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+        await Assert.ThrowsAsync<ApplicationFailure>(() => service.AvailabilityAsync(
+            new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin)));
+    }
+
     [Fact]
     public async Task Production_excludes_migration_examples_and_rejects_deposits_without_financial_records()
     {

@@ -593,6 +593,14 @@ export interface UgcSettings {
   minimumUgcBudget: number | null;
   customerOfferPlatformSalePercent: number | null;
 }
+export interface DepositAvailability {
+  mode: string;
+  canSubmit?: boolean;
+  code?: string;
+  message?: string;
+  activeDestinationCount?: number;
+}
+
 export interface ReceivingDestination {
   id: string;
   method: "Telebirr" | "Bank";

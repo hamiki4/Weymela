@@ -26,6 +26,8 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
     public async Task Anonymous_policy_status_exposes_current_versions_without_recording_acceptance()
     {
         await using var host = await ApiFixture.CreateAsync(fixture);
+        await using var db = host.Database.Open();
+        var acceptanceCount = await db.LegalAcceptances.CountAsync();
         using var client = host.Anonymous();
         var response = await client.GetAsync("/api/legal/account/status?language=en");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -40,8 +42,7 @@ public sealed class OnboardingHttpTests(PostgresFixture fixture)
             Assert.NotEmpty(document["contentHash"]!.GetValue<string>());
             Assert.NotEmpty(document["documentId"]!.GetValue<string>());
         });
-        await using var db = host.Database.Open();
-        Assert.Empty(await db.LegalAcceptances.ToListAsync());
+        Assert.Equal(acceptanceCount, await db.LegalAcceptances.CountAsync());
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/onboarding/identity")).StatusCode);
     }
 

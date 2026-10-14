@@ -266,7 +266,7 @@ public sealed class RuntimeOptions
             {
                 Require(ProductionFinancialOperations.Valid(productionReference, productionOperations),
                     "Production financial writes require an operator authorization reference and explicitly enabled operations.");
-                if (productionOperations.Any(x => x is ProductionFinancialOperations.DepositRequests or ProductionFinancialOperations.WalletFunding))
+                if (productionOperations.Any(x => x is ProductionFinancialOperations.DepositRequests or ProductionFinancialOperations.DepositReview or ProductionFinancialOperations.WalletFunding))
                     Require(deposits == "ManualApproval", "Deposit requests and wallet funding require manual settlement approval.");
             }
             else

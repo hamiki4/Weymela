@@ -423,7 +423,7 @@ public sealed class AdapterSecurityTests
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production"));
     }
     [Theory]
-    [InlineData("DepositRequests")][InlineData("WalletFunding")]
+    [InlineData("DepositRequests")][InlineData("DepositReview")][InlineData("WalletFunding")]
     public void Production_funding_and_deposits_require_the_settlement_approval_adapter(string operation)
     {
         var config = ProductionConfig();

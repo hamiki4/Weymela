@@ -38,7 +38,7 @@ public sealed class ReceivingDestinationService(WeymelaDbContext db, TimeProvide
                 "Deposits are paused. Platform Admin must confirm ownership of the receiving accounts, then an operator must enable receipt submission and manual settlement review. Active destinations alone do not enable deposits. No funds have been credited.", count);
         var now = clock.GetUtcNow().UtcDateTime;
         if (options is null || !options.FinancialOperationActive(ProductionFinancialOperations.DepositRequests, now)
-            || !options.FinancialOperationActive(ProductionFinancialOperations.WalletFunding, now))
+            || !options.FinancialOperationActive(ProductionFinancialOperations.DepositReview, now))
             return new(mode, false, "DepositReviewPaused",
                 "Deposits are paused. Receipt submission and Admin settlement review must both be enabled before you send money or upload a receipt. No funds have been credited.", count);
         return new(mode, true, "Ready",
@@ -76,7 +76,7 @@ public sealed class ReceivingDestinationService(WeymelaDbContext db, TimeProvide
         row.Method = method; row.Name = name; row.AccountReference = account; row.IsActive = input.IsActive;
         row.SortOrder = input.SortOrder; row.UpdatedAtUtc = clock.GetUtcNow().UtcDateTime; row.UpdatedBy = actor.UserId;
         db.AuditEvents.Add(new(Guid.NewGuid(), "ReceivingDestinationUpdated", actor.UserId, null, null, null, row.Id,
-            row.UpdatedAtUtc, $"Name={name};Method={method};Active={input.IsActive}"));
+            row.UpdatedAtUtc, $"Name={name};Method={method};Active={input.IsActive};AdminVerified={Production && input.IsActive}"));
         await db.SaveChangesAsync(ct);
         return new(row.Id, row.Method, row.Name, row.AccountReference, row.IsActive, row.SortOrder, row.Version);
     }

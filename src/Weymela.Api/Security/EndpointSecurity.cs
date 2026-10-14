@@ -54,7 +54,7 @@ public static class EndpointSecurity
         var route = Operation(c);
         if (route.EndsWith("/promotional-funding")) return ProductionFinancialOperations.WalletFunding;
         if (route.StartsWith("/api/admin/deposit", StringComparison.Ordinal))
-            return ProductionFinancialOperations.WalletFunding;
+            return ProductionFinancialOperations.DepositReview;
         if (Category(c) == "deposit") return ProductionFinancialOperations.DepositRequests;
         if (Category(c) is "checkout" or "qr") return ProductionFinancialOperations.Checkout;
         if (Category(c) == "payout") return ProductionFinancialOperations.Payouts;

@@ -28,7 +28,7 @@ public sealed class ProductionReceivingDestinationTests(PostgresFixture fixture)
             FinancialWritesEnabled = writes, ProductionFinancialAuthorizationReference = "isolated-authorization",
             EnabledProductionFinancialOperations = new[] {
                 submissions ? ProductionFinancialOperations.DepositRequests : ProductionFinancialOperations.Checkout,
-                reviews ? ProductionFinancialOperations.WalletFunding : ProductionFinancialOperations.Payouts } };
+                reviews ? ProductionFinancialOperations.DepositReview : ProductionFinancialOperations.Payouts } };
         var service = new ReceivingDestinationService(db, TimeProvider.System, options);
         if (configured)
         {
@@ -46,6 +46,36 @@ public sealed class ProductionReceivingDestinationTests(PostgresFixture fixture)
         Assert.Empty(await db.FinancialJournals.ToListAsync());
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.AvailabilityAsync(
             new Actor(Guid.NewGuid(), ActorRole.OperationsAdmin)));
+    }
+
+    [Fact]
+    public async Task Admin_edits_immediately_verify_active_details_and_preserve_existing_deposit_snapshots()
+    {
+        var scenario = await Scenario.Create(fixture, 0);
+        await using var db = scenario.Database.Open();
+        db.CommercePermissions.Add(new(scenario.Business.UserId, ActorRole.Business,
+            scenario.Business.BusinessId!.Value, scenario.Business.BusinessId, true, false));
+        await db.SaveChangesAsync();
+        var service = new ReceivingDestinationService(db, TimeProvider.System, Production);
+        var row = await db.PlatformReceivingDestinations.OrderBy(x => x.SortOrder).FirstAsync();
+        var first = await service.UpdateAsync(Phase4Scenario.Admin, row.Id,
+            new(row.Method, row.Name, "isolated-first-verified-account", true, row.SortOrder, row.Version));
+        var deposits = new DepositService(db, new ManualApprovalDepositProvider(), TimeProvider.System, Production);
+        var pending = await deposits.SubmitAsync(scenario.Business,
+            new DepositSubmission(17.23m, "isolated-first-receipt", null, row.Id), "isolated-first-submit", default);
+        var updated = await service.UpdateAsync(Phase4Scenario.Admin, row.Id,
+            new(row.Method, row.Name, "isolated-replacement-verified-account", true, row.SortOrder, first.Version));
+        Assert.True(updated.IsActive);
+        Assert.Equal("isolated-replacement-verified-account", Assert.Single(await service.ActiveAsync(scenario.Business)).AccountReference);
+        var next = await deposits.SubmitAsync(scenario.Business,
+            new DepositSubmission(19.87m, "isolated-second-receipt", null, row.Id), "isolated-second-submit", default);
+        Assert.Equal("isolated-first-verified-account", (await db.DepositRequests.SingleAsync(x => x.Id == pending.Id)).DestinationAccountSnapshot);
+        Assert.Equal("isolated-replacement-verified-account", (await db.DepositRequests.SingleAsync(x => x.Id == next.Id)).DestinationAccountSnapshot);
+        Assert.All(await db.DepositRequests.ToListAsync(), x => Assert.Equal(DepositReviewStatus.Pending, x.Status));
+        Assert.All(await db.AuditEvents.Where(x => x.EventType == "ReceivingDestinationUpdated").ToListAsync(),
+            x => Assert.Contains("AdminVerified=True", x.Detail));
+        Assert.Empty(await db.FinancialJournals.ToListAsync());
+        Assert.Equal(0, (await db.BusinessWallets.SingleAsync()).TotalBalance.Amount);
     }
 
     [Fact]

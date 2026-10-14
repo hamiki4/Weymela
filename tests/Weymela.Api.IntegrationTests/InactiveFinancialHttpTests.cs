@@ -16,8 +16,8 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
 {
     [Theory]
     [InlineData("/api/business/deposit-requests", "DepositRequests")]
-    [InlineData("/api/admin/deposit-requests/{id:guid}/approve", "WalletFunding")]
-    [InlineData("/api/admin/deposit-requests/{id:guid}/review", "WalletFunding")]
+    [InlineData("/api/admin/deposit-requests/{id:guid}/approve", "DepositReview")]
+    [InlineData("/api/admin/deposit-requests/{id:guid}/review", "DepositReview")]
     [InlineData("/api/admin/accounts/businesses/{businessId:guid}/promotional-funding", "WalletFunding")]
     [InlineData("/api/business/campaigns/{id:guid}/fund", "PromotionReservations")]
     [InlineData("/api/business/ugc/{id:guid}/publish", "PromotionReservations")]
@@ -28,7 +28,7 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
-        foreach (var enabled in new[] { "DepositRequests", "WalletFunding", "PromotionReservations", "Checkout", "Payouts" })
+        foreach (var enabled in new[] { "DepositRequests", "DepositReview", "WalletFunding", "PromotionReservations", "Checkout", "Payouts" })
         {
             var called = false;
             var middleware = new ApiSafetyMiddleware(_ => { called = true; return Task.CompletedTask; },
@@ -54,7 +54,7 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
         var middleware = new ApiSafetyMiddleware(_ => { called = true; return Task.CompletedTask; },
             new RuntimeOptions { EnvironmentName = "Production", FinancialWritesEnabled = true,
                 ProductionFinancialAuthorizationReference = "isolated-test-authorization",
-                EnabledProductionFinancialOperations = ["DepositRequests", "WalletFunding", "PromotionReservations", "Checkout", "Payouts"] },
+                EnabledProductionFinancialOperations = ["DepositRequests", "DepositReview", "WalletFunding", "PromotionReservations", "Checkout", "Payouts"] },
             new ProductIntegrationOptions(), NullLogger<ApiSafetyMiddleware>.Instance);
         var context = Context(route);
         await middleware.InvokeAsync(context, db);

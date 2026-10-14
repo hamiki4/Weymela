@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, postForm, useAction, useResource } from "../../api/client";
+import type { DepositAvailability } from "../../api/types";
 import { Button, Field, MoneyInput, Notice, Resource } from "../../ui/components";
 import { amount, date } from "../../ui/format";
 export interface DepositRequest { id: string; amount: number; status: string; submittedAtUtc: string; destinationName?: string | null; destinationAccount?: string | null }
 interface ReceivingDestination { id: string; method: string; name: string; accountReference: string }
 export function DepositSubmission({ showHistory = true, onSubmitted }: { showHistory?: boolean; onSubmitted?: () => void } = {}) {
-  const method = useResource<{ mode: string }>("/business/deposit-method");
-  return <Resource resource={method}>{data => data.mode === "ManualApproval" ? <ManualDeposit showHistory={showHistory} onSubmitted={onSubmitted} /> : <Notice>Deposits are not connected. No payment will be taken or funds credited.</Notice>}</Resource>;
+  const method = useResource<DepositAvailability>("/business/deposit-method");
+  return <Resource resource={method}>{data => data.mode === "ManualApproval" && data.canSubmit !== false ? <ManualDeposit showHistory={showHistory} onSubmitted={onSubmitted} /> : <Notice>{data.message ?? "Deposits are paused. Ask Platform Admin to verify receiving accounts and enable manual deposit review. No funds have been credited."}</Notice>}</Resource>;
 }
 export function ManualDeposit({ showHistory = true, onSubmitted }: { showHistory?: boolean; onSubmitted?: () => void } = {}) {
   const [value, setValue] = useState(""); const [destination, setDestination] = useState(""); const [receipt, setReceipt] = useState<File | null>(null);

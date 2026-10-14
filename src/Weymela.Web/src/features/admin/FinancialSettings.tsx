@@ -6,6 +6,7 @@ import type {
   UgcSettings,
   ViewPriceInput,
   ReceivingDestination,
+  DepositAvailability,
 } from "../../api/types";
 import {
   Button,
@@ -245,10 +246,13 @@ function ReceivingDestinationRow({ row, reload }: { row: ReceivingDestination; r
 
 function ReceivingDestinations() {
   const resource = useResource<ReceivingDestination[]>("/admin/receiving-destinations");
-  return <Section title="Business deposit destinations" description="Active destinations appear in Business Add Funds.">
+  const availability = useResource<DepositAvailability>("/admin/deposit-method");
+  const reload = () => { resource.reload(); availability.reload(); };
+  return <Section title="Business deposit destinations" description="Saving an active destination confirms your verification of its receiving details. You can update destinations at any time; changes apply immediately while deposits are enabled.">
+    <Resource resource={availability}>{status => <Notice>{status.message}</Notice>}</Resource>
     <Resource resource={resource}>{rows => <table className="settings-table"><caption className="sr-only">Business deposit destinations</caption>
       <thead><tr><th scope="col">Active</th><th scope="col">Method</th><th scope="col">Name</th><th scope="col">Account / phone</th><th scope="col">Order</th><th scope="col">Action</th></tr></thead>
-      <tbody>{rows.map(row => <ReceivingDestinationRow key={`${row.id}-${row.version}`} row={row} reload={resource.reload} />)}</tbody>
+      <tbody>{rows.map(row => <ReceivingDestinationRow key={`${row.id}-${row.version}`} row={row} reload={reload} />)}</tbody>
     </table>}</Resource>
   </Section>;
 }

@@ -27,6 +27,7 @@ public sealed record DepositReceipt(Guid Id, decimal Amount, string Status, Date
 public sealed record DepositEvidence(string Provider, string ExternalReference, string? ProofReference, bool RequiresAdminApproval);
 public sealed record ReceivingDestinationView(Guid Id, string Method, string Name, string AccountReference, bool IsActive, int SortOrder, long Version);
 public sealed record ReceivingDestinationInput(string Method, string Name, string AccountReference, bool IsActive, int SortOrder, long ExpectedVersion);
+public sealed record DepositAvailability(string Mode, bool CanSubmit, string Code, string Message, int ActiveDestinationCount);
 public interface IDepositProvider
 {
     string Name { get; }

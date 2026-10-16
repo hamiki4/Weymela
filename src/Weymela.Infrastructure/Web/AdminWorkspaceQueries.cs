@@ -255,6 +255,7 @@ public sealed partial class WorkspaceQueries
         var destinations=await db.PayoutDestinations.AsNoTracking().Where(x => eligibleCreators.Contains(x.SubjectId) || eligibleCustomers.Contains(x.SubjectId)).ToDictionaryAsync(x=>(x.Beneficiary,x.SubjectId),ct);
         var historySource = db.PayoutRecords.AsNoTracking();
         if (term != "") historySource = historySource.Where(x => x.Reference != null && x.Reference.ToLower().Contains(term)
+            || x.DestinationProvider != null && x.DestinationProvider.ToLower().Contains(term)
             || db.PublicWorkspaceProfiles.Any(p => (p.SubjectId == x.CreatorId || p.SubjectId == x.CustomerId) && p.DisplayName.ToLower().Contains(term)));
         if (query.From is { } from) historySource = historySource.Where(x => (x.PaidAtUtc ?? x.EligibleAtUtc) >= from);
         if (query.To is { } to) historySource = historySource.Where(x => (x.PaidAtUtc ?? x.EligibleAtUtc) < to.AddDays(1));

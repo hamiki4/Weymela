@@ -166,8 +166,10 @@ internal static class OperationalEndpoints
                 var matchingBusinesses=db.PublicWorkspaceProfiles.AsNoTracking()
                     .Where(x=>x.Role==ActorRole.Business&&EF.Functions.ILike(x.DisplayName,$"%{term}%"))
                     .Select(x=>x.SubjectId);
+                var matchingOwners=new Weymela.Infrastructure.Web.AdminSearchQueries(db,new Weymela.Application.Web.AdminListFilter(Search:term))
+                    .Permissions(ActorRole.Business).Select(x=>x.SubjectId);
                 var exactId=Guid.TryParse(term,out var parsedId)?parsedId:(Guid?)null;
-                query=query.Where(x=>matchingBusinesses.Contains(x.BusinessId)
+                query=query.Where(x=>matchingBusinesses.Contains(x.BusinessId)||matchingOwners.Contains(x.BusinessId)
                     ||exactId.HasValue&&x.Id==exactId.Value
                     ||EF.Functions.ILike(x.ExternalReference,$"%{term}%")
                     ||EF.Functions.ILike(x.Provider,$"%{term}%")

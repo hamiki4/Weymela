@@ -89,6 +89,31 @@ public sealed class AdminDirectorySearchTests(PostgresFixture fixture)
         Assert.Empty(await db.FinancialJournals.ToListAsync());
     }
 
+    [Fact]
+    public async Task Campaign_search_finds_pending_Creators_and_social_review_groups_unverified_profiles()
+    {
+        var scenario = await Scenario.Create(fixture, funded: true);
+        await using var db = scenario.Database.Open();
+        var creator = Guid.NewGuid(); var socialId = Guid.NewGuid();
+        var campaign = await db.Promotions.Include(x => x.Platforms).SingleAsync(x => x.Id == scenario.PromotionId);
+        campaign.Publish(Scenario.Now, Guid.NewGuid());
+        db.PublicWorkspaceProfiles.Add(new() { SubjectId = creator, Role = ActorRole.Creator,
+            DisplayName = "Pending search creator", PublicId = "CR-PENDING-SEARCH" });
+        db.CreatorSocialProfiles.Add(new() { Id = socialId, CreatorId = creator, Platform = CreatorPlatform.TikTok,
+            ProfileUrl = "https://www.tiktok.com/@isolated_search_fixture", VerificationStatus = "SelfReported",
+            AudienceVerificationSource = "SelfReported", CreatedAtUtc = Scenario.Now, UpdatedAtUtc = Scenario.Now });
+        db.CreatorApplications.Add(new(campaign.Id, creator, socialId, CreatorPlatform.TikTok, "Controlled fixture", null, campaign, Scenario.Now, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var query = new AdminSearchQueries(db, new(Search: "pending search creator"));
+        Assert.Equal(campaign.Id, Assert.Single(await query.Campaigns().ToListAsync()).Id);
+        var review = new AdminSocialProfileReviewService(db, TimeProvider.System);
+        var unverified = await review.ListAsync(new(Guid.NewGuid(), ActorRole.PlatformAdmin), default,
+            new(Search: "pending search creator", Status: "Unverified", Type: "TikTok"));
+        Assert.Equal(socialId, Assert.Single(unverified).Id);
+        Assert.Empty(await review.ListAsync(new(Guid.NewGuid(), ActorRole.PlatformAdmin), default,
+            new(Search: "pending search creator", Status: "Verified")));
+    }
+
     private sealed class NoDelivery : IEmailCodeDelivery
     {
         public bool Enabled => false;

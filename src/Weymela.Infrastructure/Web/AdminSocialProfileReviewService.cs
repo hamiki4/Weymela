@@ -26,7 +26,8 @@ public sealed class AdminSocialProfileReviewService(WeymelaDbContext db, TimePro
                 throw new ApplicationFailure(FailureKind.Validation, "Choose a valid social platform.");
             source = source.Where(x => x.Platform == platform);
         }
-        if (!string.IsNullOrEmpty(query.Status)) source = source.Where(x => x.VerificationStatus == query.Status);
+        if (query.Status == "Unverified") source = source.Where(x => x.VerificationStatus != "Verified" && x.VerificationStatus != "Rejected");
+        else if (!string.IsNullOrEmpty(query.Status)) source = source.Where(x => x.VerificationStatus == query.Status);
         var profiles = await source.OrderBy(x => x.UpdatedAtUtc).ThenBy(x => x.Id)
             .Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var ids = profiles.Select(x => x.CreatorId).Distinct().ToArray();

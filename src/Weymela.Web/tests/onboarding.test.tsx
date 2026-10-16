@@ -235,6 +235,19 @@ describe("shared role-themed onboarding", () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
+  it("retains saved registration when the backend has not confirmed activation", async () => {
+    mocks.legalStatus = { ...effectiveLegal, current: true };
+    mocks.post.mockResolvedValue({ id: "pending-account", status: "Pending" });
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "pending-backend-result", role: "Customer", legalName: "Test account",
+      email: "test@example.test", phone: "+251900000000", legalAccepted: true,
+    }));
+    renderOnboarding();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Activation is still pending");
+    expect(screen.getByTestId("destination")).toHaveTextContent("/onboarding");
+    expect(window.sessionStorage.getItem("weymela.public-signup")).not.toBeNull();
+  });
+
   it("completes a PIN-enrolled public Business registration exactly once and opens its workspace", async () => {
     mocks.identityEmail = "owner@example.test";
     mocks.legalStatus = { ...effectiveLegal, current: true };

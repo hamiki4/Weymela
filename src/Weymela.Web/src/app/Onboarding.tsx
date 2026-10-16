@@ -111,13 +111,17 @@ function PublicSignupCompletion({ draft, identity, identityMatches, onRecover, o
       socialProfiles,
       ...(accountLegal ? { accountLegal } : {}),
     }, draft.idempotencyKey);
-    if (draft.role !== "Creator" && result.status !== "Approved" && result.status !== 1)
+    const activated = result.status === "Approved" || result.status === 1;
+    const pending = result.status === "Pending" || result.status === 0;
+    if (draft.role !== "Creator" && !activated)
       throw new Error("Your profile is saved. Activation is still pending.");
-    if (draft.role !== "Creator") {
+    if (draft.role === "Creator" && !activated && !pending)
+      throw new Error("Your profile needs review. Open profile setup to check its status.");
+    if (activated) {
       await refresh(true);
       clearSignupDraft();
       onFinished();
-      navigate(draft.role === "Business" ? "/business" : "/customer/offers", { replace: true });
+      navigate(draft.role === "Business" ? "/business" : draft.role === "Creator" ? "/creator" : "/customer/offers", { replace: true });
     } else {
       clearSignupDraft();
       setCompleted(true);

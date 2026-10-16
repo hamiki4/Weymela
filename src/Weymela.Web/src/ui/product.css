@@ -794,7 +794,7 @@ html[lang="am"] .settings-page-row strong, html[lang="am"] .account-role-copy, h
 .product-shell.role-creator .creator-opportunity-payment strong { font-size: .94rem; }
 .product-shell.role-creator .creator-opportunity-payment span { color: var(--product-secondary); font-size: .82rem; }
 .product-shell.role-creator .creator-opportunity-commission { color: var(--product-secondary); font-size: .82rem; }
-.product-shell.role-creator .creator-opportunity-card > .button,
+.product-shell.role-creator .creator-opportunity-card > .button { width: fit-content; align-self: flex-start; padding: 8px 16px; }
 .product-shell.role-creator .creator-opportunity-card > .creator-join-controls { width: 100%; }
 .product-shell.role-creator .creator-opportunity-card > .button { justify-content: center; min-height: 44px; }
 .product-shell.role-creator .creator-opportunity-card .creator-opportunity-type { text-transform: none; letter-spacing: 0; }

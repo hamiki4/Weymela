@@ -1103,6 +1103,9 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         offer = await db.UgcCustomerOffers.SingleAsync();
         Assert.Equal(UgcCustomerOfferStatus.Exhausted, offer.Status);
         Assert.Equal(0m, offer.RemainingFunding.Amount);
+        var tracking = new WorkspaceQueries(db, new TestDirectory(), new FixedTime(Now));
+        var pausedCampaign = (await tracking.BusinessPromotionTrackingAsync(state.Business, default)).Single(x => x.Id == id && x.Kind == "UGC campaign");
+        Assert.Equal("Pending", pausedCampaign.Group); Assert.Equal("Add Funds", pausedCampaign.PrimaryAction);
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetLow").ToListAsync());
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetExhausted").ToListAsync());
         await Assert.ThrowsAsync<ApplicationFailure>(() => checkout.IssueUgcAsync(new(customer, offer.Id, assignmentId, "empty-qr"), default));

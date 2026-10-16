@@ -16,7 +16,7 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
-  "Promotion funds low": "የማስተዋወቂያ ገንዘብ ዝቅተኛ ነው",
+  "Insufficient wallet funds.": "በቦርሳው ያለው ገንዘብ በቂ አይደለም።",  "Promotion funds low": "የማስተዋወቂያ ገንዘብ ዝቅተኛ ነው",
   "Cashback funds low": "የገንዘብ ተመላሽ በጀት ዝቅተኛ ነው",
   "Cashback funds exhausted": "የገንዘብ ተመላሽ በጀት አልቋል",
   "Add funds to continue rewards.": "ሽልማቶችን ለመቀጠል ገንዘብ ይጨምሩ።",

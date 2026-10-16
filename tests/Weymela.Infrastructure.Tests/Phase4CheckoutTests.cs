@@ -36,6 +36,9 @@ public sealed class Phase4CheckoutTests(PostgresFixture fixture)
         await Assert.ThrowsAsync<ApplicationFailure>(() => s.Issue("exhausted-qr"));
         await using (var db = s.Database.Open())
         {
+            var tracking = new WorkspaceQueries(db, new TestDirectory(), s.Clock);
+            var pausedWork = (await tracking.BusinessPromotionTrackingAsync(s.Seed.Business, default)).Single(x => x.Id == s.AllocationId && x.Kind == "Creator work");
+            Assert.Equal("Pending", pausedWork.Group); Assert.Equal("Add Funds", pausedWork.PrimaryAction);
             var allocation = await db.CreatorAllocations.SingleAsync();
             await new FinancialCommands(db).IncreaseCreatorAllocationAsync(new(s.Seed.Business, allocation.Id,
                 new Money(300), allocation.Version, Scenario.Now), "hybrid-refill");

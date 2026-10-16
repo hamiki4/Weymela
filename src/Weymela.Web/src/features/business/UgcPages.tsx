@@ -250,6 +250,7 @@ export function BusinessUgcDetail() {
         }}><Field label="Amount to add (ETB)"><input type="number" min="0.01" step="0.01" inputMode="decimal" required value={funding} onChange={event => setFunding(event.target.value)} /></Field>
           <Button type="submit" disabled={action.busy || Number(funding) <= 0 || !wallet.data || Number(funding) > wallet.data.available || item.customerOfferVersion == null}>{action.busy ? "Saving…" : "Add Funds"}</Button>
         </form>}
+        {wallet.data && Number(funding) > wallet.data.available && <Notice error>Insufficient wallet funds. <Link to="/business/wallet">Add Funds</Link></Notice>}
       </Section>}
       <div className="two-column business-collaboration-workspace">
         <Section title="Brief">

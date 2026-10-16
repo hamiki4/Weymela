@@ -23,11 +23,12 @@ public sealed partial class WorkspaceQueries
             && allocationIds.Contains(x.CreatorAllocationId.Value)).OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
         foreach (var campaign in campaigns)
         {
-            var closed = campaign.EndUtc <= Now || campaign.Status is "Completed" or "Ended" or "Cancelled" or "BudgetExhausted" || campaign.Remaining <= 0 && campaign.Status != "Draft";
-            var group = closed ? "Completed" : campaign.Status is "Draft" or "Funded" ? "Pending" : "Active";
+            var closed = campaign.EndUtc <= Now || campaign.Status is "Completed" or "Ended" or "Cancelled";
+            var funding = !closed && (campaign.Status == "BudgetExhausted" || campaign.Remaining <= 0 && campaign.Status is not ("Draft" or "Funded"));
+            var group = closed ? "Completed" : funding || campaign.Status is "Draft" or "Funded" ? "Pending" : "Active";
             items.Add(new("campaign-" + campaign.Id, campaign.Id, campaign.Id, campaign.Type, campaign.Title, group,
-                campaign.EndUtc <= Now ? "Expired" : campaign.Status, campaign.CampaignBudget, campaign.Remaining, campaign.ContentDueAtUtc,
-                group == "Pending" ? "Complete setup" : "Manage campaign", $"/business/campaigns/{campaign.Id}",
+                campaign.EndUtc <= Now ? "Expired" : funding ? "FundingRequired" : campaign.Status, campaign.CampaignBudget, campaign.Remaining, campaign.ContentDueAtUtc,
+                funding ? "Add Funds" : group == "Pending" ? "Complete setup" : "Manage campaign", $"/business/campaigns/{campaign.Id}",
                 RemainingDays: group == "Active" ? Math.Max(0, (int)Math.Ceiling((campaign.EndUtc - Now).TotalDays)) : null));
             foreach (var application in applications.Where(x => x.PromotionId == campaign.Id))
                 items.Add(new("application-" + application.Id, application.Id, campaign.Id, "Creator application", campaign.Title,
@@ -38,15 +39,16 @@ public sealed partial class WorkspaceQueries
                 var revision = content.FirstOrDefault(x => x.CreatorAllocationId == allocation.Id);
                 var publication = publications.FirstOrDefault(x => x.CreatorAllocationId == allocation.Id);
                 var days = publication?.WentLiveAtUtc is { } live ? Math.Max(0, (int)Math.Ceiling((live.AddDays(campaign.PromotionLiveDurationDays) - Now).TotalDays)) : (int?)null;
-                var complete = closed || allocation.Status is CreatorAllocationStatus.Completed or CreatorAllocationStatus.Cancelled or CreatorAllocationStatus.Exhausted || days == 0;
-                var review = !complete && revision?.ReviewStatus == PromotionContentReviewStatus.UnderReview;
-                var status = complete ? days == 0 ? "Expired" : "Completed" : review ? "Pending Business review"
+                var complete = closed || allocation.Status is CreatorAllocationStatus.Completed or CreatorAllocationStatus.Cancelled || days == 0;
+                var needsFunding = !complete && (allocation.Status == CreatorAllocationStatus.Exhausted || allocation.RemainingAmount.Amount <= 0);
+                var review = !complete && !needsFunding && revision?.ReviewStatus == PromotionContentReviewStatus.UnderReview;
+                var status = complete ? days == 0 ? "Expired" : "Completed" : needsFunding ? "FundingRequired" : review ? "Pending Business review"
                     : publication?.WentLiveAtUtc != null ? "Live" : publication?.Status == PublicationVerificationStatus.Verified ? "Ready for Go Live"
                     : revision?.ReviewStatus == PromotionContentReviewStatus.Approved ? "Approved for publication" : "Creator work in progress";
                 items.Add(new("work-" + allocation.Id, allocation.Id, campaign.Id, "Creator work", campaign.Title,
-                    complete ? "Completed" : review ? "Pending" : "Active", status, allocation.OriginalAllocation.Amount,
+                    complete ? "Completed" : review || needsFunding ? "Pending" : "Active", status, allocation.OriginalAllocation.Amount,
                     complete ? 0 : allocation.RemainingAmount.Amount, allocation.ContentDueAtUtc,
-                    review ? "Review video" : "View Creator work", $"/business/campaigns/{campaign.Id}?tab=budgets",
+                    needsFunding ? "Add Funds" : review ? "Review video" : "View Creator work", $"/business/campaigns/{campaign.Id}?tab=budgets",
                     (await directory.CreatorCardAsync(allocation.CreatorId, ct)).DisplayName, days));
             }
         }
@@ -62,13 +64,14 @@ public sealed partial class WorkspaceQueries
         {
             var offer = offers.FirstOrDefault(x => x.UgcOpportunityId == opportunity.Id);
             var offerRunning = offer is not null && offer.Status == UgcCustomerOfferStatus.Active && offer.RemainingFunding.Amount > 0 && offer.EndsAtUtc > Now;
-            var expired = !offerRunning && opportunity.DueDateUtc <= Now;
-            var closed = opportunity.Status == UgcOpportunityStatus.Cancelled || !offerRunning && (opportunity.Status == UgcOpportunityStatus.Completed || expired);
+            var offerNeedsFunding = opportunity.Status != UgcOpportunityStatus.Cancelled && offer is { Status: UgcCustomerOfferStatus.Exhausted } && offer.EndsAtUtc > Now;
+            var expired = !offerRunning && !offerNeedsFunding && opportunity.DueDateUtc <= Now;
+            var closed = opportunity.Status == UgcOpportunityStatus.Cancelled || !offerRunning && !offerNeedsFunding && (opportunity.Status == UgcOpportunityStatus.Completed || expired);
             items.Add(new("ugc-" + opportunity.Id, opportunity.Id, opportunity.Id, "UGC campaign", opportunity.Title,
-                closed ? "Completed" : opportunity.Status == UgcOpportunityStatus.Draft ? "Pending" : "Active",
-                offerRunning && opportunity.Status == UgcOpportunityStatus.Completed ? "Creator work completed · Customer offer active" : expired ? "Expired" : opportunity.Status.ToString(), opportunity.RequiredFunding.Amount + (offer?.FundedLimit.Amount ?? 0), opportunity.ReservedFunding.Amount + (offer?.RemainingFunding.Amount ?? 0),
-                offerRunning ? offer!.EndsAtUtc : opportunity.DueDateUtc, opportunity.Status == UgcOpportunityStatus.Draft ? "Complete setup" : "Manage campaign", $"/business/ugc/{opportunity.Id}",
-                RemainingDays: offerRunning ? Math.Max(0, (int)Math.Ceiling((offer!.EndsAtUtc - Now).TotalDays)) : null));
+                closed ? "Completed" : offerNeedsFunding || opportunity.Status == UgcOpportunityStatus.Draft ? "Pending" : "Active",
+                offerNeedsFunding ? "Cashback funds exhausted" : offerRunning && opportunity.Status == UgcOpportunityStatus.Completed ? "Creator work completed · Customer offer active" : expired ? "Expired" : opportunity.Status.ToString(), opportunity.RequiredFunding.Amount + (offer?.FundedLimit.Amount ?? 0), opportunity.ReservedFunding.Amount + (offer?.RemainingFunding.Amount ?? 0),
+                offerRunning || offerNeedsFunding ? offer!.EndsAtUtc : opportunity.DueDateUtc, offerNeedsFunding ? "Add Funds" : opportunity.Status == UgcOpportunityStatus.Draft ? "Complete setup" : "Manage campaign", $"/business/ugc/{opportunity.Id}",
+                RemainingDays: offerRunning || offerNeedsFunding ? Math.Max(0, (int)Math.Ceiling((offer!.EndsAtUtc - Now).TotalDays)) : null));
             foreach (var request in ugcRequests.Where(x => x.UgcOpportunityId == opportunity.Id))
                 items.Add(new("ugc-request-" + request.Id, request.Id, opportunity.Id, "Creator application", opportunity.Title,
                     "Pending", "Awaiting Business decision", opportunity.CreatorPayment.Amount, opportunity.CreatorPayment.Amount,

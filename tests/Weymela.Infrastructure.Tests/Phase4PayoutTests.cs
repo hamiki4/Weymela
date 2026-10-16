@@ -19,7 +19,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     [InlineData("+254711223344", true, false)]
     [InlineData("+25171122334", true, false)]
     [InlineData("+251711223344", false, false)]
-    public async Task Mpesa_uses_only_one_verified_registered_compatible_phone_for_each_role(string phone, bool verified, bool accepted)
+    public async Task Legacy_mobile_money_defaults_remain_compatible_while_explicit_receiving_numbers_are_independent(string phone, bool verified, bool accepted)
     {
         var s=await Phase4Scenario.Create(fixture);
         await using var db=s.Database.Open();
@@ -48,13 +48,65 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
             Assert.Equal("M-PESA",result.Provider);Assert.Equal(canonical,result.Account);
             Assert.Equal("Existing Legal Name",result.LegalName);
             Assert.Equal(canonical,(await service.OwnAsync(actor))!.RegisteredPhone);
-            await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(actor,new("Mpesa",null,"+251799999999")));
+            var preferred=await service.UpdateAsync(actor,new("Mpesa",null,"0799999999",RecipientName:"Preferred Recipient"));
+            Assert.Equal("+251799999999",preferred.Account);Assert.Equal("Preferred Recipient",preferred.LegalName);
+            Assert.Equal(canonical,(await service.OwnAsync(actor))!.RegisteredPhone);
             var kind=actor.Role==ActorRole.Creator?PayoutBeneficiary.Creator:PayoutBeneficiary.Customer;
             var admin=await service.AdminAsync(Phase4Scenario.Admin,kind,actor.CreatorId??actor.CustomerId!.Value);
-            Assert.Equal(canonical,admin!.Account);Assert.False(admin.IsMasked);
+            Assert.Equal("+251799999999",admin!.Account);Assert.False(admin.IsMasked);
+            var legacyRetry=await service.UpdateAsync(actor,new("Mpesa",null,null));
+            Assert.Equal(preferred.Account,legacyRetry.Account);Assert.Equal(preferred.LegalName,legacyRetry.LegalName);
             await Assert.ThrowsAsync<ApplicationFailure>(()=>service.AdminAsync(s.Seed.Business,kind,actor.CreatorId??actor.CustomerId!.Value));
         }
         await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(s.Cashier,new("Mpesa",null,null)));
+    }
+
+    [Theory]
+    [InlineData("Telebirr", "0911 223-355", "+251911223355", true)]
+    [InlineData("Telebirr", "+251 911 223355", "+251911223355", true)]
+    [InlineData("Mpesa", "0711 223355", "+251711223355", true)]
+    [InlineData("Mpesa", "+251711223355", "+251711223355", true)]
+    [InlineData("Mpesa", "0911223355", "", false)]
+    [InlineData("Mpesa", "+254711223355", "", false)]
+    [InlineData("Telebirr", "+14045550123", "", false)]
+    [InlineData("Telebirr", "0911223", "", false)]
+    [InlineData("Telebirr", "0911223355 ext 12", "", false)]
+    [InlineData("Telebirr", "", "", false)]
+    public async Task Receiving_number_saves_without_verified_registration_phone_and_never_changes_identity_or_money(
+        string method,string receiving,string canonical,bool accepted)
+    {
+        var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
+        var actors=new[] {s.Creator,s.Customer};
+        foreach(var actor in actors)
+        {
+            db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.UserId==actor.UserId&&x.Kind=="Phone").ToListAsync());
+            db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile {SubjectId=actor.CreatorId??actor.CustomerId!.Value,Role=actor.Role,DisplayName="Account Owner",PublicId=$"RECEIVE-{actor.UserId:N}"});
+        }
+        await db.SaveChangesAsync();
+        var journals=await db.FinancialJournals.CountAsync();var payouts=await db.PayoutRecords.CountAsync();
+        var service=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+        foreach(var actor in actors)
+        {
+            var input=new Weymela.Application.Operations.PayoutDestinationInput(method,null,receiving,RecipientName:"Receiving Recipient");
+            if(!accepted) {await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(actor,input));continue;}
+            var saved=await service.UpdateAsync(actor,input);Assert.True(saved.IsConfigured);
+            Assert.Equal(canonical,saved.Account);Assert.Equal("Receiving Recipient",saved.LegalName);Assert.Null(saved.RegisteredPhone);
+            var read=await service.OwnAsync(actor);Assert.Equal(canonical,read!.Account);Assert.Equal("Receiving Recipient",read.LegalName);
+            Assert.Equal("Account Owner",(await db.PublicWorkspaceProfiles.SingleAsync(x=>x.SubjectId==(actor.CreatorId??actor.CustomerId!.Value))).DisplayName);
+            Assert.Empty(await db.AuthIdentifiers.Where(x=>x.UserId==actor.UserId&&x.Kind=="Phone").ToListAsync());
+        }
+        Assert.Equal(journals,await db.FinancialJournals.CountAsync());Assert.Equal(payouts,await db.PayoutRecords.CountAsync());
+    }
+
+    [Fact]
+    public async Task Receiving_recipient_name_must_fit_destination_without_writing_on_failure()
+    {
+        var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
+        var service=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
+        var audits=await db.AuditEvents.CountAsync();
+        foreach(var name in new[] {" ",new string('A',121)})
+            await Assert.ThrowsAsync<ApplicationFailure>(()=>service.UpdateAsync(s.Creator,new("Telebirr",null,"0911223355",RecipientName:name)));
+        Assert.Equal(audits,await db.AuditEvents.CountAsync());
     }
 
     [Fact]
@@ -87,6 +139,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     {
         var s=await Phase4Scenario.Create(fixture);await using var db=s.Database.Open();
         db.AuthIdentifiers.RemoveRange(await db.AuthIdentifiers.Where(x=>x.UserId==s.Customer.UserId&&x.Kind=="Phone").ToListAsync());
+        db.PayoutDestinations.Remove(await db.PayoutDestinations.SingleAsync(x=>x.Beneficiary==PayoutBeneficiary.Customer));
         db.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId=s.Customer.CustomerId!.Value,
             Role=ActorRole.Customer,DisplayName="International Customer",PublicId="CU-INTL" });
         db.AuthIdentifiers.Add(new AuthIdentifierRecord { UserId=s.Customer.UserId,Kind="Phone",
@@ -120,9 +173,8 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         var payouts=new PayoutService(db,s.Clock,destinations);
         var identifier=await db.AuthIdentifiers.SingleAsync(x=>x.UserId==s.Creator.UserId);
         identifier.IsVerified=false;await db.SaveChangesAsync();
-        await Assert.ThrowsAsync<ApplicationFailure>(()=>payouts.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value,new Money(5000),"revoked-phone"));
-        identifier=await db.AuthIdentifiers.SingleAsync(x=>x.UserId==s.Creator.UserId);
-        identifier.IsVerified=true;await db.SaveChangesAsync();
+        // Identity alias verification is independent of the saved provider destination.
+        // Admin authorization, available balance and external payment reference remain required.
         var id=await payouts.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value,new Money(5000),"mpesa-prepare");
         await destinations.UpdateAsync(s.Creator,new("Bank","CBE","123456789"));
         await payouts.MarkPaidAsync(Phase4Scenario.Admin,id,"manual-mpesa-receipt","mpesa-paid");
@@ -158,7 +210,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Payout_destination_uses_verified_phone_masks_bank_and_preserves_historical_snapshot()
+    public async Task Payout_destination_preserves_preferred_phone_masks_bank_and_preserves_historical_snapshot()
     {
         var s=await Phase4Scenario.Create(fixture,PromotionType.ViewOnly,9000,10000);await s.Refresh(81000);
         await using var db=s.Database.Open();
@@ -172,9 +224,9 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         var destinations=new PayoutDestinationService(db,TestPayoutProtector.Instance,s.Clock);
         var telebirr=await destinations.UpdateAsync(s.Creator,new("Telebirr",null,null));
         Assert.Equal("+251911223344",telebirr.Account);Assert.False(telebirr.IsMasked);Assert.True(telebirr.IsConfigured);
-        var substitution=await Assert.ThrowsAsync<ApplicationFailure>(()=>destinations.UpdateAsync(s.Creator,
-            new("Telebirr",null,"+251999999999")));
-        Assert.Equal(FailureKind.Validation,substitution.Kind);
+        var substitution=await destinations.UpdateAsync(s.Creator,new("Telebirr",null,"0999999999",RecipientName:"Receiving Recipient"));
+        Assert.Equal("+251999999999",substitution.Account);
+        Assert.Equal("+251911223344",(await destinations.OwnAsync(s.Creator))!.RegisteredPhone);
         var bank=await destinations.UpdateAsync(s.Creator,new("Bank","CBE","123456789"));
         Assert.True(bank.IsMasked);Assert.EndsWith("6789",bank.Account,StringComparison.Ordinal);
         var admin=await destinations.AdminAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value);

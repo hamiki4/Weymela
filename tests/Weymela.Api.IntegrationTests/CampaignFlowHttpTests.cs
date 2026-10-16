@@ -130,4 +130,22 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
         Assert.True(bank["isConfigured"]!.GetValue<bool>());Assert.True(bank["isMasked"]!.GetValue<bool>());
         Assert.EndsWith("6789",bank["account"]!.GetValue<string>(),StringComparison.Ordinal);
     }
+    [Theory]
+    [InlineData("customer", "Telebirr", "0911 223355", "+251911223355")]
+    [InlineData("creator", "Telebirr", "+251911223355", "+251911223355")]
+    [InlineData("customer", "Mpesa", "0711 223355", "+251711223355")]
+    [InlineData("creator", "Mpesa", "+251711223355", "+251711223355")]
+    public async Task Preferred_receiving_destination_is_independent_of_identity_and_scoped_to_role(string role,string method,string phone,string canonical)
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);using var own=await f.Login(role);
+        var endpoint=$"/api/{role}/payout-destination";
+        var saved=await own.PostJson(endpoint,new{method,bankName=(string?)null,accountNumber=phone,recipientName="Preferred Recipient"});
+        Assert.Equal(canonical,saved["account"]!.GetValue<string>());Assert.Equal("Preferred Recipient",saved["legalName"]!.GetValue<string>());
+        var read=await own.GetJson(endpoint);Assert.Equal(canonical,read["account"]!.GetValue<string>());
+        Assert.True(read["isConfigured"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.BadRequest,(await own.Post(endpoint,new{method,bankName=(string?)null,accountNumber="+254711223355",recipientName="Preferred Recipient"})).StatusCode);
+        var other=role=="customer"?"creator":"customer";
+        Assert.Equal(HttpStatusCode.Forbidden,(await own.Post($"/api/{other}/payout-destination",new{method,bankName=(string?)null,accountNumber=phone})).StatusCode);
+    }
+
 }

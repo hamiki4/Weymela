@@ -21,7 +21,9 @@ describe("authorized Admin account email presentation", () => {
   it("shows the full email in the Platform Admin directory and detail", async () => {
     mockApi({
       "/admin/accounts?role=Customer": [account],
-      "/admin/accounts/customer-id?role=Customer": { account, roles: ["Customer"], profiles: [], transactions: [], roleData: null },
+      "/admin/accounts/customer-id?role=Customer": { account, roles: ["Customer"], profiles: [], transactions: [], roleData: null,
+        audit: [{ id: "account-audit", action: "AccountUnlocked", operation: "unlock", occurredAtUtc: "2026-10-16T01:00:00Z",
+          actorUserId: "admin-id", targetUserId: "customer-id", targetRole: "Customer", targetSubjectId: "customer-id", correlationId: "audit-reference" }] },
       "/admin/accounts/customer-id/deletion-status": { status: "NotRequested" },
     });
     render(<MemoryRouter initialEntries={["/admin/customers"]}><Routes>
@@ -34,6 +36,9 @@ describe("authorized Admin account email presentation", () => {
     expect(screen.queryByText(account.safeIdentifier)).not.toBeInTheDocument();
     screen.getAllByRole("link", { name: account.name })[0].click();
     expect(await screen.findByText(email)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Account history", { selector: "summary" }));
+    expect(screen.getAllByText("Account Unlocked")[0]).toBeVisible();
+    expect(screen.queryByText("admin-id")).not.toBeInTheDocument();
   });
 
   it("opens a pending invitation detail by its invitation ID", async () => {

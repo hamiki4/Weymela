@@ -16,6 +16,8 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Account history": "የመለያ ታሪክ",
+  "Operation": "ክዋኔ",
   "Owner phone": "የባለቤቱ ስልክ",
   "Previous": "የቀድሞው",
   "Next": "ቀጣይ",

@@ -249,7 +249,8 @@ public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string T
     bool ProductProvided = false, bool CreatorMustPurchase = false,
     IReadOnlyList<UgcPlatformCapacityView>? PlatformCapacities = null,
     IReadOnlyList<UgcEligibleSocialProfile>? EligibleSocialProfiles = null,
-    DateTime? ApplicationClosesAtUtc = null);
+    DateTime? ApplicationClosesAtUtc = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? CustomerOfferVersion = null);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason, long? CreatorNumber = null,
     CreatorSocialProfileView? SocialProfile = null);

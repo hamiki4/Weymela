@@ -34,7 +34,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         // Audit and domain events can describe the same operation. Each event below has one canonical producer.
         var supported = new[] { "CreatorAppliedAudit", "CreatorApprovedAudit", "CreatorRejectedAudit", "CreatorAllocationCreated", "CreatorBudgetIncreasedAudit",
             "PromotionFunded", "PromotionPublished", "ViewRewardEarned", "CreatorCommissionEarned", "CustomerCashbackEarned", "SaleCompleted", "VerifiedSaleRecorded", "BusinessPurchaseRecorded", "CreatorBudgetExhausted", "CreatorPayoutEligible", "CustomerPayoutEligible",
-            "PayoutPaid", "FinancialConfigurationEffective", "DepositSubmitted", "DepositReviewed",
+            "PayoutPaid", "FinancialConfigurationEffective", "DepositSubmitted", "DepositReviewed", "CreatorBudgetLow", "UgcCashbackBudgetLow", "UgcCashbackBudgetExhausted",
             "CreatorProfileApproved", "CreatorProfileCorrectionRequested", "CreatorProfileRejected",
             "BusinessProfileApproved", "BusinessProfileCorrectionRequested", "BusinessProfileRejected",
             "RoleEnrollmentSubmitted", "RoleEnrollmentApproved", "RoleEnrollmentRejected",
@@ -111,6 +111,24 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan("Creator Budget needs funding", "The remaining Creator Budget cannot fund the next activity. No partial reward or negative balance was posted.",
                     p.Id, a.Id, new(ActorRole.Business, p.BusinessId), new(ActorRole.Creator, a.CreatorId)) with
                     { SourceKey = $"CreatorBudgetExhausted:{a.Id}:{a.OriginalAllocation.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}" };
+            }
+            case "CreatorBudgetLow":
+            {
+                var allocationId = Id("AllocationId");
+                var allocation = await db.CreatorAllocations.AsNoTracking().SingleAsync(x => x.Id == allocationId, ct);
+                var promotion = await db.Promotions.AsNoTracking().SingleAsync(x => x.Id == allocation.PromotionId, ct);
+                return Plan("Promotion funds low", "Add funds to continue rewards.", promotion.Id, allocation.Id,
+                    new NotificationAudience(ActorRole.Business, promotion.BusinessId)) with
+                    { SourceKey = $"CreatorBudgetLow:{allocation.Id}:{data.GetProperty("FundedLimit").GetRawText()}" };
+            }
+            case "UgcCashbackBudgetLow": case "UgcCashbackBudgetExhausted":
+            {
+                var offerId = Id("OfferId");
+                var offer = await db.UgcCustomerOffers.AsNoTracking().SingleAsync(x => x.Id == offerId, ct);
+                return Plan(row.EventType == "UgcCashbackBudgetExhausted" ? "Cashback funds exhausted" : "Cashback funds low",
+                    "Add funds to continue cashback.", null, null, new NotificationAudience(ActorRole.Business, offer.BusinessId)) with
+                    { UgcId = offer.UgcOpportunityId, RelatedItemId = offer.UgcOpportunityId,
+                      SourceKey = $"{row.EventType}:{offer.Id}:{data.GetProperty("FundedLimit").GetRawText()}" };
             }
             case "CreatorPayoutEligible": case "CustomerPayoutEligible":
                 return Plan("Eligible for payout", "Your available balance has reached the current minimum to cash out.", null, null,

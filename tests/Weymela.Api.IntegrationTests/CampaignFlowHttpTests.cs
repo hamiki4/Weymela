@@ -23,6 +23,29 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
         await using var db=f.Database.Open();var stored=await db.CreatorApplications.SingleAsync(x=>x.Id==Guid.Parse(applicationId));var hasBudget=await db.CreatorAllocations.AnyAsync(x=>x.PromotionId==stored.PromotionId&&x.CreatorId==stored.CreatorId);Assert.Equal(stored.Status==CreatorApplicationStatus.Approved,hasBudget);
     }
     private static object Draft(decimal budget=500)=>new{title="HTTP Promotion",description="A real persisted Promotion",type="View & Sale",campaignBudget=budget,requirements="Original content",category="Food",region="Addis Ababa",minimumVerifiedFollowers=1000,startUtc=DateTime.UtcNow.AddMinutes(-1),endUtc=DateTime.UtcNow.AddDays(5)};
+    [Theory]
+    [InlineData("View Only")]
+    [InlineData("View & Sale")]
+    public async Task Active_uncommitted_promotion_cancellation_is_owned_concurrent_safe_and_balanced(string type)
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);using var business=await f.Login("business");using var other=await f.Login("other-business");
+        var input=System.Text.Json.JsonSerializer.SerializeToNode(Draft(),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;input["type"]=type;
+        var before=await business.GetJson("/api/business/wallet");var id=(await business.PostJson("/api/business/campaigns",input))["id"]!.GetValue<string>();
+        var campaign=(await business.GetJson($"/api/business/campaigns/{id}"))["campaign"]!;
+        await business.PostJson($"/api/business/campaigns/{id}/fund",new{campaignVersion=campaign["version"]!.GetValue<long>(),walletVersion=before["version"]!.GetValue<long>()});
+        campaign=(await business.GetJson($"/api/business/campaigns/{id}"))["campaign"]!;
+        await business.PostJson($"/api/business/campaigns/{id}/publish",new{version=campaign["version"]!.GetValue<long>()});
+        campaign=(await business.GetJson($"/api/business/campaigns/{id}"))["campaign"]!;Assert.Equal("Active",campaign["status"]!.GetValue<string>());
+        var cancel=new{version=campaign["version"]!.GetValue<long>()};var path=$"/api/business/promotions/{id}/cancel";
+        Assert.Equal(HttpStatusCode.Forbidden,(await other.Post(path,cancel)).StatusCode);
+        var responses=await Task.WhenAll(business.Post(path,cancel,"cancel-a"),business.Post(path,cancel,"cancel-b"));
+        Assert.Single(responses,r=>r.IsSuccessStatusCode);Assert.Single(responses,r=>r.StatusCode==HttpStatusCode.Conflict);
+        await business.PostJson(path,cancel,responses[0].IsSuccessStatusCode?"cancel-a":"cancel-b");
+        var after=await business.GetJson("/api/business/wallet");foreach(var key in new[]{"totalBalance","available","reserved"})Assert.Equal(before[key]!.GetValue<decimal>(),after[key]!.GetValue<decimal>());
+        Assert.Equal("Cancelled",(await business.GetJson($"/api/business/campaigns/{id}"))["campaign"]!["status"]!.GetValue<string>());
+        await using var db=f.Database.Open();Assert.Equal(2,await db.FinancialJournals.CountAsync(x=>EF.Property<Guid?>(x,"PromotionId")==Guid.Parse(id)));
+        using var admin=await f.Login("admin");Assert.Empty((await admin.GetJson("/api/admin/reconciliation")).AsArray());
+    }
     [Fact] public async Task Create_fund_publish_join_approve_and_topup_share_real_financial_services()
     {
         await using var f=await ApiFixture.CreateAsync(postgres);using var business=await f.Login("business");using var creator=await f.Login("other-creator");
@@ -130,4 +153,22 @@ public sealed class CampaignFlowHttpTests(PostgresFixture postgres)
         Assert.True(bank["isConfigured"]!.GetValue<bool>());Assert.True(bank["isMasked"]!.GetValue<bool>());
         Assert.EndsWith("6789",bank["account"]!.GetValue<string>(),StringComparison.Ordinal);
     }
+    [Theory]
+    [InlineData("customer", "Telebirr", "0911 223355", "+251911223355")]
+    [InlineData("creator", "Telebirr", "+251911223355", "+251911223355")]
+    [InlineData("customer", "Mpesa", "0711 223355", "+251711223355")]
+    [InlineData("creator", "Mpesa", "+251711223355", "+251711223355")]
+    public async Task Preferred_receiving_destination_is_independent_of_identity_and_scoped_to_role(string role,string method,string phone,string canonical)
+    {
+        await using var f=await ApiFixture.CreateAsync(postgres);using var own=await f.Login(role);
+        var endpoint=$"/api/{role}/payout-destination";
+        var saved=await own.PostJson(endpoint,new{method,bankName=(string?)null,accountNumber=phone,recipientName="Preferred Recipient"});
+        Assert.Equal(canonical,saved["account"]!.GetValue<string>());Assert.Equal("Preferred Recipient",saved["legalName"]!.GetValue<string>());
+        var read=await own.GetJson(endpoint);Assert.Equal(canonical,read["account"]!.GetValue<string>());
+        Assert.True(read["isConfigured"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.BadRequest,(await own.Post(endpoint,new{method,bankName=(string?)null,accountNumber="+254711223355",recipientName="Preferred Recipient"})).StatusCode);
+        var other=role=="customer"?"creator":"customer";
+        Assert.Equal(HttpStatusCode.Forbidden,(await own.Post($"/api/{other}/payout-destination",new{method,bankName=(string?)null,accountNumber=phone})).StatusCode);
+    }
+
 }

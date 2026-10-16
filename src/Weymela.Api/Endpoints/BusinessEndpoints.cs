@@ -73,6 +73,8 @@ internal static class BusinessEndpoints
             EndpointSupport.Id(await service.PublishAsync(EndpointSupport.Actor(c),id,input.Version,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/{id:guid}/update",async(Guid id,UgcRevisionInput input,long expectedVersion,HttpContext c,UgcService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.UpdateAsync(EndpointSupport.Actor(c),id,input,expectedVersion,EndpointSupport.Key(c),ct)));
+        g.MapPost("/ugc/{id:guid}/cashback-funding",async(Guid id,BudgetInput input,HttpContext c,UgcService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.AddCustomerOfferFundingAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/{id:guid}/cancel",async(Guid id,VersionInput input,HttpContext c,UgcService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.CancelAsync(EndpointSupport.Actor(c),id,input.Version,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/requests/{id:guid}/approve",async(Guid id,UgcReviewInput input,HttpContext c,UgcService service,CancellationToken ct)=>

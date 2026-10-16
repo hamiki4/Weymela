@@ -39,8 +39,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await layout(page);
     if (width === 390 || width === 393) await screenshot(page, `${width}-business-wallet-receipt`);
     await page.getByRole("button", { name: "Submit for Review" }).click();
-    await expect(page.getByText("Your payment is waiting for approval.")).toBeVisible();
-    await expect(page.getByText("Under review").first()).toBeVisible();
+    await expect(page.getByText("Awaiting Review", { exact: true })).toBeVisible();
     await layout(page);
 
     const pending = ["first", "second"].map(id => ({ id, businessId: "biz", business: "Abc Coffee", amount: 10000,
@@ -96,7 +95,7 @@ test("real Business deposits remain pending until Admin approval and rejection n
     await page.getByLabel("Amount", { exact: true }).fill(value);
     await page.getByLabel("Payment receipt").setInputFiles({ name: `receipt-${value}.png`, mimeType: "image/png", buffer: png });
     await page.getByRole("button", { name: "Submit for Review" }).click();
-    await expect(page.getByText("Your payment is waiting for approval.")).toBeVisible();
+    await expect(page.getByText("Awaiting Review", { exact: true })).toBeVisible();
   };
   await submit("CBE · 1000000000", "17.23");
   await submit("Bank of Abyssinia · 123456789", "19.87");
@@ -158,7 +157,7 @@ test("frozen receipt submission shows the typed pause without claiming a deposit
   await page.getByLabel("Payment receipt").setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
   await page.getByRole("button", { name: "Submit for Review" }).click();
   await expect(page.getByText("Adding funds is temporarily paused. Your receipt was not submitted.")).toBeVisible();
-  await expect(page.getByText("Your payment is waiting for approval.")).toHaveCount(0);
+  await expect(page.getByText("Awaiting Review", { exact: true })).toHaveCount(0);
   expect(posts).toBe(1);
 });
 

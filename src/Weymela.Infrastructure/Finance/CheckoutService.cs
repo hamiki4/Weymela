@@ -171,6 +171,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         var correlation = Guid.NewGuid();
         var sale = new UgcCustomerOfferSale(offer, assignment.Id, customerId, actor.UserId, quote,
             sourceReference, RequestFingerprint.Create(actor.UserId.ToString(), key), clock.GetUtcNow().UtcDateTime);
+        var previousRemaining = offer.RemainingFunding.Amount;
         offer.Consume(quote, wallet, clock.GetUtcNow().UtcDateTime, correlation);
         var journal = new FinancialJournal(Guid.NewGuid().ToString("N"), correlation, actor.UserId,
             JournalSourceType.UgcCustomerOfferSale, clock.GetUtcNow().UtcDateTime, key);
@@ -190,6 +191,11 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
         db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, sale.Id, quote.FundConsumption,
             "Sale", journal.Id, clock.GetUtcNow().UtcDateTime));
         var operation = new FinancialOperation(db);
+        if (offer.RemainingFunding.Amount == 0
+            || previousRemaining > offer.FundedLimit.Amount * .2m && offer.RemainingFunding.Amount <= offer.FundedLimit.Amount * .2m
+            || previousRemaining >= quote.FundConsumption.Amount && offer.RemainingFunding.Amount < quote.FundConsumption.Amount)
+            operation.Event(offer.RemainingFunding.Amount == 0 ? "UgcCashbackBudgetExhausted" : "UgcCashbackBudgetLow",
+                new { OfferId = offer.Id, OpportunityId = offer.UgcOpportunityId, FundedLimit = offer.FundedLimit.Amount }, clock.GetUtcNow().UtcDateTime);
         if (offer.BenefitMode == CustomerBenefitMode.Cashback)
         {
             var account = await db.CustomerCashbackAccounts.SingleOrDefaultAsync(x => x.CustomerId == customerId, ct);

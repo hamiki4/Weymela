@@ -82,7 +82,7 @@ describe("Operational states", () => {
     await userEvent.type(screen.getByLabelText("Amount"), "17.23");
     await userEvent.upload(screen.getByLabelText("Payment receipt"), new File(["receipt"], "receipt.png", { type: "image/png" }));
     await userEvent.click(screen.getByRole("button", { name: "Submit for Review" }));
-    expect(await screen.findByText(/Your payment is waiting for approval/)).toBeVisible();
+    expect(await screen.findByText("Awaiting Review")).toBeVisible();
     expect(api.writes[0].body).toBeInstanceOf(FormData);
     expect(api.writes[0].body.get("amount")).toBe("17.23");
     expect(api.writes[0].body.get("receivingDestinationId")).toBe("10000000-0000-0000-0000-000000000001");

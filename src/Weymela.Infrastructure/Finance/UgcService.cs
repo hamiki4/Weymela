@@ -50,7 +50,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     throw new ApplicationFailure(FailureKind.Validation,
                         "UGC + Sale requires Creator publication on a selected social platform.");
                 if (pricing.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
-                    throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
+                    throw new ApplicationFailure(FailureKind.Validation, "Ask Platform Admin to set the UGC + Sale fee.", code: "ProductPricingRequired");
                 var offer = CreateCustomerOffer(opportunity, input.CustomerDiscountPercent,
                     input.CustomerOfferFundedAllocation, input.CustomerFacingSlogan,
                     input.CustomerOfferStartsAtUtc, input.CustomerOfferEndsAtUtc,
@@ -104,6 +104,35 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             Record(actor, "UgcPublished", opportunity.Id, null, correlation,
                 new { opportunity.Id, opportunity.BusinessId, RequiredFunding = opportunity.RequiredFunding.Amount });
             return opportunity.Id;
+        }, ct);
+
+    public Task<Guid> AddCustomerOfferFundingAsync(Actor actor, Guid id, BudgetInput input, string key, CancellationToken ct) =>
+        Transaction.ExecuteAsync(async token =>
+        {
+            await DemandBusiness(actor, token);
+            var opportunity = await Opportunity(id, token); Own(actor, opportunity);
+            var operation = new FinancialOperation(db);
+            var fingerprint = RequestFingerprint.Create(id.ToString(), RequestFingerprint.Amount(Amount(input.Amount)), input.Version.ToString());
+            if (await operation.Replay(actor, "AddUgcCustomerOfferFunding", key, fingerprint, token) is { } replay)
+                return Guid.Parse(replay);
+            if (opportunity.Status == UgcOpportunityStatus.Cancelled)
+                throw new ApplicationFailure(FailureKind.Validation, "This Promotion is cancelled.");
+            var offer = await db.UgcCustomerOffers.SingleOrDefaultAsync(x => x.UgcOpportunityId == id, token)
+                ?? throw new ApplicationFailure(FailureKind.NotFound, "Cashback budget not found.");
+            if (offer.Version != input.Version) throw Conflict();
+            var amount = Amount(input.Amount);
+            var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == opportunity.BusinessId, token);
+            var correlation = Guid.NewGuid();
+            try { offer.AddFunding(amount, wallet, Now, correlation); }
+            catch (InvalidOperationException ex)
+            { throw new ApplicationFailure(FailureKind.Validation, "Check the amount, available funds and offer end date.", ex); }
+            var journal = Journal(actor, JournalSourceType.UgcCustomerOfferReservation, amount,
+                "BusinessAvailable", "UgcCustomerOfferReserve", key, correlation, id, null, offer.Id);
+            db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, amount, "UgcCustomerOfferTopUp", journal.Id, Now, id, offer.Id));
+            db.UgcCustomerOfferBudgetEntries.Add(new(Guid.NewGuid(), offer.Id, null, amount, "Increased", journal.Id, Now));
+            operation.Remember(actor, "AddUgcCustomerOfferFunding", key, fingerprint, offer.Id.ToString(), Now);
+            Record(actor, "UgcCustomerOfferFundingAdded", id, null, correlation, new { OpportunityId = id, OfferId = offer.Id, Amount = amount.Amount });
+            return offer.Id;
         }, ct);
 
     public Task<Guid> RequestAsync(Actor actor, Guid id, string key, CancellationToken ct,
@@ -401,7 +430,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                     var config = await new FinancialConfigurationResolver(db).EffectiveAsync(Now, token);
                     var ugc = config.Ugc ?? throw new ApplicationFailure(FailureKind.Validation, "UGC financial settings are unavailable.");
                     if (ugc.CustomerOfferPlatformSalePercent is not { } platformSalePercent)
-                        throw new ApplicationFailure(FailureKind.Validation, "The effective financial configuration does not support UGC Customer Offers.");
+                        throw new ApplicationFailure(FailureKind.Validation, "Ask Platform Admin to set the UGC + Sale fee.", code: "ProductPricingRequired");
                     var discount = input.CustomerDiscountPercent ?? offer?.CustomerDiscountPercent;
                     EnsureCustomerDiscount(discount);
                     if (offer is null)
@@ -854,7 +883,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         x.PlatformCapacities.Where(slot => slot.Capacity > 0).Select(slot => new UgcPlatformCapacityView(slot.Platform.ToString(), slot.Capacity, slot.ApprovedCount, slot.Available)).ToArray(),
         socials?.Where(profile => profile.IsActive && x.PlatformCapacities.Any(slot => slot.Platform == profile.Platform && slot.Capacity > 0)
             && MatchesProfile(profile, x, enforceAudience)).Select(profile => new UgcEligibleSocialProfile(profile.Id, profile.Platform.ToString(), profile.ProfileUrl)).ToArray(),
-        x.ApplicationClosesAtUtc);
+        x.ApplicationClosesAtUtc, includeBusinessFinancials ? offer?.Version : null);
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,
         decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)

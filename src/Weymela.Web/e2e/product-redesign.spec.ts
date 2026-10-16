@@ -78,20 +78,32 @@ async function ensureVisualReviewUgc(context: BrowserContext) {
   return { title: opportunity.title, instructions: detail.instructions };
 }
 
-test("mobile money choices use the registered phone on Creator and Customer mobile screens", async ({ page, context }) => {
+test("mobile money choices save independent receiving numbers on Creator and Customer mobile screens", async ({ page, context }) => {
   await page.setViewportSize({width:390,height:844});
   for(const [role,path] of [["creator","/creator/earnings"],["customer","/customer/cashback"]]) {
     await login(context,role);await open(page,path);
     await expect(page.getByRole("radio",{name:"Telebirr",exact:true})).toBeVisible();
     await page.getByRole("radio",{name:"M-PESA",exact:true}).check();
-    await expect(page.getByLabel("Verified Weymela phone")).toHaveAttribute("readonly","");
+    const form=page.locator(".payout-destination-form");
+    const phone=page.getByLabel("Receiving phone number",{exact:true});
+    await expect(phone).toBeEditable();
+    await phone.fill("0711 223355");await page.getByLabel("Recipient name",{exact:true}).fill("Preferred Recipient");
+    await form.getByRole("button",{name:"Save Destination",exact:true}).click();
+    await expect(form.getByRole("status")).toHaveText("Saved");
+    await page.reload();await expect(phone).toHaveValue("+251711223355");
+    await expect(page.getByLabel("Recipient name",{exact:true})).toHaveValue("Preferred Recipient");
+    await page.getByRole("radio",{name:"Telebirr",exact:true}).check();
+    await phone.fill("0911223355");await form.getByRole("button",{name:"Save Destination",exact:true}).click();
+    await expect(form.getByRole("status")).toHaveText("Saved");
+    await page.reload();await expect(phone).toHaveValue("+251911223355");
+    await expect(form.getByText("Verified Weymela phone",{exact:true})).toHaveCount(0);
     await expect(page.getByLabel("Account Number",{exact:true})).toHaveCount(0);
     await expect(page.getByRole("button",{name:"Request Payout"})).toHaveCount(0);
     await layout(page);
     await page.getByRole("radio",{name:"Bank account",exact:true}).check();
     await expect(page.getByLabel("Bank Name",{exact:true})).toBeVisible();
     await expect(page.getByLabel("Account Number",{exact:true})).toBeVisible();
-    await expect(page.getByLabel("Verified Weymela phone")).toHaveCount(0);
+    await expect(page.getByLabel("Receiving phone number",{exact:true})).toHaveCount(0);
     await layout(page);
   }
 });

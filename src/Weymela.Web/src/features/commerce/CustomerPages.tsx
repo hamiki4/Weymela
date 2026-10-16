@@ -94,7 +94,7 @@ function CustomerLocationCard({
       <span className="customer-location-icon" aria-hidden="true"><Icon name="location" size={23} /></span>
       <div className="customer-location-copy">
         <h2>{discover ? "Find promotions near you" : "See what is close to you"}</h2>
-        {coordinates && <p className="customer-location-note">Location is on. Offers without Business coordinates remain available without a distance.</p>}
+        {coordinates && <p className="customer-location-note">Location is on</p>}
         {error && <p className="customer-location-error" role="status">{error}</p>}
       </div>
       <Button variant="secondary" icon="location" onClick={onUseLocation}>Use Location</Button>

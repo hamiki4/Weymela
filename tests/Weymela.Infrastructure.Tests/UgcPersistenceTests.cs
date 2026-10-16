@@ -1042,6 +1042,153 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Null((await new FinancialConfigurationResolver(db).EffectiveAsync(Now)).ViewOnly);
     }
 
+    [Fact]
+    public async Task Saved_two_percent_ugc_fee_earns_4900_of_5000_once_without_view_threshold_or_customer_offer()
+    {
+        var state = await Setup(); await using var db = state.Database.Open();
+        var prior = await db.FinancialConfigurationVersions.SingleAsync();
+        db.FinancialConfigurationVersions.Add(FinancialConfigurationVersionFactory.Create(Guid.NewGuid(), prior.ConfigurationId, 2,
+            Guid.NewGuid(), Now, new FinancialSettingsInput(null, null, 5, 4, 1, null, null, Now, new(200, 2, null, null), 30, false)));
+        await db.SaveChangesAsync();
+        var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, SalesInput(1) with { CreatorPayment = 5000 }, "exact-create", default);
+        await service.PublishAsync(state.Business, id, 0, "exact-publish", default);
+        var request = await RequestForTikTok(service, db, state, id, "exact-request");
+        var assignment = await service.ReviewRequestAsync(state.Business, request, true, null, "exact-approve", default);
+        Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+        Assert.Empty(await db.UgcCustomerOffers.ToListAsync());
+        await GoLiveUgc(service, db, state, assignment, "exact");
+        var publications = new CreatorPublicationService(db, new TestViews(new TestClock { Now = Now }),
+            new CommerceAccessPolicy(db), new TestDirectory(), new FixedTime(Now));
+        await publications.GoLiveUgcAsync(state.Creator, assignment, "exact-retry", default);
+        Assert.Equal(4900m, (await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        Assert.Equal(100m, (await db.PlatformRevenueEntries.SingleAsync()).Amount.Amount);
+        Assert.Single(await db.CreatorEarningEntries.ToListAsync());
+        Assert.Empty(await db.PromotionViewVerifications.ToListAsync());
+        Assert.Empty(await db.PayoutRecords.ToListAsync());
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin, default));
+    }
+
+    [Fact]
+    public async Task Ugc_cashback_low_exhausted_alerts_and_replenishment_keep_fixed_payment_and_saved_terms_unchanged()
+    {
+        var state = await Setup(); await using var db = state.Database.Open();
+        var customer = new Actor(Guid.NewGuid(), ActorRole.Customer, CustomerId: Guid.NewGuid());
+        var cashier = new Actor(Guid.NewGuid(), ActorRole.Cashier, state.Business.BusinessId);
+        db.CommercePermissions.AddRange(new CommercePermission(customer.UserId, ActorRole.Customer, customer.CustomerId!.Value, null, true, false),
+            new CommercePermission(cashier.UserId, ActorRole.Cashier, cashier.UserId, cashier.BusinessId, true, true));
+        await db.SaveChangesAsync();
+        var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, SalesInput(1) with { CustomerOfferEnabled = true, CustomerDiscountPercent = 5,
+            CustomerOfferFundedAllocation = 100, CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7) }, "topup-create", default);
+        await service.PublishAsync(state.Business, id, 0, "topup-publish", default);
+        var request = await RequestForTikTok(service, db, state, id, "topup-request");
+        var assignmentId = await service.ReviewRequestAsync(state.Business, request, true, null, "topup-approve", default);
+        var offer = await db.UgcCustomerOffers.SingleAsync();
+        var before = await service.DetailAsync(state.Business, id, default);
+        Assert.Equal(offer.Version, before.Opportunity.CustomerOfferVersion);
+        await service.AddCustomerOfferFundingAsync(state.Business, id, new(100, offer.Version), "before-live-topup", default);
+        Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+        Assert.Equal(before.Opportunity.CreatorPayment, (await service.DetailAsync(state.Business, id, default)).Opportunity.CreatorPayment);
+        await GoLiveUgc(service, db, state, assignmentId, "topup");
+        var opportunity = await db.UgcOpportunities.SingleAsync();
+        var fixedTerms = new { opportunity.RequiredFunding, opportunity.UsedFunding, opportunity.ReservedFunding, opportunity.CreatorPayment, opportunity.PricingSnapshot, opportunity.Version };
+        var checkout = new CheckoutService(db, new CommerceAccessPolicy(db), new FixedTime(Now));
+        foreach (var (amount, key) in new[] { (2000m, "low"), (500m, "exhausted") })
+        {
+            var qr = await checkout.IssueUgcAsync(new(customer, offer.Id, assignmentId, "qr-" + key), default);
+            await checkout.RedeemAsync(new(cashier, qr.Token!, new Money(amount), "sale-" + key), default);
+            await checkout.RedeemAsync(new(cashier, qr.Token!, new Money(amount), "sale-" + key), default);
+        }
+        offer = await db.UgcCustomerOffers.SingleAsync();
+        Assert.Equal(UgcCustomerOfferStatus.Exhausted, offer.Status);
+        Assert.Equal(0m, offer.RemainingFunding.Amount);
+        var tracking = new WorkspaceQueries(db, new TestDirectory(), new FixedTime(Now));
+        var pausedCampaign = (await tracking.BusinessPromotionTrackingAsync(state.Business, default)).Single(x => x.Id == id && x.Kind == "UGC campaign");
+        Assert.Equal("Pending", pausedCampaign.Group); Assert.Equal("Add Funds", pausedCampaign.PrimaryAction);
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetLow").ToListAsync());
+        Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetExhausted").ToListAsync());
+        await Assert.ThrowsAsync<ApplicationFailure>(() => checkout.IssueUgcAsync(new(customer, offer.Id, assignmentId, "empty-qr"), default));
+        var oldVersion = offer.Version;
+        await service.AddCustomerOfferFundingAsync(state.Business, id, new(200, oldVersion), "replenish", default);
+        await service.AddCustomerOfferFundingAsync(state.Business, id, new(200, oldVersion), "replenish", default);
+        offer = await db.UgcCustomerOffers.SingleAsync();
+        Assert.Equal(200m, offer.RemainingFunding.Amount); Assert.Equal(UgcCustomerOfferStatus.Active, offer.Status);
+        Assert.Equal(3m, offer.PricingSnapshot.PlatformSalePercent); Assert.Equal(5m, offer.CustomerDiscountPercent);
+        Assert.Equal(JsonSerializer.Serialize(fixedTerms), JsonSerializer.Serialize(new { opportunity.RequiredFunding, opportunity.UsedFunding, opportunity.ReservedFunding, opportunity.CreatorPayment, opportunity.PricingSnapshot, opportunity.Version }));
+        Assert.Single(await db.CreatorEarningEntries.ToListAsync());
+        Assert.Empty(await db.CreatorEarningEntries.Where(x => x.Source == EarningSource.SaleCommission).ToListAsync());
+        Assert.Equal(450m, (await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        var afterQr = await checkout.IssueUgcAsync(new(customer, offer.Id, assignmentId, "refilled-qr"), default);
+        await checkout.RedeemAsync(new(cashier, afterQr.Token!, new Money(1000), "refilled-sale"), default);
+        Assert.Equal(120m, (await db.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
+        await DrainNotifications(state.Database);
+        var alerts = await db.InAppNotifications.Where(x => x.EventType == "UgcCashbackBudgetLow" || x.EventType == "UgcCashbackBudgetExhausted").ToListAsync();
+        Assert.Equal(2, alerts.Count); Assert.All(alerts, x => { Assert.Equal(state.Business.UserId, x.UserId); Assert.Contains(id.ToString(), x.Route); });
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin, default));
+    }
+
+    [Theory]
+    [InlineData("other-business")][InlineData("creator")][InlineData("stale")][InlineData("insufficient")][InlineData("expired")][InlineData("zero")]
+    public async Task Cashback_replenishment_rejects_unauthorized_stale_unfunded_or_expired_requests_atomically(string reason)
+    {
+        var state = await Setup(); await using var db = state.Database.Open(); var service = new UgcService(db, new FixedTime(Now));
+        var id = await service.CreateAsync(state.Business, SalesInput(1) with { CustomerOfferEnabled = true, CustomerDiscountPercent = 5,
+            CustomerOfferFundedAllocation = 100, CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7) }, "reject-create", default);
+        await service.PublishAsync(state.Business, id, 0, "reject-publish", default);
+        var offer = await db.UgcCustomerOffers.SingleAsync();
+        var actor = reason == "creator" ? state.Creator : reason == "other-business" ? state.Business with { BusinessId = Guid.NewGuid() } : state.Business;
+        var input = new BudgetInput(reason == "insufficient" ? 99999 : reason == "zero" ? 0 : 100, reason == "stale" ? -1 : offer.Version);
+        var target = reason == "expired" ? new UgcService(db, new FixedTime(Now.AddDays(8))) : service;
+        var journals = await db.FinancialJournals.CountAsync();
+        await Assert.ThrowsAsync<ApplicationFailure>(() => target.AddCustomerOfferFundingAsync(actor, id, input, "rejected-topup", default));
+        db.ChangeTracker.Clear(); Assert.Equal(journals, await db.FinancialJournals.CountAsync());
+        Assert.Equal(100m, (await db.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
+        Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin, default));
+    }
+
+    [Fact]
+    public async Task Replenishment_migration_preserves_existing_history_and_blocks_unjournaled_funding_and_term_changes()
+    {
+        var state = await Setup(targetMigration: "20261014203304_StabilizePublicationPaymentsAndNotificationReads");
+        Guid id; int journalCount; decimal available;
+        await using (var db = state.Database.Open())
+        {
+            var service = new UgcService(db, new FixedTime(Now));
+            id = await service.CreateAsync(state.Business, SalesInput(1) with { CustomerOfferEnabled = true, CustomerDiscountPercent = 5,
+                CustomerOfferFundedAllocation = 100, CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(7) }, "migration-create", default);
+            await service.PublishAsync(state.Business, id, 0, "migration-publish", default);
+            journalCount = await db.FinancialJournals.CountAsync(); available = (await db.BusinessWallets.SingleAsync()).AvailableBalance.Amount;
+            await db.Database.MigrateAsync();
+            Assert.Equal(journalCount, await db.FinancialJournals.CountAsync());
+            Assert.Equal(available, (await db.BusinessWallets.SingleAsync()).AvailableBalance.Amount);
+        }
+        await using (var db = state.Database.Open())
+        {
+            var error = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync(
+                "UPDATE v3.\"UgcCustomerOffers\" SET \"FundedLimit\"=\"FundedLimit\"+1, \"ReservedFunding\"=\"ReservedFunding\"+1"));
+            Assert.Equal("23514", error.SqlState);
+            await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync(
+                "UPDATE v3.\"UgcCustomerOffers\" SET \"PricingSnapshot_PlatformSalePercent\"=4"));
+            Assert.Equal(100m, (await db.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
+            Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin, default));
+        }
+        long version;
+        await using (var db = state.Database.Open()) version = (await db.UgcCustomerOffers.SingleAsync()).Version;
+        async Task<bool> Attempt(string key)
+        {
+            await using var db = state.Database.Open();
+            try { await new UgcService(db, new FixedTime(Now)).AddCustomerOfferFundingAsync(state.Business, id, new(100, version), key, default); return true; }
+            catch (ApplicationFailure ex) when (ex.Kind == FailureKind.ConcurrencyConflict) { return false; }
+        }
+        var outcomes = await Task.WhenAll(Attempt("race-one"), Attempt("race-two"));
+        Assert.Single(outcomes, x => x);
+        await using var verify = state.Database.Open();
+        Assert.Equal(journalCount + 1, await verify.FinancialJournals.CountAsync());
+        Assert.Equal(200m, (await verify.UgcCustomerOffers.SingleAsync()).RemainingFunding.Amount);
+        Assert.Empty(await new ReconciliationService(verify).CheckAsync(Phase4Scenario.Admin, default));
+    }
+
     private async Task<State> Setup(decimal deposit = 10_000, string? targetMigration = null)
     {
         var database = await fixture.CreateAsync(targetMigration); await using var db = database.Open();

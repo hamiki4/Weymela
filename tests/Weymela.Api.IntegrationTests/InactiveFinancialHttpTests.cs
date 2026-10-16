@@ -21,14 +21,16 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
     [InlineData("/api/admin/accounts/businesses/{businessId:guid}/promotional-funding", "WalletFunding")]
     [InlineData("/api/business/campaigns/{id:guid}/fund", "PromotionReservations")]
     [InlineData("/api/business/ugc/{id:guid}/publish", "PromotionReservations")]
+    [InlineData("/api/business/ugc/{id:guid}/cashback-funding", "PromotionReservations")]
     [InlineData("/api/business/checkout/confirm", "Checkout")]
     [InlineData("/api/customer/offers/{id:guid}/qr", "Checkout")]
     [InlineData("/api/admin/payouts/{id:guid}/paid", "Payouts")]
+    [InlineData("/api/creator/participations/{id:guid}/refresh", "ViewRewards")]
     public async Task Production_operation_controls_do_not_enable_other_money_routes(string route, string operation)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
-        foreach (var enabled in new[] { "DepositRequests", "DepositReview", "WalletFunding", "PromotionReservations", "Checkout", "Payouts" })
+        foreach (var enabled in new[] { "DepositRequests", "DepositReview", "WalletFunding", "PromotionReservations", "Checkout", "Payouts", "ViewRewards" })
         {
             var called = false;
             var middleware = new ApiSafetyMiddleware(_ => { called = true; return Task.CompletedTask; },
@@ -46,7 +48,7 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
     [Theory]
     [InlineData("/api/creator/participations/{id:guid}/refresh")]
     [InlineData("/api/future/approve")]
-    public async Task Production_never_enables_unverified_view_rewards_or_unclassified_money_routes(string route)
+    public async Task Production_keeps_unauthorized_view_rewards_and_unclassified_money_routes_paused(string route)
     {
         var database = await fixture.CreateAsync();
         await using var db = database.Open();
@@ -60,6 +62,26 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
         await middleware.InvokeAsync(context, db);
         Assert.False(called);
         Assert.Equal(503, context.Response.StatusCode);
+    }
+    [Fact]
+    public async Task Authorized_view_operation_still_rejects_missing_provider_evidence_without_posting_money()
+    {
+        var database = await fixture.CreateAsync(); await using var db = database.Open();
+        var called = false;
+        var middleware = new ApiSafetyMiddleware(async _ => {
+            called = true;
+            await new Weymela.Infrastructure.Providers.SocialProviderRouter([], TimeProvider.System)
+                .VerifyAsync(new(Guid.NewGuid(), Guid.NewGuid(), "TikTok", "7412345678901234567"), default);
+        }, new RuntimeOptions { EnvironmentName = "Production", FinancialWritesEnabled = true,
+            ProductionFinancialAuthorizationReference = "isolated-test-authorization", EnabledProductionFinancialOperations = ["ViewRewards"] },
+            new ProductIntegrationOptions(), NullLogger<ApiSafetyMiddleware>.Instance);
+        var context = Context("/api/creator/participations/{id:guid}/refresh");
+        context.Response.Body = new MemoryStream();
+        await middleware.InvokeAsync(context, db);
+        Assert.True(called); Assert.Equal(400, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        Assert.Contains("ProviderUnavailable", await new StreamReader(context.Response.Body).ReadToEndAsync());
+        Assert.False(await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AnyAsync(db.FinancialJournals));
     }
     private static DefaultHttpContext Context(string route)
     {

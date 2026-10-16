@@ -39,6 +39,11 @@ internal sealed class AttributableFinance(WeymelaDbContext db)
         db.WalletEntries.Add(new(Guid.NewGuid(), promotion.BusinessId, promotion.Id, amounts.Total, "Consumed", j.Id, at));
         db.PromotionBudgetEntries.Add(new(Guid.NewGuid(), promotion.Id, allocation.Id, amounts.Total, source.ToString(), j.Id, at));
         var operation = new FinancialOperation(db);
+        var remainingBefore = allocation.RemainingAmount.Amount + amounts.Total.Amount;
+        if (allocation.RemainingAmount.Amount > 0 && remainingBefore > allocation.OriginalAllocation.Amount * .2m
+            && allocation.RemainingAmount.Amount <= allocation.OriginalAllocation.Amount * .2m)
+            operation.Event("CreatorBudgetLow", new { AllocationId = allocation.Id,
+                FundedLimit = allocation.OriginalAllocation.Amount }, at);
         if (amounts.Creator.Amount > 0)
         {
             var account = await db.CreatorEarningsAccounts.SingleOrDefaultAsync(x => x.CreatorId == allocation.CreatorId, ct);

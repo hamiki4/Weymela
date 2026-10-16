@@ -1,5 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
-import { createPublishedUgc, installQrCamera, layout, login, open, scanQr } from "./helpers";
+import { createPublishedUgc, ensureBusinessFunds, installQrCamera, layout, login, open, scanQr } from "./helpers";
 
 const requestHeaders = { "X-Weymela-Request": "1" };
 const manualCustomerPhone = "0911111111";
@@ -360,4 +360,28 @@ test("Business and Cashier checkout layouts stay usable at required widths", asy
     await layout(page);
     await expect(page.getByRole("button", { name: "Scan QR", exact: true })).toBeVisible();
   }
+});
+
+test("UGC cashback top-up after Creator approval preserves the fixed fee and deducts wallet funds once", async ({ page, context }) => {
+  const id = await createPublishedUgc(context, `Cashback replenishment ${Date.now()}`, "creator");
+  await login(context, "business");
+  const before = await apiJson<{ opportunity: { customerOfferRemaining: number; creatorPayment: number; requiredFunding: number } }>(context, `/business/ugc/${id}`);
+  await ensureBusinessFunds(context, 100);
+  const wallet = await apiJson<{ available: number }>(context, "/business/wallet");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, `/business/ugc/${id}`);
+  const budget = page.locator("section").filter({ has: page.getByRole("heading", { name: "Cashback budget", exact: true }) });
+  await budget.getByLabel("Amount to add (ETB)").fill("100");
+  const saved = page.waitForResponse(response => response.url().endsWith(`/ugc/${id}/cashback-funding`) && response.request().method() === "POST");
+  await budget.getByRole("button", { name: "Add Funds", exact: true }).click();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(budget.getByLabel("Amount to add (ETB)")).toHaveValue("");
+  await page.reload();
+  await expect(budget.getByRole("button", { name: "Add Funds", exact: true })).toBeVisible();
+  const after = await apiJson<typeof before>(context, `/business/ugc/${id}`);
+  expect(after.opportunity.customerOfferRemaining).toBe(before.opportunity.customerOfferRemaining + 100);
+  expect(after.opportunity.creatorPayment).toBe(before.opportunity.creatorPayment);
+  expect(after.opportunity.requiredFunding).toBe(before.opportunity.requiredFunding);
+  expect((await apiJson<{ available: number }>(context, "/business/wallet")).available).toBe(wallet.available - 100);
+  await layout(page);
 });

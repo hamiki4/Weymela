@@ -3,7 +3,7 @@
 import base64,hashlib,io,json,os,pathlib,re,stat,subprocess,tarfile,urllib.parse,urllib.request,zipfile
 root=pathlib.Path('.artifacts/image-transfer');root.mkdir(parents=True,exist_ok=False);release=root/'release';release.mkdir();repo='hamiki4/Weymela';runId=os.environ['SOURCE_RELEASE_RUN'];assert runId.isdigit()
 def gh(path):return json.loads(subprocess.check_output(['gh','api','repos/'+repo+'/'+path],text=True))
-run=gh('actions/runs/'+runId);assert run['status']=='completed' and run['conclusion']=='success' and run['head_branch'] in ['main','release/final-pilot-production']
+run=gh('actions/runs/'+runId);assert run['status']=='completed' and run['conclusion']=='success' and run['head_branch'] in ['main','release/final-pilot-production','release/payout-receiving-phone']
 jobs=gh('actions/runs/'+runId+'/jobs')['jobs'];assert all(x['conclusion']=='success' for x in jobs)
 assert {'acceptance','images (api)','images (worker)','images (web)','manifest'}.issubset({x['name'].split('/')[-1].strip() for x in jobs})
 items=[x for x in gh('actions/runs/'+runId+'/artifacts')['artifacts'] if x['name']=='weymela-release-package' and not x['expired']];assert len(items)==1;artifact=items[0]

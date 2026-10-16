@@ -40,7 +40,7 @@ report = {
     'bundleSha256': hashlib.sha256(bundle.read_bytes()).hexdigest(),
     'signed': False, 'validationCandidateOnly': True, 'nativeSharedLibraries': native_libraries,
     'liveBackendCompatibility': 'NOT VERIFIED; owner/live testing against ready V3 is required',
-    'registeredUploadCertificate': 'PENDING genuine Play Console evidence', 'closedTestingSubmission': 'NOT PERFORMED'
+    'registeredUploadCertificate': plan.get('registeredUploadCertificateSha256', 'PENDING genuine Play Console evidence'), 'closedTestingSubmission': 'NOT PERFORMED'
 }
 bundle.with_suffix('.verification.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))

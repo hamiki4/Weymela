@@ -1,17 +1,19 @@
 {
   "applicationId": "com.weymela.app",
-  "versionCode": 10,
-  "versionName": "3.0.0",
-  "highestPlayVersionCodeAtPreparation": 9,
-  "track": "alpha",
+  "versionCode": 12,
+  "versionName": "3.0.2",
+  "highestPlayVersionCodeAtPreparation": 11,
+  "track": "production",
   "firebaseProjectId": "weymela-production",
   "apiOrigin": "https://api.weymela.com",
-  "webSourceCommit": "f457e7c982b9d326efb5ab44a2e45c30f9e0329d",
-  "webImage": "ghcr.io/hamiki4/weymela-v3-web@sha256:bfe41d394ea8007ae72107f79b4ea2230f0e1dacc0a4d1ca56c2764a04e1c85d",
+  "webSourceCommit": "84996141abbf24cb0af39c8858a9e519ecf3678a",
+  "webImage": "ghcr.io/hamiki4/weymela-v3-web@sha256:cbd367ef400f909d74b7cec206bc0711ee40c25d3e08f165613991affe7f7b95",
   "recoveredNativeSourceCommit": "c3de86d9fd0748df5e630d86f494c5386f8846dc",
   "uploadAlias": "weymela-upload",
-  "registeredUploadCertificateVerification": "Pending actual Play Console evidence",
+  "registeredUploadCertificateVerification": "Original upload certificate confirmed by owner 2026-10-11; exact fingerprint must match before signing",
   "signingAuthorizedAfterCertificateMatch": true,
-  "submissionAuthorizedAfterBackendCompatibility": true,
-  "publicProductionPromotionAuthorized": false
+  "submissionAuthorizedAfterBackendCompatibility": false,
+  "publicProductionPromotionAuthorized": false,
+  "registeredUploadCertificateSha256": "AD:9A:B2:02:CD:00:76:0A:78:DE:1D:CA:61:2F:F2:4C:2C:92:99:86:D6:64:FA:55:72:0C:23:56:4E:C7:60:C9",
+  "manualGooglePlayUploadOnly": true
 }

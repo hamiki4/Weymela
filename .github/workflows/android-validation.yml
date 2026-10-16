@@ -1,8 +1,5 @@
 name: Weymela Android V3 unsigned validation
 on:
-  push:
-    branches: [release/android-v3-code10]
-    paths: ['mobile/**', '.github/workflows/android-validation.yml']
   pull_request:
     paths: ['mobile/**', '.github/workflows/android-validation.yml']
   workflow_dispatch:
@@ -34,7 +31,7 @@ jobs:
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           printf '%s' "$GH_PACKAGES_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker pull ghcr.io/hamiki4/weymela-v3-web@sha256:bfe41d394ea8007ae72107f79b4ea2230f0e1dacc0a4d1ca56c2764a04e1c85d
+          docker pull ghcr.io/hamiki4/weymela-v3-web@sha256:cbd367ef400f909d74b7cec206bc0711ee40c25d3e08f165613991affe7f7b95
           python3 mobile/prepare-assets.py
       - name: Existing Production Firebase Android configuration
         env:
@@ -57,7 +54,7 @@ jobs:
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
           chmod +x gradlew
-          ./gradlew --no-daemon testReleaseUnitTest bundleRelease -PweymelaUnsignedValidation=true -PweymelaVersionCode=10
+          ./gradlew --no-daemon testReleaseUnitTest bundleRelease -PweymelaUnsignedValidation=true -PweymelaVersionCode=12
           test -f app/build/outputs/bundle/release/app-release.aab
       - name: Verify unsigned AAB metadata and Production configuration
         run: |
@@ -66,7 +63,7 @@ jobs:
           python3 mobile/inspect-bundle.py mobile/android/app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/weymela-bundletool.jar"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: weymela-v3-production-code10-unsigned-validation
+          name: weymela-v3-production-code12-unsigned-validation
           retention-days: 14
           if-no-files-found: error
           path: |

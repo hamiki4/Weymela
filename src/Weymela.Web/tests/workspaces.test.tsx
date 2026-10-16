@@ -859,11 +859,11 @@ describe("Creator workspace", () => {
     expect(screen.queryByText("VIEW_REWARD")).not.toBeInTheDocument();
     expect(screen.queryByText("One balance.")).not.toBeInTheDocument();
   });
-  it("uses the verified Weymela phone for Telebirr and accepts only Bank destination fields", async () => {
+  it("allows an editable receiving phone and retains Bank destination fields", async () => {
     const api = mockCreatorApi();
     mount(<CreatorEarnings />);
-    expect(await screen.findByLabelText("Verified Weymela phone")).toHaveValue("+251911223344");
-    expect(screen.getByLabelText("Verified Weymela phone")).toHaveAttribute("readonly");
+    expect(await screen.findByLabelText("Receiving phone number")).toHaveValue("+251911223344");
+    expect(screen.getByLabelText("Receiving phone number")).not.toHaveAttribute("readonly");
     expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));
     await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
@@ -872,7 +872,7 @@ describe("Creator workspace", () => {
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
       body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
   });
-  it("uses only the registered phone for M-PESA, with no alternate phone or payout amount", async () => {
+  it("accepts a preferred M-PESA receiving number without exposing payout amounts", async () => {
     const api = mockCreatorApi({ "/creator/payout-destination": {
       method: "Bank", provider: "CBE", account: "••••6789", legalName: "Bella",
       updatedAtUtc: null, isMasked: true, isConfigured: true, registeredPhone: "+251711223344",
@@ -880,22 +880,25 @@ describe("Creator workspace", () => {
     } });
     mount(<CreatorEarnings />);
     await userEvent.click(await screen.findByRole("radio", { name: "M-PESA" }));
-    expect(screen.getByLabelText("Verified Weymela phone")).toHaveValue("+251711223344");
-    expect(screen.getByLabelText("Verified Weymela phone")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Receiving phone number")).toHaveValue("");
+    await userEvent.type(screen.getByLabelText("Receiving phone number"),"0711223355");
+    expect(screen.getByLabelText("Receiving phone number")).not.toHaveAttribute("readonly");
     expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
-      body: { method: "Mpesa", bankName: null, accountNumber: null } }));
+      body: { method: "Mpesa", bankName: null, accountNumber: "0711223355",recipientName:"Bella" } }));
   });
-  it("lets a Creator without a verified phone choose Bank while keeping Telebirr unavailable", async () => {
+  it("lets a Creator without a verified registration phone save Telebirr or Bank", async () => {
     const api = mockCreatorApi({ "/creator/payout-destination": {
       method: "Telebirr", provider: "Telebirr", account: "", legalName: "Bella",
       updatedAtUtc: null, isMasked: false, isConfigured: false,
     } });
     mount(<CreatorEarnings />);
-    expect(await screen.findByLabelText("Verified Weymela phone")).toHaveAttribute("placeholder", "No verified phone available");
+    expect(await screen.findByLabelText("Receiving phone number")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Save Destination" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Receiving phone number"),"0911223355");
+    expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled();
     await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));
     await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
     await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");

@@ -51,9 +51,11 @@ it("only visible, loaded records acknowledge notifications and stale profile res
 });
 
 it("does not present a saved mobile-money recipient as an independently verified identity phone",async()=>{
- mockApi({"/creator/payout-destination":{method:"Telebirr",provider:"Telebirr",isConfigured:true,account:"••••3344",registeredPhone:null,telebirrEligible:false,mpesaEligible:false,legalName:"Synthetic Creator"}});
+ mockApi({"/creator/payout-destination":{method:"Telebirr",provider:"Telebirr",isConfigured:true,account:"+251911223344",registeredPhone:null,telebirrEligible:false,mpesaEligible:false,legalName:"Synthetic Creator"}});
  render(<MemoryRouter><PayoutDestinationForm endpoint="/creator/payout-destination"/></MemoryRouter>);
- expect(await screen.findByLabelText("Verified Weymela phone")).toHaveValue("");
- expect(screen.getByText("••••3344")).toBeVisible();expect(screen.getByRole("button",{name:"Save Destination"})).toBeDisabled();
- expect(screen.getByText(/phone needs independent ownership verification/)).toBeVisible();
+ expect(await screen.findByLabelText("Receiving phone number")).toHaveValue("+251911223344");
+ expect(screen.getByLabelText("Receiving phone number")).not.toHaveAttribute("readonly");
+ expect(screen.getByRole("button",{name:"Save Destination"})).toBeEnabled();
+ expect(screen.queryByText(/phone needs independent ownership verification/)).not.toBeInTheDocument();
+ expect(screen.queryByLabelText("Verified Weymela phone")).not.toBeInTheDocument();
 });

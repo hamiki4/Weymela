@@ -199,7 +199,6 @@ export function App() {
           <Route path="/admin/settings" element={<AdminFinancialSettings />} />
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
-          <Route path="/admin/social-profiles" element={<AdminSocialProfileReview />} />
           <Route path="/admin/publications" element={<AdminPublicationReview />} />
         </Route>
         <Route element={<RoleGate roles={["OperationsAdmin"]} />}>

@@ -56,6 +56,23 @@ afterEach(() => {
 });
 
 describe("shared app navigation", () => {
+  it.each(["PlatformAdmin", "OperationsAdmin"] as const)("opens Social Review for %s through the authorized shared route", async role => {
+    const fetch = sessionResponses(role);
+    fetch.mockImplementation((input: RequestInfo | URL) => {
+      if (input === "/api/device/access") return Promise.resolve(Response.json({ state: "Unlocked", idleExpiresAtUtc: null }));
+      if (input === "/api/session") return Promise.resolve(Response.json({ role, displayName: "Reviewer", publicId: "AD-1",
+        developmentMode: true, canCheckout: false, activeProfileKey: `${role}:reviewer:-`, profiles: [] }));
+      if (input === "/api/device/enrollment") return Promise.resolve(Response.json({ state: "Enrolled", expiresAtUtc: null }));
+      if (input === "/api/notifications") return Promise.resolve(Response.json({ items: [], unreadCount: 0 }));
+      return Promise.resolve(Response.json([]));
+    });
+    renderApp("/admin/social-profiles");
+    expect(await screen.findByRole("heading", { name: "Social profile review" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "No social profiles to review" })).toBeVisible();
+    expect(screen.getByLabelText("Path")).toHaveTextContent("/admin/social-profiles");
+    expect(fetch).toHaveBeenCalledWith("/api/admin/social-profiles/review", expect.anything());
+  });
+
   it("drops an in-flight destination response after the profile context changes", async () => {
     let completeFirst!: (response: Response) => void;
     const fetch = vi.fn()

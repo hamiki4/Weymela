@@ -4,6 +4,7 @@ using Weymela.Application.Operations;
 using Weymela.Application.Web;
 using Weymela.Domain;
 using Weymela.Infrastructure.Identity;
+using Weymela.Infrastructure.Finance;
 using Weymela.Infrastructure.Persistence.Records;
 using Weymela.Infrastructure.Web;
 using Xunit;
@@ -112,6 +113,26 @@ public sealed class AdminDirectorySearchTests(PostgresFixture fixture)
         Assert.Equal(socialId, Assert.Single(unverified).Id);
         Assert.Empty(await review.ListAsync(new(Guid.NewGuid(), ActorRole.PlatformAdmin), default,
             new(Search: "pending search creator", Status: "Verified")));
+    }
+
+    [Fact]
+    public async Task Payout_history_filters_and_pages_Platform_settlements_without_exposing_them_to_Operations()
+    {
+        var scenario = await Phase4Scenario.Create(fixture);
+        await scenario.Refresh(3000);
+        await using var db = scenario.Database.Open();
+        await new PayoutService(db, scenario.Clock).SettlePlatformAsync(Phase4Scenario.Admin, new Money(30), "FIXTURE-SETTLEMENT-ONE", "fixture-one");
+        await new PayoutService(db, scenario.Clock).SettlePlatformAsync(Phase4Scenario.Admin, new Money(20), "FIXTURE-SETTLEMENT-TWO", "fixture-two");
+        var queries = new WorkspaceQueries(db, new TestDirectory(), scenario.Clock, TestPayoutProtector.Instance);
+        var first = await queries.PayoutsAsync(Phase4Scenario.Admin, default, new(PageSize: 1));
+        var second = await queries.PayoutsAsync(Phase4Scenario.Admin, default, new(Page: 2, PageSize: 1));
+        Assert.NotEqual(Assert.Single(first.History).Id, Assert.Single(second.History).Id);
+        Assert.Equal(100m, first.PlatformAccrued); Assert.Equal(50m, first.PlatformSettled); Assert.Equal(50m, first.PlatformUnsettled);
+        var searched = await queries.PayoutsAsync(Phase4Scenario.Admin, default, new(Search: "SETTLEMENT-TWO"));
+        Assert.Equal("FIXTURE-SETTLEMENT-TWO", Assert.Single(searched.History).Reference);
+        Assert.Empty((await queries.PayoutsAsync(Phase4Scenario.Admin, default, new(Search: "not-a-recipient"))).History);
+        Assert.Empty((await queries.PayoutsAsync(Phase4Scenario.Admin, default, new(Type: "Bank"))).History);
+        Assert.Empty((await queries.OperationsPayoutsAsync(new(Guid.NewGuid(), ActorRole.OperationsAdmin), default)).History);
     }
 
     private sealed class NoDelivery : IEmailCodeDelivery

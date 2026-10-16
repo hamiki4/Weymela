@@ -199,11 +199,13 @@ public sealed partial class WorkspaceQueries
     public async Task<PayoutWorkspace> PayoutsAsync(Actor actor,CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandPlatformAdmin(actor);
-        var queues = await PayoutQueuesAsync(ct, filter);
-        var platform=await Financial.PlatformAsync(actor,ct);
-        var history = queues.History.ToList();
-        history.AddRange(platform.History.Select(x=>new PayoutItem(x.Id,"Platform","Weymela",x.Amount.Amount,0,"Paid",x.SettledAtUtc,x.SettledAtUtc,x.Reference)));
-        return new(queues.Creators,queues.Customers,platform.Accrued.Amount,platform.Settled.Amount,platform.Unsettled.Amount,history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ToArray());
+        var queues = await PayoutQueuesAsync(ct, filter, includePlatform: true);
+        var totals = await db.Database.SqlQueryRaw<PlatformPayoutTotals>("""
+            SELECT (SELECT coalesce(sum("Amount"),0) FROM v3."PlatformRevenueEntries")
+                - (SELECT coalesce(sum("PlatformFee"),0) FROM v3."UgcPaymentCorrections") AS "Accrued",
+                (SELECT coalesce(sum("Amount"),0) FROM v3."PlatformSettlements") AS "Settled"
+            """).SingleAsync(ct);
+        return new(queues.Creators,queues.Customers,totals.Accrued,totals.Settled,totals.Accrued-totals.Settled,queues.History);
     }
 
     public async Task<OperationsPayoutWorkspace> OperationsPayoutsAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
@@ -213,7 +215,7 @@ public sealed partial class WorkspaceQueries
         return new(queues.Creators, queues.Customers, queues.History);
     }
 
-    private async Task<(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History)> PayoutQueuesAsync(CancellationToken ct, AdminListFilter? filter = null)
+    private async Task<(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History)> PayoutQueuesAsync(CancellationToken ct, AdminListFilter? filter = null, bool includePlatform = false)
     {
         var version=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
         var query = filter ?? new(); query.Validate();
@@ -263,12 +265,26 @@ public sealed partial class WorkspaceQueries
         else if (statusFilter != "") historySource = historySource.Where(x => false);
         if (Enum.TryParse<PayoutDestinationMethod>(methodFilter, out var historyMethod)) historySource = historySource.Where(x => x.DestinationMethod == historyMethod);
         else if (methodFilter != "") historySource = historySource.Where(x => x.DestinationProvider == methodFilter);
-        var historyRows = await historySource.OrderByDescending(x => x.PaidAtUtc ?? x.EligibleAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
+        // Platform settlements share the history page, while Operations Admin never
+        // receives them. Filter and merge keys before paging to avoid skipped rows.
+        var platformSource = db.PlatformSettlements.AsNoTracking().Where(x => includePlatform);
+        if (term != "") platformSource = platformSource.Where(x => "weymela".Contains(term) || x.Reference.ToLower().Contains(term));
+        if (query.From is { } platformFrom) platformSource = platformSource.Where(x => x.SettledAtUtc >= platformFrom);
+        if (query.To is { } platformTo) platformSource = platformSource.Where(x => x.SettledAtUtc < platformTo.AddDays(1));
+        if (statusFilter != "" && statusFilter != "Paid" || methodFilter != "") platformSource = platformSource.Where(x => false);
+        var historyKeys = await historySource.Select(x => new { x.Id, At = x.PaidAtUtc ?? x.EligibleAtUtc, IsPlatform = false })
+            .Concat(platformSource.Select(x => new { x.Id, At = x.SettledAtUtc, IsPlatform = true }))
+            .OrderByDescending(x => x.At).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
+        var payoutIds = historyKeys.Where(x => !x.IsPlatform).Select(x => x.Id).ToArray();
+        var platformIds = historyKeys.Where(x => x.IsPlatform).Select(x => x.Id).ToArray();
+        var historyRows = await db.PayoutRecords.AsNoTracking().Where(x => payoutIds.Contains(x.Id)).ToListAsync(ct);
+        var settlements = await db.PlatformSettlements.AsNoTracking().Where(x => platformIds.Contains(x.Id)).ToListAsync(ct);
         var history=new List<PayoutItem>();
+        history.AddRange(settlements.Select(x => new PayoutItem(x.Id,"Platform","Weymela",x.Amount.Amount,0,"Paid",x.SettledAtUtc,x.SettledAtUtc,x.Reference)));
         foreach(var p in historyRows)history.Add(new(p.Id,p.Beneficiary.ToString(),p.CreatorId is {} creator?(await directory.CreatorCardAsync(creator,ct)).DisplayName:await CustomerLabel(p.CustomerId!.Value,ct),p.Amount.Amount,p.ThresholdUsed.Amount,p.Status.ToString(),p.EligibleAtUtc,p.PaidAtUtc,p.Reference));
         // Unknown thresholds cannot establish eligibility. Preserve actual history without
         // inventing thresholds or placing a beneficiary in an actionable payout queue.
-        if (version is null) return (creators, customers, history);
+        if (version is null) return (creators, customers, history.OrderByDescending(x => x.PaidAtUtc ?? x.EligibleAtUtc).ThenBy(x => x.Id).ToArray());
         foreach(var a in await db.CreatorEarningsAccounts.AsNoTracking().Where(x => eligibleCreators.Contains(x.CreatorId)).ToListAsync(ct))
         {
             if (version.CreatorPayoutThreshold is not { } creatorThreshold) break;
@@ -300,8 +316,10 @@ public sealed partial class WorkspaceQueries
                 pending?.Amount.Amount??customerThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,customerThreshold.Amount,version.EffectiveFromUtc,ct),
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
-        return (creators.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), customers.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ToArray());
+        return (creators.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), customers.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ThenBy(x=>x.Id).ToArray());
     }
+    private sealed record PlatformPayoutTotals(decimal Accrued, decimal Settled);
+
     private async Task<DateTime?> EligibleSince(PayoutBeneficiary kind,Guid id,decimal threshold,DateTime effective,CancellationToken ct)
     {
         var credits=kind==PayoutBeneficiary.Creator

@@ -53,7 +53,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
             Assert.Equal(canonical,(await service.OwnAsync(actor))!.RegisteredPhone);
             var kind=actor.Role==ActorRole.Creator?PayoutBeneficiary.Creator:PayoutBeneficiary.Customer;
             var admin=await service.AdminAsync(Phase4Scenario.Admin,kind,actor.CreatorId??actor.CustomerId!.Value);
-            Assert.Equal("+251799999999",admin!.Account);Assert.False(admin.IsMasked);
+            Assert.Equal("+251799999999",admin!.Account);Assert.False(admin.IsMasked);Assert.Null(admin.RegisteredPhone);
             var legacyRetry=await service.UpdateAsync(actor,new("Mpesa",null,null));
             Assert.Equal(preferred.Account,legacyRetry.Account);Assert.Equal(preferred.LegalName,legacyRetry.LegalName);
             await Assert.ThrowsAsync<ApplicationFailure>(()=>service.AdminAsync(s.Seed.Business,kind,actor.CreatorId??actor.CustomerId!.Value));

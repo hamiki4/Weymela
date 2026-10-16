@@ -190,7 +190,6 @@ public sealed partial class PayoutDestinationService(WeymelaDbContext db, IPayou
         new(row.Method.ToString(), row.Provider, account, row.LegalName, row.UpdatedAtUtc, masked, true);
     private static PayoutDestinationView PhoneView(PayoutDestinationView view, string? phone) => view with
     {
-        RegisteredPhone = phone,
         PhoneCountry = PhoneCountry(phone),
         TelebirrEligible = TelebirrCompatible(phone),
         MpesaEligible = MpesaCompatible(phone)

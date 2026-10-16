@@ -84,7 +84,7 @@ class WorkflowGateTests(unittest.TestCase):
 
     def test_main_image_publication_requires_validation_but_no_opt_in_variable(self):
         jobs = dict(re.findall(r'^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)', RELEASE.split('jobs:\n', 1)[1], re.M | re.S))
-        expected = "(github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/release/'))) && needs.validate.outputs.passed == 'true'"
+        expected = "(github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.firebase_target == 'pilot' && startsWith(github.ref, 'refs/heads/release/'))) && needs.validate.outputs.passed == 'true'"
         image_condition = re.search(r'^    if: (.+)$', jobs['images'], re.M)[1]
         self.assertEqual(image_condition, expected)
         self.assertEqual(image_condition, re.search(r'^    if: (.+)$', jobs['migrations'], re.M)[1])

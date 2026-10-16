@@ -3,7 +3,11 @@ set -euo pipefail
 test "${GITHUB_ACTIONS:-}" = true || { printf '%s\n' 'Image builds are restricted to CI/external builders.' >&2; exit 1; }
 component="${1:?api, worker or web required}"
 case "$component" in api|worker|web) ;; *) exit 1;; esac
-test "${GITHUB_REF:-}" = refs/heads/main
+if test "${GITHUB_REF:-}" != refs/heads/main; then
+  [[ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch && "${GITHUB_REF:-}" = refs/heads/release/* && "${V3_FIREBASE_TARGET:-pilot}" = pilot ]] || {
+    printf '%s\n' 'Only an explicitly dispatched Pilot release candidate may build outside main.' >&2; exit 1;
+  }
+fi
 test "${GITHUB_SHA:-}" = "$(git rev-parse HEAD)"
 owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
 release="v3-${GITHUB_SHA}-run${GITHUB_RUN_ID}-attempt${GITHUB_RUN_ATTEMPT}"

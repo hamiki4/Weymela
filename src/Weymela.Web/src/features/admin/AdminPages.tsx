@@ -116,7 +116,7 @@ export function OperationsCustomers() {
       { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></> },
       { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
-    ]} card={(r) => <div className="card-head"><div><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></div><Badge status={r.status} /></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
+    ]} card={(r) => <div className="admin-mobile-row"><div><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</small></div><div className="admin-mobile-row-meta"><Badge status={r.status} /></div></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
     <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }

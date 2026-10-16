@@ -51,11 +51,12 @@ describe("authorized Admin account email presentation", () => {
   it.each([
     ["Business", OperationsBusinesses, "/admin/businesses", [{ business, status: "Active", activeCampaigns: 1, lastDepositUtc: null, fullEmail: email }]],
     ["Creator", OperationsCreators, "/admin/creators", [{ creator, status: "Active", activeCampaigns: 1, payoutEligible: true, fullEmail: email }]],
-    ["Customer", OperationsCustomers, "/admin/customers", [{ customer: { id: "customer-id", displayName: account.name, publicId: "CU-100" }, status: "Active", fullEmail: email }]],
+    ["Customer", OperationsCustomers, "/admin/customers", [{ customer: { id: "customer-id", displayName: account.name, publicId: "CU-100" }, status: "Active", fullEmail: email, fullPhone: "+251911222333" }]],
   ])("shows the full email in authorized Operations %s management", async (_role, Component, path, rows) => {
     mockApi({ [path]: rows });
     render(<MemoryRouter><Component /></MemoryRouter>);
     expect((await screen.findAllByText(email)).length).toBeGreaterThan(0);
+    if (_role === "Customer") expect(document.querySelector(".mobile-data .admin-account-phone")).toHaveTextContent("+251911222333");
   });
 
   it("shows the applicant email during Admin profile review", async () => {

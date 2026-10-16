@@ -29,7 +29,7 @@ export function PromotionManagement() {
             <h3>{row.title}</h3>{row.creator && <p>{row.creator}</p>}</div><Badge status={row.status} label={promotionStatusLabel(row.status)} /></div>
           <dl className="promotion-summary-list">
             {row.budget > 0 && <><div><dt>{row.kind === "UGC deliverable" ? "Agreed payment" : "Budget"}</dt><dd>{amount(row.budget)} ETB</dd></div>
-              <div><dt>Remaining</dt><dd>{amount(row.remaining)} ETB</dd></div></>}
+              {!row.kind.startsWith("UGC") && row.kind !== "Creator application" && <div><dt>Remaining</dt><dd>{amount(row.remaining)} ETB</dd></div>}</>}
             {row.dueAtUtc && <div><dt>Due</dt><dd>{date(row.dueAtUtc)}</dd></div>}
             {row.remainingDays != null && <div><dt>Remaining duration</dt><dd>{row.remainingDays} days</dd></div>}
           </dl>

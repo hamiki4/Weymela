@@ -7,6 +7,7 @@ using Weymela.Infrastructure.Identity;
 using Weymela.Infrastructure.Notifications;
 using Weymela.Infrastructure.Operations;
 using Weymela.Infrastructure.Persistence.Records;
+using Weymela.Infrastructure.Persistence.Transactions;
 using Weymela.Infrastructure.Web;
 using Xunit;
 
@@ -15,6 +16,39 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class Phase4CheckoutTests(PostgresFixture fixture)
 {
+    [Fact] public async Task View_and_sale_share_funded_obligations_without_double_counting_then_replenish_at_saved_rates()
+    {
+        var s = await Phase4Scenario.Create(fixture, allocation: 500);
+        await s.Refresh(3000, "verified-views");
+        var qr = await s.Issue("hybrid-qr"); await s.Redeem(qr, 1000, "hybrid-sale");
+        await s.Redeem(qr, 1000, "hybrid-sale");
+        await s.Refresh(3000, "same-views");
+        await using (var db = s.Database.Open())
+        {
+            Assert.Equal(245m, (await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+            Assert.Equal(20m, (await db.CustomerCashbackAccounts.SingleAsync()).AvailableCashback.Amount);
+            Assert.Equal(135m, (await db.PlatformRevenueEntries.ToListAsync()).Sum(x => x.Amount.Amount));
+            Assert.Equal(100m, (await db.CreatorAllocations.SingleAsync()).RemainingAmount.Amount);
+            Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "CreatorBudgetLow").ToListAsync());
+            Assert.Equal(2, await db.FinancialJournals.CountAsync(x => x.SourceType == JournalSourceType.ViewReward || x.SourceType == JournalSourceType.VerifiedSale));
+        }
+        await s.Redeem(await s.Issue("final-qr"), 1000, "final-sale");
+        await Assert.ThrowsAsync<ApplicationFailure>(() => s.Issue("exhausted-qr"));
+        await using (var db = s.Database.Open())
+        {
+            var allocation = await db.CreatorAllocations.SingleAsync();
+            await new FinancialCommands(db).IncreaseCreatorAllocationAsync(new(s.Seed.Business, allocation.Id,
+                new Money(300), allocation.Version, Scenario.Now), "hybrid-refill");
+        }
+        await s.Refresh(6000, "new-views-after-refill");
+        await using var verify = s.Database.Open();
+        Assert.Equal(490m, (await verify.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        Assert.Equal(40m, (await verify.CustomerCashbackAccounts.SingleAsync()).AvailableCashback.Amount);
+        Assert.Equal(270m, (await verify.PlatformRevenueEntries.ToListAsync()).Sum(x => x.Amount.Amount));
+        Assert.Equal(0m, (await verify.CreatorAllocations.SingleAsync()).RemainingAmount.Amount);
+        Assert.Equal(2, await verify.ViewRewardReceipts.CountAsync()); Assert.Equal(2, await verify.VerifiedSales.CountAsync());
+        Assert.Empty(await new ReconciliationService(verify).CheckAsync(Phase4Scenario.Admin, default));
+    }
     [Fact] public async Task Hybrid_issue_binds_all_parties_and_stores_only_hash_without_secret_in_controls()
     {
         var s = await Phase4Scenario.Create(fixture); var qr = await s.Issue(); await using var db = s.Database.Open();

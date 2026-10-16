@@ -173,11 +173,11 @@ export function Checkout() {
       <PageHeader
         eyebrow={user?.role === "Cashier" ? "Cashier checkout" : "Business checkout"}
         title="Checkout"
-        description="Scan the Customer’s Offer QR, then enter the total purchase amount."
+        description="Scan Offer QR"
       />
       {result ? (
         <Section title="Payment recorded">
-          <Notice>Payment recorded successfully.</Notice>
+
           <p>
             Purchase total: <strong>{amount(result.purchaseAmount.amount)}</strong>
           </p>

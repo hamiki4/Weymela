@@ -45,6 +45,7 @@ public static class EndpointSecurity
             || route.EndsWith("/fund") || route.EndsWith("/promotional-funding")
             || route.EndsWith("/approve") || route.EndsWith("/increase")
             || route == "/api/business/ugc/{id:guid}/publish"
+            || route == "/api/business/ugc/{id:guid}/cashback-funding"
             || route == "/api/business/ugc/{id:guid}/cancel"
             || route == "/api/business/promotions/{id:guid}/cancel"
             || route == "/api/business/ugc/assignments/{id:guid}/review/{action}";

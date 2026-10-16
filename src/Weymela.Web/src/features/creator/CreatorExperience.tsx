@@ -676,7 +676,7 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
           {assignment?.publication?.status === "Verified" && !assignment.publication.wentLiveAtUtc && <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
             await post(`/creator/ugc/assignments/${assignment.id}/go-live`, {}, key); onSubmitted();
           })}>{action.busy ? "Going live…" : "Go Live"}</Button>}
-          {assignment?.publication?.wentLiveAtUtc && <Notice>Published · fixed fee earned. External payouts are recorded separately.</Notice>}
+          {assignment?.publication?.wentLiveAtUtc && <Notice>Completed · fixed fee earned</Notice>}
           {action.error && <Notice error>{action.error}</Notice>}
         </div>
       </details> : request?.rejectionReason ? <details className="creator-work-disclosure">

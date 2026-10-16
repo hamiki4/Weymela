@@ -21,6 +21,7 @@ public sealed class InactiveFinancialHttpTests(PostgresFixture fixture)
     [InlineData("/api/admin/accounts/businesses/{businessId:guid}/promotional-funding", "WalletFunding")]
     [InlineData("/api/business/campaigns/{id:guid}/fund", "PromotionReservations")]
     [InlineData("/api/business/ugc/{id:guid}/publish", "PromotionReservations")]
+    [InlineData("/api/business/ugc/{id:guid}/cashback-funding", "PromotionReservations")]
     [InlineData("/api/business/checkout/confirm", "Checkout")]
     [InlineData("/api/customer/offers/{id:guid}/qr", "Checkout")]
     [InlineData("/api/admin/payouts/{id:guid}/paid", "Payouts")]

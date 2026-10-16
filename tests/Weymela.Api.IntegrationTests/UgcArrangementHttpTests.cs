@@ -13,6 +13,48 @@ namespace Weymela.Api.IntegrationTests;
 public sealed class UgcArrangementHttpTests(PostgresFixture postgres)
 {
     [Fact]
+    public async Task Business_can_replenish_only_its_saved_ugc_cashback_fund_with_version_and_role_checks()
+    {
+        await using var host = await ApiFixture.CreateAsync(postgres);
+        await using (var setup = host.Database.Open())
+        {
+            setup.PublicWorkspaceProfiles.Add(new PublicWorkspaceProfile { SubjectId = DevelopmentDirectory.Id(100), Role = ActorRole.Business, DisplayName = "HTTP fixture Business", PublicId = "BUS-HTTP-TOPUP" });
+            await setup.SaveChangesAsync();
+        }
+        using var business = await host.Login("business"); using var creator = await host.Login("creator");
+        using var admin = await host.Login("admin");
+        var current = await admin.GetJson("/api/admin/financial-settings");
+        var settings = current["current"]!.DeepClone();
+        settings["effectiveFromUtc"] = null;
+        settings["ugc"]!["customerOfferPlatformSalePercent"] = 3m; // isolated fixture; never a Production default
+        await admin.PostJson("/api/admin/financial-settings", new { settings, expectedVersion = current["version"]!.GetValue<long>() });
+        var id = (await business.PostJson("/api/business/ugc", new {
+            title = "Separate cashback HTTP", contentType = "Video", instructions = "Create product video", resources = Array.Empty<string>(),
+            dueDateUtc = DateTime.UtcNow.AddDays(30), productProvided = true, creatorMustPurchase = false,
+            creatorPayment = 500m, creatorsNeeded = 1,
+            platformRequirements = new[] { new { platform = "TikTok", format = "Video", minimumAudience = (long?)null } },
+            platformCapacities = new[] { new { platform = "TikTok", capacity = 1 } },
+            customerOfferEnabled = true, customerDiscountPercent = 5m, customerOfferFundedAllocation = 100m,
+            customerOfferStartsAtUtc = DateTime.UtcNow.AddMinutes(-1), customerOfferEndsAtUtc = DateTime.UtcNow.AddDays(10)
+        }))["id"]!.GetValue<Guid>();
+        await business.PostJson($"/api/business/ugc/{id}/publish", new { version = 0 });
+        var card = (await business.GetJson($"/api/business/ugc/{id}"))["opportunity"]!;
+        var input = new { amount = 200m, version = card["customerOfferVersion"]!.GetValue<long>() };
+        var path = $"/api/business/ugc/{id}/cashback-funding";
+        Assert.Equal(HttpStatusCode.Forbidden, (await creator.Post(path, input)).StatusCode);
+        await business.PostJson(path, input, "http-replenish");
+        await business.PostJson(path, input, "http-replenish");
+        var after = (await business.GetJson($"/api/business/ugc/{id}"))["opportunity"]!;
+        Assert.Equal(300m, after["customerOfferRemaining"]!.GetValue<decimal>());
+        Assert.Equal(card["creatorPayment"]!.GetValue<decimal>(), after["creatorPayment"]!.GetValue<decimal>());
+        Assert.Equal(HttpStatusCode.Conflict, (await business.Post(path, input)).StatusCode);
+        await using var db = host.Database.Open();
+        Assert.Single(await db.UgcCustomerOfferBudgetEntries.Where(x => x.Movement == "Increased").ToListAsync());
+        Assert.Empty(await new Weymela.Infrastructure.Operations.ReconciliationService(db).CheckAsync(
+            new Actor(Guid.NewGuid(), ActorRole.PlatformAdmin), default));
+    }
+
+    [Fact]
     public async Task Ugc_platform_capacity_audience_metadata_is_mapped_and_strictly_validated()
     {
         await using var host = await ApiFixture.CreateAsync(postgres);

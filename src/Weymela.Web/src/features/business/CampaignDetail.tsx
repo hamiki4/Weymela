@@ -118,7 +118,7 @@ export function BusinessCampaignDetail() {
             )}
             {["Draft", "Funded"].includes(c.status) && (
               <div className="callout">
-                <div><h2>{c.status === "Draft" ? "Saved" : "Ready to publish"}</h2><p>Publish when the details and confirmed funding are ready.</p></div>
+                <div><h2>{c.status === "Draft" ? "Saved" : "Ready to publish"}</h2></div>
                 <Button disabled={action.busy || !wallet.data || wallet.data.available < c.campaignBudget} onClick={() => void action.run(async (key) => {
                   if (!wallet.data) return;
                   let current = data;
@@ -127,7 +127,7 @@ export function BusinessCampaignDetail() {
                     current = await request<BusinessCampaign>(`/business/campaigns/${id}`);
                   }
                   await post(`/business/campaigns/${id}/publish`, { version: current.campaign.version }, `${key}:publish`);
-                  changed("Promotion published. Eligible Creators can now find it."); wallet.reload();
+                  changed("Published"); wallet.reload();
                 })}>{action.busy ? "Publishing…" : "Publish"}</Button>
                 {wallet.data && wallet.data.available < c.campaignBudget && <Notice><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(c.campaignBudget - wallet.data.available)} ETB more.</Notice>}
               </div>
@@ -181,7 +181,7 @@ export function BusinessCampaignDetail() {
             {tab === "applicants" && (
               <Section
                 title="Creator Applicants"
-                description="Discover their ideas, then give each approved Creator a budget for verified activity."
+
               >
                 <div className="campaign-grid">
                   {data.applicants.map((a) => (

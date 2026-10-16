@@ -663,6 +663,7 @@ export interface UgcCard {
   customerOfferFundedAllocation?: number;
   customerOfferRemaining?: number;
   customerOfferStatus?: string;
+  customerOfferVersion?: number;
   customerFacingSlogan?: string;
   platformFeePercent?: number;
   platformFee?: number;

@@ -383,7 +383,7 @@ describe("Business workspace", () => {
       "/business/campaigns/:id",
     );
     expect(await screen.findByRole("button", { name: "Publish" })).toBeVisible();
-    expect(screen.getByText(/Publish when the details and confirmed funding are ready/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Saved" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
     expect(api.writes).toHaveLength(0);
   });
@@ -902,7 +902,7 @@ describe("Creator workspace", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));
     await userEvent.type(screen.getByLabelText("Bank Name"), "CBE");
     await userEvent.type(screen.getByLabelText("Account Number"), "1000123456789");
-    expect(await screen.findByRole("button", { name: "Save Destination" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled());
     await userEvent.click(screen.getByRole("button", { name: "Save Destination" }));
     await waitFor(() => expect(api.writes.at(-1)).toMatchObject({ path: "/creator/payout-destination",
       body: { method: "Bank", bankName: "CBE", accountNumber: "1000123456789" } }));
@@ -945,7 +945,7 @@ describe("Creator workspace", () => {
       await screen.findByText("Eligible for payout · 5,000"),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Request Payout" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Save Destination" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled());
   });
   it("shows amount remaining and disables payout below threshold", async () => {
     mockCreatorApi({

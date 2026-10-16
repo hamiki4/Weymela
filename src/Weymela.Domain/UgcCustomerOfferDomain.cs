@@ -132,6 +132,19 @@ public sealed class UgcCustomerOffer
         Version++;
     }
 
+    public void AddFunding(Money amount, BusinessWallet wallet, DateTime now, Guid correlation)
+    {
+        Ensure(UgcCustomerOfferStatus.Active, UgcCustomerOfferStatus.Exhausted);
+        if (now >= EndsAtUtc || amount.Amount <= 0 || amount.Currency != FundedLimit.Currency
+            || wallet.BusinessId != BusinessId)
+            throw new InvalidOperationException("Enter a positive amount for an unexpired offer.");
+        wallet.Reserve(amount, now, correlation);
+        FundedLimit = FundedLimit.Add(amount);
+        ReservedFunding = ReservedFunding.Add(amount);
+        Status = UgcCustomerOfferStatus.Active;
+        Version++;
+    }
+
     public void Cancel(BusinessWallet wallet, DateTime now, Guid correlation)
     {
         Ensure(UgcCustomerOfferStatus.Draft, UgcCustomerOfferStatus.Active);

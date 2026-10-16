@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { post, useAction, useResource } from "../../api/client";
 import type {
@@ -67,8 +68,8 @@ function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () =>
       reload();
     });
   }}><fieldset disabled={action.busy}>
-    <Notice>Unset prices and payout minimums restrict only their dependent operations. Saving settings does not activate financial writes.</Notice>
-    <Section title="Audience enforcement" description="Off allows Creators to apply regardless of audience size. On enforces Admin-verified audience requirements.">
+    <Link className="text-link" to="/settings/help">Help</Link>
+    <Section title="Audience enforcement">
       <div className="settings-audience"><Field label="Enforce audience requirements"><select value={settings.enforceAudienceRequirements === null ? "" : String(settings.enforceAudienceRequirements)}
         onChange={event => set({ ...settings, enforceAudienceRequirements: event.target.value === "" ? null : event.target.value === "true" })}>
         <option value="">Not configured</option><option value="false">Off</option><option value="true">On</option>
@@ -102,11 +103,11 @@ function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () =>
     <Section title="Payout Thresholds" description="Minimum to cash out"><div className="form-grid">{([["creatorThreshold", "Creator"], ["customerThreshold", "Customer"]] as const).map(([key, label]) => <Field key={key} label={label}>
       <input type="number" min="0.01" step="0.01" value={settings[key] ?? ""} onChange={event => update(key, event.target.value)} placeholder="Not configured" />
     </Field>)}</div></Section>
-    <Section title="Promotion live duration" description="Number of days each new Promotion can remain live after a Creator goes live.">
+    <Section title="Promotion live duration">
       <Field label="Promotion live duration"><input type="number" min="1" max="365" step="1" value={settings.promotionLiveDurationDays ?? ""} onChange={event => update("promotionLiveDurationDays", event.target.value)} placeholder="Not configured" /></Field>
       <p className="fine-print">Set by Weymela. Existing Promotions keep their saved duration.</p>
     </Section></div>
-    <Section title="UGC Pricing" description="Applied to UGC creator payments and optional Customer Offers." action={<Currency />}>
+    <Section title="UGC Pricing" action={<Currency />}>
       <label className="check-row"><input type="checkbox" aria-label="Configure UGC pricing" checked={settings.ugc !== null}
         onChange={event => set({ ...settings, ugc: event.target.checked ? { minimumCreatorPayment: null, platformFeePercent: null, minimumUgcBudget: null, customerOfferPlatformSalePercent: null } : null })} />Configure UGC pricing</label>
       <div className="form-grid">{([["minimumCreatorPayment", "Minimum Creator Payment"], ["platformFeePercent", "Platform Fee %"], ["minimumUgcBudget", "Minimum UGC Budget"], ["customerOfferPlatformSalePercent", "Customer Offer Platform Sale Fee %"]] as [keyof UgcSettings, string][]).map(([key, label]) => <Field key={key} label={label}>

@@ -140,7 +140,7 @@ export function BusinessUgcCard({ item, onChanged, initiallyEditing = false }: {
           </div>)}</>}
         </div>}</>}
         <Dialog title="Edit Promotion details" open={!!editDetail} onClose={() => { if (!editAction.busy) setEditDetail(null); }}>
-          <p className="muted">{editDetail && editDetail.opportunity.approvedCreators > 0 ? "Some terms are locked because a Creator has been approved." : "You can update the full UGC opportunity while no Creator is approved. Pending applications do not lock editing."}</p>
+          <p className="muted">{editDetail && editDetail.opportunity.approvedCreators > 0 ? "Agreed terms are locked." : "Edit Promotion details"}</p>
           <form className="form-grid" onSubmit={(event) => { event.preventDefault(); if (!editDetail) return; void editAction.run(async key => {
             const full = editDetail.opportunity.approvedCreators === 0;
             const iso = (value: string) => value ? new Date(value).toISOString() : null;
@@ -200,7 +200,7 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
       <Field label="Feedback (required for changes)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
       <div className="actions"><Button disabled={action.busy || !row.watchUrl && !row.reviewMediaUrl} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("changes")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
     </div>}
-    {row.status === "Approved" && !row.publication?.wentLiveAtUtc && <Notice>Approved for publication. The fixed payment remains pending verified Go Live.</Notice>}
+    {row.status === "Approved" && !row.publication?.wentLiveAtUtc && <Notice>Approved · payment pending</Notice>}
     {row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
     {row.publication && <p className="fine-print">Publication: {row.publication.wentLiveAtUtc ? "Live" : row.publication.verificationLabel}</p>}
     {action.error && <Notice error>{action.error}</Notice>}
@@ -220,6 +220,7 @@ export function BusinessUgcDetail() {
   const detail = useResource<UgcDetail>(`/business/ugc/${id}`);
   const wallet = useResource<Wallet>("/business/wallet");
   const action = useAction();
+  const [funding, setFunding] = useState("");
   const reload = () => { detail.reload(); wallet.reload(); };
   return <Resource resource={detail}>{data => {
     const item = data.opportunity;
@@ -231,13 +232,25 @@ export function BusinessUgcDetail() {
         description={`Content due ${date(item.dueDateUtc)}`}
         action={<Badge status={item.status} label={promotionStatusLabel(item.status)} />} />
       {item.status === "Draft" && <div className="callout">
-        <div><h2>Saved</h2><p>Publish when the details and confirmed funding are ready.</p></div>
+        <div><h2>Saved</h2></div>
         <Button disabled={action.busy || !wallet.data || shortfall > 0} onClick={() => void action.run(async key => {
           await post(`/business/ugc/${item.id}/publish`, { version: item.version }, key); reload();
         })}>{action.busy ? "Publishing…" : "Publish"}</Button>
         {wallet.data && shortfall > 0 && <Notice><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
       </div>}
       {action.error && <Notice error>{action.error}</Notice>}
+      {item.customerOfferEnabled && <Section title="Cashback budget">
+        <dl className="detail-list"><div><dt>Available</dt><dd>{amount(item.customerOfferRemaining ?? 0)} ETB</dd></div>
+          <div><dt>Customer cashback</dt><dd>{item.customerDiscountPercent == null ? "—" : `${amount(item.customerDiscountPercent)}%`}</dd></div></dl>
+        {item.status !== "Cancelled" && ["Active", "Exhausted"].includes(item.customerOfferStatus ?? "") && <form className="form-grid" onSubmit={event => {
+          event.preventDefault(); void action.run(async key => {
+            await post(`/business/ugc/${item.id}/cashback-funding`, { amount: Number(funding), version: item.customerOfferVersion }, key);
+            setFunding(""); reload();
+          });
+        }}><Field label="Amount to add (ETB)"><input type="number" min="0.01" step="0.01" inputMode="decimal" required value={funding} onChange={event => setFunding(event.target.value)} /></Field>
+          <Button type="submit" disabled={action.busy || Number(funding) <= 0 || !wallet.data || Number(funding) > wallet.data.available || item.customerOfferVersion == null}>{action.busy ? "Saving…" : "Add Funds"}</Button>
+        </form>}
+      </Section>}
       <div className="two-column business-collaboration-workspace">
         <Section title="Brief">
           <p className="preserve-lines">{data.instructions}</p>
@@ -383,7 +396,7 @@ export function CreateBusinessUgcPage() {
                     )}
                   {form.customerOffer && <><Field label="Customer cashback %"><input type="number" min="0.01" max="100" step="0.0001" value={form.customerDiscount} onChange={(e) => set("customerDiscount", e.target.value)} required /></Field><Field label="Customer cashback budget"><input type="number" min="0.01" step="0.01" value={form.customerRewardBudget} onChange={(e) => set("customerRewardBudget", e.target.value)} required /></Field></>}
                   {form.mustPost && form.platforms.length === 0 && <Notice error>Choose at least one social platform.</Notice>}
-                  {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Customer cashback is unavailable for this Promotion right now.</Notice>}
+                  {form.customerOffer && config.customerOfferPlatformSalePercent === null && <Notice error>Ask Platform Admin to set the UGC + Sale fee.</Notice>}
                   {form.customerOffer && discount > 100 && <Notice error>Cashback must be between 0 and 100%.</Notice>}
                   {!minimumBudgetMet && <Notice error>The Promotion budget is below the minimum required to publish.</Notice>}
                   {action.error && <Notice error>{action.error}</Notice>}

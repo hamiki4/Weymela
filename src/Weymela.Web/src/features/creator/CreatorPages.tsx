@@ -28,15 +28,15 @@ export function CreatorHowYouEarn() {
   return (
     <>
       <PageHeader
-        eyebrow="Clear rewards, real creativity"
+
         title="How You Earn"
-        description="Creator rewards are recorded from verified activity using the saved terms for each Promotion."
+
       />
       <Resource resource={resource}>
         {(p) => (
           <Section
             title="Your earning terms"
-            description="Current earning rates. Existing Promotions keep their saved earning terms."
+            description="Saved earning terms"
             action={<Currency />}
           >
             <div
@@ -70,16 +70,13 @@ export function CreatorHowYouEarn() {
                   </dl>
                 </article>
               ))}
-              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Earn the agreed fixed UGC fee when approved content is verified published and goes live. No minimum views are required for this fixed fee.</p></article>
+              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Fixed fee after verified Go Live</p></article>
             </div>
             <div className="threshold-note">
               <strong>
                 Minimum to cash out: {p.minimumToCashOut === null ? "Not configured" : amount(p.minimumToCashOut)}
               </strong>
-              <p>
-                Earnings from your Promotions accumulate together. Any balance
-                left after a payout carries forward.
-              </p>
+
             </div>
           </Section>
         )}

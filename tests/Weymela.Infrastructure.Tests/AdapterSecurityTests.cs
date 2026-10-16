@@ -408,10 +408,21 @@ public sealed class AdapterSecurityTests
             EnabledProductionFinancialOperations = [ProductionFinancialOperations.Checkout] }
             .FinancialOperationActive(ProductionFinancialOperations.Checkout, DateTime.UtcNow));
     }
+    [Fact] public void Production_can_authorize_view_processing_without_replacing_provider_evidence_checks()
+    {
+        var config = ProductionConfig();
+        config["V3:FinancialWritesEnabled"] = "true";
+        config["V3:ProductionFinancial:AuthorizationReference"] = "isolated-test-production-authorization";
+        config["V3:ProductionFinancial:Operations:0"] = ProductionFinancialOperations.ViewRewards;
+        var options = RuntimeOptions.Load(new ConfigurationBuilder().AddInMemoryCollection(config).Build(), "Production");
+        Assert.True(options.FinancialOperationActive(ProductionFinancialOperations.ViewRewards, DateTime.UtcNow));
+        Assert.False(options.FinancialOperationActive(ProductionFinancialOperations.Checkout, DateTime.UtcNow));
+        Assert.Equal("Disabled", options.SocialMode); // no provider or view evidence is invented by an operation switch
+    }
     [Theory]
     [InlineData(null, "Checkout")]
     [InlineData("invalid reference", "Checkout")]
-    [InlineData("isolated-test-authorization", "ViewRewards")]
+    [InlineData(null, "ViewRewards")]
     [InlineData("isolated-test-authorization", "Unknown")]
     public void Production_rejects_missing_authorization_and_unsupported_operations(string? reference, string operation)
     {

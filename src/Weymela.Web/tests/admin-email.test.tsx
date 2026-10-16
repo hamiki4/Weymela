@@ -13,7 +13,7 @@ const email = "very.long.account-holder@example.test";
 const account = {
   id: "customer-id", userId: "customer-id", name: "Michael Kibru", role: "Customer",
   status: "Active", approvalState: "Active", safeIdentifier: "v*****r@example.test",
-  fullEmail: email, association: null, lastActivityAtUtc: null, canManage: false,
+  fullEmail: email, fullPhone: "+251911222333", association: null, lastActivityAtUtc: null, canManage: false,
   joinedAtUtc: "2026-09-16T00:00:00Z",
 };
 
@@ -21,7 +21,9 @@ describe("authorized Admin account email presentation", () => {
   it("shows the full email in the Platform Admin directory and detail", async () => {
     mockApi({
       "/admin/accounts?role=Customer": [account],
-      "/admin/accounts/customer-id?role=Customer": { account, roles: ["Customer"], profiles: [], transactions: [], roleData: null },
+      "/admin/accounts/customer-id?role=Customer": { account, roles: ["Customer"], profiles: [], transactions: [], roleData: null,
+        audit: [{ id: "account-audit", action: "AccountUnlocked", operation: "unlock", occurredAtUtc: "2026-10-16T01:00:00Z",
+          actorUserId: "admin-id", targetUserId: "customer-id", targetRole: "Customer", targetSubjectId: "customer-id", correlationId: "audit-reference" }] },
       "/admin/accounts/customer-id/deletion-status": { status: "NotRequested" },
     });
     render(<MemoryRouter initialEntries={["/admin/customers"]}><Routes>
@@ -29,9 +31,14 @@ describe("authorized Admin account email presentation", () => {
       <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
     </Routes></MemoryRouter>);
     expect((await screen.findAllByText(email)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(account.fullPhone).length).toBeGreaterThan(0);
+    expect(screen.getByRole("columnheader", { name: "Phone" })).toBeInTheDocument();
     expect(screen.queryByText(account.safeIdentifier)).not.toBeInTheDocument();
     screen.getAllByRole("link", { name: account.name })[0].click();
     expect(await screen.findByText(email)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Account history", { selector: "summary" }));
+    expect(screen.getAllByText("Account Unlocked")[0]).toBeVisible();
+    expect(screen.queryByText("admin-id")).not.toBeInTheDocument();
   });
 
   it("opens a pending invitation detail by its invitation ID", async () => {
@@ -44,11 +51,12 @@ describe("authorized Admin account email presentation", () => {
   it.each([
     ["Business", OperationsBusinesses, "/admin/businesses", [{ business, status: "Active", activeCampaigns: 1, lastDepositUtc: null, fullEmail: email }]],
     ["Creator", OperationsCreators, "/admin/creators", [{ creator, status: "Active", activeCampaigns: 1, payoutEligible: true, fullEmail: email }]],
-    ["Customer", OperationsCustomers, "/admin/customers", [{ customer: { id: "customer-id", displayName: account.name, publicId: "CU-100" }, status: "Active", fullEmail: email }]],
+    ["Customer", OperationsCustomers, "/admin/customers", [{ customer: { id: "customer-id", displayName: account.name, publicId: "CU-100" }, status: "Active", fullEmail: email, fullPhone: "+251911222333" }]],
   ])("shows the full email in authorized Operations %s management", async (_role, Component, path, rows) => {
     mockApi({ [path]: rows });
     render(<MemoryRouter><Component /></MemoryRouter>);
     expect((await screen.findAllByText(email)).length).toBeGreaterThan(0);
+    if (_role === "Customer") expect(document.querySelector(".mobile-data .admin-account-phone")).toHaveTextContent("+251911222333");
   });
 
   it("shows the applicant email during Admin profile review", async () => {

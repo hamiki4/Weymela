@@ -130,6 +130,8 @@ function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () =>
 export function AdminFinancialSettings() {
   const resource = useResource<SettingsWorkspace>("/admin/financial-settings");
   const [saved, setSaved] = useState(false);
+  const [versionSearch, setVersionSearch] = useState("");
+  const [versionStatus, setVersionStatus] = useState("");
   return (
     <>
       <PageHeader
@@ -162,7 +164,10 @@ export function AdminFinancialSettings() {
               title="Saved versions"
               description="Open any version to review its stored values, including scheduled changes."
             >
-              {data.versions.map((v) => (
+              <div className="admin-search-controls"><Field label="Search saved versions"><input type="search" value={versionSearch} onChange={event => setVersionSearch(event.target.value)} placeholder="Version, product or date" /></Field>
+                <Field label="Version status"><select value={versionStatus} onChange={event => setVersionStatus(event.target.value)}><option value="">All versions</option><option>Effective</option><option>Scheduled</option><option>Historical</option></select></Field></div>
+              {data.versions.filter(v => (!versionStatus || (v.version === data.version ? "Effective" : new Date(v.effectiveFromUtc) > new Date() ? "Scheduled" : "Historical") === versionStatus)
+                && (!versionSearch.trim() || `Version ${v.version} ${v.effectiveFromUtc} ${JSON.stringify(v.settings)}`.toLowerCase().includes(versionSearch.trim().toLowerCase()))).map((v) => (
                 <details className="audit-detail" key={v.id}>
                   <summary>
                     Version {v.version} · {dateTime(v.effectiveFromUtc)} ·{" "}
@@ -245,14 +250,16 @@ function ReceivingDestinationRow({ row, reload }: { row: ReceivingDestination; r
 }
 
 function ReceivingDestinations() {
+  const [search, setSearch] = useState("");
   const resource = useResource<ReceivingDestination[]>("/admin/receiving-destinations");
   const availability = useResource<DepositAvailability>("/admin/deposit-method");
   const reload = () => { resource.reload(); availability.reload(); };
   return <Section title="Business deposit destinations" description="Saving an active destination confirms your verification of its receiving details. You can update destinations at any time; changes apply immediately while deposits are enabled.">
     <Resource resource={availability}>{status => <Notice>{status.message}</Notice>}</Resource>
+    <div className="admin-search-controls"><Field label="Search deposit destinations"><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name or method" /></Field></div>
     <Resource resource={resource}>{rows => <table className="settings-table"><caption className="sr-only">Business deposit destinations</caption>
       <thead><tr><th scope="col">Active</th><th scope="col">Method</th><th scope="col">Name</th><th scope="col">Account / phone</th><th scope="col">Order</th><th scope="col">Action</th></tr></thead>
-      <tbody>{rows.map(row => <ReceivingDestinationRow key={`${row.id}-${row.version}`} row={row} reload={reload} />)}</tbody>
+      <tbody>{rows.filter(row => `${row.name} ${row.method}`.toLowerCase().includes(search.trim().toLowerCase())).map(row => <ReceivingDestinationRow key={`${row.id}-${row.version}`} row={row} reload={reload} />)}</tbody>
     </table>}</Resource>
   </Section>;
 }

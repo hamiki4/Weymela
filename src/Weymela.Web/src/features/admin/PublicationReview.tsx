@@ -1,3 +1,4 @@
+import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useState } from "react";
 import { post, useAction, useResource } from "../../api/client";
 import type { AdminPublicationReview } from "../../api/types";
@@ -31,10 +32,12 @@ function PublicationCard({ row, reload }: { row: AdminPublicationReview; reload:
 }
 
 export function AdminPublicationReview() {
-  const resource = useResource<AdminPublicationReview[]>("/admin/publication-verifications");
-  return <><PageHeader title="Publication Verification" compact />
+  const search = useAdminSearch("/admin/publication-verifications");
+  const resource = useResource<AdminPublicationReview[]>(search.path);
+  return <><PageHeader title="Publication Verification" compact /><AdminSearch value={search} statuses={["VerificationPending", "Verified"]} types={[]} />
     <Section title="Publication status"><Resource resource={resource}>{rows => rows.length
       ? <div className="card-stack">{rows.map(row => <PublicationCard key={row.id} row={row} reload={resource.reload} />)}</div>
       : <Empty title="No publications need attention." />}</Resource></Section>
+    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }

@@ -1,3 +1,4 @@
+import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useState } from "react";
 import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type {
@@ -122,7 +123,8 @@ export function PlatformSettlement({
 export function AdminPayouts() {
   const { user } = useSession();
   if (user?.role === "OperationsAdmin") return <OperationsPayouts />;
-  const resource = useResource<PayoutWorkspace>("/admin/payouts");
+  const search = useAdminSearch("/admin/payouts");
+  const resource = useResource<PayoutWorkspace>(search.path);
   const [tab, setTab] = useState("Creators");
   const [filter, setFilter] = useState("All");
   const [selected, select] = useState<{ kind: string; row: QueueRow } | null>(
@@ -145,6 +147,8 @@ export function AdminPayouts() {
         title="Payouts"
         compact
       />
+      <AdminSearch value={search} label="Search recipient or reference" statuses={["Eligible", "Ready", "NeedsDestination", "Paid"]} types={["Telebirr", "Bank", "Mpesa"]} dates />
+      <AdminPager value={search} count={Math.max(resource.data?.creators.length ?? 0, resource.data?.customers.length ?? 0, resource.data?.history.length ?? 0)} loading={resource.loading} />
       <Tabs
         label="Payout workspaces"
         value={tab}
@@ -399,7 +403,8 @@ export function AdminPayouts() {
 }
 
 export function OperationsPayouts() {
-  const resource = useResource<OperationsPayoutWorkspace>("/admin/payouts");
+  const search = useAdminSearch("/admin/payouts");
+  const resource = useResource<OperationsPayoutWorkspace>(search.path);
   const [tab, setTab] = useState("Creators");
   const [selected, select] = useState<{ kind: string; row: QueueRow } | null>(null);
   const [reference, setReference] = useState("");
@@ -414,7 +419,7 @@ export function OperationsPayouts() {
     confirm(false);
   };
   return <>
-    <PageHeader title="Payouts" compact />
+    <PageHeader title="Payouts" compact /><AdminSearch value={search} label="Search recipient or reference" statuses={["Eligible", "Ready", "NeedsDestination", "Paid"]} types={["Telebirr", "Bank", "Mpesa"]} dates /><AdminPager value={search} count={Math.max(resource.data?.creators.length ?? 0, resource.data?.customers.length ?? 0, resource.data?.history.length ?? 0)} loading={resource.loading} />
     <Tabs label="Payout workspaces" value={tab} onChange={setTab} items={["Creators", "Customers", "History"].map((value) => ({ value, label: value }))} />
     {message && <Notice>{message}</Notice>}
     <Resource resource={resource}>{(data) => <>

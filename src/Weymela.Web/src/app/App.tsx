@@ -23,7 +23,6 @@ import {
   CreatorActiveDetail,
 } from "../features/creator/ActiveCampaigns";
 import {
-  AdminActivity,
   AdminBusinesses,
   AdminCampaignDetail,
   AdminCampaigns,
@@ -75,6 +74,11 @@ function ProtectedShell() {
   const { user, loading, resolution } = useSession();
   if (!user) return loading || resolution === "resolving" ? <SessionTransition /> : <Navigate to="/sign-in" replace />;
   return <Shell />;
+}
+function NotificationRoute() {
+  const { user } = useSession();
+  return user && (user.role === "PlatformAdmin" || user.role === "OperationsAdmin")
+    ? <Navigate to={roleHome[user.role]} replace /> : <Inbox />;
 }
 function AdminUgcWorkspace() {
   const { user } = useSession();
@@ -147,7 +151,7 @@ export function App() {
         <Route path="/settings/contact" element={<ContactPage />} />
         <Route path="/settings/delete-account" element={<DeleteAccountPage />} />
         <Route path="/profile" element={<RoleGate roles={["Customer", "Creator", "Business"]}><ProfilePage /></RoleGate>} />
-        <Route path="/notifications" element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><Inbox /></RoleGate>} />
+        <Route path="/notifications" element={<RoleGate roles={["Business", "Creator", "Customer", "Cashier", "PlatformAdmin", "OperationsAdmin"]}><NotificationRoute /></RoleGate>} />
         <Route element={<RoleGate roles={["Business"]} />}>
           <Route path="/business" element={<BusinessDashboard />} />
           <Route path="/business/wallet" element={<BusinessWallet />} />
@@ -195,7 +199,6 @@ export function App() {
           <Route path="/admin/settings" element={<AdminFinancialSettings />} />
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
-          <Route path="/admin/social-profiles" element={<AdminSocialProfileReview />} />
           <Route path="/admin/publications" element={<AdminPublicationReview />} />
         </Route>
         <Route element={<RoleGate roles={["OperationsAdmin"]} />}>
@@ -212,7 +215,7 @@ export function App() {
           <Route path="/admin/operations/customers" element={<OperationsCustomers />} />
           <Route path="/admin/role-enrollments" element={<AdminRoleEnrollments />} />
           <Route path="/admin/payouts" element={<AdminPayouts />} />
-          <Route path="/admin/notifications" element={<Navigate to="/notifications" replace />} />
+          <Route path="/admin/notifications" element={<Navigate to="/" replace />} />
           <Route path="/admin/social-profiles" element={<AdminSocialProfileReview />} />
         </Route>
         <Route element={<RoleGate roles={["Customer"]} />}>

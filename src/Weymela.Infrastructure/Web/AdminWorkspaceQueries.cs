@@ -24,12 +24,17 @@ public sealed partial class WorkspaceQueries
             await db.Promotions.CountAsync(x => x.Status == PromotionStatus.Active, ct), creatorPayouts, customerPayouts);
     }
 
-    public async Task<IReadOnlyList<OperationsBusinessView>> OperationsBusinessesAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<OperationsBusinessView>> OperationsBusinessesAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandCapability(actor, AdministrativeCapability.BusinessOperationalVisibility);
-        var wallets = await db.BusinessWallets.AsNoTracking().OrderBy(x => x.BusinessId).ToListAsync(ct);
-        var owners = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Business).ToListAsync(ct);
+        var query = filter ?? new();
+        var subjects = new AdminSearchQueries(db, query).Permissions(ActorRole.Business).Select(x => x.SubjectId);
+        var wallets = await db.BusinessWallets.AsNoTracking().Where(x => subjects.Contains(x.BusinessId))
+            .OrderBy(x => x.BusinessId).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
+        var walletIds = wallets.Select(x => x.BusinessId).ToArray();
+        var owners = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Business && walletIds.Contains(x.SubjectId)).ToListAsync(ct);
         var emails = await VerifiedAccountEmailsAsync(owners.Select(x => x.UserId), ct);
+        var phones = await AccountPhonesAsync(owners.Select(x => x.UserId), ct);
         var result = new List<OperationsBusinessView>();
         foreach (var wallet in wallets)
         {
@@ -40,38 +45,52 @@ public sealed partial class WorkspaceQueries
                 await db.Promotions.CountAsync(x => x.BusinessId == wallet.BusinessId && x.Status == PromotionStatus.Active, ct),
                 await db.WalletEntries.Where(x => x.BusinessId == wallet.BusinessId && x.Movement == "Deposit")
                     .OrderByDescending(x => x.CreatedAtUtc).Select(x => (DateTime?)x.CreatedAtUtc).FirstOrDefaultAsync(ct),
-                owner is null ? null : emails.GetValueOrDefault(owner.UserId)));
+                owner is null ? null : emails.GetValueOrDefault(owner.UserId), owner is null ? null : phones.GetValueOrDefault(owner.UserId)));
         }
         return result;
     }
 
-    public async Task<IReadOnlyList<OperationsCreatorView>> OperationsCreatorsAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<OperationsCreatorView>> OperationsCreatorsAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandCapability(actor, AdministrativeCapability.CreatorOperationalVisibility);
         var threshold = (await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now, ct))?.CreatorPayoutThreshold?.Amount;
-        var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Creator).ToListAsync(ct);
+        var query = filter ?? new();
+        var permissions = await new AdminSearchQueries(db, query).Permissions(ActorRole.Creator)
+            .OrderBy(x => x.SubjectId).ThenBy(x => x.UserId).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var emails = await VerifiedAccountEmailsAsync(permissions.Select(x => x.UserId), ct);
+        var phones = await AccountPhonesAsync(permissions.Select(x => x.UserId), ct);
         var result = new List<OperationsCreatorView>();
         foreach (var group in permissions.GroupBy(x => x.SubjectId))
         {
             var available = (await db.CreatorEarningsAccounts.AsNoTracking().SingleOrDefaultAsync(x => x.CreatorId == group.Key, ct))?.AvailableEarnings.Amount ?? 0;
             result.Add(new(await directory.CreatorCardAsync(group.Key, ct), group.Any(x => x.IsActive) ? "Active" : "Inactive",
                 await db.CreatorAllocations.CountAsync(x => x.CreatorId == group.Key && x.Status == CreatorAllocationStatus.Active, ct),
-                threshold is { } minimum && available >= minimum, emails.GetValueOrDefault(group.First().UserId)));
+                threshold is { } minimum && available >= minimum, emails.GetValueOrDefault(group.First().UserId), phones.GetValueOrDefault(group.First().UserId)));
         }
         return result;
     }
 
-    public async Task<IReadOnlyList<OperationsCustomerView>> OperationsCustomersAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<OperationsCustomerView>> OperationsCustomersAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandCapability(actor, AdministrativeCapability.CustomerOperationalVisibility);
-        var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Customer).ToListAsync(ct);
+        var query = filter ?? new();
+        var permissions = await new AdminSearchQueries(db, query).Permissions(ActorRole.Customer)
+            .OrderBy(x => x.SubjectId).ThenBy(x => x.UserId).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var emails = await VerifiedAccountEmailsAsync(permissions.Select(x => x.UserId), ct);
+        var phones = await AccountPhonesAsync(permissions.Select(x => x.UserId), ct);
         var result = new List<OperationsCustomerView>();
         foreach (var group in permissions.GroupBy(x => x.SubjectId))
             result.Add(new(await directory.CustomerCardAsync(group.Key, ct), group.Any(x => x.IsActive) ? "Active" : "Inactive",
-                emails.GetValueOrDefault(group.First().UserId)));
+                emails.GetValueOrDefault(group.First().UserId), phones.GetValueOrDefault(group.First().UserId)));
         return result;
+    }
+
+    private async Task<Dictionary<Guid, string>> AccountPhonesAsync(IEnumerable<Guid> userIds, CancellationToken ct)
+    {
+        var ids = userIds.Distinct().ToArray();
+        var rows = await db.AuthIdentifiers.AsNoTracking().Where(x => ids.Contains(x.UserId)
+            && x.Kind == "Phone" && x.DeliveryAddress != null).ToListAsync(ct);
+        return rows.GroupBy(x => x.UserId).ToDictionary(x => x.Key, x => x.First().DeliveryAddress!);
     }
 
     private async Task<Dictionary<Guid, string>> VerifiedAccountEmailsAsync(IEnumerable<Guid> userIds, CancellationToken ct)
@@ -83,11 +102,12 @@ public sealed partial class WorkspaceQueries
             x => x.OrderByDescending(y => y.CreatedAtUtc).First().DeliveryAddress!);
     }
 
-    public async Task<IReadOnlyList<OperationsCampaignView>> OperationsCampaignsAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<OperationsCampaignView>> OperationsCampaignsAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandCapability(actor, AdministrativeCapability.CampaignOperationalVisibility);
-        var campaigns = await db.Promotions.AsNoTracking().Include(x => x.Allocations)
-            .OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        var query = filter ?? new();
+        var campaigns = await new AdminSearchQueries(db, query).Campaigns().Include(x => x.Allocations)
+            .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var result = new List<OperationsCampaignView>();
         foreach (var campaign in campaigns)
             result.Add(new(campaign.Id, campaign.PublicPromotionId, campaign.BusinessId,
@@ -117,9 +137,11 @@ public sealed partial class WorkspaceQueries
             (await db.CreatorEarningEntries.Select(x=>x.Amount).ToListAsync(ct)).Sum(x=>x.Amount) - (await db.UgcPaymentCorrections.Select(x=>x.CreatorAmount).ToListAsync(ct)).Sum(x=>x.Amount),(await db.CustomerCashbackEntries.Select(x=>x.Amount).ToListAsync(ct)).Sum(x=>x.Amount),
             platform.Accrued.Amount,await History(null,ct));
     }
-    public async Task<IReadOnlyList<CampaignRow>> AdminCampaignsAsync(Actor actor,CancellationToken ct)
+    public async Task<IReadOnlyList<CampaignRow>> AdminCampaignsAsync(Actor actor,CancellationToken ct, AdminListFilter? filter = null)
     {
-        DemandPlatformAdmin(actor);var campaigns=await db.Promotions.AsNoTracking().Include(x=>x.Allocations).OrderByDescending(x=>x.CreatedAtUtc).ToListAsync(ct);
+        DemandPlatformAdmin(actor);var query = filter ?? new();
+        var campaigns=await new AdminSearchQueries(db, query).Campaigns().Include(x=>x.Allocations)
+            .OrderByDescending(x=>x.CreatedAtUtc).ThenBy(x=>x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var result=new List<CampaignRow>();foreach(var p in campaigns)result.Add(await Row(p,ct));return result;
     }
     public async Task<AdminCampaign> AdminCampaignAsync(Actor actor,Guid id,CancellationToken ct)
@@ -174,34 +196,96 @@ public sealed partial class WorkspaceQueries
         }
         return new(Settings(v),v.Version,versions);
     }
-    public async Task<PayoutWorkspace> PayoutsAsync(Actor actor,CancellationToken ct)
+    public async Task<PayoutWorkspace> PayoutsAsync(Actor actor,CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandPlatformAdmin(actor);
-        var queues = await PayoutQueuesAsync(ct);
-        var platform=await Financial.PlatformAsync(actor,ct);
-        var history = queues.History.ToList();
-        history.AddRange(platform.History.Select(x=>new PayoutItem(x.Id,"Platform","Weymela",x.Amount.Amount,0,"Paid",x.SettledAtUtc,x.SettledAtUtc,x.Reference)));
-        return new(queues.Creators,queues.Customers,platform.Accrued.Amount,platform.Settled.Amount,platform.Unsettled.Amount,history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ToArray());
+        var queues = await PayoutQueuesAsync(ct, filter, includePlatform: true);
+        var totals = await db.Database.SqlQueryRaw<PlatformPayoutTotals>("""
+            SELECT (SELECT coalesce(sum("Amount"),0) FROM v3."PlatformRevenueEntries")
+                - (SELECT coalesce(sum("PlatformFee"),0) FROM v3."UgcPaymentCorrections") AS "Accrued",
+                (SELECT coalesce(sum("Amount"),0) FROM v3."PlatformSettlements") AS "Settled"
+            """).SingleAsync(ct);
+        return new(queues.Creators,queues.Customers,totals.Accrued,totals.Settled,totals.Accrued-totals.Settled,queues.History);
     }
 
-    public async Task<OperationsPayoutWorkspace> OperationsPayoutsAsync(Actor actor, CancellationToken ct)
+    public async Task<OperationsPayoutWorkspace> OperationsPayoutsAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandCapability(actor, AdministrativeCapability.CreatorPayoutProcessing);
-        var queues = await PayoutQueuesAsync(ct);
+        var queues = await PayoutQueuesAsync(ct, filter);
         return new(queues.Creators, queues.Customers, queues.History);
     }
 
-    private async Task<(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History)> PayoutQueuesAsync(CancellationToken ct)
+    private async Task<(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History)> PayoutQueuesAsync(CancellationToken ct, AdminListFilter? filter = null, bool includePlatform = false)
     {
         var version=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
-        var records=await db.PayoutRecords.AsNoTracking().ToListAsync(ct);var creators=new List<PayoutQueueRow>();var customers=new List<PayoutQueueRow>();
-        var destinations=await db.PayoutDestinations.AsNoTracking().ToDictionaryAsync(x=>(x.Beneficiary,x.SubjectId),ct);
+        var query = filter ?? new(); query.Validate();
+        var term = query.Term;
+        var statusFilter = query.Status ?? "";
+        var methodFilter = query.Type ?? "";
+        var creatorMinimum = version?.CreatorPayoutThreshold?.Amount ?? decimal.MaxValue;
+        var customerMinimum = version?.CustomerPayoutThreshold?.Amount ?? decimal.MaxValue;
+        // Numeric balances are filtered by PostgreSQL before paging. Creator earned
+        // balance is still checked again below, and at the payout command boundary.
+        var eligibleCreators = await db.Database.SqlQuery<Guid>($"""
+            SELECT a."CreatorId" AS "Value" FROM v3."CreatorEarningsAccounts" a
+            WHERE a."AvailableEarnings">={creatorMinimum}
+              AND ({term}='' OR EXISTS (SELECT 1 FROM v3."PublicWorkspaceProfiles" p WHERE p."Role"='Creator' AND p."SubjectId"=a."CreatorId" AND strpos(lower(p."DisplayName"),{term})>0))
+              AND ({methodFilter}='' OR EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."SubjectId"=a."CreatorId" AND d."Beneficiary"='Creator' AND (d."Method"={methodFilter} OR d."Provider"={methodFilter})))
+              AND ({statusFilter}=''
+                OR {statusFilter}='NeedsDestination' AND NOT EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."Beneficiary"='Creator' AND d."SubjectId"=a."CreatorId")
+                OR {statusFilter}='Ready' AND EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CreatorId"=a."CreatorId" AND p."Status"='Eligible')
+                OR {statusFilter}='Eligible' AND EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."Beneficiary"='Creator' AND d."SubjectId"=a."CreatorId")
+                  AND NOT EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CreatorId"=a."CreatorId" AND p."Status"='Eligible'))
+            ORDER BY a."CreatorId" LIMIT {query.PageSize} OFFSET {query.Offset}
+            """).ToListAsync(ct);
+        var eligibleCustomers = await db.Database.SqlQuery<Guid>($"""
+            SELECT a."CustomerId" AS "Value" FROM v3."CustomerCashbackAccounts" a
+            WHERE a."AvailableCashback">={customerMinimum}
+              AND ({term}='' OR EXISTS (SELECT 1 FROM v3."PublicWorkspaceProfiles" p WHERE p."Role"='Customer' AND p."SubjectId"=a."CustomerId" AND strpos(lower(p."DisplayName"),{term})>0))
+              AND ({methodFilter}='' OR EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."SubjectId"=a."CustomerId" AND d."Beneficiary"='Customer' AND (d."Method"={methodFilter} OR d."Provider"={methodFilter})))
+              AND ({statusFilter}=''
+                OR {statusFilter}='NeedsDestination' AND NOT EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."Beneficiary"='Customer' AND d."SubjectId"=a."CustomerId")
+                OR {statusFilter}='Ready' AND EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CustomerId"=a."CustomerId" AND p."Status"='Eligible')
+                OR {statusFilter}='Eligible' AND EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."Beneficiary"='Customer' AND d."SubjectId"=a."CustomerId")
+                  AND NOT EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CustomerId"=a."CustomerId" AND p."Status"='Eligible'))
+            ORDER BY a."CustomerId" LIMIT {query.PageSize} OFFSET {query.Offset}
+            """).ToListAsync(ct);
+        var records=await db.PayoutRecords.AsNoTracking().Where(x => x.Status == PayoutStatus.Eligible
+            && (x.CreatorId != null && eligibleCreators.Contains(x.CreatorId.Value)
+                || x.CustomerId != null && eligibleCustomers.Contains(x.CustomerId.Value))).ToListAsync(ct);
+        var creators=new List<PayoutQueueRow>();var customers=new List<PayoutQueueRow>();
+        var destinations=await db.PayoutDestinations.AsNoTracking().Where(x => eligibleCreators.Contains(x.SubjectId) || eligibleCustomers.Contains(x.SubjectId)).ToDictionaryAsync(x=>(x.Beneficiary,x.SubjectId),ct);
+        var historySource = db.PayoutRecords.AsNoTracking();
+        if (term != "") historySource = historySource.Where(x => x.Reference != null && x.Reference.ToLower().Contains(term)
+            || x.DestinationProvider != null && x.DestinationProvider.ToLower().Contains(term)
+            || db.PublicWorkspaceProfiles.Any(p => (p.SubjectId == x.CreatorId || p.SubjectId == x.CustomerId) && p.DisplayName.ToLower().Contains(term)));
+        if (query.From is { } from) historySource = historySource.Where(x => (x.PaidAtUtc ?? x.EligibleAtUtc) >= from);
+        if (query.To is { } to) historySource = historySource.Where(x => (x.PaidAtUtc ?? x.EligibleAtUtc) < to.AddDays(1));
+        if (Enum.TryParse<PayoutStatus>(statusFilter, out var historyStatus)) historySource = historySource.Where(x => x.Status == historyStatus);
+        else if (statusFilter != "") historySource = historySource.Where(x => false);
+        if (Enum.TryParse<PayoutDestinationMethod>(methodFilter, out var historyMethod)) historySource = historySource.Where(x => x.DestinationMethod == historyMethod);
+        else if (methodFilter != "") historySource = historySource.Where(x => x.DestinationProvider == methodFilter);
+        // Platform settlements share the history page, while Operations Admin never
+        // receives them. Filter and merge keys before paging to avoid skipped rows.
+        var platformSource = db.PlatformSettlements.AsNoTracking().Where(x => includePlatform);
+        if (term != "") platformSource = platformSource.Where(x => "weymela".Contains(term) || x.Reference.ToLower().Contains(term));
+        if (query.From is { } platformFrom) platformSource = platformSource.Where(x => x.SettledAtUtc >= platformFrom);
+        if (query.To is { } platformTo) platformSource = platformSource.Where(x => x.SettledAtUtc < platformTo.AddDays(1));
+        if (statusFilter != "" && statusFilter != "Paid" || methodFilter != "") platformSource = platformSource.Where(x => false);
+        var historyKeys = await historySource.Select(x => new { x.Id, At = x.PaidAtUtc ?? x.EligibleAtUtc, IsPlatform = false })
+            .Concat(platformSource.Select(x => new { x.Id, At = x.SettledAtUtc, IsPlatform = true }))
+            .OrderByDescending(x => x.At).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
+        var payoutIds = historyKeys.Where(x => !x.IsPlatform).Select(x => x.Id).ToArray();
+        var platformIds = historyKeys.Where(x => x.IsPlatform).Select(x => x.Id).ToArray();
+        var historyRows = await db.PayoutRecords.AsNoTracking().Where(x => payoutIds.Contains(x.Id)).ToListAsync(ct);
+        var settlements = await db.PlatformSettlements.AsNoTracking().Where(x => platformIds.Contains(x.Id)).ToListAsync(ct);
         var history=new List<PayoutItem>();
-        foreach(var p in records.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc))history.Add(new(p.Id,p.Beneficiary.ToString(),p.CreatorId is {} creator?(await directory.CreatorCardAsync(creator,ct)).DisplayName:await CustomerLabel(p.CustomerId!.Value,ct),p.Amount.Amount,p.ThresholdUsed.Amount,p.Status.ToString(),p.EligibleAtUtc,p.PaidAtUtc,p.Reference));
+        history.AddRange(settlements.Select(x => new PayoutItem(x.Id,"Platform","Weymela",x.Amount.Amount,0,"Paid",x.SettledAtUtc,x.SettledAtUtc,x.Reference)));
+        foreach(var p in historyRows)history.Add(new(p.Id,p.Beneficiary.ToString(),p.CreatorId is {} creator?(await directory.CreatorCardAsync(creator,ct)).DisplayName:await CustomerLabel(p.CustomerId!.Value,ct),p.Amount.Amount,p.ThresholdUsed.Amount,p.Status.ToString(),p.EligibleAtUtc,p.PaidAtUtc,p.Reference));
         // Unknown thresholds cannot establish eligibility. Preserve actual history without
         // inventing thresholds or placing a beneficiary in an actionable payout queue.
-        if (version is null) return (creators, customers, history);
-        foreach(var a in await db.CreatorEarningsAccounts.AsNoTracking().ToListAsync(ct))
+        if (version is null) return (creators, customers, history.OrderByDescending(x => x.PaidAtUtc ?? x.EligibleAtUtc).ThenBy(x => x.Id).ToArray());
+        foreach(var a in await db.CreatorEarningsAccounts.AsNoTracking().Where(x => eligibleCreators.Contains(x.CreatorId)).ToListAsync(ct))
         {
             if (version.CreatorPayoutThreshold is not { } creatorThreshold) break;
             var pending=records.SingleOrDefault(x=>x.CreatorId==a.CreatorId&&x.Status==PayoutStatus.Eligible);
@@ -218,7 +302,7 @@ public sealed partial class WorkspaceQueries
                 pending?.Amount.Amount??creatorThreshold.Amount,pending?.EligibleAtUtc??since,
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
-        foreach(var a in await db.CustomerCashbackAccounts.AsNoTracking().ToListAsync(ct))
+        foreach(var a in await db.CustomerCashbackAccounts.AsNoTracking().Where(x => eligibleCustomers.Contains(x.CustomerId)).ToListAsync(ct))
         {
             if (version.CustomerPayoutThreshold is not { } customerThreshold) break;
             var pending=records.SingleOrDefault(x=>x.CustomerId==a.CustomerId&&x.Status==PayoutStatus.Eligible);
@@ -232,8 +316,10 @@ public sealed partial class WorkspaceQueries
                 pending?.Amount.Amount??customerThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,customerThreshold.Amount,version.EffectiveFromUtc,ct),
                 method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
         }
-        return (creators, customers, history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ToArray());
+        return (creators.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), customers.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ThenBy(x=>x.Id).ToArray());
     }
+    private sealed record PlatformPayoutTotals(decimal Accrued, decimal Settled);
+
     private async Task<DateTime?> EligibleSince(PayoutBeneficiary kind,Guid id,decimal threshold,DateTime effective,CancellationToken ct)
     {
         var credits=kind==PayoutBeneficiary.Creator

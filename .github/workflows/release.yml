@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions: { contents: read }
   images:
-    if: github.ref == 'refs/heads/main' && needs.validate.outputs.passed == 'true'
+    if: (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.firebase_target == 'pilot' && startsWith(github.ref, 'refs/heads/release/'))) && needs.validate.outputs.passed == 'true'
     needs: validate
     environment: v3-registry
     runs-on: ubuntu-24.04
@@ -152,7 +152,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   migrations:
-    if: github.ref == 'refs/heads/main' && needs.validate.outputs.passed == 'true'
+    if: (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.firebase_target == 'pilot' && startsWith(github.ref, 'refs/heads/release/'))) && needs.validate.outputs.passed == 'true'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 15

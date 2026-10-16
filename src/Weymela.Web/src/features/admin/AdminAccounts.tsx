@@ -1,3 +1,4 @@
+import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
@@ -35,12 +36,13 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
   const search = searchParams.get("search") ?? "";
   const status = searchParams.get("status") ?? "";
   const role = searchParams.get("adminRole") ?? "";
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const [draftSearch, setDraftSearch] = useState(search);
   const [selected, setSelected] = useState<{ row: AdminAccountSummary; command: string } | null>(null);
   const [reason, setReason] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
   const action = useAction();
-  const path = `/admin/accounts?${new URLSearchParams({ role: area, ...(search ? { search } : {}), ...(status ? { status } : {}) }).toString()}`;
+  const path = `/admin/accounts?${new URLSearchParams({ role: area, ...(search ? { search } : {}), ...(status ? { status } : {}), ...(role ? { adminRole: role } : {}), ...(page > 1 ? { page: String(page) } : {}) }).toString()}`;
   const resource = useResource<AdminAccountSummary[]>(path);
   useEffect(() => { setDraftSearch(search); }, [search, area]);
   const updateFilters = (next: { search?: string; status?: string; adminRole?: string }) =>
@@ -68,14 +70,18 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
       {area === "Admin" && <label>Role <select aria-label="Admin role" value={role} onChange={event => updateFilters({ search, status, adminRole: event.target.value })}><option value="">All roles</option><option value="PlatformAdmin">Platform Admin</option><option value="OperationsAdmin">Operations Admin</option></select></label>}
     </div>
     <Resource resource={resource}>{rows => {
-      const filtered = area === "Admin" && role ? rows.filter(row => row.role === role) : rows;
-      return <DataTable rows={filtered} rowKey={row => `${row.id}-${row.role}`} label={areaTitle[area]} columns={[
+      return <><DataTable rows={rows} rowKey={row => `${row.id}-${row.role}`} label={areaTitle[area]} columns={[
         { label: area, cell: row => <Link to={`/admin/accounts/${detailId(row)}?role=${row.role}`}><strong>{row.name}</strong></Link> },
         { label: "Contact", cell: row => <div className="admin-account-contact">{area === "Admin" && <span>{roleName(row.role)}</span>}<span className="admin-account-email">{row.fullEmail ?? row.safeIdentifier}</span></div> },
+        ...(area === "Business" ? [{ label: "Owner", cell: (row: AdminAccountSummary) => row.ownerName || "—" }] : []),
+        { label: "Phone", cell: row => <span className="admin-account-phone" data-no-translate>{row.businessContactPhone ?? row.fullPhone ?? "—"}{area === "Business" && row.fullPhone && !row.businessContactPhone && <small>Owner phone</small>}</span> },
         { label: "Status", cell: row => <Badge status={displayStatus(row.status)} /> },
         { label: "Joined", cell: row => row.joinedAtUtc ? date(row.joinedAtUtc) : "—" },
         { label: "Actions", cell: row => <AccountActions row={row} onChoose={command => setSelected({ row, command })} /> },
-      ]} card={row => <div className="admin-mobile-row"><div><Link to={`/admin/accounts/${detailId(row)}?role=${row.role}`}><strong>{row.name}</strong></Link>{area === "Admin" && <small>{roleName(row.role)}</small>}<small className="admin-account-email">{row.fullEmail ?? row.safeIdentifier}</small></div><div className="admin-mobile-row-meta"><Badge status={displayStatus(row.status)} /><AccountActions row={row} onChoose={command => setSelected({ row, command })} /></div>{row.joinedAtUtc && <small>Joined {date(row.joinedAtUtc)}</small>}</div>} empty={<Empty title={`No ${areaTitle[area].toLowerCase()} match`} message="Try another filter or search term." icon="people" />} />;
+      ]} card={row => <div className="admin-mobile-row"><div><Link to={`/admin/accounts/${detailId(row)}?role=${row.role}`}><strong>{row.name}</strong></Link>{area === "Admin" && <small>{roleName(row.role)}</small>}<small className="admin-account-email">{row.fullEmail ?? row.safeIdentifier}</small><small className="admin-account-phone" data-no-translate>{row.businessContactPhone ?? row.fullPhone ?? "—"}</small></div><div className="admin-mobile-row-meta"><Badge status={displayStatus(row.status)} /><AccountActions row={row} onChoose={command => setSelected({ row, command })} /></div>{row.joinedAtUtc && <small>Joined {date(row.joinedAtUtc)}</small>}</div>} empty={<Empty title={`No ${areaTitle[area].toLowerCase()} match`} message="Try another filter or search term." icon="people" />} /><nav className="admin-pagination" aria-label="Results pages">
+        <Button variant="secondary" disabled={page === 1} onClick={() => { const next = new URLSearchParams(searchParams); next.set("page", String(page - 1)); setSearchParams(next); }}>Previous</Button>
+        <span>Page {page}</span><Button variant="secondary" disabled={rows.length < 50} onClick={() => { const next = new URLSearchParams(searchParams); next.set("page", String(page + 1)); setSearchParams(next); }}>Next</Button>
+      </nav></>;
     }}</Resource>
     <Dialog title={selected ? `${commandLabel(selected.command)} ${selected.row.name}` : "Account action"} open={!!selected} onClose={() => { if (!action.busy) { setSelected(null); setReason(""); setConfirmClose(false); } }}>
       {selected && <form onSubmit={event => { event.preventDefault(); runLifecycle(); }}>{selected.command === "delete-role" && <p>This permanently removes this {roleName(selected.row.role)} profile. Other profiles remain available.</p>}<Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{selected.command === "close" && <label className="check-line"><input type="checkbox" checked={confirmClose} onChange={event => setConfirmClose(event.target.checked)} /> Confirm terminal closure. Financial and security history remains.</label>}{action.error && <Notice error>{action.error}</Notice>}<div className="actions"><Button type="submit" className={selected.command === "delete-role" ? "destructive-action" : ""} disabled={action.busy || !reason.trim() || (selected.command === "close" && !confirmClose)}>{action.busy ? "Saving…" : commandLabel(selected.command)}</Button><Button variant="secondary" onClick={() => setSelected(null)} disabled={action.busy}>Cancel</Button></div></form>}
@@ -100,7 +106,8 @@ type EnrollmentReviewRow = {
 };
 
 function PendingEnrollmentReview({ area, onReviewed }: { area: "Business" | "Creator"; onReviewed: () => void }) {
-  const resource = useResource<EnrollmentReviewRow[]>("/admin/role-enrollments");
+  const search = useAdminSearch("/admin/role-enrollments");
+  const resource = useResource<EnrollmentReviewRow[]>(search.path);
   const action = useAction();
   const [selected, setSelected] = useState<EnrollmentReviewRow | null>(null);
   const [rejecting, setRejecting] = useState(false);
@@ -118,6 +125,8 @@ function PendingEnrollmentReview({ area, onReviewed }: { area: "Business" | "Cre
   return <Resource resource={resource}>{rows => {
     const pending = rows.filter(row => actorRoleNameFromWire(row.role) === area);
     return <Section title={`Pending Review (${pending.length})`} action={<CompactLanguageChoice />} className="admin-pending-review">
+      <AdminSearch value={search} label="Search pending applications" />
+      <AdminPager value={search} count={rows.length} loading={resource.loading} />
       <DataTable rows={pending} rowKey={row => row.id} label={`Pending ${area} reviews`} columns={area === "Business" ? [
         { label: "Business Name", cell: (row: EnrollmentReviewRow) => <strong data-no-translate>{row.displayName}</strong> },
         { label: "Owner", cell: (row: EnrollmentReviewRow) => <span data-no-translate>{row.legalName || "—"}</span> },
@@ -236,6 +245,15 @@ function AccountDetailContent({ detail, manage, reason, setReason, confirmClose,
       <Section title="Overview"><div className="stack-list">{detail.roles.map((role) => <div className="amount-row" key={role}><strong>{role}</strong><Badge status={displayStatus(account.status)} /></div>)}{detail.profiles.map((profile) => <div className="amount-row" key={profile.subjectId}><div><strong>{profile.displayName}</strong><small>{profile.role} · {profile.publicId}{profile.region ? ` · ${profile.region}` : ""}</small></div><Badge status={profile.active ? "Active" : "Inactive"} /></div>)}</div>{manage && account.canManage && <><Field label="Reason for lifecycle action"><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required for this change" /></Field>{account.status !== "Pending" && <Field label="Confirm terminal closure" help="Closing denies future access and keeps financial and security history."><input type="checkbox" checked={confirmClose} onChange={(event) => setConfirmClose(event.target.checked)} /></Field>}<div className="actions">{account.status === "Pending" ? <Button disabled={action.busy || !reason.trim()} onClick={() => lifecycle("cancel")}>Cancel preauthorization</Button> : <>{account.status === "Active" && <Button disabled={action.busy || !reason.trim()} onClick={() => lifecycle("lock")}>Lock</Button>}{account.status === "Suspended" && <Button disabled={action.busy || !reason.trim()} onClick={() => lifecycle("unlock")}>Unlock</Button>}{(account.status === "Active" || account.status === "Suspended") && <Button variant="secondary" disabled={action.busy || !reason.trim()} onClick={() => lifecycle("deactivate")}>Deactivate</Button>}{account.status === "Disabled" && <Button variant="secondary" disabled={action.busy || !reason.trim()} onClick={() => lifecycle("reactivate")}>Reactivate</Button>}{["Active", "Suspended", "Disabled"].includes(account.status) && <Button variant="secondary" disabled={action.busy || !reason.trim() || !confirmClose} onClick={() => lifecycle("close")}>Close Account</Button>}</>}</div>{action.error && <Notice error>{action.error}</Notice>}</>}</Section>
       <Section title="Role-specific information">{roleData ? <div className="stack-list">{Object.entries(roleData).map(([key, value]) => <div className="amount-row" key={key}><span>{label(key)}</span><strong>{displayValue(key, value)}</strong></div>)}</div> : <Empty title="No role projection" message="This account has no role-specific projection available." />}</Section>
     </div>
+    {(detail.audit?.length ?? 0) > 0 && <details className="settings-card">
+      <summary>Account history</summary>
+      <DataTable rows={detail.audit} rowKey={row => row.id} label="Account history" empty={null} columns={[
+        { label: "Date", cell: row => dateTime(row.occurredAtUtc) },
+        { label: "Action", cell: row => label(row.action) },
+        { label: "Operation", cell: row => label(row.operation) },
+        { label: "Role", cell: row => row.targetRole ? roleName(row.targetRole) : "—" },
+      ]} card={row => <div className="amount-row"><div><strong>{label(row.action)}</strong><small>{label(row.operation)}{row.targetRole ? ` · ${roleName(row.targetRole)}` : ""}</small></div><small>{dateTime(row.occurredAtUtc)}</small></div>} />
+    </details>}
     {detail.transactions.length > 0 && <Section title="Commerce activity"><div className="stack-list">{detail.transactions.map((transaction) => <div className="amount-row" key={transaction.id}><div><strong>{transaction.purchaseAmount.toLocaleString()} {transaction.currency}</strong><small>{dateTime(transaction.occurredAtUtc)} · {transaction.status}</small></div><span>{transaction.businessId}</span></div>)}</div></Section>}
     {businessId && <BusinessCashiers businessId={businessId} />}
     {account.role !== "Cashier" && account.status !== "Pending" && <Section title="Entire account" description="Identity-level action affecting every Customer, Creator, Business, and Admin role owned by this account.">

@@ -62,11 +62,13 @@
 .admin-toolbar form input { flex: 1; min-width: 0; }
 .admin-toolbar label { display: grid; gap: 4px; font-size: .76rem; font-weight: 600; color: var(--admin-secondary); }
 .admin-toolbar :is(input, select) { min-height: 40px; }
-.admin-mobile-row { display: grid; gap: 7px; }
+.admin-mobile-row { display: grid; gap: 7px; min-width: 0; overflow-wrap: anywhere; }
 .admin-mobile-row > div:first-child:not(.admin-mobile-row-meta) { display: grid; gap: 2px; min-width: 0; }
 .admin-mobile-row small { color: var(--admin-muted); font-size: .73rem; }
 .admin-account-contact { min-width: 0; }
 .admin-account-email { display: block; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.role-operationsadmin .data-card .card-head > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.role-operationsadmin .data-card .card-head .badge { flex-shrink: 0; }
 .admin-detail-email { margin: -10px 0 22px; color: var(--admin-secondary); }
 .admin-mobile-row-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .admin-mobile-row-meta strong { min-width: 0; overflow-wrap: anywhere; }
@@ -161,3 +163,9 @@
 .admin-review-social-list article { display: grid; gap: 4px; padding: 11px; border: 1px solid var(--admin-line); border-radius: 10px; background: #f8faf9; font-size: .8rem; }
 .admin-review-social-list a { color: #166534; font-weight: 700; }
 .review-history { display: grid; gap: 4px; padding: 11px; border-radius: 10px; background: #f3f6f4; font-size: .8rem; }
+
+.admin-search-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-block: 12px; }
+.admin-search-controls > .field { flex: 1 1 150px; min-width: 0; max-width: 640px; }
+.admin-search-controls input, .admin-search-controls select { width: 100%; min-width: 0; }
+.admin-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-block: 14px; }
+.admin-account-phone { white-space: nowrap; font-variant-numeric: tabular-nums; }

@@ -34,7 +34,7 @@ public sealed record AdminAccountSummary(
     DateTime? LastActivityAtUtc,
     bool CanManage,
     DateTime? JoinedAtUtc = null,
-    string? FullEmail = null);
+    string? FullEmail = null, string? FullPhone = null, string? BusinessContactPhone = null, string? OwnerName = null);
 
 public sealed record AdminAuditItem(
     Guid Id,
@@ -126,4 +126,4 @@ public sealed record AdminAccountDetail(
 public sealed record AccountLifecycleInput(string Action, string Reason, long? ExpectedVersion = null, bool ConfirmClose = false);
 public sealed record RevokeAccountProfileInput(string Role, Guid? SubjectId, string Reason, long? ExpectedVersion = null);
 
-public sealed record AdminAccountFilterInput(string? Role = null, string? Status = null, string? Search = null, string? Approval = null);
+public sealed record AdminAccountFilterInput(string? Role = null, string? Status = null, string? Search = null, string? Approval = null, string? AdminRole = null, int Page = 1, int PageSize = 50);

@@ -636,21 +636,23 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             opportunity.ProductProvided, opportunity.CreatorMustPurchase, opportunity.UsageRights, opportunity.CurrentRevision, requests, assignments, revisions);
     }
 
-    public async Task<IReadOnlyList<UgcCard>> AdminAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<UgcCard>> AdminAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandPlatformAdmin(actor);
-        var rows = await db.UgcOpportunities.AsNoTracking().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities).OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        var query = filter ?? new();
+        var rows = await new AdminSearchQueries(db, query).Ugc().Include(x => x.PlatformRequirements).Include(x => x.PlatformCapacities).OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var ids = rows.Select(x => x.BusinessId).Distinct().ToArray();
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business && ids.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         var offers = await db.UgcCustomerOffers.AsNoTracking().ToDictionaryAsync(x => x.UgcOpportunityId, ct);
         return rows.Select(x => Card(x, names.GetValueOrDefault(x.BusinessId, "Business"), null, offers.GetValueOrDefault(x.Id), true)).ToArray();
     }
 
-    public async Task<IReadOnlyList<OperationsUgcView>> OperationsAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<OperationsUgcView>> OperationsAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         if (!AdministrativeAuthority.For(new RealActor(actor)).Allows(AdministrativeCapability.UgcOperationalVisibility))
             throw new ApplicationFailure(FailureKind.Forbidden, "Operations UGC access is required.");
-        var rows = await db.UgcOpportunities.AsNoTracking().OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        var query = filter ?? new();
+        var rows = await new AdminSearchQueries(db, query).Ugc().OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var businessIds = rows.Select(x => x.BusinessId).Distinct().ToArray();
         var names = await db.PublicWorkspaceProfiles.AsNoTracking()
             .Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId))

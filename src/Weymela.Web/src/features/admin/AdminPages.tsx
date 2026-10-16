@@ -1,3 +1,4 @@
+import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
@@ -75,42 +76,56 @@ export function OperationsDashboard() {
 }
 
 export function OperationsBusinesses() {
-  const resource = useResource<OperationsBusinessView[]>("/admin/businesses");
+  const search = useAdminSearch("/admin/businesses");
+  const resource = useResource<OperationsBusinessView[]>(search.path);
   return <><PageHeader title="Businesses" compact />
+    <AdminSearch value={search} statuses={["Active", "Inactive"]} />
     <Resource resource={resource}>{(rows) => <Section title="Business accounts"><DataTable rows={rows} rowKey={(r) => r.business.id} label="Operational Business accounts" columns={[
       { label: "Business", cell: (r) => <><strong>{r.business.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.business.region}</small></> },
+      { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
       { label: "Active Campaigns", cell: (r) => count(r.activeCampaigns), numeric: true },
       { label: "Last Deposit", cell: (r) => date(r.lastDepositUtc) },
-    ]} card={(r) => <><div className="card-head"><h3>{r.business.displayName}</h3><Badge status={r.status} /></div>{r.fullEmail && <p className="admin-account-email">{r.fullEmail}</p>}<p>{r.business.region}</p><p className="fine-print">{count(r.activeCampaigns)} active campaigns · Last deposit {date(r.lastDepositUtc)}</p></>} empty={<Empty title="No Business accounts yet" message="Approved Business accounts appear here." />} /></Section>}</Resource>
+    ]} card={(r) => <><div className="card-head"><h3>{r.business.displayName}</h3><Badge status={r.status} /></div>{r.fullEmail && <p className="admin-account-email">{r.fullEmail}</p>}<p className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</p><p>{r.business.region}</p><p className="fine-print">{count(r.activeCampaigns)} active campaigns · Last deposit {date(r.lastDepositUtc)}</p></>} empty={<Empty title="No Business accounts yet" message="Approved Business accounts appear here." />} /></Section>}</Resource>
+    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }
 
 export function OperationsCreators() {
-  const resource = useResource<OperationsCreatorView[]>("/admin/creators");
+  const search = useAdminSearch("/admin/creators");
+  const resource = useResource<OperationsCreatorView[]>(search.path);
   return <><PageHeader title="Creators" compact />
+    <AdminSearch value={search} statuses={["Active", "Inactive"]} />
     <Resource resource={resource}>{(rows) => <Section title="Creator accounts"><DataTable rows={rows} rowKey={(r) => r.creator.id} label="Operational Creator accounts" columns={[
       { label: "Creator", cell: (r) => <><Person person={r.creator} />{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}</> },
+      { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
       { label: "Active Campaigns", cell: (r) => count(r.activeCampaigns), numeric: true },
       { label: "Payout Queue", cell: (r) => <Badge status={r.payoutEligible ? "Eligible" : "No pending payout"} /> },
-    ]} card={(r) => <><div className="card-head"><Person person={r.creator} /><Badge status={r.status} /></div>{r.fullEmail && <p className="admin-account-email">{r.fullEmail}</p>}<p>{count(r.activeCampaigns)} active campaigns</p><Badge status={r.payoutEligible ? "Eligible for payout" : "No pending payout"} /></>} empty={<Empty title="No Creator accounts yet" message="Approved Creators appear here." icon="people" />} /></Section>}</Resource>
+    ]} card={(r) => <><div className="card-head"><Person person={r.creator} /><Badge status={r.status} /></div>{r.fullEmail && <p className="admin-account-email">{r.fullEmail}</p>}<p className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</p><p>{count(r.activeCampaigns)} active campaigns</p><Badge status={r.payoutEligible ? "Eligible for payout" : "No pending payout"} /></>} empty={<Empty title="No Creator accounts yet" message="Approved Creators appear here." icon="people" />} /></Section>}</Resource>
+    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }
 
 export function OperationsCustomers() {
-  const resource = useResource<OperationsCustomerView[]>("/admin/customers");
+  const search = useAdminSearch("/admin/customers");
+  const resource = useResource<OperationsCustomerView[]>(search.path);
   return <><PageHeader title="Customers" compact />
+    <AdminSearch value={search} statuses={["Active", "Inactive"]} />
     <Resource resource={resource}>{(rows) => <Section title="Customer accounts"><DataTable rows={rows} rowKey={(r) => r.customer.id} label="Operational Customer accounts" columns={[
       { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></> },
+      { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
-    ]} card={(r) => <div className="card-head"><div><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></div><Badge status={r.status} /></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
+    ]} card={(r) => <div className="admin-mobile-row"><div><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</small></div><div className="admin-mobile-row-meta"><Badge status={r.status} /></div></div>} empty={<Empty title="No Customer accounts yet" message="Active Customer accounts appear here." icon="people" />} /></Section>}</Resource>
+    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }
 
 export function OperationsCampaigns() {
-  const resource = useResource<OperationsCampaignView[]>("/admin/campaigns");
+  const search = useAdminSearch("/admin/campaigns");
+  const resource = useResource<OperationsCampaignView[]>(search.path);
   return <><PageHeader title="Campaigns" compact />
+    <AdminSearch value={search} statuses={["Draft", "Published", "Funded", "Active", "Completed", "Cancelled"]} types={["View Only", "View + Sale"]} dates />
     <Resource resource={resource}>{(rows) => <Section title="Campaign activity"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational campaigns" columns={[
       { label: "Campaign", cell: (r) => <><strong>{r.title}</strong><small>{r.publicId}</small></> },
       { label: "Business", cell: (r) => r.business },
@@ -119,12 +134,15 @@ export function OperationsCampaigns() {
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
       { label: "Window", cell: (r) => `${date(r.startUtc)} – ${date(r.endUtc)}` },
     ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><Badge status={r.status} /></div><p>{r.business} · {r.type}</p><p className="fine-print">{count(r.creatorCount)} creators · {date(r.startUtc)} – {date(r.endUtc)}</p></>} empty={<Empty title="No campaigns yet" message="Campaigns appear here as Businesses create them." icon="campaign" />} /></Section>}</Resource>
+    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }
 
 export function OperationsUgc() {
-  const resource = useResource<OperationsUgcView[]>("/admin/ugc");
+  const search = useAdminSearch("/admin/ugc");
+  const resource = useResource<OperationsUgcView[]>(search.path);
   return <><PageHeader title="UGC" compact />
+    <AdminSearch value={search} statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} />
     <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
       { label: "Opportunity", cell: (r) => <><strong>{r.title}</strong><small>{r.business}</small></> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -132,15 +150,17 @@ export function OperationsUgc() {
       { label: "Due", cell: (r) => date(r.dueDateUtc) },
       { label: "Offer", cell: (r) => r.customerOfferStatus ?? "None" },
     ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><Badge status={r.status} /></div><p>{r.business} · {r.approvedCreators}/{r.creatorsNeeded} creators</p><p className="fine-print">Due {date(r.dueDateUtc)} · Customer offer {r.customerOfferStatus ?? "None"}</p></>} empty={<Empty title="No UGC opportunities yet" message="UGC opportunities appear here for operational support." icon="sparkle" />} /></Section>}</Resource>
+    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }
 
 export function AdminRoleEnrollments() {
-  const resource = useResource<EnrollmentRow[]>("/admin/role-enrollments");
+  const enrollmentSearch = useAdminSearch("/admin/role-enrollments");
+  const resource = useResource<EnrollmentRow[]>(enrollmentSearch.path);
   const action = useAction();
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  return <><PageHeader title="Profile requests" compact />
+  return <><AdminSearch value={enrollmentSearch} label="Search profile requests" types={["Creator", "Business", "Customer"]} /><AdminPager value={enrollmentSearch} count={resource.data?.length ?? 0} loading={resource.loading} /><PageHeader title="Profile requests" compact />
     <Resource resource={resource}>{(rows) => rows.length === 0 ? <Section title="No pending requests"><Empty title="Everything is up to date" message="New Creator and Business requests will appear here." /></Section> : <Section title="Under review"><div className="stack-list">{rows.map(row =>
       <article className="admin-profile-request" key={row.id} data-notification-resource={row.id}>
         <div><strong>{actorRoleNameFromWire(row.role)} · {row.displayName}</strong>{row.fullEmail && <small className="admin-account-email">{row.fullEmail}</small>}<small>Submitted {date(row.submittedAtUtc)}</small></div>
@@ -190,110 +210,22 @@ export function AdminDashboard() {
 export function AdminCampaigns() {
   const { user } = useSession();
   if (user?.role === "OperationsAdmin") return <OperationsCampaigns />;
-  const resource = useResource<CampaignRow[]>("/admin/campaigns");
-  const [filters, set] = useState({
-    business: "",
-    campaign: "",
-    type: "",
-    status: "",
-    start: "",
-    end: "",
-  });
+  const search = useAdminSearch("/admin/campaigns");
+  const resource = useResource<CampaignRow[]>(search.path);
   return (
     <>
       <PageHeader title="Campaigns" compact />
       <Resource resource={resource}>
         {(rows) => {
-          const filtered = rows.filter(
-            (r) =>
-              r.business
-                .toLowerCase()
-                .includes(filters.business.toLowerCase()) &&
-              `${r.title} ${r.publicId}`
-                .toLowerCase()
-                .includes(filters.campaign.toLowerCase()) &&
-              (!filters.type || promotionTypeCode(r.type) === filters.type) &&
-              (!filters.status || r.status === filters.status) &&
-              (!filters.start || r.startUtc.slice(0, 10) >= filters.start) &&
-              (!filters.end || r.startUtc.slice(0, 10) <= filters.end),
-          );
+          const filtered = rows;
           return (
             <Section title="All Campaigns" action={<Currency />}>
-              <div className="filter-grid six">
-                <Field label="Business">
-                  <input
-                    type="search"
-                    value={filters.business}
-                    onChange={(e) =>
-                      set({ ...filters, business: e.target.value })
-                    }
-                    placeholder="Business name"
-                  />
-                </Field>
-                <Field label="Campaign">
-                  <input
-                    type="search"
-                    value={filters.campaign}
-                    onChange={(e) =>
-                      set({ ...filters, campaign: e.target.value })
-                    }
-                    placeholder="Title or public ID"
-                  />
-                </Field>
-                <Field label="Type">
-                  <select
-                    value={filters.type}
-                    onChange={(e) => set({ ...filters, type: e.target.value })}
-                  >
-                    <option value="">All types</option>
-                    <option value="ViewOnly">View Only</option>
-                    <option value="ViewPlusCommission">
-                      View &amp; Sale
-                    </option>
-                  </select>
-                </Field>
-                <Field label="Status">
-                  <select
-                    value={filters.status}
-                    onChange={(e) =>
-                      set({ ...filters, status: e.target.value })
-                    }
-                  >
-                    <option value="">All statuses</option>
-                    {[
-                      "Draft",
-                      "Funded",
-                      "Published",
-                      "Active",
-                      "BudgetExhausted",
-                      "Completed",
-                    ].map((s) => (
-                      <option key={s} value={s}>
-                        {s === "BudgetExhausted" ? "Budget exhausted" : s}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Starts from">
-                  <input
-                    type="date"
-                    value={filters.start}
-                    onChange={(e) => set({ ...filters, start: e.target.value })}
-                  />
-                </Field>
-                <Field label="Starts through">
-                  <input
-                    type="date"
-                    value={filters.end}
-                    min={filters.start}
-                    onChange={(e) => set({ ...filters, end: e.target.value })}
-                  />
-                </Field>
-              </div>
+              <AdminSearch value={search} label="Search campaigns, Businesses or Creators" statuses={["Draft", "Published", "Funded", "Active", "BudgetExhausted", "Completed", "Cancelled"]} types={["View Only", "View + Sale"]} dates />
               <p className="fine-print">{filtered.length} Campaigns</p>
               <div className="admin-table">
                 <CampaignTable campaigns={filtered} admin />
               </div>
+              <AdminPager value={search} count={rows.length} loading={resource.loading} />
             </Section>
           );
         }}
@@ -628,27 +560,6 @@ export function AdminCreators() {
                 />
               }
             />
-          </Section>
-        )}
-      </Resource>
-    </>
-  );
-}
-export function AdminActivity() {
-  const resource = useResource<Activity[]>("/admin/notifications");
-  return (
-    <>
-      <PageHeader
-        eyebrow="Operational visibility"
-        title="Notifications"
-        description="Recent platform notifications."
-      />
-      <Resource resource={resource}>
-        {(items) => (
-          <Section
-            title="Latest platform activity"
-          >
-            <ActivityList items={items} />
           </Section>
         )}
       </Resource>

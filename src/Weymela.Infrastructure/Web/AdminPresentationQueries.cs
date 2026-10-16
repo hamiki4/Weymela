@@ -11,23 +11,31 @@ namespace Weymela.Infrastructure.Web;
 // Read-only Platform Admin projections. Balances and movements remain owned by the existing journal and domain models.
 public sealed partial class WorkspaceQueries
 {
-    public async Task<AdminWallets> AdminWalletsAsync(Actor actor, CancellationToken ct)
+    public async Task<AdminWallets> AdminWalletsAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandPlatformAdmin(actor);
-        var wallets = await db.BusinessWallets.AsNoTracking().ToListAsync(ct);
-        var promotions = await db.Promotions.AsNoTracking().ToListAsync(ct);
-        var deposits = await db.DepositRequests.AsNoTracking().Where(x => x.Status == DepositReviewStatus.Pending).ToListAsync(ct);
+        var query = filter ?? new(); query.Validate();
+        var search = new AdminSearchQueries(db, query);
+        var matchingBusinesses = search.Permissions(ActorRole.Business).Select(x => x.SubjectId);
+        var wallets = await db.BusinessWallets.AsNoTracking().Where(x => matchingBusinesses.Contains(x.BusinessId))
+            .OrderBy(x => x.BusinessId).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
+        var walletIds = wallets.Select(x => x.BusinessId).ToArray();
+        var promotions = await search.Campaigns().Where(x => x.Status == PromotionStatus.Active)
+            .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
+        var deposits = await db.DepositRequests.AsNoTracking().Where(x => walletIds.Contains(x.BusinessId) && x.Status == DepositReviewStatus.Pending).ToListAsync(ct);
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
-        var permissions = await db.CommercePermissions.AsNoTracking().Where(x => x.Role == ActorRole.Business && x.IsActive).Select(x => x.SubjectId).ToListAsync(ct);
+        var permissions = await db.CommercePermissions.AsNoTracking().Where(x => walletIds.Contains(x.SubjectId) && x.Role == ActorRole.Business && x.IsActive).Select(x => x.SubjectId).ToListAsync(ct);
         var active = permissions.ToHashSet();
-        var lastDepositVia = (await db.DepositRequests.AsNoTracking().Where(x => x.Status == DepositReviewStatus.Approved)
+        var lastDepositVia = (await db.DepositRequests.AsNoTracking().Where(x => walletIds.Contains(x.BusinessId) && x.Status == DepositReviewStatus.Approved)
             .OrderByDescending(x => x.ReviewedAtUtc).ToListAsync(ct)).GroupBy(x => x.BusinessId)
             .ToDictionary(x => x.Key, x => x.First().DestinationNameSnapshot);
+        var counts = await db.Promotions.AsNoTracking().Where(x => walletIds.Contains(x.BusinessId) && x.Status == PromotionStatus.Active)
+            .GroupBy(x => new { x.BusinessId, x.PromotionType }).Select(x => new { x.Key.BusinessId, x.Key.PromotionType, Count = x.Count() }).ToListAsync(ct);
         var rows = wallets.Select(w => new AdminBusinessWallet(w.BusinessId, names.GetValueOrDefault(w.BusinessId, "Business"),
             w.TotalBalance.Amount, w.AvailableBalance.Amount, w.ReservedBalance.Amount,
             deposits.Where(x => x.BusinessId == w.BusinessId).Sum(x => x.Amount.Amount),
-            promotions.Count(x => x.BusinessId == w.BusinessId && x.PromotionType == PromotionType.ViewOnly && x.Status == PromotionStatus.Active),
-            promotions.Count(x => x.BusinessId == w.BusinessId && x.PromotionType == PromotionType.ViewPlusCommission && x.Status == PromotionStatus.Active),
+            counts.Where(x => x.BusinessId == w.BusinessId && x.PromotionType == PromotionType.ViewOnly).Sum(x => x.Count),
+            counts.Where(x => x.BusinessId == w.BusinessId && x.PromotionType == PromotionType.ViewPlusCommission).Sum(x => x.Count),
             active.Contains(w.BusinessId) ? "Active" : "Inactive", lastDepositVia.GetValueOrDefault(w.BusinessId))).OrderBy(x => x.Business).ToArray();
         var current = promotions.Where(x => x.Status == PromotionStatus.Active).ToArray();
         var ids = current.Select(x => x.Id).ToArray();
@@ -41,10 +49,11 @@ public sealed partial class WorkspaceQueries
         return new(rows, promotionRows);
     }
 
-    public async Task<IReadOnlyList<AdminUgcFinance>> AdminUgcFinanceAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<AdminUgcFinance>> AdminUgcFinanceAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandPlatformAdmin(actor);
-        var opportunities = await db.UgcOpportunities.AsNoTracking().OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        var query = filter ?? new();
+        var opportunities = await new AdminSearchQueries(db, query).Ugc().OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var ids = opportunities.Select(x => x.Id).ToArray();
         var offers = await db.UgcCustomerOffers.AsNoTracking().Where(x => ids.Contains(x.UgcOpportunityId)).ToDictionaryAsync(x => x.UgcOpportunityId, ct);
         var sales = await db.UgcCustomerOfferSales.AsNoTracking().Where(x => ids.Contains(x.UgcOpportunityId)).ToListAsync(ct);

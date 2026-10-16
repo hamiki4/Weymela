@@ -17,14 +17,13 @@ export function AdminMore() {
       ["Businesses", "/admin/businesses"], ["Admins", "/admin/admins"]]],
     ["Promotions", [["Campaigns", "/admin/campaigns"], ["UGC", "/admin/ugc"],
       ["Publication Verification", "/admin/publications"]]],
-    ["Management", [["Reports", "/admin/reports"], ["Financial Settings", "/admin/settings"],
-      ["Notifications", "/notifications"]]],
+    ["Management", [["Reports", "/admin/reports"], ["Financial Settings", "/admin/settings"], ["Social Review", "/admin/social-profiles"]]],
   ] : [
     ["Accounts", [["Profile Requests", "/admin/role-enrollments"],
       ["Customers", "/admin/operations/customers"], ["Creators", "/admin/operations/creators"],
       ["Businesses", "/admin/operations/businesses"]]],
     ["Promotions", [["Campaigns", "/admin/campaigns"], ["UGC", "/admin/ugc"]]],
-    ["Management", [["Notifications", "/notifications"]]],
+    ["Management", [["Social Review", "/admin/social-profiles"]]],
   ];
   return <div className="admin-more-page">
     <Link className="admin-more-back" to={back}><Icon name="back" size={18} />Back</Link>

@@ -1,14 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 
-const adminLinks = ["Dashboard", "Customers", "Creators", "Businesses", "Admins", "Campaigns", "Wallets", "UGC", "Payouts", "Reports", "Financial Settings", "Notifications"];
+const adminLinks = ["Dashboard", "Customers", "Creators", "Businesses", "Admins", "Campaigns", "Wallets", "UGC", "Payouts", "Reports", "Financial Settings", "Social Review"];
 
 test("Platform Admin uses the compact navigation and every dashboard summary leads somewhere", async ({ page, context }) => {
   await login(context, "admin");
   await open(page, "/admin");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   for (const label of adminLinks) await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
-  for (const retired of ["View As", "Audit", "Accounts", "Platform Revenue"]) await expect(nav.getByRole("link", { name: retired, exact: true })).toHaveCount(0);
+  for (const retired of ["Notifications", "View As", "Audit", "Accounts", "Platform Revenue"]) await expect(nav.getByRole("link", { name: retired, exact: true })).toHaveCount(0);
   await expect(page.locator(".topbar-identity")).not.toBeEmpty();
   await expect(page.locator(".topbar-identity")).not.toContainText("@");
   await expect(page.getByRole("heading", { name: "Recent activity" })).toHaveCount(0);
@@ -101,4 +101,26 @@ test("interactive controls keep their colors, borders, opacity and shadow on hov
   const before = await values();
   await button.hover();
   expect(await values()).toEqual(before);
+});
+
+test("Operations account cards contain long identifiers and show phones at mobile widths", async ({ page, context }) => {
+  await login(context, "operations-admin");
+  const phone = "+251911222333";
+  const identity = { id: "10fbc49c-d94b-4869-8df7-829ac0bb3fc8", displayName: "LongAccountName".repeat(8),
+    publicId: "LONG-PUBLIC-IDENTIFIER-".repeat(8), region: "Addis Ababa", category: "Food" };
+  for (const [path, record] of [
+    ["customers", { customer: identity, status: "Active" }],
+    ["creators", { creator: identity, status: "Active", activeCampaigns: 0, payoutEligible: false }],
+    ["businesses", { business: identity, status: "Active", activeCampaigns: 0, lastDepositUtc: null }],
+  ] as const) {
+    // Synthetic rendering fixture only; authorization and database search are covered by HTTP tests.
+    await page.route(`**/api/admin/${path}*`, route => route.fulfill({ json: [{ ...record,
+      fullEmail: "long.account.holder.with.a.registered.contact@subdomain.example.test", fullPhone: phone }] }));
+    for (const width of [360, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 });
+      await open(page, `/admin/operations/${path}`);
+      await expect(page.locator(".mobile-data .admin-account-phone")).toHaveText(phone);
+      await layout(page);
+    }
+  }
 });

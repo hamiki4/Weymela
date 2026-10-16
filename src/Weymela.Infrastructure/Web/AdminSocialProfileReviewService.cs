@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Weymela.Domain;
 using Microsoft.EntityFrameworkCore;
 using Weymela.Application;
 using Weymela.Application.Web;
@@ -11,11 +12,24 @@ public sealed class AdminSocialProfileReviewService(WeymelaDbContext db, TimePro
 {
     private const long MaximumAudience = 9_000_000_000_000_000;
 
-    public async Task<IReadOnlyList<AdminSocialProfileReviewView>> ListAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<AdminSocialProfileReviewView>> ListAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         Demand(actor);
-        var profiles = await db.CreatorSocialProfiles.AsNoTracking().Where(x => x.IsActive)
-            .OrderBy(x => x.UpdatedAtUtc).ToListAsync(ct);
+        var query = filter ?? new(); query.Validate();
+        var term = query.Term;
+        var source = db.CreatorSocialProfiles.AsNoTracking().Where(x => x.IsActive);
+        if (term != "") source = source.Where(x => x.ProfileUrl.ToLower().Contains(term)
+            || db.PublicWorkspaceProfiles.Any(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator && p.DisplayName.ToLower().Contains(term)));
+        if (!string.IsNullOrEmpty(query.Type))
+        {
+            if (!Enum.TryParse<CreatorPlatform>(query.Type, true, out var platform))
+                throw new ApplicationFailure(FailureKind.Validation, "Choose a valid social platform.");
+            source = source.Where(x => x.Platform == platform);
+        }
+        if (query.Status == "Unverified") source = source.Where(x => x.VerificationStatus != "Verified" && x.VerificationStatus != "Rejected");
+        else if (!string.IsNullOrEmpty(query.Status)) source = source.Where(x => x.VerificationStatus == query.Status);
+        var profiles = await source.OrderBy(x => x.UpdatedAtUtc).ThenBy(x => x.Id)
+            .Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var ids = profiles.Select(x => x.CreatorId).Distinct().ToArray();
         var creators = await db.PublicWorkspaceProfiles.AsNoTracking()
             .Where(x => x.Role == ActorRole.Creator && ids.Contains(x.SubjectId)).ToDictionaryAsync(x => x.SubjectId, ct);

@@ -132,6 +132,9 @@ export interface AdminAccountSummary {
   canManage: boolean;
   joinedAtUtc?: string | null;
   fullEmail: string | null;
+  fullPhone?: string | null;
+  businessContactPhone?: string | null;
+  ownerName?: string | null;
 }
 export interface AdminAuditItem {
   id: string;
@@ -491,6 +494,9 @@ export interface OperationsBusinessView {
   activeCampaigns: number;
   lastDepositUtc: string | null;
   fullEmail: string | null;
+  fullPhone?: string | null;
+  businessContactPhone?: string | null;
+  ownerName?: string | null;
 }
 export interface OperationsCreatorView {
   creator: CreatorCard;
@@ -498,11 +504,17 @@ export interface OperationsCreatorView {
   activeCampaigns: number;
   payoutEligible: boolean;
   fullEmail: string | null;
+  fullPhone?: string | null;
+  businessContactPhone?: string | null;
+  ownerName?: string | null;
 }
 export interface OperationsCustomerView {
   customer: { id: string; displayName: string; publicId: string };
   status: string;
   fullEmail: string | null;
+  fullPhone?: string | null;
+  businessContactPhone?: string | null;
+  ownerName?: string | null;
 }
 export interface OperationsCampaignView {
   id: string;

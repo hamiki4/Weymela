@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { actorRoleWireValues } from "../src/api/actorRoleContract";
 import type { AccountLegalStatus } from "../src/api/types";
 
@@ -88,10 +88,11 @@ vi.mock("../src/app/Session", () => ({
 
 import { Onboarding } from "../src/app/Onboarding";
 
+function Destination() { return <output data-testid="destination">{useLocation().pathname}</output>; }
 function renderOnboarding() {
   return render(
     <MemoryRouter initialEntries={["/onboarding"]}>
-      <Onboarding />
+      <Destination /><Onboarding />
     </MemoryRouter>,
   );
 }
@@ -100,7 +101,7 @@ describe("shared role-themed onboarding", () => {
   afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     window.sessionStorage.clear();
-    mocks.post.mockClear();
+    mocks.post.mockReset().mockResolvedValue({ id: "enrollment-1", status: "Approved" });
     mocks.reload.mockClear();
     mocks.refresh.mockClear();
     mocks.switchProfile.mockClear();
@@ -172,7 +173,7 @@ describe("shared role-themed onboarding", () => {
         privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
       },
     }), "explicit-current-consent");
-    expect(await screen.findByRole("heading", { name: "Your account is ready." })).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId("destination")).toHaveTextContent("/customer/offers"));
   });
 
   it("reuses genuine agreement to unchanged versions from the registration form", async () => {
@@ -234,6 +235,19 @@ describe("shared role-themed onboarding", () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
+  it("retains saved registration when the backend has not confirmed activation", async () => {
+    mocks.legalStatus = { ...effectiveLegal, current: true };
+    mocks.post.mockResolvedValue({ id: "pending-account", status: "Pending" });
+    window.sessionStorage.setItem("weymela.public-signup", JSON.stringify({
+      version: 1, idempotencyKey: "pending-backend-result", role: "Customer", legalName: "Test account",
+      email: "test@example.test", phone: "+251900000000", legalAccepted: true,
+    }));
+    renderOnboarding();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Activation is still pending");
+    expect(screen.getByTestId("destination")).toHaveTextContent("/onboarding");
+    expect(window.sessionStorage.getItem("weymela.public-signup")).not.toBeNull();
+  });
+
   it("completes a PIN-enrolled public Business registration exactly once and opens its workspace", async () => {
     mocks.identityEmail = "owner@example.test";
     mocks.legalStatus = { ...effectiveLegal, current: true };
@@ -248,9 +262,8 @@ describe("shared role-themed onboarding", () => {
       role: "Business", displayName: "ABC Trading", legalName: "Abebe Kebede",
       registeredPhone: "+251911111111", category: "Retail",
     }), "public-business-key");
-    expect(await screen.findByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
-    expect(screen.getByText(/secure device is registered/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId("destination")).toHaveTextContent("/business"));
+    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
     expect(screen.queryByText(/waiting for Weymela approval/)).not.toBeInTheDocument();
     expect(window.sessionStorage.getItem("weymela.public-signup")).toBeNull();
   });

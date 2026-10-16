@@ -45,14 +45,60 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             && !string.Equals(filter.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
             throw new ApplicationFailure(FailureKind.Validation, "Choose a supported account status.");
 
-        var permissions = await db.CommercePermissions.AsNoTracking().ToListAsync(ct);
+        if (filter.Page < 1 || filter.Page > 100000 || filter.PageSize < 1 || filter.PageSize > 100
+            || filter.Search?.Length > 200)
+            throw new ApplicationFailure(FailureKind.Validation, "Choose a valid search and page size from 1 to 100.");
+        if (!string.IsNullOrEmpty(filter.AdminRole) && (!adminRoles
+            || filter.AdminRole is not ("PlatformAdmin" or "OperationsAdmin")))
+            throw new ApplicationFailure(FailureKind.Validation, "Choose a supported Admin role.");
+        var search = filter.Search?.Trim().ToLowerInvariant() ?? "";
+        var roleFilter = requestedRole?.ToString() ?? (adminRoles ? "Admin" : "");
+        var statusFilter = filter.Status ?? "";
+        var adminRole = filter.AdminRole ?? "";
+        var approval = filter.Approval ?? "";
+        var offset = (filter.Page - 1) * filter.PageSize;
+        // The authorized role, identity search, status and page are applied in PostgreSQL
+        // before loading contact or financial projections. Values are bound parameters.
+        var keys = await db.Database.SqlQuery<DirectoryKey>($"""
+            WITH candidates AS (
+              SELECT p."UserId", p."Role", 0 AS priority,
+                coalesce(w."DisplayName", g."DisplayName", c."PreferredName", split_part(e."DeliveryAddress", '@', 1), 'Weymela account') AS name,
+                coalesce(l."Status", CASE WHEN p."IsActive" THEN 'Active' ELSE 'Inactive' END) AS status,
+                coalesce((SELECT r."Status" FROM v3."RoleEnrollments" r WHERE r."UserId"=p."UserId" AND r."RequestedRole"=p."Role" ORDER BY r."SubmittedAtUtc" DESC LIMIT 1), 'Active') AS approval
+              FROM v3."CommercePermissions" p
+              LEFT JOIN v3."PublicWorkspaceProfiles" w ON w."SubjectId"=p."SubjectId" AND w."Role"=p."Role"
+              LEFT JOIN v3."AdminGrants" g ON g."UserId"=p."UserId" AND g."Role"=p."Role"
+              LEFT JOIN v3."CustomerProfiles" c ON c."UserId"=p."UserId"
+              LEFT JOIN v3."AuthIdentifiers" e ON e."UserId"=p."UserId" AND e."Kind"='Email'
+              LEFT JOIN v3."AccountLifecycles" l ON l."UserId"=p."UserId"
+              UNION ALL
+              SELECT a."UserId", a."TargetRole", 1, a."DisplayName", 'Pending', 'Pending'
+              FROM v3."AccountPreauthorizations" a WHERE a."Status"='Pending'
+            ), accounts AS (
+              SELECT DISTINCT ON ("UserId", "Role") * FROM candidates ORDER BY "UserId", "Role", priority, name
+            )
+            SELECT a."UserId", a."Role" FROM accounts a
+            WHERE ({roleFilter}='' OR a."Role"={roleFilter} OR ({roleFilter}='Admin' AND a."Role" IN ('PlatformAdmin','OperationsAdmin')))
+              AND ({adminRole}='' OR a."Role"={adminRole})
+              AND ({statusFilter}='' OR lower(a.status)=lower({statusFilter}))
+              AND ({approval}='' OR lower(a.approval)=lower({approval}))
+              AND ({search}='' OR strpos(lower(a.name),{search})>0
+                OR EXISTS (SELECT 1 FROM v3."AuthIdentifiers" i WHERE i."UserId"=a."UserId" AND strpos(lower(i."DeliveryAddress"),{search})>0)
+                OR EXISTS (SELECT 1 FROM v3."RoleEnrollments" r WHERE r."UserId"=a."UserId" AND r."RequestedRole"=a."Role" AND strpos(lower(r."SubmissionJson"),{search})>0)
+                OR EXISTS (SELECT 1 FROM v3."CommercePermissions" p JOIN v3."CreatorSocialProfiles" sp ON sp."CreatorId"=p."SubjectId"
+                    WHERE p."UserId"=a."UserId" AND a."Role"='Creator' AND strpos(lower(sp."ProfileUrl"),{search})>0))
+            ORDER BY lower(a.name), a."Role", a."UserId" LIMIT {filter.PageSize} OFFSET {offset}
+            """).ToListAsync(ct);
+        var selectedUsers = keys.Select(x => x.UserId).ToArray();
+        var permissions = await db.CommercePermissions.AsNoTracking().Where(x => selectedUsers.Contains(x.UserId)).ToListAsync(ct);
         var preauthorizations = await db.AccountPreauthorizations.AsNoTracking()
-            .Where(x => x.Status == AccountPreauthorizationStatus.Pending)
+            .Where(x => x.Status == AccountPreauthorizationStatus.Pending && selectedUsers.Contains(x.UserId))
             .ToListAsync(ct);
-        var lifecycles = await db.AccountLifecycles.AsNoTracking().ToDictionaryAsync(x => x.UserId, ct);
+        var lifecycles = await db.AccountLifecycles.AsNoTracking().Where(x => selectedUsers.Contains(x.UserId)).ToDictionaryAsync(x => x.UserId, ct);
         var userIds = permissions.Select(x => x.UserId).Concat(preauthorizations.Select(x => x.UserId)).Distinct().ToArray();
         var identifiers = await db.AuthIdentifiers.AsNoTracking().Where(x => userIds.Contains(x.UserId)).ToListAsync(ct);
-        var profiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => userIds.Contains(x.SubjectId)).ToListAsync(ct);
+        var subjectIds = permissions.Select(x => x.SubjectId).ToArray();
+        var profiles = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => subjectIds.Contains(x.SubjectId)).ToListAsync(ct);
         var customers = await db.CustomerProfiles.AsNoTracking().Where(x => userIds.Contains(x.UserId)).ToListAsync(ct);
         var grants = await db.AdminGrants.AsNoTracking().Where(x => userIds.Contains(x.UserId)).ToListAsync(ct);
         var enrollments = await db.RoleEnrollments.AsNoTracking().Where(x => userIds.Contains(x.UserId)).ToListAsync(ct);
@@ -63,14 +109,14 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         var result = new List<AdminAccountSummary>();
         foreach (var group in permissions.GroupBy(x => new { x.UserId, x.Role }))
         {
+            if (!keys.Any(x => x.UserId == group.Key.UserId && x.Role == group.Key.Role.ToString())) continue;
             if (requestedRole is not null && group.Key.Role != requestedRole) continue;
             if (adminRoles && group.Key.Role is not (ActorRole.PlatformAdmin or ActorRole.OperationsAdmin)) continue;
             var groupProfile = profiles.FirstOrDefault(p => p.Role == group.Key.Role && group.Select(x => x.SubjectId).Contains(p.SubjectId));
             var groupGrant = grants.Where(x => x.UserId == group.Key.UserId && x.Role == group.Key.Role).OrderByDescending(x => x.GrantedAtUtc).FirstOrDefault();
             var groupCustomer = customers.FirstOrDefault(x => x.UserId == group.Key.UserId);
             var groupEmail = identifiers.FirstOrDefault(x => x.UserId == group.Key.UserId && x.Kind == "Email")?.DeliveryAddress;
-            if (!Matches(filter.Search, groupProfile?.DisplayName, groupGrant?.DisplayName, groupCustomer?.PreferredName, groupEmail,
-                group.FirstOrDefault()?.BusinessId?.ToString("D"))) continue;
+
             var lifecycle = lifecycles.GetValueOrDefault(group.Key.UserId);
             var preauth = preauthorizations.LastOrDefault(x => x.UserId == group.Key.UserId && x.TargetRole == group.Key.Role);
             var enrollment = enrollments.Where(x => x.UserId == group.Key.UserId && x.RequestedRole == group.Key.Role)
@@ -84,7 +130,7 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
         {
             if (permissions.Any(x => x.UserId == preauth.UserId && x.Role == preauth.TargetRole)) continue;
             var preauthEmail = identifiers.FirstOrDefault(x => x.UserId == preauth.UserId && x.Kind == "Email")?.DeliveryAddress;
-            if (!Matches(filter.Search, preauth.DisplayName, preauthEmail, preauth.PublicId)) continue;
+            if (!keys.Any(x => x.UserId == preauth.UserId && x.Role == preauth.TargetRole.ToString())) continue;
             var lifecycle = lifecycles.GetValueOrDefault(preauth.UserId);
             result.Add(Summary(preauth.UserId, preauth.TargetRole, lifecycle, [], [], identifiers, profiles, customers, grants,
                 activity.GetValueOrDefault(preauth.UserId), preauth, null) with { Id = preauth.Id });
@@ -612,7 +658,17 @@ public sealed class PlatformAdminAccountService(WeymelaDbContext db, TimeProvide
             permissions.FirstOrDefault(x => x.Role == role)?.BusinessId?.ToString("D"), activity ?? preauth?.CreatedAtUtc,
             role != ActorRole.Cashier && status is not ("Closed" or "Revoked" or "Cancelled")
                 && (permissions.Any(x => x.IsActive) || preauth?.Status == AccountPreauthorizationStatus.Pending),
-            status == "Pending" ? null : joined, email);
+            status == "Pending" ? null : joined, email,
+            identifiers.FirstOrDefault(x => x.UserId == userId && x.Kind == "Phone")?.DeliveryAddress,
+            OwnerName: enrollment is null ? null : EnrollmentLegalName(enrollment.SubmissionJson));
+    }
+
+    private sealed record DirectoryKey(Guid UserId, string Role);
+
+    private static string? EnrollmentLegalName(string json)
+    {
+        try { using var document = JsonDocument.Parse(json); return document.RootElement.TryGetProperty("LegalName", out var name) ? name.GetString() : null; }
+        catch (JsonException) { return null; }
     }
 
     private static AdminCommerceTransaction Transaction(VerifiedSale x)

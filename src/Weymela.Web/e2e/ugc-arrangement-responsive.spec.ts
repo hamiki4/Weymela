@@ -83,7 +83,8 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
         await expect(page.getByRole("button", { name: "Request to Join" })).toBeVisible();
       }
       const bell = page.getByRole("link", { name: "Your notifications" });
-      await expect(bell.locator("svg")).toBeVisible();
+      if (["admin", "operations-admin"].includes(alias)) await expect(bell).toHaveCount(0);
+      else await expect(bell.locator("svg")).toBeVisible();
       const gear = page.locator(".topbar-right svg:has(circle[cx='12'][cy='12'])");
       if (!["cashier", "operations-admin"].includes(alias)) await expect(gear).toBeVisible();
       expect(await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).fontSize))).toBeGreaterThanOrEqual(18);

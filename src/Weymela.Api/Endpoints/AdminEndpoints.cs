@@ -54,31 +54,31 @@ internal static class AdminEndpoints
             return Results.Ok(new{creators,wallets,socialReview,payouts});
         });
         g.MapGet("/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminHomeAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
-        g.MapGet("/wallets",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminWalletsAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
-        g.MapGet("/ugc/finance",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminUgcFinanceAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
+        g.MapGet("/wallets",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminWalletsAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c))).RequireAuthorization("PlatformAdmin");
+        g.MapGet("/ugc/finance",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.AdminUgcFinanceAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c))).RequireAuthorization("PlatformAdmin");
         g.MapGet("/reports",(DateOnly from,DateOnly to,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
             q.AdminReportAsync(EndpointSupport.Actor(c),from,to,ct)).RequireAuthorization("PlatformAdmin");
         g.MapGet("/operations/home",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.OperationsHomeAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/businesses",async(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
-            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsBusinessesAsync(actor,ct)) : Results.Ok(await q.BusinessesAsync(actor,ct));
+            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsBusinessesAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await q.BusinessesAsync(actor,ct));
         });
         g.MapGet("/creators",async(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
-            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsCreatorsAsync(actor,ct)) : Results.Ok(await q.CreatorsAsync(actor,ct));
+            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsCreatorsAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await q.CreatorsAsync(actor,ct));
         });
-        g.MapGet("/customers",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.OperationsCustomersAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/customers",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.OperationsCustomersAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c)));
         g.MapGet("/campaigns",async(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
-            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsCampaignsAsync(actor,ct)) : Results.Ok(await q.AdminCampaignsAsync(actor,ct));
+            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsCampaignsAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await q.AdminCampaignsAsync(actor,ct,EndpointSupport.ListFilter(c)));
         });
         g.MapGet("/promotions",async(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
-            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsCampaignsAsync(actor,ct)) : Results.Ok(await q.AdminCampaignsAsync(actor,ct));
+            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsCampaignsAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await q.AdminCampaignsAsync(actor,ct,EndpointSupport.ListFilter(c)));
         });
         g.MapGet("/campaigns/{id:guid}",async(Guid id,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {
@@ -91,7 +91,7 @@ internal static class AdminEndpoints
         g.MapGet("/payouts",async(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
-            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsPayoutsAsync(actor,ct)) : Results.Ok(await q.PayoutsAsync(actor,ct));
+            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsPayoutsAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await q.PayoutsAsync(actor,ct,EndpointSupport.ListFilter(c)));
         });
         g.MapPost("/payouts/{kind}/{subject:guid}/prepare",async(string kind,Guid subject,PayoutAmountInput input,HttpContext c,PayoutService service,CancellationToken ct)=>
         {
@@ -104,18 +104,18 @@ internal static class AdminEndpoints
             EndpointSupport.Id(await service.SettlePlatformAsync(EndpointSupport.Actor(c),new Money(input.Amount),input.Reference,EndpointSupport.Key(c),ct))).RequireAuthorization("PlatformAdmin");
         g.MapGet("/platform",(HttpContext c,FinancialQueries q,CancellationToken ct)=>q.PlatformAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
         g.MapGet("/notifications",(HttpContext c,WorkspaceQueries q,CancellationToken ct)=>q.NotificationsAsync(EndpointSupport.Actor(c),ct));
-        g.MapGet("/social-profiles/review",(HttpContext c,AdminSocialProfileReviewService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),ct));
+        g.MapGet("/social-profiles/review",(HttpContext c,AdminSocialProfileReviewService service,CancellationToken ct)=>service.ListAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c)));
         g.MapPost("/social-profiles/{id:guid}/review",async(Guid id,AdminSocialProfileReviewInput input,HttpContext c,AdminSocialProfileReviewService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.ReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapGet("/publication-verifications",(HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
-            service.AdminQueueAsync(EndpointSupport.Actor(c),ct)).RequireAuthorization("PlatformAdmin");
+            service.AdminQueueAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c))).RequireAuthorization("PlatformAdmin");
         g.MapPost("/publication-verifications/{id:guid}/review",async(Guid id,AdminPublicationReviewInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.AdminReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)))
             .RequireAuthorization("PlatformAdmin");
         g.MapGet("/ugc",async(HttpContext c,UgcService service,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
-            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await service.OperationsAsync(actor,ct)) : Results.Ok(await service.AdminAsync(actor,ct));
+            return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await service.OperationsAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await service.AdminAsync(actor,ct,EndpointSupport.ListFilter(c)));
         });
         g.MapGet("/ugc/{id:guid}",(Guid id,HttpContext c,UgcService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct)).RequireAuthorization("PlatformAdmin");
         var accounts=g.MapGroup("/accounts").RequireAuthorization("PlatformAdmin");

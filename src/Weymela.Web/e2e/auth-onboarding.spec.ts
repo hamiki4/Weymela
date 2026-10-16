@@ -478,8 +478,6 @@ test("public Business signup creates the role only after verified email and devi
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await enrolled).status()).toBe(200);
   expect((await activated).status()).toBe(200);
-  await expect(page.getByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL(/\/business/);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Business" });
   const identityBefore = await (await context.request.get("/api/onboarding/identity")).json() as { userId: string; phone: string };
@@ -536,7 +534,7 @@ test("Platform Admin reviews Creator while verified Business registration activa
   await login(context, "admin");
   await open(page, "/admin/creators");
   await expect(page.getByRole("heading", { name: /Pending Review \(\d+\)/ })).toBeVisible();
-  const creatorRow = page.getByRole("row", { name: new RegExp(creatorName) });
+  const creatorRow = page.locator(".admin-pending-review").getByRole("row", { name: new RegExp(creatorName) });
   await expect(creatorRow).toContainText("YouTube");
   await creatorRow.getByRole("button", { name: "Review" }).click();
   await expect(page.getByText(account.email, { exact: true })).toBeVisible();
@@ -548,6 +546,7 @@ test("Platform Admin reviews Creator while verified Business registration activa
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   expect((await approved).status()).toBe(200);
   await expect(creatorRow).toHaveCount(0);
+  await expect(page.getByRole("row", { name: new RegExp(creatorName) })).toContainText("Active");
 
   await establishFirebaseSession(context, account.token, "Customer");
   const businessName = `Business Review ${account.suffix}`;

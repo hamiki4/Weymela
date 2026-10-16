@@ -794,7 +794,7 @@ html[lang="am"] .settings-page-row strong, html[lang="am"] .account-role-copy, h
 .product-shell.role-creator .creator-opportunity-payment strong { font-size: .94rem; }
 .product-shell.role-creator .creator-opportunity-payment span { color: var(--product-secondary); font-size: .82rem; }
 .product-shell.role-creator .creator-opportunity-commission { color: var(--product-secondary); font-size: .82rem; }
-.product-shell.role-creator .creator-opportunity-card > .button,
+.product-shell.role-creator .creator-opportunity-card > .button { width: fit-content; align-self: flex-start; padding: 8px 16px; }
 .product-shell.role-creator .creator-opportunity-card > .creator-join-controls { width: 100%; }
 .product-shell.role-creator .creator-opportunity-card > .button { justify-content: center; min-height: 44px; }
 .product-shell.role-creator .creator-opportunity-card .creator-opportunity-type { text-transform: none; letter-spacing: 0; }
@@ -1465,3 +1465,8 @@ div.private-review-media {
 .product-shell.role-business .business-promotion-tabs .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow-x: visible; }
 .product-shell.role-business .business-promotion-tabs .tabs button { min-width: 0; max-width: 100%; padding-inline: 6px; white-space: normal; overflow-wrap: break-word; }
 .product-shell.role-business .business-promotion-list .business-promotion-card .badge { white-space: normal; }
+
+.product-shell.role-creator .creator-request-join {
+  width: fit-content; max-width: 100%; min-height: 44px; padding: 8px 16px;
+  align-self: flex-start; font-size: .9rem; line-height: 1.25;
+}

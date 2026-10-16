@@ -166,16 +166,28 @@ internal static class OperationalEndpoints
                 var matchingBusinesses=db.PublicWorkspaceProfiles.AsNoTracking()
                     .Where(x=>x.Role==ActorRole.Business&&EF.Functions.ILike(x.DisplayName,$"%{term}%"))
                     .Select(x=>x.SubjectId);
+                var matchingOwners=new Weymela.Infrastructure.Web.AdminSearchQueries(db,new Weymela.Application.Web.AdminListFilter(Search:term))
+                    .Permissions(ActorRole.Business).Select(x=>x.SubjectId);
                 var exactId=Guid.TryParse(term,out var parsedId)?parsedId:(Guid?)null;
-                query=query.Where(x=>matchingBusinesses.Contains(x.BusinessId)
+                query=query.Where(x=>matchingBusinesses.Contains(x.BusinessId)||matchingOwners.Contains(x.BusinessId)
                     ||exactId.HasValue&&x.Id==exactId.Value
                     ||EF.Functions.ILike(x.ExternalReference,$"%{term}%")
                     ||EF.Functions.ILike(x.Provider,$"%{term}%")
                     ||x.DestinationNameSnapshot!=null&&EF.Functions.ILike(x.DestinationNameSnapshot,$"%{term}%")
                     ||x.DestinationAccountSnapshot!=null&&EF.Functions.ILike(x.DestinationAccountSnapshot,$"%{term}%"));
             }
+            var filter = EndpointSupport.ListFilter(c);
+            if (!string.IsNullOrEmpty(filter.Status))
+            {
+                if (!Enum.TryParse<DepositReviewStatus>(filter.Status, true, out var status))
+                    throw new ApplicationFailure(FailureKind.Validation, "Choose a valid deposit status.");
+                query = query.Where(x => x.Status == status);
+            }
+            if (!string.IsNullOrEmpty(filter.Type)) query = query.Where(x => x.Provider == filter.Type || x.DestinationNameSnapshot == filter.Type);
+            if (filter.From is { } from) query = query.Where(x => x.SubmittedAtUtc >= from);
+            if (filter.To is { } to) query = query.Where(x => x.SubmittedAtUtc < to.AddDays(1));
             var rows=await query.OrderBy(x=>x.Status==DepositReviewStatus.Pending?0:1)
-                .ThenByDescending(x=>x.SubmittedAtUtc).ThenByDescending(x=>x.Id).ToListAsync(ct);
+                .ThenByDescending(x=>x.SubmittedAtUtc).ThenByDescending(x=>x.Id).Skip(filter.Offset).Take(filter.PageSize).ToListAsync(ct);
             var ids=rows.Select(x=>x.BusinessId).Distinct().ToArray();
             var names=await db.PublicWorkspaceProfiles.AsNoTracking().Where(x=>x.Role==ActorRole.Business&&ids.Contains(x.SubjectId))
                 .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);

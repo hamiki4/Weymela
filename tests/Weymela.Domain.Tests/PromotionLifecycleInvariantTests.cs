@@ -27,5 +27,25 @@ public sealed class PromotionLifecycleInvariantTests
  [Fact] public void Published_promotion_allows_only_non_financial_presentation_edits(){var p=Funded();p.Publish(Now,Guid.NewGuid());var budget=p.TotalBudget;var pricing=p.PricingSnapshot;p.UpdatePresentation("Clarified instructions","Weekend Special","Addis Ababa","[\"https://example.com/reference\"]");Assert.Equal("Clarified instructions",p.Description);Assert.Equal("Weekend Special",p.Slogan);Assert.Equal(budget,p.TotalBudget);Assert.Equal(pricing,p.PricingSnapshot);Assert.Equal(PromotionStatus.Published,p.Status);}
  [Fact] public void Draft_promotion_can_be_revised_without_reserving_funds(){var p=New();p.ReviseBeforeApproval("Updated","New brief",PromotionType.ViewOnly,new Money(7000),new(null,null,"Addis",null),Now,Now.AddDays(30),Pricing(PromotionType.ViewOnly),null,null,null,[(CreatorPlatform.TikTok,2,null)],Now.AddDays(5),Now.AddDays(10));Assert.Equal(PromotionStatus.Draft,p.Status);Assert.Equal(0,p.ReservedBudget.Amount);Assert.Equal(7000,p.TotalBudget.Amount);Assert.Equal("Updated",p.Title);Assert.Equal(2,p.Platforms.Single().Capacity);}
  [Fact] public void Published_promotion_without_approved_creator_can_cancel_and_release_exact_reserve(){var p=New();var w=new BusinessWallet(p.BusinessId);w.CreditDeposit(p.TotalBudget,Now,Guid.NewGuid());p.Fund(w,Now,Guid.NewGuid());p.Publish(Now,Guid.NewGuid());p.CancelExceptional(w,Now,Guid.NewGuid());Assert.Equal(PromotionStatus.Cancelled,p.Status);Assert.Equal(0,p.ReservedBudget.Amount);Assert.Equal(6000,w.AvailableBalance.Amount);Assert.Equal(0,w.ReservedBalance.Amount);}
+ [Theory]
+ [InlineData(PromotionType.ViewOnly)]
+ [InlineData(PromotionType.ViewPlusCommission)]
+ public void Active_promotion_without_commitments_can_cancel_and_release_exact_reserve(PromotionType type)
+ {
+  var p=New(type);var w=new BusinessWallet(p.BusinessId);w.CreditDeposit(new Money(7000),Now,Guid.NewGuid());
+  p.Fund(w,Now,Guid.NewGuid());p.Publish(Now,Guid.NewGuid());p.Activate(Now,Guid.NewGuid());var terms=p.PricingSnapshot;
+  p.CancelExceptional(w,Now,Guid.NewGuid());
+  Assert.Equal(PromotionStatus.Cancelled,p.Status);Assert.Equal(0,p.ReservedBudget.Amount);Assert.Equal(7000,w.AvailableBalance.Amount);Assert.Equal(0,w.ReservedBalance.Amount);Assert.Equal(terms,p.PricingSnapshot);
+ }
+ [Theory]
+ [InlineData(PromotionType.ViewOnly)]
+ [InlineData(PromotionType.ViewPlusCommission)]
+ public void Active_promotion_with_approved_creator_cannot_release_committed_funds(PromotionType type)
+ {
+  var p=New(type);var w=new BusinessWallet(p.BusinessId);w.CreditDeposit(p.TotalBudget,Now,Guid.NewGuid());
+  p.Fund(w,Now,Guid.NewGuid());p.Publish(Now,Guid.NewGuid());p.Activate(Now,Guid.NewGuid());p.Allocate(Guid.NewGuid(),new Money(1000),Now,Guid.NewGuid());
+  Assert.Throws<InvalidOperationException>(()=>p.CancelExceptional(w,Now,Guid.NewGuid()));
+  Assert.Equal(PromotionStatus.Active,p.Status);Assert.Equal(6000,p.ReservedBudget.Amount);Assert.Equal(0,w.AvailableBalance.Amount);Assert.Equal(6000,w.ReservedBalance.Amount);
+ }
  [Fact] public void Promotion_with_approved_creator_cannot_cancel_and_preserves_reserved_funds(){var p=Funded();p.Publish(Now,Guid.NewGuid());p.Allocate(Guid.NewGuid(),new Money(1000),Now,Guid.NewGuid());var w=new BusinessWallet(p.BusinessId);Assert.Throws<InvalidOperationException>(()=>p.CancelExceptional(w,Now,Guid.NewGuid()));Assert.Equal(PromotionStatus.Published,p.Status);Assert.Equal(6000,p.ReservedBudget.Amount);}
 }

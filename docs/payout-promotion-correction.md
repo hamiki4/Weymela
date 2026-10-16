@@ -22,3 +22,5 @@ Release gates: targeted database/API/browser tests; required CI and source/depen
 The explicit operator allowlist now supports ViewRewards. Enabling this operation still requires genuine provider ownership and fresh count evidence at the service boundary. Missing provider integration returns ProviderUnavailable and never posts a reward. Unknown money operations remain denied.
 
 Provider fixtures demonstrate software behavior only. They do not establish real TikTok views, external ownership, settlement or payouts. Missing provider credentials or required product-specific Admin values must be reported explicitly; never invent those values or disable unrelated operations.
+
+An active View campaign with no approved Creator or spending can be cancelled through the existing owned, versioned, idempotent cancellation operation. Publishing an immediately starting campaign activates it in the same transaction; activation alone must not strand an entirely uncommitted reserve. Approved Creator commitments and spent funds remain protected. Cancellation posts the existing balanced release journal and preserves the original reservation and historical terms.

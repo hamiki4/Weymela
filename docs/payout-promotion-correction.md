@@ -19,4 +19,6 @@ Repeated instructional text moves into role-specific Settings → Help, with Eng
 
 Release gates: targeted database/API/browser tests; required CI and source/dependency/image security checks; backup and isolated restoration/migration rehearsal; Pilot validation before protected main merge; identical verified source deployed to Production with ledger and identity/configuration preservation checks. The Android release uses the verified Production UI, original upload key and a newly checked unused versionCode.
 
+The explicit operator allowlist now supports ViewRewards. Enabling this operation still requires genuine provider ownership and fresh count evidence at the service boundary. Missing provider integration returns ProviderUnavailable and never posts a reward. Unknown money operations remain denied.
+
 Provider fixtures demonstrate software behavior only. They do not establish real TikTok views, external ownership, settlement or payouts. Missing provider credentials or required product-specific Admin values must be reported explicitly; never invent those values or disable unrelated operations.

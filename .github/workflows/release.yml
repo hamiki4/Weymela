@@ -1,218 +1,34 @@
-name: Weymela immutable registry release
+name: Weymela verified image transport
+run-name: Transfer verified images from passed release ${{ inputs.source_release_run }}
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
-      firebase_target:
-        description: Firebase project for the Web image in this immutable release
-        type: choice
+      source_release_run:
+        description: Completed successful immutable release run to transport
         required: true
-        default: pilot
-        options: [pilot, production]
+        type: string
 permissions:
   contents: read
-concurrency:
-  group: v3-registry-${{ github.ref }}
-  cancel-in-progress: false
+  actions: read
+  packages: read
 jobs:
-  validate:
-    uses: ./.github/workflows/ci.yml
-    permissions: { contents: read }
-  images:
-    if: (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.firebase_target == 'pilot' && startsWith(github.ref, 'refs/heads/release/'))) && needs.validate.outputs.passed == 'true'
-    needs: validate
-    environment: v3-registry
+  transfer:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      packages: write
-      # Used only by the explicitly enabled, supported attestation path below.
-      id-token: write
-      attestations: write
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix: { component: [api, worker, web] }
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with: { persist-credentials: false }
-      - name: Select supported attestation mode (private user repositories stay private)
-        id: attestation-policy
+      - name: Copy exact verified OCI blobs, without build, push or deployment
         env:
-          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
-          REPOSITORY_OWNER_TYPE: ${{ github.event.repository.owner.type }}
-          ATTESTATION_ENABLED: ${{ vars.V3_GITHUB_ATTESTATION_ENABLED }}
-        run: python3 tools/ci/release-evidence.py policy
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RELEASE_RUN: ${{ inputs.source_release_run }}
+        run: python3 tools/ci/export-verified-images.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build digest-pinned linux/amd64 runtime image in CI
-        id: build
-        env:
-          COMPONENT: '${{ matrix.component }}'
-          V3_FIREBASE_TARGET: ${{ github.event.inputs.firebase_target || 'pilot' }}
-          VITE_FIREBASE_API_KEY: ${{ github.event.inputs.firebase_target == 'production' && vars.VITE_FIREBASE_PRODUCTION_API_KEY || github.event.inputs.firebase_target != 'production' && vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ github.event.inputs.firebase_target == 'production' && vars.VITE_FIREBASE_PRODUCTION_AUTH_DOMAIN || github.event.inputs.firebase_target != 'production' && vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ github.event.inputs.firebase_target == 'production' && vars.VITE_FIREBASE_PRODUCTION_PROJECT_ID || github.event.inputs.firebase_target != 'production' && vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_APP_ID: ${{ github.event.inputs.firebase_target == 'production' && vars.VITE_FIREBASE_PRODUCTION_APP_ID || github.event.inputs.firebase_target != 'production' && vars.VITE_FIREBASE_APP_ID }}
-        run: bash tools/ci/build-image.sh "$COMPONENT"
-      - name: Scan before publishing; high/critical findings block release
-        id: scan
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
-        with:
-          version: v0.74.0
-          image-ref: ${{ steps.build.outputs.image }}
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: false
-          exit-code: '1'
-          format: json
-          output: .artifacts/release/${{ matrix.component }}-security.json
-      - name: Publish scanned image and record immutable digest and size
-        id: publish
-        env:
-          IMAGE: ${{ steps.build.outputs.image }}
-          COMPONENT: ${{ matrix.component }}
-        run: |
-          docker push "$IMAGE"
-          docker image inspect "$IMAGE" --format '{{json .}}' | python3 -c '
-          import json,os,sys,pathlib
-          d=json.load(sys.stdin); name=os.environ["IMAGE"].split(":")[0]
-          digest=next(x for x in d["RepoDigests"] if x.startswith(name+"@"))
-          p=pathlib.Path(".artifacts/release")/(os.environ["COMPONENT"]+"-image.json")
-          record={"component":os.environ["COMPONENT"],"image":os.environ["IMAGE"],"digest":digest,"imageId":d["Id"],"unpackedBytes":d["Size"],"commit":os.environ["GITHUB_SHA"]}
-          if os.environ["COMPONENT"]=="web":
-              project=pathlib.Path(".artifacts/release/web-firebase-project.txt").read_text().strip()
-              target=pathlib.Path(".artifacts/release/web-firebase-target.txt").read_text().strip()
-              assert target in ("pilot","production")
-              assert project=={"pilot":"weymela-pilot","production":"weymela-production"}[target]
-              record["firebaseTarget"]=target
-              record["firebaseProjectId"]=project
-          p.write_text(json.dumps(record,indent=2)+"\n")
-          with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write("name="+name+"\ndigest="+digest.split("@")[1]+"\n")'
-      - name: Record SBOM
-        id: sbom
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
-        with:
-          version: v0.74.0
-          image-ref: ${{ steps.build.outputs.image }}
-          format: cyclonedx
-          output: .artifacts/release/${{ matrix.component }}-sbom.json
-          exit-code: '0'
-      - name: Attest image digest using GitHub OIDC (no signing secret)
-        id: attest
-        if: steps.attestation-policy.outputs.mode == 'enabled'
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
-        with:
-          subject-name: ${{ steps.publish.outputs.name }}
-          subject-digest: ${{ steps.publish.outputs.digest }}
-          push-to-registry: true
-      - name: Record actual scan, SBOM and attestation evidence
-        env:
-          COMPONENT: ${{ matrix.component }}
-          V3_FIREBASE_TARGET: ${{ github.event.inputs.firebase_target || 'pilot' }}
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
-          SCAN_OUTCOME: ${{ steps.scan.outcome }}
-          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
-          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
-          ATTESTATION_MODE: ${{ steps.attestation-policy.outputs.mode }}
-          ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
-          ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
-          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
-        run: python3 tools/ci/release-evidence.py complete
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: weymela-image-${{ matrix.component }}
-          path: .artifacts/release/
-          include-hidden-files: true
-          retention-days: 30
-      - name: Preserve failed-image diagnostics without secret match content
-        # Separate failure step: Trivy's nonzero exit must not bypass evidence
-        # retention or be turned into success. Never print/upload the raw report.
-        if: failure()
-        env:
-          COMPONENT: ${{ matrix.component }}
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
-          SCAN_OUTCOME: ${{ steps.scan.outcome }}
-          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
-          ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
-        run: python3 tools/ci/release-evidence.py diagnostics
-      - name: Upload failure diagnostics only (not a release artifact)
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: weymela-diagnostics-${{ matrix.component }}
-          path: .artifacts/diagnostics/${{ matrix.component }}-diagnostics.json
-          include-hidden-files: true
+          name: verified-images-${{ inputs.source_release_run }}
+          compression-level: 0
+          retention-days: 2
           if-no-files-found: error
-          retention-days: 14
-  migrations:
-    if: (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.firebase_target == 'pilot' && startsWith(github.ref, 'refs/heads/release/'))) && needs.validate.outputs.passed == 'true'
-    needs: validate
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with: { persist-credentials: false, fetch-depth: 0 }
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
-        with: { dotnet-version: '10.0.x' }
-      - name: Build offline migration bundle, SQL and checksums only
-        env:
-          V3_MIGRATION_TARGET: ${{ github.event.inputs.firebase_target || 'pilot' }}
-        run: bash tools/ci/migration-artifacts.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: weymela-migrations
-          path: .artifacts/migrations/
-          include-hidden-files: true
-          retention-days: 30
-  manifest:
-    needs: [validate, images, migrations]
-    if: needs.validate.outputs.passed == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { pattern: 'weymela-image-*', path: release/images, merge-multiple: true }
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { name: weymela-migrations, path: release/migrations }
-      - name: Assemble complete release record (never a deployment)
-        env:
-          V3_FIREBASE_TARGET: ${{ github.event.inputs.firebase_target || 'pilot' }}
-        run: |
-          python3 - <<'PY'
-          import hashlib,json,os,pathlib
-          root=pathlib.Path('release')
-          images=[json.loads(p.read_text()) for p in sorted((root/'images').glob('*-image.json'))]
-          assert len(images)==3
-          assert {i['component'] for i in images}=={'api','worker','web'}
-          assert all(i['commit']==os.environ['GITHUB_SHA'] for i in images)
-          web=next(i for i in images if i['component']=='web')
-          assert web['firebaseTarget']==os.environ['V3_FIREBASE_TARGET']
-          assert web['firebaseProjectId']=={'pilot':'weymela-pilot','production':'weymela-production'}[web['firebaseTarget']]
-          migrations=json.loads((root/'migrations/migration-manifest.json').read_text())
-          assert migrations['target']==web['firebaseTarget'], 'Migration target does not match Firebase release target'
-          for i in images:
-              assert i['buildStatus']=='passed' and i['publishStatus']=='passed'
-              assert i['scan']['status']=='passed'
-              assert i['attestation']['status'] in ('unavailable','not-enabled','attested')
-              if i['attestation']['status']=='attested':
-                  assert i['attestation']['id'] and i['attestation']['url']
-              for key,suffix in (('scan','security'),('sbom','sbom')):
-                  evidence=i[key]
-                  assert evidence['path']==f"images/{i['component']}-{suffix}.json"
-                  assert hashlib.sha256((root/evidence['path']).read_bytes()).hexdigest()==evidence['sha256']
-          manifest={'releaseId':f"weymela-{os.environ['GITHUB_SHA']}-run{os.environ['GITHUB_RUN_ID']}-attempt{os.environ['GITHUB_RUN_ATTEMPT']}",'commit':os.environ['GITHUB_SHA'],'runId':os.environ['GITHUB_RUN_ID'],'platform':'linux/amd64','images':images,'migrations':migrations,'financialWritesEnabled':False,'deploymentAuthorized':False,'productionUntouched':True,'checksums':{p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
-          assert manifest['migrations']['commit']==manifest['commit']
-          (root/'release-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-          PY
-          (cd release && sha256sum release-manifest.json > SHA256SUMS)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: weymela-release-package
-          path: release/
-          retention-days: 30
+          path: |
+            .artifacts/image-transfer/verified-images.oci.tar
+            .artifacts/image-transfer/transfer-manifest.json

@@ -16,6 +16,14 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Promotion funds low": "የማስተዋወቂያ ገንዘብ ዝቅተኛ ነው",
+  "Cashback funds low": "የገንዘብ ተመላሽ በጀት ዝቅተኛ ነው",
+  "Cashback funds exhausted": "የገንዘብ ተመላሽ በጀት አልቋል",
+  "Add funds to continue rewards.": "ሽልማቶችን ለመቀጠል ገንዘብ ይጨምሩ።",
+  "Add funds to continue cashback.": "የገንዘብ ተመላሽን ለመቀጠል ገንዘብ ይጨምሩ።",
+  "Check the amount, available funds and offer end date.": "መጠኑን፣ ያለውን ገንዘብና የቅናሹን መጨረሻ ቀን ይፈትሹ።",
+  "This Promotion is cancelled.": "ይህ ማስተዋወቂያ ተሰርዟል።",
+  "Cashback budget not found.": "የገንዘብ ተመላሽ በጀት አልተገኘም።",
   "Ask Platform Admin to set the UGC + Sale fee.": "የUGC + Sale ክፍያን እንዲያዘጋጅ የመድረኩን አስተዳዳሪ ይጠይቁ።",
   "Cashback budget": "የገንዘብ ተመላሽ በጀት",
   "Amount to add (ETB)": "የሚጨመር መጠን (ብር)",

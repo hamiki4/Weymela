@@ -478,8 +478,6 @@ test("public Business signup creates the role only after verified email and devi
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   expect((await enrolled).status()).toBe(200);
   expect((await activated).status()).toBe(200);
-  await expect(page.getByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL(/\/business/);
   await expect((await context.request.get("/api/session")).json()).resolves.toMatchObject({ role: "Business" });
   const identityBefore = await (await context.request.get("/api/onboarding/identity")).json() as { userId: string; phone: string };

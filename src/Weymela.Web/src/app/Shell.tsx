@@ -45,7 +45,6 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/reports", "Reports", "chart"],
     ["/admin/settings", "Financial Settings", "settings"],
     ["/admin/social-profiles", "Social Review", "people"],
-    ["/notifications", "Notifications", "bell"],
   ],
   OperationsAdmin: [
     ["/admin/operations", "Home", "home"],
@@ -57,7 +56,6 @@ const navigation: Record<Role, [string, string, string][]> = {
     ["/admin/campaigns", "Campaigns", "campaign"],
     ["/admin/ugc", "UGC", "sparkle"],
     ["/admin/payouts", "Payouts", "money"],
-    ["/admin/notifications", "Notifications", "bell"],
     ["/admin/social-profiles", "Social Review", "people"],
   ],
   Customer: [
@@ -255,14 +253,14 @@ export function Shell({ children }: { children?: ReactNode }) {
           </span>
           {user.role === "PlatformAdmin" && <strong className="topbar-identity" data-no-translate>{user.displayName}</strong>}
           <div className="topbar-right">
-            <Link
+            {!isAdmin && <Link
               className="button button-quiet"
               to="/notifications"
               aria-label="Your notifications"
             >
               <Icon name="bell" />
               {notifications.data && notifications.data.unreadCount > 0 && <span className="notification-count" aria-label={`${notifications.data.unreadCount} unread notifications`}>{notifications.data.unreadCount > 99 ? "99+" : notifications.data.unreadCount}</span>}
-            </Link>
+            </Link>}
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
             )}

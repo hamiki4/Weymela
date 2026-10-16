@@ -13,7 +13,7 @@ const email = "very.long.account-holder@example.test";
 const account = {
   id: "customer-id", userId: "customer-id", name: "Michael Kibru", role: "Customer",
   status: "Active", approvalState: "Active", safeIdentifier: "v*****r@example.test",
-  fullEmail: email, association: null, lastActivityAtUtc: null, canManage: false,
+  fullEmail: email, fullPhone: "+251911222333", association: null, lastActivityAtUtc: null, canManage: false,
   joinedAtUtc: "2026-09-16T00:00:00Z",
 };
 
@@ -29,6 +29,8 @@ describe("authorized Admin account email presentation", () => {
       <Route path="/admin/accounts/:id" element={<AdminAccountDetail />} />
     </Routes></MemoryRouter>);
     expect((await screen.findAllByText(email)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(account.fullPhone).length).toBeGreaterThan(0);
+    expect(screen.getByRole("columnheader", { name: "Phone" })).toBeInTheDocument();
     expect(screen.queryByText(account.safeIdentifier)).not.toBeInTheDocument();
     screen.getAllByRole("link", { name: account.name })[0].click();
     expect(await screen.findByText(email)).toBeInTheDocument();

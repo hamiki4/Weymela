@@ -13,8 +13,10 @@ test("Admin More is a routed full page at phone widths with working links and Ba
     for (const [name, path] of Object.entries({ Customers: "/admin/customers", Creators: "/admin/creators",
       Businesses: "/admin/businesses", Admins: "/admin/admins", Campaigns: "/admin/campaigns",
       UGC: "/admin/ugc", Reports: "/admin/reports", "Financial Settings": "/admin/settings",
-      Notifications: "/notifications" }))
+      "Social Review": "/admin/social-profiles" }))
       await expect(page.getByRole("main").getByRole("link", { name })).toHaveAttribute("href", path);
+    await expect(page.getByRole("link", { name: "Notifications", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Your notifications" })).toHaveCount(0);
     await layout(page);
     await page.getByRole("main").getByRole("link", { name: "Back" }).click();
     await expect(page).toHaveURL(/\/admin\/wallets$/);

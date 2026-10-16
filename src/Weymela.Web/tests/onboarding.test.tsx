@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { actorRoleWireValues } from "../src/api/actorRoleContract";
 import type { AccountLegalStatus } from "../src/api/types";
 
@@ -88,10 +88,11 @@ vi.mock("../src/app/Session", () => ({
 
 import { Onboarding } from "../src/app/Onboarding";
 
+function Destination() { return <output data-testid="destination">{useLocation().pathname}</output>; }
 function renderOnboarding() {
   return render(
     <MemoryRouter initialEntries={["/onboarding"]}>
-      <Onboarding />
+      <Destination /><Onboarding />
     </MemoryRouter>,
   );
 }
@@ -100,7 +101,7 @@ describe("shared role-themed onboarding", () => {
   afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     window.sessionStorage.clear();
-    mocks.post.mockClear();
+    mocks.post.mockReset().mockResolvedValue({ id: "enrollment-1", status: "Approved" });
     mocks.reload.mockClear();
     mocks.refresh.mockClear();
     mocks.switchProfile.mockClear();
@@ -172,7 +173,7 @@ describe("shared role-themed onboarding", () => {
         privacyPolicy: { documentId: "privacy-id", contentHash: "privacy-hash", accepted: true },
       },
     }), "explicit-current-consent");
-    expect(await screen.findByRole("heading", { name: "Your account is ready." })).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId("destination")).toHaveTextContent("/customer/offers"));
   });
 
   it("reuses genuine agreement to unchanged versions from the registration form", async () => {
@@ -248,9 +249,8 @@ describe("shared role-themed onboarding", () => {
       role: "Business", displayName: "ABC Trading", legalName: "Abebe Kebede",
       registeredPhone: "+251911111111", category: "Retail",
     }), "public-business-key");
-    expect(await screen.findByRole("heading", { name: "Your Business account is ready." })).toBeVisible();
-    expect(screen.getByText(/secure device is registered/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId("destination")).toHaveTextContent("/business"));
+    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
     expect(screen.queryByText(/waiting for Weymela approval/)).not.toBeInTheDocument();
     expect(window.sessionStorage.getItem("weymela.public-signup")).toBeNull();
   });

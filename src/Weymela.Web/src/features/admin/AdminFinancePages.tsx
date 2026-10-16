@@ -1,3 +1,4 @@
+import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useEffect, useState } from "react";
 import { notifyAdminActionCountsChanged, post, privateAsset, useAction, useResource } from "../../api/client";
 import type { AdminReport, AdminUgcFinance, AdminWallets } from "../../api/types";
@@ -8,13 +9,14 @@ type Deposit = { id: string; businessId: string; business: string; amount: numbe
 const br = (value: number) => `${amount(value)} Br`;
 
 export function AdminWalletsPage() {
-  const wallets = useResource<AdminWallets>("/admin/wallets");
+  const walletSearch = useAdminSearch("/admin/wallets");
+  const wallets = useResource<AdminWallets>(walletSearch.path);
   const action = useAction();
   const [fund, setFund] = useState<{ id: string; name: string } | null>(null);
   const [fundAmount, setFundAmount] = useState("");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
-  return <div className="admin-page"><PageHeader title="Wallets" compact />{message && <Notice>{message}</Notice>}
+  return <div className="admin-page"><PageHeader title="Wallets" compact /><AdminSearch value={walletSearch} label="Search wallets or account owners" />{message && <Notice>{message}</Notice>}
     <DepositReviewSection onReviewed={wallets.reload} />
     <Section title="Business wallets"><Resource resource={wallets}>{data => <DataTable rows={data.businesses} rowKey={row => row.businessId} label="Business wallets" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> },
@@ -33,6 +35,7 @@ export function AdminWalletsPage() {
       { label: "Budget", cell: row => br(row.budget), numeric: true }, { label: "Used", cell: row => br(row.used), numeric: true }, { label: "Remaining", cell: row => br(row.remaining), numeric: true },
       { label: "Views / Sales", cell: row => row.type === "View Only" ? `${count(row.verifiedViews)} views` : `${count(row.verifiedViews)} views · ${count(row.verifiedSales)} sales` }, { label: "Status", cell: row => <Badge status={row.status} /> },
     ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.title}</strong><Badge status={row.status} /></div><small>{row.business} · {row.type}</small><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Remaining</dt><dd>{br(row.remaining)}</dd></div><div><dt>Verified views</dt><dd>{count(row.verifiedViews)}</dd></div>{row.type !== "View Only" && <div><dt>Sales</dt><dd>{count(row.verifiedSales)}</dd></div>}</dl></div>} empty={<Empty title="No active promotions" message="Active View and Sale promotions appear here." />} />}</Resource></Section>
+    <AdminPager value={walletSearch} count={Math.max(wallets.data?.businesses.length ?? 0, wallets.data?.promotions.length ?? 0)} loading={wallets.loading} />
     <Dialog title={fund ? `Promotional credit · ${fund.name}` : "Promotional credit"} open={!!fund} onClose={() => { if (!action.busy) setFund(null); }}>
       {fund && <form onSubmit={event => { event.preventDefault(); void action.run(async key => { await post(`/admin/accounts/businesses/${fund.id}/promotional-funding`, { amount: Number(fundAmount), reason: reason.trim() }, key); setMessage(`Promotional funding added for ${fund.name}.`); setFund(null); setFundAmount(""); setReason(""); wallets.reload(); }); }}><Field label="Amount (ETB)"><MoneyInput value={fundAmount} onChange={event => setFundAmount(event.target.value)} /></Field><Field label="Reason"><textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>{action.error && <Notice error>{action.error}</Notice>}<Button type="submit" disabled={action.busy || !fundAmount || !reason.trim()}>{action.busy ? "Adding…" : "Add Promotional Funds"}</Button></form>}
     </Dialog>
@@ -62,13 +65,8 @@ function ReceiptReviewImage({ id }: { id: string }) {
 }
 
 function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
-  const [search, setSearch] = useState("");
-  const [submittedSearch, setSubmittedSearch] = useState("");
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSubmittedSearch(search.trim()), 250);
-    return () => window.clearTimeout(timer);
-  }, [search]);
-  const deposits = useResource<Deposit[]>(`/admin/deposit-requests${submittedSearch ? `?search=${encodeURIComponent(submittedSearch)}` : ""}`);
+  const depositSearch = useAdminSearch("/admin/deposit-requests");
+  const deposits = useResource<Deposit[]>(depositSearch.path);
   const action = useAction();
   const [selected, setSelected] = useState<string | null>(null);
   const [reference, setReference] = useState("");
@@ -86,8 +84,7 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
   };
   return <Section title={`Deposit review · ${pending.length} pending`}>
     {message && <Notice>{message}</Notice>}
-    <div className="admin-deposit-search"><Field label="Search business or deposit..."><input type="search" value={search}
-      onChange={event => setSearch(event.target.value)} placeholder="Search business or deposit..." autoComplete="off" /></Field></div>
+    <AdminSearch value={depositSearch} label="Search business or deposit..." statuses={["Pending", "Approved", "Rejected"]} types={["Telebirr", "CBE", "Bank of Abyssinia"]} dates />
     <Resource resource={deposits}>{() => rows.length ? <DataTable rows={rows} rowKey={row => row.id} label="Deposits" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> }, { label: "Amount", cell: row => br(row.amount), numeric: true },
       { label: "Deposited To", cell: row => row.destinationNameSnapshot ?? "Legacy" }, { label: "Weymela Destination", cell: row => row.destinationAccountSnapshot ?? "—" },
@@ -95,6 +92,7 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
       { label: "Submitted", cell: row => date(row.submittedAtUtc) }, { label: "Status", cell: row => <Badge status={row.status} label={row.status} /> },
       { label: "Action", cell: row => <Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button> },
     ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} label={row.status} /></div><small>{row.destinationNameSnapshot ?? "Legacy"} · {row.destinationAccountSnapshot ?? "—"}</small><dl className="admin-mobile-facts"><div><dt>Amount</dt><dd>{br(row.amount)}</dd></div><div><dt>Submitted</dt><dd>{date(row.submittedAtUtc)}</dd></div></dl><Button variant="secondary" onClick={() => setSelected(row.id)}>{row.status === "Pending" ? "Review" : "View Receipt"}</Button></div>} empty={null} /> : <Empty title="No deposits" message="Submitted deposits will appear here." />}</Resource>
+    <AdminPager value={depositSearch} count={rows.length} loading={deposits.loading} />
     <Dialog title={current ? `Review deposit · ${current.business}` : "Review deposit"} open={!!current} onClose={() => { if (!action.busy) { setSelected(null); setReference(""); } }}>
       {current && <div className="admin-deposit-review"><dl className="admin-mobile-facts"><div><dt>Business</dt><dd>{current.business}</dd></div><div><dt>Amount</dt><dd>{br(current.amount)}</dd></div><div><dt>Deposited To</dt><dd>{current.destinationNameSnapshot ?? "Legacy request"}</dd></div><div><dt>Weymela Destination</dt><dd>{current.destinationAccountSnapshot ?? "—"}</dd></div><div><dt>Submitted</dt><dd>{date(current.submittedAtUtc)}</dd></div><div><dt>Status</dt><dd>Pending</dd></div></dl>
         {current.hasReceipt ? <ReceiptReviewImage id={current.id} /> : <Notice error>No receipt is attached to this earlier request.</Notice>}
@@ -107,9 +105,9 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
 }
 
 export function AdminUgcPage() {
-  const resource = useResource<AdminUgcFinance[]>("/admin/ugc/finance");
-  const [search, setSearch] = useState("");
-  return <div className="admin-page"><PageHeader title="UGC" compact /><Section title="UGC funding and activity"><div className="admin-ugc-search"><Field label="Search"><input placeholder="Search business or promotion..." value={search} onChange={event => setSearch(event.target.value)} /></Field></div><Resource resource={resource}>{rows => { const visible = rows.filter(row => `${row.business} ${row.title}`.toLowerCase().includes(search.trim().toLowerCase())); return visible.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{visible.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer cashback</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No matching UGC promotions" message="Business UGC promotions appear here." />; }}</Resource></Section></div>;
+  const ugcSearch = useAdminSearch("/admin/ugc/finance");
+  const resource = useResource<AdminUgcFinance[]>(ugcSearch.path);
+  return <div className="admin-page"><PageHeader title="UGC" compact /><Section title="UGC funding and activity"><AdminSearch value={ugcSearch} label="Search UGC, Business or Creator" statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} /><Resource resource={resource}>{rows => { const visible = rows; return visible.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{visible.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer cashback</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No matching UGC promotions" message="Business UGC promotions appear here." />; }}</Resource><AdminPager value={ugcSearch} count={resource.data?.length ?? 0} loading={resource.loading} /></Section></div>;
 }
 
 type Range = "Today" | "Week" | "Month" | "Year" | "Custom";

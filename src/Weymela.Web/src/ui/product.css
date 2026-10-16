@@ -1465,3 +1465,8 @@ div.private-review-media {
 .product-shell.role-business .business-promotion-tabs .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow-x: visible; }
 .product-shell.role-business .business-promotion-tabs .tabs button { min-width: 0; max-width: 100%; padding-inline: 6px; white-space: normal; overflow-wrap: break-word; }
 .product-shell.role-business .business-promotion-list .business-promotion-card .badge { white-space: normal; }
+
+.product-shell.role-creator .creator-request-join {
+  width: fit-content; max-width: 100%; min-height: 44px; padding: 8px 16px;
+  align-self: flex-start; font-size: .9rem; line-height: 1.25;
+}

@@ -1004,12 +1004,11 @@ describe("Admin workspace", () => {
     expect(screen.getByLabelText("View Only Business Pays")).toHaveValue(null);
     expect(api.writes).toHaveLength(0);
   });
-  it("filters Campaigns with a designed empty result", async () => {
+  it("searches Campaigns on the server with a designed empty result", async () => {
+    const api = mockApi({ "/admin/campaigns?search=No+matching+Business": [] });
     mount(<AdminCampaigns />);
-    await userEvent.type(
-      await screen.findByLabelText("Business"),
-      "No matching Business",
-    );
+    await userEvent.type(await screen.findByLabelText("Search campaigns, Businesses or Creators"), "No matching Business");
+    await waitFor(() => expect(api.fetch).toHaveBeenCalledWith("/api/admin/campaigns?search=No+matching+Business", expect.anything()));
     expect(await screen.findByText("No Campaigns to show")).toBeVisible();
   });
   it("shows the full Campaign financial oversight", async () => {

@@ -1,3 +1,4 @@
+import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useState } from "react";
 import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type { AdminSocialProfileReview as Review } from "../../api/types";
@@ -5,10 +6,11 @@ import { Button, Empty, Field, PageHeader, Resource, Section } from "../../ui/co
 import { CreatorPlatformIcon, isCreatorPlatform, type CreatorPlatform } from "../creator/CreatorPlatformIcon";
 
 export function AdminSocialProfileReview() {
-  const resource = useResource<Review[]>("/admin/social-profiles/review");
-  return <><PageHeader title="Social profile review" compact />
+  const search = useAdminSearch("/admin/social-profiles/review");
+  const resource = useResource<Review[]>(search.path);
+  return <><PageHeader title="Social profile review" compact /><AdminSearch value={search} statuses={["Unverified", "Verified", "Rejected"]} types={["TikTok", "YouTube", "Instagram", "Facebook"]} />
     <Resource resource={resource}>{rows => rows.length === 0 ? <Empty title="No social profiles to review" message="Creator social profiles will appear here." icon="people" /> :
-      <div className="stack-list">{rows.map(row => <ReviewCard key={row.id} row={row} reload={resource.reload} />)}</div>}</Resource></>;
+      <div className="stack-list">{rows.map(row => <ReviewCard key={row.id} row={row} reload={resource.reload} />)}</div>}</Resource><AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} /></>;
 }
 
 function ReviewCard({ row, reload }: { row: Review; reload: () => void }) {

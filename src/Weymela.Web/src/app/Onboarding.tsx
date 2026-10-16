@@ -102,7 +102,7 @@ function PublicSignupCompletion({ draft, identity, identityMatches, onRecover, o
       followerCount: draft.followerCount ?? 0,
       subscriberCount: draft.subscriberCount,
     }] : [];
-    await post("/onboarding/registration", {
+    const result = await post<Enrollment>("/onboarding/registration", {
       role: draft.role,
       displayName: draft.role === "Business" ? draft.businessName : draft.legalName,
       legalName: draft.legalName,
@@ -111,8 +111,17 @@ function PublicSignupCompletion({ draft, identity, identityMatches, onRecover, o
       socialProfiles,
       ...(accountLegal ? { accountLegal } : {}),
     }, draft.idempotencyKey);
-    clearSignupDraft();
-    setCompleted(true);
+    if (draft.role !== "Creator" && result.status !== "Approved" && result.status !== 1)
+      throw new Error("Your profile is saved. Activation is still pending.");
+    if (draft.role !== "Creator") {
+      await refresh(true);
+      clearSignupDraft();
+      onFinished();
+      navigate(draft.role === "Business" ? "/business" : "/customer/offers", { replace: true });
+    } else {
+      clearSignupDraft();
+      setCompleted(true);
+    }
   };
   useEffect(() => {
     if (!user || !legal.data || legal.loading || started.current || completed || error) return;

@@ -34,7 +34,7 @@ export function UgcJoinControls({ item, onChanged }: { item: UgcCard; onChanged:
     {!item.requestStatus && allFull && <p className="creator-opportunity-unavailable">All Creator spots filled</p>}
     {!item.requestStatus && slots.length > 0 && !allFull && eligible.length === 0 &&
       <p className="creator-opportunity-unavailable">No available verified profile</p>}
-    {!item.requestStatus && <Button disabled={action.busy || !arrangementReady || allFull || (slots.length > 0 && !selected)}
+    {!item.requestStatus && <Button className="creator-request-join" disabled={action.busy || !arrangementReady || allFull || (slots.length > 0 && !selected)}
       onClick={() => void action.run(async key => {
         if (slots.length > 0 && !selected) return;
         const query = selected

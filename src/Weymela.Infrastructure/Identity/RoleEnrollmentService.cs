@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Weymela.Application;
 using Weymela.Application.Operations;
+using Weymela.Application.Web;
 using Weymela.Domain;
 using Weymela.Infrastructure.Persistence;
 using Weymela.Infrastructure.Persistence.Records;
@@ -210,11 +211,20 @@ public sealed class RoleEnrollmentService(WeymelaDbContext db, TimeProvider cloc
     public async Task<IReadOnlyList<RoleEnrollmentSummary>> MineAsync(Guid userId, CancellationToken ct)
         => (await db.RoleEnrollments.AsNoTracking().Where(x => x.UserId == userId).OrderByDescending(x => x.SubmittedAtUtc).ToListAsync(ct)).Select(Summary).ToList();
 
-    public async Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(Actor admin, CancellationToken ct)
+    public async Task<IReadOnlyList<RoleEnrollmentSummary>> PendingAsync(Actor admin, CancellationToken ct, AdminListFilter? filter = null)
     {
         if (!AdministrativeAuthority.For(new RealActor(admin)).Allows(AdministrativeCapability.AccountReview)) throw Denied();
-        var rows = await db.RoleEnrollments.AsNoTracking().Where(x => x.Status == RoleEnrollmentStatus.Pending)
-            .OrderBy(x => x.SubmittedAtUtc).ToListAsync(ct);
+        var query = filter ?? new(); query.Validate();
+        var term = query.Term;
+        var source = db.RoleEnrollments.AsNoTracking().Where(x => x.Status == RoleEnrollmentStatus.Pending);
+        if (term != "") source = source.Where(x => x.SubmissionJson.ToLower().Contains(term)
+            || db.AuthIdentifiers.Any(i => i.UserId == x.UserId && i.DeliveryAddress != null && i.DeliveryAddress.ToLower().Contains(term)));
+        if (!string.IsNullOrEmpty(query.Type))
+        {
+            if (!Enum.TryParse<ActorRole>(query.Type, true, out var role) || !PublicRoles.Contains(role)) throw Denied();
+            source = source.Where(x => x.RequestedRole == role);
+        }
+        var rows = await source.OrderBy(x => x.SubmittedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var userIds = rows.Select(x => x.UserId).Distinct().ToArray();
         var emails = await db.AuthIdentifiers.AsNoTracking().Where(x => userIds.Contains(x.UserId)
                 && x.Kind == "Email" && x.IsVerified && x.DeliveryAddress != null)

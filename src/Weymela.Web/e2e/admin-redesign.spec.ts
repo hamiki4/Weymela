@@ -1,14 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { layout, login, open, screenshot } from "./helpers";
 
-const adminLinks = ["Dashboard", "Customers", "Creators", "Businesses", "Admins", "Campaigns", "Wallets", "UGC", "Payouts", "Reports", "Financial Settings", "Notifications"];
+const adminLinks = ["Dashboard", "Customers", "Creators", "Businesses", "Admins", "Campaigns", "Wallets", "UGC", "Payouts", "Reports", "Financial Settings", "Social Review"];
 
 test("Platform Admin uses the compact navigation and every dashboard summary leads somewhere", async ({ page, context }) => {
   await login(context, "admin");
   await open(page, "/admin");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   for (const label of adminLinks) await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
-  for (const retired of ["View As", "Audit", "Accounts", "Platform Revenue"]) await expect(nav.getByRole("link", { name: retired, exact: true })).toHaveCount(0);
+  for (const retired of ["Notifications", "View As", "Audit", "Accounts", "Platform Revenue"]) await expect(nav.getByRole("link", { name: retired, exact: true })).toHaveCount(0);
   await expect(page.locator(".topbar-identity")).not.toBeEmpty();
   await expect(page.locator(".topbar-identity")).not.toContainText("@");
   await expect(page.getByRole("heading", { name: "Recent activity" })).toHaveCount(0);

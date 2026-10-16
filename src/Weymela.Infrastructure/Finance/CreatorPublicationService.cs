@@ -237,15 +237,30 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             return publication.Id;
         }, ct);
 
-    public async Task<IReadOnlyList<AdminPublicationReviewCard>> AdminQueueAsync(Actor actor, CancellationToken ct)
+    public async Task<IReadOnlyList<AdminPublicationReviewCard>> AdminQueueAsync(Actor actor, CancellationToken ct, AdminListFilter? filter = null)
     {
         DemandPlatformAdmin(actor);
-        var rows = await db.CreatorPublicationVerifications.AsNoTracking()
+        var query = filter ?? new(); query.Validate();
+        var term = query.Term;
+        var source = db.CreatorPublicationVerifications.AsNoTracking();
+        if (term != "") source = source.Where(x => x.ExternalContentId.ToLower().Contains(term)
+            || db.PublicWorkspaceProfiles.Any(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator && p.DisplayName.ToLower().Contains(term))
+            || db.UgcAssignments.Any(a => a.Id == x.UgcAssignmentId && db.UgcOpportunities.Any(u => u.Id == a.UgcOpportunityId && (u.Title.ToLower().Contains(term)
+                || db.PublicWorkspaceProfiles.Any(p => p.SubjectId == u.BusinessId && p.Role == ActorRole.Business && p.DisplayName.ToLower().Contains(term)))))
+            || db.CreatorAllocations.Any(a => a.Id == x.CreatorAllocationId && db.Promotions.Any(u => u.Id == a.PromotionId && (u.Title.ToLower().Contains(term)
+                || db.PublicWorkspaceProfiles.Any(p => p.SubjectId == u.BusinessId && p.Role == ActorRole.Business && p.DisplayName.ToLower().Contains(term))))));
+        if (!string.IsNullOrEmpty(query.Status))
+        {
+            if (!Enum.TryParse<PublicationVerificationStatus>(query.Status, true, out var status))
+                throw new ApplicationFailure(FailureKind.Validation, "Choose a valid publication status.");
+            source = source.Where(x => x.Status == status);
+        }
+        var rows = await source
             .Where(x => x.EndedAtUtc == null
                 && (x.Status == PublicationVerificationStatus.VerificationPending
                     || x.Status == PublicationVerificationStatus.Verified))
             .OrderBy(x => x.Status == PublicationVerificationStatus.VerificationPending ? 0 : 1)
-            .ThenBy(x => x.RequestedAtUtc).ToListAsync(ct);
+            .ThenBy(x => x.RequestedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var result = new List<AdminPublicationReviewCard>();
         foreach (var row in rows)
         {

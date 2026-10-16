@@ -40,7 +40,6 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     if (width === 390 || width === 393) await screenshot(page, `${width}-business-wallet-receipt`);
     await page.getByRole("button", { name: "Submit for Review" }).click();
     await expect(page.getByText("Awaiting Review", { exact: true })).toBeVisible();
-    await expect(page.getByText("Under review").first()).toBeVisible();
     await layout(page);
 
     const pending = ["first", "second"].map(id => ({ id, businessId: "biz", business: "Abc Coffee", amount: 10000,

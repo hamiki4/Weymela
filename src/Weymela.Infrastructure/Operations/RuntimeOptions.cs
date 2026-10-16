@@ -237,7 +237,7 @@ public sealed class RuntimeOptions
         var productionOperations = config.GetSection("V3:ProductionFinancial:Operations").Get<string[]>() ?? [];
         Require(productionOperations.All(ProductionFinancialOperations.Known)
             && productionOperations.Distinct(StringComparer.Ordinal).Count() == productionOperations.Length,
-            "Production financial operations must use the explicit supported allowlist; view rewards are unavailable.");
+            "Production financial operations must use the explicit supported allowlist.");
         Require(environment == "Production" || productionOperations.Length == 0 && string.IsNullOrEmpty(productionReference),
             "Production financial authorization cannot be used in another environment.");
         if (environment == "Pilot" && financialWrites)

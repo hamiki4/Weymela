@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Weymela.Application;
+using Weymela.Application.Web;
 using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Api.Security;
@@ -118,7 +119,10 @@ public sealed class ValidatedInputFilter : IEndpointFilter
             if (input is string text)
             {
                 var max = name switch { "Title" => 120, "Description" => 3000, "Requirements" or "ContentConcept" => 2000, "Message" => 1000,
-                    "Category" or "Region" => 80, "Token" => 43, "IdToken" => 8192, "AccessKey" => 256, "ExternalContentId" => 100, _ => 200 };
+                    "Category" or "Region" => 80, "Token" => 43, "IdToken" => 8192, "AccessKey" => 256,
+                    "ExternalContentId" when value is PublicationInput => 1000,
+                    "EvidenceReference" when value is AdminPublicationReviewInput => 500,
+                    "ExternalContentId" => 100, _ => 200 };
                 InputRules.Text(text, max);
             }
             else if (input is decimal number)

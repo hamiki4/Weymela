@@ -1,5 +1,9 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Weymela.Application;
+using Weymela.Infrastructure.Providers;
 using Weymela.Domain;
 using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
@@ -39,7 +43,8 @@ public sealed class CreatorGoLiveHttpTests(PostgresFixture postgres)
         var id = pending["id"]!.GetValue<Guid>();
         Assert.Equal(id, (await creator.PostJson(path, null!, "same-work-new-request"))["id"]!.GetValue<Guid>());
         var review = $"/api/business/publication-verifications/{id}/review";
-        var evidence = new { action = "verify", evidenceReference = "isolated-http-evidence-review", evidenceChecked = true };
+        var evidenceReference = "isolated-http-evidence-review:" + new string('e', 300);
+        var evidence = new { action = "verify", evidenceReference, evidenceChecked = true };
         Assert.Equal(HttpStatusCode.Forbidden, (await foreignBusiness.Post(review, evidence)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await creator.Post(review, evidence)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await business.Post(review, new { action = "verify", evidenceReference = "unchecked" })).StatusCode);
@@ -52,6 +57,38 @@ public sealed class CreatorGoLiveHttpTests(PostgresFixture postgres)
         Assert.Equal(start, retry["wentLiveAtUtc"]!.GetValue<DateTime>());
         await using var db = host.Database.Open();
         Assert.Single(db.CreatorEarningEntries.Where(x => x.UgcAssignmentId == assignment));
+        Assert.Equal(evidenceReference, (await db.CreatorPublicationVerifications.SingleAsync(x => x.Id == id)).EvidenceReference);
+    }
+
+    [Fact]
+    public async Task Long_public_video_urls_normalize_but_stay_unverified_without_a_provider()
+    {
+        await using var host = await ApiFixture.CreateAsync(postgres, builder =>
+            builder.Host.ConfigureContainer<IServiceCollection>((_, services) => services.Replace(
+                ServiceDescriptor.Singleton<IVerifiedViewProvider>(new SocialProviderRouter([], TimeProvider.System)))));
+        using var business = await host.Login("business"); using var creator = await host.Login("creator");
+        var assignment = await ApprovedAssignment(business, creator, direct: false);
+        var profile = (await creator.GetJson("/api/creator/social-accounts")).AsArray()
+            .First(x => x!["platform"]!.GetValue<string>() == "TikTok")!;
+        var canonical = profile["profileUrl"]!.GetValue<string>().TrimEnd('/') + "/video/7412345678901234567";
+        var shared = canonical + "?is_from_webapp=1&tracking=" + new string('x', 250);
+        Assert.InRange(shared.Length, 101, 1000);
+        var path = $"/api/creator/ugc/assignments/{assignment}/launch";
+        var pending = await creator.PostJson(path, new {
+            provider = "TikTok", externalContentId = shared, creatorSocialProfileId = profile["id"]!.GetValue<Guid>()
+        });
+        Assert.Equal("VerificationPending", pending["status"]!.GetValue<string>());
+        Assert.Equal("7412345678901234567", pending["externalContentId"]!.GetValue<string>());
+        Assert.Equal(canonical, pending["watchUrl"]!.GetValue<string>());
+        Assert.NotNull(pending["goLiveRequestedAtUtc"]); Assert.Null(pending["wentLiveAtUtc"]);
+        Assert.Null(pending["verificationMethod"]);
+        Assert.Equal(HttpStatusCode.BadRequest, (await creator.Post(path, new {
+            provider = "TikTok", externalContentId = canonical + "?tracking=" + new string('x', 1000),
+            creatorSocialProfileId = profile["id"]!.GetValue<Guid>()
+        })).StatusCode);
+        await using var db = host.Database.Open();
+        Assert.False(await db.CreatorEarningEntries.AnyAsync(x => x.UgcAssignmentId == assignment));
+        Assert.Single(await db.CreatorPublicationVerifications.Where(x => x.UgcAssignmentId == assignment).ToListAsync());
     }
 
     [Fact]

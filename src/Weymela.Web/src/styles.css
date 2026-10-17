@@ -2981,3 +2981,32 @@ td .button {
 .receipt-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
 .receipt-name { display: block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .receipt-selection .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+
+/* Compact release lists and profile headers. */
+.compact-table { width:100%; overflow-x:auto; }
+.compact-table table { width:100%; table-layout:fixed; border-collapse:collapse; font-size:.78rem; }
+.compact-table th,.compact-table td { padding:.55rem .35rem; text-align:left; vertical-align:top; overflow-wrap:anywhere; white-space:normal; border-bottom:1px solid var(--border,#e5e7eb); }
+.compact-table .numeric { text-align:right; font-variant-numeric:tabular-nums; }
+.compact-table summary { cursor:pointer; }
+.notification-list .compact-notification { display:block; padding:0; margin:0; border-radius:0; }
+.notification-row { display:flex; align-items:center; gap:.5rem; width:100%; padding:.65rem .4rem; color:inherit; text-decoration:none; font-size:.82rem; }
+.notification-row>span:first-child { flex:1; min-width:0; overflow-wrap:anywhere; }
+.notification-row time { flex:0 0 auto; font-size:.7rem; color:#576172; font-weight:400; }
+.notification-row .notification-state { flex:0 0 1rem; color:#4357ca; }
+.compact-notification[data-unread="true"] .notification-row>span:first-child { font-weight:700; }
+.compact-notification[data-unread="false"] .notification-row>span:first-child { font-weight:400; }
+.low-funds,.low-funds-row { color:#b42318; font-size:.8rem; }
+.low-funds-row { display:flex; justify-content:space-between; align-items:center; gap:.7rem; padding:.5rem .65rem; background:#fff1f0; border-radius:.55rem; margin-bottom:.5rem; }
+.low-funds-row>span { min-width:0; overflow-wrap:anywhere; }
+.low-funds-row a { flex-shrink:0; color:inherit; font-weight:600; }
+.brand-mark,.brand-wordmark { filter:drop-shadow(0 2px 2px #17255422); }
+.topbar .brand-mark { width:42px; height:42px; }
+.topbar .brand-wordmark { width:158px; max-width:34vw; }
+.role-home-profile { display:flex; align-items:center; gap:.7rem; margin-bottom:.75rem; }
+.role-home-profile>div { display:grid; gap:.1rem; min-width:0; }
+.role-home-profile strong { font-size:1.05rem; overflow-wrap:anywhere; }
+.role-home-profile small { color:#5c6678; font-size:.75rem; }
+.role-avatar { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border-radius:50%; background:#e7ebff; color:#3343a8; font-weight:700; }
+.business-promotion-tabs .tabs { flex-wrap:nowrap; overflow-x:auto; }
+.customer-promotion-creator small { font-size:.7rem; }
+@media(max-width:480px) { .compact-table table { font-size:.72rem; } .compact-table th,.compact-table td { padding:.45rem .25rem; } .notification-row time { max-width:6.5rem; } }

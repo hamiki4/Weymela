@@ -7,6 +7,8 @@ import {
   ActionLink,
   Button,
   Empty,
+  DataTable,
+  Field,
   Metric,
   Notice,
   PageHeader,
@@ -75,7 +77,8 @@ function useCustomerLocation() {
     );
   };
 
-  return { coordinates, error, requestLocation };
+  const selectLocation = (next: Coordinates) => { if (validCoordinates(next)) { setCoordinates(next); setError(null); try { sessionStorage.setItem(CUSTOMER_LOCATION_KEY, JSON.stringify(next)); } catch { /* Retain location for this page. */ } } };
+  return { coordinates, error, requestLocation, selectLocation };
 }
 
 function CustomerLocationCard({
@@ -143,7 +146,7 @@ function CustomerPromotionCard({ offer, distanceKm }: { offer: Offer; distanceKm
             <span className="customer-creator-avatar" aria-hidden="true">
               {initial(offer.creator.displayName)}
             </span>
-            By <span data-no-translate>{offer.creator.displayName}</span>
+            <span data-no-translate>{offer.creator.displayName}</span>{offer.creator.creatorNumber != null && <small data-no-translate>#{offer.creator.creatorNumber}</small>}
           </span>
         )}
       </div>
@@ -173,11 +176,14 @@ function CustomerOfferBrowser({
   rows,
   discover,
   coordinates,
+  onSelectLocation,
 }: {
   rows: Offer[];
   discover: boolean;
   coordinates: Coordinates | null;
+  onSelectLocation?: (value: Coordinates) => void;
 }) {
+  const [distanceFilter, setDistanceFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -205,15 +211,17 @@ function CustomerOfferBrowser({
       row.creator?.displayName.toLocaleLowerCase().includes(normalizedSearch);
     return matchesSearch &&
       (locationFilter === "all" || row.location?.trim() === locationFilter) &&
-      (sourceFilter === "all" || row.source === sourceFilter);
+      (sourceFilter === "all" || row.source === sourceFilter) &&
+      (distanceFilter === "all" || (coordinates !== null && offerDistanceKm(row, coordinates) !== null && offerDistanceKm(row, coordinates)! <= Number(distanceFilter)));
   });
-  const visibleRows = sort === "nearest" && coordinates
+  const visibleRows = (sort === "nearest" || distanceFilter !== "all") && coordinates
     ? nearestOffers(filteredRows, coordinates)
     : filteredRows;
 
   return (
     <>
       <div className="customer-filter-bar" aria-label="Promotion filters">
+        <label className="customer-filter-control"><span className="sr-only">Distance</span><select aria-label="Distance" value={distanceFilter} onChange={event => setDistanceFilter(event.target.value)}><option value="all">All</option>{[1,2,5,10,25].map(km => <option value={km} key={km}>{km} km</option>)}</select></label>
           <label className="customer-filter-control customer-search-control">
             <Icon name="search" size={17} />
             <span className="sr-only">Search business or creator</span>
@@ -269,6 +277,7 @@ function CustomerOfferBrowser({
         )}
       </div>
 
+      {!coordinates && onSelectLocation && <Field label="Choose location"><select aria-label="Choose location" defaultValue="" onChange={event => { const business = rows.find(row => row.id === event.target.value)?.business; if (business && business.latitude != null && business.longitude != null) onSelectLocation({ latitude: business.latitude, longitude: business.longitude }); }}><option value="">Choose location</option>{rows.filter(row => row.business.latitude != null && row.business.longitude != null).filter((row,index,all) => all.findIndex(other => other.business.displayName === row.business.displayName) === index).map(row => <option key={row.id} value={row.id}>{row.business.displayName} · {row.location ?? row.business.address}</option>)}</select></Field>}
       {discover && !coordinates && (
         <div className="customer-location-off-note">
           <p>Location access is off. Enable location to see promotions near you.</p>
@@ -354,7 +363,7 @@ function CustomerHomeSummary() {
   const cashback = useResource<CashbackSummary>("/customer/cashback");
   const transactions = useResource<CustomerTransaction[]>("/customer/transactions");
   return <section className="product-home-summary" aria-label="Your account summary">
-    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Cashback</span><strong>{amount(data.availableCashback.amount)} ETB</strong><small>{data.eligible ? "Ready to cash out" : data.minimumCashOut ? `Cash out at ${amount(data.minimumCashOut.amount)} ETB` : "Payout minimum not configured"}</small></Link>}</Resource>
+    <Resource resource={cashback}>{(data) => <Link to="/customer/cashback" className="product-summary-row"><span>Cashback</span><strong>{amount(data.availableCashback.amount)} ETB</strong><small>{data.eligible ? "Ready to cash out" : data.minimumCashOut ? `Cash out at ${amount(data.minimumCashOut.amount)} ETB${data.monthlyPayoutEnabled ? " or monthly" : ""}` : "Payout minimum not configured"}</small></Link>}</Resource>
     <Resource resource={transactions}>{(rows) => rows.length ? <Link to="/customer/transactions" className="product-summary-row"><span>Latest purchase</span><strong>{rows[0].business}</strong><small>{dateTime(rows[0].purchasedAtUtc)}</small></Link> : null}</Resource>
   </section>;
 }
@@ -382,6 +391,7 @@ export function CustomerOffers({ discover = false }: CustomerOffersProps = {}) {
             rows={rows}
             discover={discover}
             coordinates={customerLocation.coordinates}
+            onSelectLocation={customerLocation.selectLocation}
           />
         )}
       </Resource>
@@ -539,31 +549,23 @@ export function CustomerOfferQr() {
 
 export function CustomerTransactions() {
   const resource = useResource<CustomerTransaction[]>("/customer/transactions");
+  const [search, setSearch] = useState("");
   return (
     <div className="customer-ledger-page">
       <PageHeader title="Transactions" compact />
+      <Field label="Search Business"><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field>
       <Resource resource={resource}>
         {(rows) => rows.length ? (<>
           <div className="metric-grid customer-transaction-summary" aria-label="Transaction summary">
             <Metric label="Total Spent" value={`${amount(rows.reduce((total, row) => total + row.purchaseAmount.amount, 0))} ETB`} icon="wallet" />
             <Metric label="Total Cashback Earned" value={`${amount(rows.reduce((total, row) => total + (row.cashbackEarned?.amount ?? 0), 0))} ETB`} icon="plus" emphasis />
           </div>
-          <section className="customer-ledger-list" aria-label="Customer transactions">
-            {rows.map((row, index) => (
-                <article className="customer-transaction-card" key={`${row.source}-${row.purchasedAtUtc}-${index}`}>
-                  <header>
-                    <div>
-                      <h2 data-no-translate>{row.business}</h2>
-                    </div>
-                    <time dateTime={row.purchasedAtUtc}>{dateTime(row.purchasedAtUtc)}</time>
-                  </header>
-                  <div className="customer-transaction-values">
-                    <div><small>Total Purchase</small><strong>{amount(row.purchaseAmount.amount)} ETB</strong></div>
-                    <div><small>Cashback Earned</small><strong>{row.cashbackEarned ? `+${amount(row.cashbackEarned.amount)} ETB` : "—"}</strong></div>
-                  </div>
-                </article>
-              ))}
-          </section>
+          <DataTable compact label="Customer transactions" rows={rows.filter(row => row.business.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))} rowKey={row => `${row.source}-${row.purchasedAtUtc}-${row.business}`} columns={[
+            { label: "Business", cell: row => <span data-no-translate>{row.business}</span> },
+            { label: "Date/time", cell: row => dateTime(row.purchasedAtUtc) },
+            { label: "Purchase", cell: row => amount(row.purchaseAmount.amount), numeric: true },
+            { label: "Cashback", cell: row => amount(row.cashbackEarned?.amount), numeric: true },
+          ]} empty={<Empty title="No transactions yet." />} />
         </>
         ) : (
           <Empty
@@ -604,7 +606,7 @@ export function CustomerCashback() {
                 <div className="customer-cashback-progress">
                   <div className="customer-cashback-threshold">
                     <span>Cash out at</span>
-                    <strong>{threshold === null ? "Not configured" : `${amount(threshold)} ETB`}</strong>
+                    <strong>{threshold === null ? "Not configured" : `${amount(threshold)} ETB${summary.monthlyPayoutEnabled ? " or monthly" : ""}`}</strong>
                   </div>
                   <div className="customer-cashback-track" role="progressbar" aria-label="Progress toward minimum cash-out" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
                     <span style={{ width: `${progress}%` }} />

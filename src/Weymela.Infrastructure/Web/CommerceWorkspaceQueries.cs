@@ -91,7 +91,7 @@ public sealed partial class WorkspaceQueries
         await Access.EnsureScannerAsync(actor,actor.BusinessId.Value,ct);
         // The first HTTP response and retry both use committed PostgreSQL precision, not an unrounded tracked object.
         var sale=await db.VerifiedSales.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==saleId&&x.BusinessId==actor.BusinessId,ct);
-        if(sale is not null)return new(sale.Id,sale.PurchaseAmount,sale.TotalPromotionCharge,sale.CreatedAtUtc);
+        if(sale is not null)return new(sale.Id,sale.PurchaseAmount,sale.TotalPromotionCharge,sale.CreatedAtUtc,sale.PurchaseAmount,sale.CustomerCashbackAmount);
         var ugcSale=await db.UgcCustomerOfferSales.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==saleId&&x.BusinessId==actor.BusinessId,ct)
             ??throw new ApplicationFailure(FailureKind.NotFound,"Confirmed purchase not found.");
         return new(ugcSale.Id,ugcSale.PurchaseAmount,ugcSale.TotalOfferCharge,ugcSale.CreatedAtUtc,
@@ -113,7 +113,7 @@ public sealed partial class WorkspaceQueries
                     ?? PublicContentLink.Create(live.Provider,live.ExternalContentId);
                 result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude,business.Category,
                         OfferAddress(business.Address, offer.Location)),
-                    new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location,offer.RemainingDays));
+                    new(profile.DisplayName,profile.CreatorNumber),offer.BenefitPercent,content,offer.Slogan,offer.Location,offer.RemainingDays));
             }
             else
             {
@@ -124,7 +124,7 @@ public sealed partial class WorkspaceQueries
                 result.Add(new(offer.OfferId,offer.Source,offer.Offer,
                     new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude,business.Category,
                         OfferAddress(business.Address, offer.Location)),
-                    new(offer.Creator.DisplayName),offer.BenefitPercent,
+                    new(offer.Creator.DisplayName,(await directory.CreatorCardAsync(offer.Creator.Id,ct)).CreatorNumber),offer.BenefitPercent,
                     publicationUrl ?? (offer.Provider is null || offer.ExternalContentId is null ? null
                         : PublicContentLink.Create(offer.Provider,offer.ExternalContentId)),
                     offer.Slogan,offer.Location,UgcAssignmentId:offer.UgcAssignmentId,BenefitMode:offer.BenefitMode));

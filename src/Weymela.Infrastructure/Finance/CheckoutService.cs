@@ -455,7 +455,7 @@ public sealed class CheckoutService(WeymelaDbContext db, ICommerceAccessPolicy a
     }
     private static ApplicationFailure CheckoutError(FailureKind kind, string code, string message, Exception? inner = null) =>
         new(kind, message, inner, code);
-    private static SaleResult Result(VerifiedSale sale) => new(sale.Id, sale.PurchaseAmount, sale.TotalPromotionCharge, sale.CreatedAtUtc);
+    private static SaleResult Result(VerifiedSale sale) => new(sale.Id, sale.PurchaseAmount, sale.TotalPromotionCharge, sale.CreatedAtUtc, sale.PurchaseAmount, sale.CustomerCashbackAmount);
     private static SaleResult Result(UgcCustomerOfferSale sale) => new(sale.Id, sale.PurchaseAmount,
         sale.TotalOfferCharge, sale.CreatedAtUtc, sale.CustomerPaysAmount, sale.CustomerDiscountAmount, "UGC_CUSTOMER_OFFER", sale.BenefitMode.ToString());
     private static SensitiveQrToken NewToken() => new(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))

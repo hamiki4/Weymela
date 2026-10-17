@@ -9,6 +9,7 @@ import type {
 } from "../../api/types";
 import {
   Button,
+  DataTable,
   Field,
   MoneyInput,
   Notice,
@@ -21,6 +22,13 @@ import { Icon } from "../../ui/Icon";
 import { useSession } from "../../app/Session";
 
 function CheckoutTransactionList({ rows, business = false }: { rows: CheckoutSaleRow[]; business?: boolean }) {
+  if (business) return <DataTable compact label="Business transactions" rows={rows} rowKey={row => `${row.source}-${row.id}`} columns={[
+    { label: "Date/time", cell: row => dateTime(row.createdAtUtc) },
+    { label: "Creator", cell: row => <span data-no-translate>{row.creator ?? "—"}{row.creatorNumber ? ` · #${row.creatorNumber}` : ""}</span> },
+    { label: "Cashier", cell: row => row.cashier ?? "—" },
+    { label: "Purchase", cell: row => amount(row.purchaseAmount), numeric: true },
+    { label: "Cashback", cell: row => amount(row.customerDiscount), numeric: true },
+  ]} empty={<p>No transactions yet.</p>} />;
   return rows.length ? <div className="business-transaction-list">{rows.map((row) => <article className="business-transaction-card" key={`${row.source}-${row.id}`}>
     {business ? <div className="business-transaction-context business-only">
         <span>Promotion: {row.offer}</span>
@@ -176,11 +184,12 @@ export function Checkout() {
         description="Scan Offer QR"
       />
       {result ? (
-        <Section title="Payment recorded">
+        <Section title="Completed">
 
           <p>
             Purchase total: <strong>{amount(result.purchaseAmount.amount)}</strong>
           </p>
+          <p>Customer Cashback: <strong>{amount(result.benefitMode === "LegacyDiscount" ? 0 : result.customerDiscount?.amount)} ETB</strong></p>
           <Button onClick={clearCheckout}>Scan Another QR</Button>
         </Section>
       ) : offer ? (
@@ -394,9 +403,9 @@ export function Checkout() {
           </Section>
         </>
       )}
-      <Section title="Recent Transactions">
-        <Resource resource={recent}>{(rows) => <CheckoutTransactionList rows={Array.isArray(rows) ? rows.slice(0, 10) : []} />}</Resource>
-      </Section>
+      {!result && <Section title="Recent Transactions">
+        <Resource resource={recent}>{(rows) => <CheckoutTransactionList business={user?.role === "Business"} rows={Array.isArray(rows) ? rows.slice(0, 10) : []} />}</Resource>
+      </Section>}
     </div>
   );
 }

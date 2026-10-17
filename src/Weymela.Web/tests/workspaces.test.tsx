@@ -101,16 +101,18 @@ describe("Business workspace", () => {
         status: "Completed", createdAtUtc: "2026-09-29T13:00:00Z" },
     ] });
     const rendered = mount(<CheckoutTransactions />);
-    await screen.findByText("Promotion: Coffee stories");
-    expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
-    expect(screen.getByText("Customer Cashback: 20 ETB")).toBeVisible();
-    expect(screen.queryByText(/Creator earning|Creator:|Creator ID|Business charge/)).not.toBeInTheDocument();
+    await screen.findByRole("table", { name: "Business transactions" });
+    expect(rendered.container.querySelectorAll(".compact-table tbody tr")).toHaveLength(2);
+    expect(screen.getByText("20")).toBeVisible();
+    expect(screen.getAllByText("Mina · #1001")).toHaveLength(2);
+    expect(screen.getAllByText("Cashier A")).toHaveLength(2);
+    expect(screen.queryByText(/Creator earning|Business charge/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "UGC + Sale" }));
-    expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(1);
-    expect(screen.getByText("Promotion: Product story")).toBeVisible();
-    expect(screen.queryByText("Promotion: Coffee stories")).not.toBeInTheDocument();
+    expect(rendered.container.querySelectorAll(".compact-table tbody tr")).toHaveLength(1);
+    expect(screen.getByText("40")).toBeVisible();
+    expect(screen.queryByText("20")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(rendered.container.querySelectorAll(".business-transaction-card")).toHaveLength(2);
+    expect(rendered.container.querySelectorAll(".compact-table tbody tr")).toHaveLength(2);
   });
   it("keeps Home funds focused while Wallet retains reserved balance", async () => {
     mount(<BusinessDashboard />);
@@ -857,7 +859,7 @@ describe("Creator workspace", () => {
   });
   it("shows friendly earning sources", async () => {
     mount(<CreatorEarnings />);
-    expect((await screen.findAllByText("Verified Views")).length).toBeGreaterThan(
+    expect((await screen.findAllByText(/View Earnings/)).length).toBeGreaterThan(
       0,
     );
     expect(screen.queryByText("VIEW_REWARD")).not.toBeInTheDocument();
@@ -934,19 +936,19 @@ describe("Creator workspace", () => {
     ] } });
     const rendered = mount(<CreatorEarnings />);
     await screen.findByRole("heading", { name: "Transaction History" });
-    const cards = rendered.container.querySelectorAll(".mobile-data .data-card");
+    const cards = rendered.container.querySelectorAll(".compact-table tbody tr");
     expect(cards).toHaveLength(2);
     expect(cards[0]).toHaveTextContent("Bella Restaurant");
-    expect(cards[0]).toHaveTextContent("Sale Commission");
-    expect(cards[0]).toHaveTextContent("+30 ETB");
+    expect(cards[0]).toHaveTextContent("Sale Earnings");
+    expect(cards[0]).toHaveTextContent("+30");
     expect(cards[1]).toHaveTextContent("UGC");
-    expect(cards[1]).toHaveTextContent("+4,500 ETB");
+    expect(cards[1]).toHaveTextContent("+4,500");
     expect(rendered.container).not.toHaveTextContent("1,000 ETB");
   });
   it("shows threshold eligibility without payout calendar dates", async () => {
     mount(<CreatorEarnings />);
     expect(
-      await screen.findByText("Eligible for payout · 5,000"),
+      await screen.findByText("Ready to cash out"),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Request Payout" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Save Destination" })).toBeEnabled());
@@ -1246,12 +1248,12 @@ describe("Accepted commerce compatibility", () => {
     expect(screen.getByText("Total Cashback Earned")).toBeVisible();
     expect(screen.getByText("2,000 ETB")).toBeVisible();
     expect(screen.getByText("90 ETB")).toBeVisible();
-    expect(screen.getAllByText("Cashback Earned")).toHaveLength(2);
+    expect(screen.getByRole("columnheader",{name:"Cashback"})).toBeVisible();
     expect(screen.queryByText("Promoted by Bella")).not.toBeInTheDocument();
     expect(screen.queryByText("Original purchase")).not.toBeInTheDocument();
     expect(screen.queryByText("Discount")).not.toBeInTheDocument();
-    const cards = rendered.container.querySelectorAll(".customer-transaction-card");
-    expect(within(cards[1] as HTMLElement).getByText("+50 ETB")).toBeVisible();
+    const cards = rendered.container.querySelectorAll(".compact-table tbody tr");
+    expect(within(cards[1] as HTMLElement).getByText("50")).toBeVisible();
     expect(cards[0]).toHaveTextContent("Abc Coffee");
     expect(cards[1]).toHaveTextContent("Bella Beauty");
     expect(cards[1]).not.toHaveTextContent("Promoted by");
@@ -1333,4 +1335,30 @@ describe("Accepted commerce compatibility", () => {
       }),
     );
   });
+});
+
+it("saves the monthly day, switch and effective date without changing existing rates", async () => {
+  const api=mockApi(); mount(<AdminFinancialSettings />);
+  const day=await screen.findByLabelText("Monthly Payout Day");
+  expect(within(day).getAllByRole("option")).toHaveLength(28);
+  await userEvent.click(screen.getByLabelText("Monthly payouts"));
+  await userEvent.selectOptions(day,"28");
+  await userEvent.click(screen.getByLabelText("UGC: Cash out anytime"));
+  await userEvent.type(screen.getByLabelText("Low Promotion Balance Alert (ETB)"),"1000");
+  await userEvent.click(screen.getByRole("button",{name:"Save Financial Settings"}));
+  await waitFor(()=>expect(api.writes.some(row=>row.path==="/admin/financial-settings")).toBe(true));
+  expect(api.writes.find(row=>row.path==="/admin/financial-settings")?.body).toMatchObject({settings:{monthlyPayoutEnabled:true,monthlyPayoutDay:28,monthlyPayoutEffectiveFromUtc:"2026-10-31T21:00:00Z",ugcPayoutMinimumExempt:true,lowPromotionBalanceAlert:1000,creatorThreshold:5000,customerThreshold:500,creatorCommissionPercent:4.5,customerCashbackPercent:2,platformPercent:3.5}});
+});
+
+it("filters distances from a manually selected real location and shows the public Creator ID", async () => {
+  sessionStorage.removeItem("weymela.customer-location");
+  mockApi({"/customer/offers":[{...offer,id:"near",creator:{displayName:"Bella",creatorNumber:1010},business:{...offer.business,latitude:9,longitude:38}},
+    {...offer,id:"far",business:{...offer.business,displayName:"Far Business",latitude:9.1,longitude:38}}]});
+  mount(<CustomerOffers discover />);
+  await userEvent.selectOptions(await screen.findByLabelText("Choose location"),"near");
+  await userEvent.selectOptions(screen.getByLabelText("Distance"),"5");
+  expect(screen.queryByRole("heading",{name:"Far Business"})).not.toBeInTheDocument();
+  expect(screen.getByText("#1010")).toBeVisible();
+  await userEvent.selectOptions(screen.getByLabelText("Distance"),"25");
+  expect(screen.getByRole("heading",{name:"Far Business"})).toBeVisible();
 });

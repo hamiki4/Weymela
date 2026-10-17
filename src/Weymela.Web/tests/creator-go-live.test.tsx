@@ -42,7 +42,8 @@ it("distinguishes unread and read notification cards for title and message styli
   ] } });
   render(<MemoryRouter><Inbox /></MemoryRouter>);
   expect((await screen.findByText("New work")).closest("article")).toHaveAttribute("data-unread", "true");
-  expect(screen.getByText("Review this video").closest("article")).toHaveAttribute("data-unread", "true");
+  expect(screen.queryByText("Review this video")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "New work" })).toHaveAttribute("href", "/creator/promotions");
   expect(screen.getByText("Earlier work").closest("article")).toHaveAttribute("data-unread", "false");
 });
 

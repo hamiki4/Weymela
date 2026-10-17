@@ -28,10 +28,11 @@ public sealed class PayoutRecord
     public long Version { get; private set; }
     public PayoutRecord(PayoutBeneficiary beneficiary, Guid subjectId, Money available, Money threshold, Money amount,
         Guid version, DateTime eligibleAt, PayoutDestinationMethod destinationMethod, string destinationProvider,
-        string protectedDestinationAccount, string destinationLegalName)
+        string protectedDestinationAccount, string destinationLegalName, Money? eligibleFunds = null)
     {
         if (threshold.Amount <= 0 || available.Currency != threshold.Currency || amount.Currency != threshold.Currency
-            || amount.Amount < threshold.Amount || amount.Amount > available.Amount)
+            || amount.Amount < (eligibleFunds is null ? threshold.Amount : 0.01m) || amount.Amount > available.Amount
+            || eligibleFunds is { } eligible && (eligible.Currency != amount.Currency || amount.Amount > eligible.Amount))
             throw new InvalidOperationException("Payout threshold has not been reached.");
         if (string.IsNullOrWhiteSpace(destinationProvider) || string.IsNullOrWhiteSpace(protectedDestinationAccount)
             || string.IsNullOrWhiteSpace(destinationLegalName))

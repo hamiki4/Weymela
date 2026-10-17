@@ -198,6 +198,7 @@ export const queue = {
   available: 5400,
   threshold: 5000,
   payAmount: 5000,
+  eligibleAmount: 5400,
   eligibleSinceUtc: "2026-09-11T12:00:00Z",
   status: "Eligible",
   method: "Telebirr",

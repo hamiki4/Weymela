@@ -186,7 +186,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     }
 
     [Theory]
-    [InlineData(4999, false)]
+    [InlineData(4999, true)]
     [InlineData(5000, true)]
     [InlineData(5200, true)]
     [InlineData(5400, true)]

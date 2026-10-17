@@ -47,7 +47,7 @@ internal static class Phase4Configuration
         Mapping.Version(qr);
         var payout = model.Entity<PayoutRecord>(); Mapping.Scalars(payout, "BeneficiaryId"); payout.HasKey(x => x.Id);
         payout.ToTable("PayoutRecords", t => t.HasCheckConstraint("CK_Payout_Amounts",
-            "\"Amount\" >= \"ThresholdUsed\" AND \"ThresholdUsed\" > 0 AND ((\"Beneficiary\"='Creator' AND \"CreatorId\" IS NOT NULL AND \"CustomerId\" IS NULL) OR (\"Beneficiary\"='Customer' AND \"CustomerId\" IS NOT NULL AND \"CreatorId\" IS NULL))"));
+            "\"Amount\" > 0 AND \"ThresholdUsed\" > 0 AND ((\"Beneficiary\"='Creator' AND \"CreatorId\" IS NOT NULL AND \"CustomerId\" IS NULL) OR (\"Beneficiary\"='Customer' AND \"CustomerId\" IS NOT NULL AND \"CreatorId\" IS NULL))"));
         payout.Property(x => x.DestinationProvider).HasMaxLength(100);
         payout.Property(x => x.ProtectedDestinationAccount).HasMaxLength(2048);
         payout.Property(x => x.DestinationLegalName).HasMaxLength(120);

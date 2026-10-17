@@ -139,7 +139,17 @@ public sealed class Promotion
         var allocation = new CreatorAllocation(Id, creatorId, amount, at, platform, creatorSocialProfileId, ContentDueAtUtc);
         allocations.Add(allocation); Version++; events.Add(new CreatorAllocationCreated(allocation.Id, amount, at, correlation)); return allocation;
     }
-    public void IncreaseAllocation(Guid allocationId, Money amount, DateTime at, Guid correlation) { Ensure(PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active); var allocation = allocations.SingleOrDefault(x => x.Id == allocationId) ?? throw new KeyNotFoundException(); if (amount.Amount > UnallocatedBudget.Amount) throw new InvalidOperationException("Allocation exceeds unallocated Promotion budget."); allocation.Increase(amount, at); Version++; }
+    public void AddRewardFunding(BusinessWallet wallet, Money amount, DateTime at, Guid correlation, DateTime? liveEndUtc = null)
+    {
+        Ensure(PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active, PromotionStatus.BudgetExhausted);
+        if (at >= (liveEndUtc ?? EndDateUtc) || amount.Amount <= 0 || amount.Currency != TotalBudget.Currency)
+            throw new InvalidOperationException("Renew this ended Promotion before adding funds.");
+        wallet.ReserveForPromotion(amount, at, correlation);
+        TotalBudget = TotalBudget.Add(amount);
+        ReservedBudget = ReservedBudget.Add(amount);
+        Version++;
+    }
+    public void IncreaseAllocation(Guid allocationId, Money amount, DateTime at, Guid correlation) { Ensure(PromotionStatus.Funded, PromotionStatus.Published, PromotionStatus.Active, PromotionStatus.BudgetExhausted); var allocation = allocations.SingleOrDefault(x => x.Id == allocationId) ?? throw new KeyNotFoundException(); if (amount.Amount > UnallocatedBudget.Amount) throw new InvalidOperationException("Allocation exceeds unallocated Promotion budget."); allocation.Increase(amount, at); if (Status == PromotionStatus.BudgetExhausted) Status = PromotionStatus.Active; Version++; }
     public void CompleteParticipation(Guid allocationId, DateTime at, Guid correlation) { var allocation = allocations.SingleOrDefault(x => x.Id == allocationId) ?? throw new KeyNotFoundException(); allocation.Complete(at); Version++; }
     public void Consume(Guid allocationId, Money amount, DateTime at, Guid correlation) { Ensure(PromotionStatus.Active); var allocation = allocations.SingleOrDefault(x => x.Id == allocationId) ?? throw new KeyNotFoundException(); allocation.Consume(amount, at); UsedBudget = UsedBudget.Add(amount); ReservedBudget = ReservedBudget.Subtract(amount); Version++; if (RemainingBudget.Amount == 0 || (UnallocatedBudget.Amount == 0 && allocations.All(x => x.RemainingAmount.Amount == 0))) { Status = PromotionStatus.BudgetExhausted; events.Add(new PromotionBudgetExhausted(Id, at, correlation)); } }
     public void Complete(BusinessWallet wallet, DateTime at, Guid correlation) { Ensure(PromotionStatus.Active, PromotionStatus.BudgetExhausted); foreach (var allocation in allocations.Where(x => x.Status is CreatorAllocationStatus.Active or CreatorAllocationStatus.Exhausted)) allocation.Complete(at); Status = PromotionStatus.Completed; CompletedAtUtc = at; Version++; events.Add(new PromotionCompleted(Id, at, correlation)); }

@@ -20,6 +20,7 @@ internal sealed class FinancialConfigurationMapping : IEntityTypeConfiguration<F
         b.HasOne<FinancialConfiguration>().WithMany().HasForeignKey(x => x.ConfigurationId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => new { x.ConfigurationId, x.Version }).IsUnique();
         b.HasIndex(x => new { x.EffectiveFromUtc, x.Version });
+        b.Property(x => x.LowPromotionBalanceAlert).HasPrecision(18, 2);
         b.OwnsOne(x => x.ViewOnly, Mapping.Pricing);
         b.OwnsOne(x => x.ViewPlusCommission, Mapping.Pricing);
         b.Navigation(x => x.ViewOnly).IsRequired(false);

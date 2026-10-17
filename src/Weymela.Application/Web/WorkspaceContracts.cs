@@ -45,10 +45,11 @@ public sealed record CampaignRow(Guid Id, string PublicId, Guid BusinessId, stri
     decimal CampaignBudget, decimal AssignedToCreators, decimal AvailableCampaignBudget, decimal Used, decimal Remaining,
     int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version, int PromotionLiveDurationDays, string? Slogan = null,
     string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null,
-    DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
+    DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null, bool LowFunds = false);
 public sealed record BusinessPromotionItem(string Key, Guid Id, Guid CampaignId, string Kind, string Title,
     string Group, string Status, decimal Budget, decimal Remaining, DateTime? DueAtUtc,
-    string PrimaryAction, string ActionPath, string? Creator = null, int? RemainingDays = null);
+    string PrimaryAction, string ActionPath, string? Creator = null, int? RemainingDays = null,
+    int CreatorCount = 0, bool LowFunds = false);
 public sealed record ApplicantCard(Guid Id, CreatorCard Creator, string Message, string? ContentConcept, string Status, DateTime AppliedAtUtc,
     string? Platform = null, CreatorSocialProfileView? SocialProfile = null);
 public sealed record CreatorBudgetCard(Guid Id, CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining,
@@ -60,7 +61,7 @@ public sealed record CampaignOpportunity(Guid Id, string PublicId, BusinessCard 
     string? Requirements, string? Category, string? Region, long? MinimumVerifiedFollowers, DateTime StartUtc, DateTime EndUtc,
     int PromotionLiveDurationDays, CreatorPrice Earnings, string? RequestStatus, string Eligibility, string? Slogan = null, string? Location = null,
     IReadOnlyList<PromotionPlatformView>? Platforms = null, IReadOnlyList<CreatorSocialProfileView>? EligibleSocialProfiles = null,
-    int ApprovedCreators = 0, int CreatorCapacity = 0, DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null);
+    int ApprovedCreators = 0, int CreatorCapacity = 0, DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null, bool LowFunds = false);
 public sealed record CreatorCampaignCard(Guid Id, Guid BudgetId, Guid? ParticipationId, string Title, BusinessCard Business, string Type,
     decimal YourBudget, decimal BudgetRemaining, long VerifiedViews, long RewardedViews, decimal ViewEarnings, decimal SaleCommissionEarnings,
     string Status, string ContentStatus, string? Provider, string? ExternalContentId, DateTime StartUtc, DateTime EndUtc, int PromotionLiveDurationDays,
@@ -89,12 +90,12 @@ public sealed record AdminPublicationReviewCard(Guid Id, string Creator, string 
     string? ApprovedMediaUrl = null, string? ApprovedWatchUrl = null, string? ApprovedMediaContentType = null, string? VerificationMethod = null);
 public sealed record AdminPublicationReviewInput(string Action, string? EvidenceReference, long? BaselineViews, bool EvidenceChecked = false);
 public sealed record EarningItem(Guid Id, string Campaign, string Source, decimal Amount, DateTime AtUtc,
-    string? Business = null, string? SourceType = null, string Status = "Earned");
+    string? Business = null, string? SourceType = null, string Status = "Earned", string? PromotionType = null);
 public sealed record PayoutItem(Guid Id, string Kind, string Name, decimal Amount, decimal Threshold, string Status,
     DateTime EligibleAtUtc, DateTime? PaidAtUtc, string? Reference);
 public sealed record EarningsWorkspace(decimal AvailableEarnings, decimal? MinimumToCashOut, decimal? AmountNeeded, decimal EligibleAmount,
     IReadOnlyList<EarningItem> History, IReadOnlyList<PayoutItem> PayoutHistory, decimal ViewEarnings = 0,
-    decimal SaleEarnings = 0, decimal UgcEarnings = 0, decimal PendingEarnings = 0, decimal PaidOut = 0);
+    decimal SaleEarnings = 0, decimal UgcEarnings = 0, decimal PendingEarnings = 0, decimal PaidOut = 0, bool MonthlyPayoutEnabled = false, bool UgcPayoutMinimumExempt = false);
 public sealed record CreatorHome(CreatorCard Creator, int Requests, int ActiveCampaigns, EarningsWorkspace Earnings);
 public sealed record AdminHome(int Businesses, int Creators, int ActiveCampaigns, decimal CampaignSpend, decimal CreatorEarnings,
     decimal CustomerCashback, decimal PlatformRevenue, IReadOnlyList<ActivityItem> Activity);
@@ -105,7 +106,7 @@ public sealed record AdminPromotionWallet(Guid Id, string Business, string Title
 public sealed record AdminWallets(IReadOnlyList<AdminBusinessWallet> Businesses, IReadOnlyList<AdminPromotionWallet> Promotions);
 public sealed record AdminUgcFinance(Guid Id, string Business, string Title, string Type, decimal Budget,
     decimal CreatorPayment, decimal? CustomerDiscountPercent, decimal CreatorUsed, decimal OfferUsed, decimal DiscountUsed,
-    decimal Remaining, int QualifyingSales, string Status);
+    decimal Remaining, int QualifyingSales, string Status, bool LowFunds = false);
 public sealed record AdminReportPeriod(decimal BusinessDeposits, decimal PromotionalFunding, decimal PromotionSpend,
     decimal UgcCreatorSpend, decimal UgcOfferSpend, decimal UgcCreatorPayments, decimal CreatorEarnings, decimal CustomerCashback,
     decimal CustomerDiscounts, decimal PlatformRevenue, decimal CreatorPayouts, decimal CustomerPayouts,
@@ -130,7 +131,7 @@ public sealed record OperationsCreatorView(CreatorCard Creator, string Status, i
 public sealed record OperationsCustomerView(CustomerCard Customer, string Status, string? FullEmail = null, string? FullPhone = null);
 public sealed record OperationsCampaignView(Guid Id, string PublicId, Guid BusinessId, string Business, string Title,
     string Type, int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version,
-    int PromotionLiveDurationDays, string? Slogan = null, string? Location = null);
+    int PromotionLiveDurationDays, string? Slogan = null, string? Location = null, bool LowFunds = false);
 public sealed record AdminCreatorRow(CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining, long BaselineViews,
     long LatestVerifiedViews, long VerifiedViews, long RewardedViews, decimal ViewEarnings, int VerifiedSales, decimal SaleCommission,
     decimal CustomerCashback, decimal PlatformRevenue, string Status);
@@ -144,24 +145,26 @@ public sealed record FinancialSettingsInput(ViewPriceInput? ViewOnly, ViewPriceI
     [property: System.Text.Json.Serialization.JsonRequired] decimal CustomerCashbackPercent,
     [property: System.Text.Json.Serialization.JsonRequired] decimal PlatformPercent, decimal? CreatorThreshold, decimal? CustomerThreshold,
     DateTime? EffectiveFromUtc, UgcSettingsInput? Ugc = null, int? PromotionLiveDurationDays = null,
-    bool? EnforceAudienceRequirements = null);
+    bool? EnforceAudienceRequirements = null, decimal? LowPromotionBalanceAlert = null,
+    int? MonthlyPayoutDay = null, DateTime? MonthlyPayoutEffectiveFromUtc = null, bool? UgcPayoutMinimumExempt = null, bool? MonthlyPayoutEnabled = null);
 public sealed record FinancialVersionInfo(Guid Id, int Version, DateTime EffectiveFromUtc, Guid ChangedBy, FinancialSettingsInput Settings);
 public sealed record InactiveFinancialBaselineInfo(int Version, decimal CustomerCashbackPercent,
     decimal CreatorCommissionPercent, decimal PlatformPercent, DateTime EffectiveFromUtc);
 public sealed record FinancialSettingsWorkspace(FinancialSettingsInput? Current, int Version,
     IReadOnlyList<FinancialVersionInfo> Versions, InactiveFinancialBaselineInfo? InactiveBaseline = null);
 public sealed record PayoutQueueRow(Guid SubjectId, Guid? PayoutId, string Name, decimal Available, decimal Threshold, decimal PayAmount,
-    DateTime? EligibleSinceUtc, string Status, string? Method = null, string? Provider = null, string? Account = null);
+    DateTime? EligibleSinceUtc, string Status, string? Method = null, string? Provider = null, string? Account = null,
+    decimal EligibleAmount = 0);
 public sealed record PayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators, IReadOnlyList<PayoutQueueRow> Customers,
     decimal PlatformAccrued, decimal PlatformSettled, decimal PlatformUnsettled, IReadOnlyList<PayoutItem> History);
 public sealed record OperationsPayoutWorkspace(IReadOnlyList<PayoutQueueRow> Creators,
     IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History);
 public sealed record OperationsUgcView(Guid Id, Guid BusinessId, string Business, string Title, string Status,
     int CreatorsNeeded, int ApprovedCreators, DateTime DueDateUtc, string? Location, int CurrentRevision,
-    string? CustomerOfferStatus = null);
+    string? CustomerOfferStatus = null, bool LowFunds = false);
 public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl,
     decimal? Latitude = null, decimal? Longitude = null, string? Category = null, string? Address = null);
-public sealed record CustomerOfferCreator(string DisplayName);
+public sealed record CustomerOfferCreator(string DisplayName, long? CreatorNumber = null);
 public sealed record CustomerOfferCard(Guid Id, string Source, string Offer, CustomerOfferBusiness Business,
     CustomerOfferCreator? Creator, decimal BenefitPercent, string? WatchUrl, string? Slogan = null, string? Location = null,
     int? RemainingDays = null, Guid? UgcAssignmentId = null, string BenefitMode = "Cashback");
@@ -273,3 +276,5 @@ public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOn
 public sealed record AdminGrantInput(string Email, string Role, string? DisplayName = null);
 public sealed record AdminAccountView(Guid UserId, string Name, string Email, string Role, string Status,
     DateTime? GrantedAtUtc, DateTime? LastActivityAtUtc);
+
+public sealed record AddPromotionFundsInput(decimal Amount, long CampaignVersion, long WalletVersion);

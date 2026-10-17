@@ -131,9 +131,9 @@ export function OperationsCampaigns() {
       { label: "Business", cell: (r) => r.business },
       { label: "Type", cell: (r) => r.type },
       { label: "Creators", cell: (r) => count(r.creatorCount), numeric: true },
-      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+      { label: "Status", cell: (r) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
       { label: "Window", cell: (r) => `${date(r.startUtc)} – ${date(r.endUtc)}` },
-    ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><Badge status={r.status} /></div><p>{r.business} · {r.type}</p><p className="fine-print">{count(r.creatorCount)} creators · {date(r.startUtc)} – {date(r.endUtc)}</p></>} empty={<Empty title="No campaigns yet" message="Campaigns appear here as Businesses create them." icon="campaign" />} /></Section>}</Resource>
+    ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span></div><p>{r.business} · {r.type}</p><p className="fine-print">{count(r.creatorCount)} creators · {date(r.startUtc)} – {date(r.endUtc)}</p></>} empty={<Empty title="No campaigns yet" message="Campaigns appear here as Businesses create them." icon="campaign" />} /></Section>}</Resource>
     <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }
@@ -145,11 +145,11 @@ export function OperationsUgc() {
     <AdminSearch value={search} statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} />
     <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
       { label: "Opportunity", cell: (r) => <><strong>{r.title}</strong><small>{r.business}</small></> },
-      { label: "Status", cell: (r) => <Badge status={r.status} /> },
+      { label: "Status", cell: (r) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
       { label: "Creators", cell: (r) => `${r.approvedCreators}/${r.creatorsNeeded}` },
       { label: "Due", cell: (r) => date(r.dueDateUtc) },
       { label: "Offer", cell: (r) => r.customerOfferStatus ?? "None" },
-    ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><Badge status={r.status} /></div><p>{r.business} · {r.approvedCreators}/{r.creatorsNeeded} creators</p><p className="fine-print">Due {date(r.dueDateUtc)} · Customer offer {r.customerOfferStatus ?? "None"}</p></>} empty={<Empty title="No UGC opportunities yet" message="UGC opportunities appear here for operational support." icon="sparkle" />} /></Section>}</Resource>
+    ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span></div><p>{r.business} · {r.approvedCreators}/{r.creatorsNeeded} creators</p><p className="fine-print">Due {date(r.dueDateUtc)} · Customer offer {r.customerOfferStatus ?? "None"}</p></>} empty={<Empty title="No UGC opportunities yet" message="UGC opportunities appear here for operational support." icon="sparkle" />} /></Section>}</Resource>
     <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
   </>;
 }

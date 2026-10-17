@@ -156,6 +156,7 @@ public sealed partial class WorkspaceQueries
         var businessIds=promotions.Values.Select(x=>x.BusinessId).Concat(ugc.Values.Select(x=>x.BusinessId)).Distinct().ToArray();
         var businessNames=await db.PublicWorkspaceProfiles.AsNoTracking().Where(x=>x.Role==ActorRole.Business&&businessIds.Contains(x.SubjectId))
             .ToDictionaryAsync(x=>x.SubjectId,x=>x.DisplayName,ct);
+        var saleUgcIds = await db.UgcCustomerOffers.AsNoTracking().Where(x => ugcIds.Contains(x.UgcOpportunityId)).Select(x => x.UgcOpportunityId).ToListAsync(ct);
         var history=new List<EarningItem>();
         foreach(var e in entries)
         {
@@ -167,7 +168,8 @@ public sealed partial class WorkspaceQueries
                 e.Source switch{EarningSource.ViewReward=>"View Earnings",EarningSource.SaleCommission=>"Sale Earnings",EarningSource.Ugc=>"UGC Earnings",_=>"Authorized adjustment"},
                 e.Amount.Amount,e.CreatedAtUtc,businessId is { } id?businessNames.GetValueOrDefault(id):null,
                 e.Source==EarningSource.Ugc?"UGC":promotion?.PromotionType==PromotionType.ViewOnly?"VIEW_ONLY":"VIEW_PLUS_SALE",
-                correctedIds.Contains(e.Id)?"Reversed":e.Source==EarningSource.Ugc && !earnedUgcAssignments.Contains(e.UgcAssignmentId!.Value)?"Pending correction":"Earned"));
+                correctedIds.Contains(e.Id)?"Reversed":e.Source==EarningSource.Ugc && !earnedUgcAssignments.Contains(e.UgcAssignmentId!.Value)?"Pending correction":"Earned",
+                e.Source == EarningSource.Ugc ? e.UgcAssignmentId is { } work && ugcAssignments.TryGetValue(work,out var opportunityId) && saleUgcIds.Contains(opportunityId) ? "UGC + Sale" : "UGC Only" : promotion?.PromotionType == PromotionType.ViewOnly ? "View Only" : "View + Sale"));
         }
         foreach(var correction in corrections)
             history.Add(new(correction.Id,"UGC payment correction","Returned to campaign reserve",-correction.CreatorAmount.Amount,
@@ -175,9 +177,9 @@ public sealed partial class WorkspaceQueries
         history=history.OrderByDescending(x=>x.AtUtc).ToList();
         var paid=(await db.PayoutRecords.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).OrderByDescending(x=>x.EligibleAtUtc).ToListAsync(ct))
             .Select(x=>new PayoutItem(x.Id,"Creator","You",x.Amount.Amount,x.ThresholdUsed.Amount,x.Status.ToString(),x.EligibleAtUtc,x.PaidAtUtc,x.Reference)).ToArray();
-        return new(available.Amount,threshold?.Amount,threshold is { } minimum ? Math.Max(0,minimum.Amount-available.Amount) : null,threshold is { } configured && available.Amount>=configured.Amount ? configured.Amount : 0,history,paid,
+        return new(available.Amount,threshold?.Amount,threshold is { } minimum ? Math.Max(0,minimum.Amount-available.Amount) : null,configuration is null ? 0 : await PayoutEligibleBalance.AmountAsync(db,configuration,PayoutBeneficiary.Creator,actor.CreatorId!.Value,available.Amount,Now,ct),history,paid,
             entries.Where(x=>x.Source==EarningSource.ViewReward).Sum(x=>x.Amount.Amount),entries.Where(x=>x.Source==EarningSource.SaleCommission).Sum(x=>x.Amount.Amount),
             entries.Where(x=>x.Source==EarningSource.Ugc && !correctedIds.Contains(x.Id) && earnedUgcAssignments.Contains(x.UgcAssignmentId!.Value)).Sum(x=>x.Amount.Amount),
-            pending,paid.Where(x=>x.Status=="Paid").Sum(x=>x.Amount));
+            pending,paid.Where(x=>x.Status=="Paid").Sum(x=>x.Amount),configuration?.MonthlyPayoutEnabled==true,configuration?.UgcPayoutMinimumExempt==true);
     }
 }

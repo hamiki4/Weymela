@@ -18,7 +18,7 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
         var available = kind == PayoutBeneficiary.Creator
             ? await CreatorEarnedBalance.AvailableAsync(db, subject, ct)
             : (await db.CustomerCashbackAccounts.SingleOrDefaultAsync(x => x.CustomerId == subject, ct))?.AvailableCashback ?? Money.Zero();
-        return new(kind, subject, available, threshold, available.Amount >= threshold.Amount ? threshold : Money.Zero(), config.Id);
+        return new(kind, subject, available, threshold, new Money(await PayoutEligibleBalance.AmountAsync(db, config, kind, subject, available.Amount, clock.GetUtcNow().UtcDateTime, ct)), config.Id);
     }
 
     public Task<Guid> PrepareAsync(Actor actor, PayoutBeneficiary kind, Guid subject, Money amount, string key, CancellationToken ct = default) =>
@@ -33,12 +33,12 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
             if (pending is not null) throw new ApplicationFailure(FailureKind.Validation, "That beneficiary already has a payout awaiting confirmation.");
             var eligible = await EligibilityAsync(actor, kind, subject, token);
             if (eligible.EligibleAmount.Amount == 0) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout threshold has not been reached.");
-            if (amount.Amount < eligible.Threshold.Amount) throw new ApplicationFailure(FailureKind.Validation, "Payout amount is below the effective minimum.");
+            if (amount.Amount <= 0 || amount.Amount > eligible.EligibleAmount.Amount) throw new ApplicationFailure(FailureKind.Validation, "Payout exceeds eligible funds.");
             if (amount.Amount > eligible.Available.Amount) throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds the current available balance.");
             var destination = await (destinations ?? throw new InvalidOperationException("Payout destination service is unavailable."))
                 .RequiredAsync(kind, subject, token);
             var record = new PayoutRecord(kind, subject, eligible.Available, eligible.Threshold, amount, eligible.ConfigurationVersionId,
-                clock.GetUtcNow().UtcDateTime, destination.Method, destination.Provider, destination.ProtectedAccount, destination.LegalName);
+                clock.GetUtcNow().UtcDateTime, destination.Method, destination.Provider, destination.ProtectedAccount, destination.LegalName, eligible.EligibleAmount);
             db.PayoutRecords.Add(record);
             op.Remember(actor, "PreparePayout", key, fp, record.Id.ToString(), clock.GetUtcNow().UtcDateTime);
             op.Event("PayoutPrepared",
@@ -61,10 +61,9 @@ public sealed class PayoutService(WeymelaDbContext db, TimeProvider clock, Payou
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Payout not found.");
             DemandPayoutConfirmation(actor, payout.Beneficiary);
             if (payout.Status != PayoutStatus.Eligible) throw new ApplicationFailure(FailureKind.Validation, "Payout has already been paid.");
-            var configuration = await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime, token);
-            var threshold = configuration.RequirePayoutThreshold(payout.Beneficiary);
-            if (payout.Amount.Amount < threshold.Amount)
-                throw new ApplicationFailure(FailureKind.Validation, "Payout amount is below the effective minimum.");
+            var eligibility = await EligibilityAsync(actor, payout.Beneficiary, (payout.CreatorId ?? payout.CustomerId)!.Value, token);
+            if (payout.Amount.Amount > eligibility.EligibleAmount.Amount)
+                throw new ApplicationFailure(FailureKind.InsufficientFunds, "Payout exceeds eligible funds.");
             if (payout.Beneficiary == PayoutBeneficiary.Creator)
             {
                 var account = await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == payout.CreatorId, token);

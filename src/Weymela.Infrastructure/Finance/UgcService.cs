@@ -700,9 +700,11 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             .Where(x => x.Role == ActorRole.Business && businessIds.Contains(x.SubjectId))
             .ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
         var offers = await db.UgcCustomerOffers.AsNoTracking().ToDictionaryAsync(x => x.UgcOpportunityId, ct);
+        var settings = await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
+        bool Low(Guid id) => offers.TryGetValue(id,out var offer) && offer.Status is UgcCustomerOfferStatus.Active or UgcCustomerOfferStatus.Exhausted && offer.EndsAtUtc > Now && settings?.LowPromotionBalanceAlert is { } alert && offer.RemainingFunding.Amount < alert;
         return rows.Select(x => new OperationsUgcView(x.Id, x.BusinessId, names.GetValueOrDefault(x.BusinessId, "Business"),
             x.Title, x.Status.ToString(), x.CreatorCapacity, x.ApprovedCreatorCount, x.DueDateUtc, x.Location,
-            x.CurrentRevision, offers.GetValueOrDefault(x.Id)?.Status.ToString())).ToArray();
+            x.CurrentRevision, offers.GetValueOrDefault(x.Id)?.Status.ToString(),Low(x.Id))).ToArray();
     }
 
     private async Task<IReadOnlyList<UgcAssignmentView>> AssignmentViews(IReadOnlyCollection<UgcAssignment> rows, CancellationToken ct)

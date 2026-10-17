@@ -18,6 +18,7 @@ export function CreatorGoLive({ path, publication, profileId, platform, reload }
   if (publication?.wentLiveAtUtc) return <div className="creator-live-days">
     <strong>{publication.status !== "Verified" ? "Action Required" : publication.remainingDays === 0 ? "Completed" : "Live"}</strong>
     {publication.remainingDays != null && <p>{publication.remainingDays} days left</p>}
+    <p><span>Starts</span> <span data-no-translate>{dateTime(publication.wentLiveAtUtc)}</span></p>
     {publication.expiresAtUtc && <p><span>Ends</span> <span data-no-translate>{dateTime(publication.expiresAtUtc)}</span></p>}
   </div>;
   if (current?.status === "VerificationPending" && current.goLiveRequestedAtUtc)

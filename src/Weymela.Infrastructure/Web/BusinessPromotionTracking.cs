@@ -101,6 +101,21 @@ public sealed partial class WorkspaceQueries
                     review ? "Review video" : "View deliverable", $"/business/ugc/{opportunity.Id}", (await directory.CreatorCardAsync(assignment.CreatorId, ct)).DisplayName));
             }
         }
-        return items.OrderBy(x => x.Group).ThenBy(x => x.DueAtUtc).ThenBy(x => x.Key).ToArray();
+        var settings = await new Weymela.Infrastructure.Persistence.Repositories.FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
+        return items.Where(x => x.Key.StartsWith("campaign-") || x.Kind == "UGC campaign")
+            .Select(row => {
+                var offer = offers.FirstOrDefault(x => x.UgcOpportunityId == row.CampaignId);
+                var regular = campaigns.FirstOrDefault(x => x.Id == row.CampaignId);
+                var active = row.Group != "Completed" && row.Status is not ("Draft" or "Funded");
+                var rewardBudget = regular?.Remaining ?? offer?.RemainingFunding.Amount ?? 0;
+                var low = active && (regular is not null || offer is not null && offer.EndsAtUtc > Now)
+                    && settings?.LowPromotionBalanceAlert is { } alert && rewardBudget < alert;
+                return row with { Group = active ? "Active" : row.Group,
+                    Kind = regular is not null ? row.Kind : offer is null ? "UGC Only" : "UGC + Sale",
+                    Remaining = regular is not null ? row.Remaining : offer?.RemainingFunding.Amount ?? row.Remaining,
+                    CreatorCount = regular?.CreatorCount ?? assignments.Count(x => x.UgcOpportunityId == row.CampaignId && x.Status != UgcAssignmentStatus.Rejected),
+                    LowFunds = low, PrimaryAction = "Manage",
+                    ActionPath = regular is null ? $"/business/ugc/{row.CampaignId}" : $"/business/campaigns/{row.CampaignId}" };
+            }).OrderBy(x => x.Group).ThenBy(x => x.DueAtUtc).ThenBy(x => x.Key).ToArray();
     }
 }

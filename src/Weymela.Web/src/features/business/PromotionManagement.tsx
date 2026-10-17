@@ -6,7 +6,7 @@ import { amount, date, promotionTypeLabel, promotionStatusLabel } from "../../ui
 export interface BusinessPromotionItem {
   key: string; id: string; campaignId: string; kind: string; title: string;
   group: "Pending" | "Active" | "Completed"; status: string; budget: number; remaining: number;
-  dueAtUtc: string | null; primaryAction: string; actionPath: string; creator: string | null; remainingDays: number | null;
+  dueAtUtc: string | null; primaryAction: string; actionPath: string; creator: string | null; remainingDays: number | null; creatorCount: number; lowFunds: boolean;
 }
 const groups = ["Pending", "Active", "Completed"] as const;
 
@@ -28,11 +28,11 @@ export function PromotionManagement() {
           <div className="card-head"><div><p className="card-eyebrow">{["ViewOnly", "ViewPlusCommission"].includes(row.kind) ? promotionTypeLabel(row.kind) : row.kind}</p>
             <h3>{row.title}</h3>{row.creator && <p>{row.creator}</p>}</div><Badge status={row.status} label={promotionStatusLabel(row.status)} /></div>
           <dl className="promotion-summary-list">
-            {row.budget > 0 && <><div><dt>{row.kind === "UGC deliverable" ? "Agreed payment" : "Budget"}</dt><dd>{amount(row.budget)} ETB</dd></div>
-              {!row.kind.startsWith("UGC") && row.kind !== "Creator application" && <div><dt>Remaining</dt><dd>{amount(row.remaining)} ETB</dd></div>}</>}
-            {row.dueAtUtc && <div><dt>Due</dt><dd>{date(row.dueAtUtc)}</dd></div>}
-            {row.remainingDays != null && <div><dt>Remaining duration</dt><dd>{row.remainingDays} days</dd></div>}
+            <div><dt>Available</dt><dd>{amount(row.remaining)} ETB</dd></div>
+            <div><dt>Creators</dt><dd>{row.creatorCount}</dd></div>
+            {row.remainingDays != null && <div><dt>Days left</dt><dd>{row.remainingDays}</dd></div>}
           </dl>
+          {row.lowFunds && <small className="low-funds">Low funds</small>}
           <div className="actions"><Link className="button secondary business-promotion-manage" to={row.actionPath}>{row.primaryAction}</Link>
             {row.kind === "UGC campaign" && row.group !== "Completed" && <Link className="text-link" to={`/business/ugc/${row.campaignId}/edit`}>Edit details</Link>}</div>
         </article>)}

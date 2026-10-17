@@ -46,6 +46,7 @@ internal static class DeviceSessionRequestPolicy
         "/api/business/wallet/deposits",
         "/api/business/campaigns",
         "/api/business/campaigns/{id:guid}/fund",
+        "/api/business/campaigns/{id:guid}/add-funds",
         "/api/business/campaigns/{id:guid}/publish",
         "/api/business/campaigns/{id:guid}/start",
         "/api/business/applicants/{id:guid}/approve",

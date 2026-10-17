@@ -245,7 +245,7 @@ export function BusinessUgcDetail() {
         {wallet.data && shortfall > 0 && <Notice><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
       </div>}
       {action.error && <Notice error>{action.error}</Notice>}
-      {item.customerOfferEnabled && <Section title="Cashback budget">
+      {item.customerOfferEnabled && <Section id="cashback-funding" title="Cashback budget" className="cashback-funding">
         <dl className="detail-list"><div><dt>Available</dt><dd>{amount(item.customerOfferRemaining ?? 0)} ETB</dd></div>
           <div><dt>Customer cashback</dt><dd>{item.customerDiscountPercent == null ? "—" : `${amount(item.customerDiscountPercent)}%`}</dd></div></dl>
         {item.status !== "Cancelled" && ["Active", "Exhausted"].includes(item.customerOfferStatus ?? "") && <form className="form-grid" onSubmit={event => {

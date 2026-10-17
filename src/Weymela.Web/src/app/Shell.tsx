@@ -7,7 +7,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import type { Role, SessionProfile } from "../api/types";
-import { Button } from "../ui/components";
+import { Button, CreatorAvatar } from "../ui/components";
 import { Icon } from "../ui/Icon";
 import { adminActionCountsChangedEvent, notificationsChangedEvent, primeResources, useResource } from "../api/client";
 import { DisplayedNotifications } from "../features/notifications/DisplayedNotifications";
@@ -100,11 +100,19 @@ export function Brand() {
 }
 export function Shell({ children }: { children?: ReactNode }) {
   const { user, signOut, switchProfile } = useSession();
+  const profile = useResource<{ displayName: string; hasCreatorPhoto: boolean; creatorId: number | null }>("/profile", user?.role === "Creator");
   const notifications = useResource<{ unreadCount: number }>("/notifications");
+  const [unreadAdjustment, setUnreadAdjustment] = useState(0);
+  const unreadCount = Math.max(0, (notifications.data?.unreadCount ?? 0) + unreadAdjustment);
+  useEffect(() => setUnreadAdjustment(0), [notifications.data, user?.activeProfileKey]);
   const isAdmin = user?.role === "PlatformAdmin" || user?.role === "OperationsAdmin";
   const actionCounts = useResource<{ creators: number; wallets: number; socialReview: number; payouts: number }>("/admin/action-counts", isAdmin);
   useEffect(() => {
-    const refresh = () => notifications.reload();
+    const refresh = (event?: Event) => {
+      const delta = event instanceof CustomEvent ? event.detail?.unreadDelta : 0;
+      if (delta) { setUnreadAdjustment(value => value + delta); return; }
+      notifications.reload();
+    };
     window.addEventListener(notificationsChangedEvent, refresh);
     window.addEventListener("focus", refresh);
     const interval = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 15000);
@@ -259,7 +267,7 @@ export function Shell({ children }: { children?: ReactNode }) {
               aria-label="Your notifications"
             >
               <Icon name="bell" />
-              {notifications.data && notifications.data.unreadCount > 0 && <span className="notification-count" aria-label={`${notifications.data.unreadCount} unread notifications`}>{notifications.data.unreadCount > 99 ? "99+" : notifications.data.unreadCount}</span>}
+              {unreadCount > 0 && <span className="notification-count" aria-label={`${unreadCount} unread notifications`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </Link>}
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
@@ -272,6 +280,10 @@ export function Shell({ children }: { children?: ReactNode }) {
         {isProductRole && <div className="product-desktop-nav">{renderNavigation(items, `${roles[user.role]} navigation`)}</div>}
         <main id="main-content" className="main-content" tabIndex={-1}>
           <ConnectionStatus />
+          {user && location.pathname === roleHome[user.role] && <div className="role-home-profile">
+            {user.role === "Creator" ? <CreatorAvatar name={user.displayName} path={profile.data?.hasCreatorPhoto ? "/creator/photo" : undefined} /> : <span className="role-avatar" aria-hidden="true">{user.displayName.trim().slice(0,1).toUpperCase()}</span>}
+            <div><strong data-no-translate>{user.displayName}</strong><small>{roles[user.role]}</small>{user.role === "Creator" && profile.data?.creatorId != null && <small data-no-translate>#{profile.data.creatorId}</small>}</div>
+          </div>}
           {children ?? <Outlet />}
         </main>
         <nav className="mobile-role-nav" aria-label="Mobile navigation">

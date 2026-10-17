@@ -80,19 +80,22 @@ export function PageHeader({
 }
 export function Section({
   title,
+  id,
   description,
   action,
   children,
   className = "",
 }: {
   title: string;
+  id?: string;
   description?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
+  useEffect(() => { if (id && window.location.hash === `#${id}`) document.getElementById(id)?.scrollIntoView({ block: "start" }); }, [id]);
   return (
-    <section className={`panel ${className}`}>
+    <section id={id} className={`panel ${className}`}>
       <div className="section-heading">
         <div>
           <h2>{title}</h2>
@@ -495,18 +498,20 @@ export function DataTable<T>({
   label,
   card,
   empty,
+  compact = false,
 }: {
   rows: T[];
   columns: Column<T>[];
   rowKey: (row: T) => string;
   label: string;
-  card: (row: T) => ReactNode;
+  card?: (row: T) => ReactNode;
+  compact?: boolean;
   empty: ReactNode;
 }) {
   if (!rows.length) return <>{empty}</>;
   return (
     <>
-      <div className="desktop-data">
+      <div className={compact ? "compact-table" : "desktop-data"}>
         <table>
           <caption className="sr-only">{label}</caption>
           <thead>
@@ -535,13 +540,13 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
-      <div className="mobile-data card-stack">
+      {!compact && card && <div className="mobile-data card-stack">
         {rows.map((row) => (
           <article className="data-card" key={rowKey(row)} data-notification-resource={rowKey(row)}>
             {card(row)}
           </article>
         ))}
-      </div>
+      </div>}
     </>
   );
 }

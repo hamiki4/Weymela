@@ -186,6 +186,12 @@ public sealed class WorkspaceCommands(WeymelaDbContext db,IWorkspaceDirectory di
             throw new ApplicationFailure(FailureKind.Forbidden,"This social profile is not available to the active Creator.");
         return await Commands.JoinCampaignOnceAsync(new(actor,id,input.Message,input.ContentConcept,new(p.Category,p.Region,p.VerifiedFollowers,p.SocialVerified),Now,input.CreatorSocialProfileId,platform),key,ct);
     }
+    public async Task<Guid> AddPromotionFundsAsync(Actor actor, Guid id, decimal amount, long campaignVersion, long walletVersion, string key, CancellationToken ct)
+    {
+        if (actor.Role != ActorRole.Business || actor.BusinessId is null) throw new ApplicationFailure(FailureKind.Forbidden,"Business access is required.");
+        await new CommerceAccessPolicy(db).EnsureBusinessAsync(actor.BusinessId.Value,ct);
+        return await Commands.AddPromotionFundsAsync(actor,id,Amount(amount),campaignVersion,walletVersion,key,Now,ct);
+    }
     public Task<Guid> SettingsAsync(Actor actor,FinancialSettingsInput input,int expectedVersion,string key,CancellationToken ct)=>
         new EfUnitOfWork(db,System.Data.IsolationLevel.Serializable).ExecuteAsync(async token=>
         {

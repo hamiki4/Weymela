@@ -15,8 +15,8 @@ export class ApiError extends Error {
 const resourceContextChangedEvent = "weymela-resource-context-changed";
 export const notificationsChangedEvent = "weymela-notifications-changed";
 export const adminActionCountsChangedEvent = "weymela-admin-action-counts-changed";
-export function notifyNotificationsChanged() {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(notificationsChangedEvent));
+export function notifyNotificationsChanged(unreadDelta = 0) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(notificationsChangedEvent, { detail: { unreadDelta } }));
 }
 export function notifyAdminActionCountsChanged() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(adminActionCountsChangedEvent));

@@ -69,6 +69,7 @@ export function WalletMetrics({ wallet, pendingDeposits }: { wallet: Wallet; pen
 }
 export function BusinessDashboard() {
   const resource = useResource<BusinessHome>("/business/home");
+  const alerts = useResource<import("./PromotionManagement").BusinessPromotionItem[]>("/business/promotion-management");
   return (
     <Resource resource={resource}>
       {(data) => (
@@ -82,6 +83,7 @@ export function BusinessDashboard() {
               </ActionLink>
             }
           />
+          {alerts.data?.filter(row => row.lowFunds).map(row => <div className="low-funds-row" key={row.key}><span><span data-no-translate>{row.title}</span> — Low funds</span><Link to={row.kind.startsWith("UGC") ? `${row.actionPath}#cashback-funding` : `${row.actionPath}?tab=funds`}>Add Funds</Link></div>)}
           <div className="business-home-overview">
             <Section title="Funds" className="business-home-section business-home-funds">
               <Link
@@ -422,7 +424,7 @@ export function CampaignTable({
       { label: "Start", cell: (r: CampaignRow) => date(r.startUtc) },
       { label: "End", cell: (r: CampaignRow) => date(r.endUtc) },
     ] : []),
-    { label: "Status", cell: (r: CampaignRow) => <Badge status={r.status} /> },
+    { label: "Status", cell: (r: CampaignRow) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
   ];
   return (
     <DataTable
@@ -440,7 +442,7 @@ export function CampaignTable({
               </h3>
               <small className="muted">{campaignType(r.type)}</small>
             </div>
-            <Badge status={r.status} />
+            <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span>
           </div>
           <FundsGrid
             values={[

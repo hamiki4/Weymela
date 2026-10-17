@@ -1262,6 +1262,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     {
         var state = await Setup(); await using var db = state.Database.Open();
         var service = new UgcService(db, new FixedTime(Now));
+        await ConsolidatedConfiguration.AddAsync(db,Now,1,Now.AddMonths(1));
         var input = Input(1) with { DeliverableType = "DirectVideoDelivery", PlatformRequirements = [], PlatformCapacities = [] };
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, input with { CustomerOfferEnabled = true }, "invalid-direct-sale", default));
         var id = await service.CreateAsync(state.Business, input, "direct-create", default);
@@ -1289,6 +1290,9 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var row = Assert.Single((await service.DetailAsync(state.Business, id, default)).Assignments);
         Assert.NotNull(row.DownloadUrl); Assert.Equal("DirectVideoDelivery", row.DeliverableType);
         Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin, default));
+        var payouts = new PayoutService(db,new FixedTime(Now));
+        Assert.Equal(450m,(await payouts.EligibilityAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,state.Creator.CreatorId.Value)).EligibleAmount.Amount);
+        Assert.Equal(450m,(await workspace.EarningsAsync(state.Creator,default)).EligibleAmount);
         await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync(
             "UPDATE v3.\"UgcOpportunities\" SET \"DeliverableType\"='PublicSocialVideo'"));
     }

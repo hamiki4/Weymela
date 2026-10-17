@@ -165,13 +165,13 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
             .Where(x => x.Beneficiary == PayoutBeneficiary.Customer && x.CustomerId == customerId)
             .OrderByDescending(x => x.PaidAtUtc ?? x.EligibleAtUtc)
             .ToListAsync(ct);
-        var eligible = threshold is { } configured && available.Amount >= configured.Amount;
+        var eligible = configuration is not null && await PayoutEligibleBalance.AmountAsync(db,configuration,PayoutBeneficiary.Customer,customerId,available.Amount,clock.GetUtcNow().UtcDateTime,ct)>0;
         var hasPreparedPayout = payouts.Any(x => x.Status == PayoutStatus.Eligible);
         var status = threshold is null ? "ConfigurationRequired" : hasPreparedPayout ? "PayoutPrepared" : eligible ? "Eligible" : "BelowThreshold";
         Money? remaining = threshold is { } minimum ? new Money(Math.Max(minimum.Amount - available.Amount, 0m), minimum.Currency) : null;
         return new(available, threshold, remaining, eligible, status,
             payouts.Select(x => new CustomerPayoutHistory(x.Amount, x.Status.ToString(),
-                x.EligibleAtUtc, x.PaidAtUtc)).ToArray());
+                x.EligibleAtUtc, x.PaidAtUtc)).ToArray(), configuration?.MonthlyPayoutEnabled==true);
     }
     private Task<Promotion> Campaign(Guid id, CancellationToken ct) => db.Promotions.AsNoTracking().Include(x => x.Allocations).SingleAsync(x => x.Id == id,ct);
     private static Money Sum(IEnumerable<Money> values) => new(values.Sum(x => x.Amount));

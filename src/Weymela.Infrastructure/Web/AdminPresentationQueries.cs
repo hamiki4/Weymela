@@ -58,6 +58,7 @@ public sealed partial class WorkspaceQueries
         var offers = await db.UgcCustomerOffers.AsNoTracking().Where(x => ids.Contains(x.UgcOpportunityId)).ToDictionaryAsync(x => x.UgcOpportunityId, ct);
         var sales = await db.UgcCustomerOfferSales.AsNoTracking().Where(x => ids.Contains(x.UgcOpportunityId)).ToListAsync(ct);
         var names = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == ActorRole.Business).ToDictionaryAsync(x => x.SubjectId, x => x.DisplayName, ct);
+        var settings = await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
         return opportunities.Select(x =>
         {
             offers.TryGetValue(x.Id, out var offer);
@@ -69,7 +70,7 @@ public sealed partial class WorkspaceQueries
                 (x.Status is UgcOpportunityStatus.Open or UgcOpportunityStatus.InProgress ? x.RemainingFunding.Amount : 0)
                   + (offer?.Status == UgcCustomerOfferStatus.Active ? offer.RemainingFunding.Amount : 0),
                 sales.Count(s => s.UgcOpportunityId == x.Id),
-                x.Status.ToString());
+                x.Status.ToString(),offer is not null && offer.Status is UgcCustomerOfferStatus.Active or UgcCustomerOfferStatus.Exhausted && offer.EndsAtUtc > Now && settings?.LowPromotionBalanceAlert is { } alert && offer.RemainingFunding.Amount < alert);
         }).ToArray();
     }
 

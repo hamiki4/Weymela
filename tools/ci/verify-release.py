@@ -77,6 +77,7 @@ def verify(root):
         '20261014203304_StabilizePublicationPaymentsAndNotificationReads',
         '20261016161806_AllowFundedCashbackReplenishment',
         '20261017002127_CreatorGoLiveAndDirectDelivery',
+        '20261017184451_ConfigureMonthlyPayoutsAndPromotionAlerts',
     ]
     expected_count = len(expected_order)
     if (contracts.get('from') != {'sourceCommit':'1c552db44eb196603f56b623082b3cd629a46d91',

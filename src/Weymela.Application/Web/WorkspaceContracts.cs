@@ -46,7 +46,8 @@ public sealed record CampaignRow(Guid Id, string PublicId, Guid BusinessId, stri
     decimal CampaignBudget, decimal AssignedToCreators, decimal AvailableCampaignBudget, decimal Used, decimal Remaining,
     int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version, int PromotionLiveDurationDays, string? Slogan = null,
     string? Location = null, IReadOnlyList<PromotionPlatformView>? Platforms = null,
-    DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null, bool LowFunds = false);
+    DateTime? ApplicationClosesAtUtc = null, DateTime? ContentDueAtUtc = null, bool LowFunds = false,
+    DateTime? GoLiveAtUtc = null, string? LiveStatus = null);
 public sealed record BusinessPromotionItem(string Key, Guid Id, Guid CampaignId, string Kind, string Title,
     string Group, string Status, decimal Budget, decimal Remaining, DateTime? DueAtUtc,
     string PrimaryAction, string ActionPath, string? Creator = null, int? RemainingDays = null,
@@ -107,7 +108,8 @@ public sealed record AdminPromotionWallet(Guid Id, string Business, string Title
 public sealed record AdminWallets(IReadOnlyList<AdminBusinessWallet> Businesses, IReadOnlyList<AdminPromotionWallet> Promotions);
 public sealed record AdminUgcFinance(Guid Id, string Business, string Title, string Type, decimal Budget,
     decimal CreatorPayment, decimal? CustomerDiscountPercent, decimal CreatorUsed, decimal OfferUsed, decimal DiscountUsed,
-    decimal Remaining, int QualifyingSales, string Status, bool LowFunds = false);
+    decimal Remaining, int QualifyingSales, string Status, bool LowFunds = false,
+    DateTime? GoLiveAtUtc = null, string? LiveStatus = null, string? PaymentStatus = null);
 public sealed record AdminReportPeriod(decimal BusinessDeposits, decimal PromotionalFunding, decimal PromotionSpend,
     decimal UgcCreatorSpend, decimal UgcOfferSpend, decimal UgcCreatorPayments, decimal CreatorEarnings, decimal CustomerCashback,
     decimal CustomerDiscounts, decimal PlatformRevenue, decimal CreatorPayouts, decimal CustomerPayouts,
@@ -132,7 +134,8 @@ public sealed record OperationsCreatorView(CreatorCard Creator, string Status, i
 public sealed record OperationsCustomerView(CustomerCard Customer, string Status, string? FullEmail = null, string? FullPhone = null);
 public sealed record OperationsCampaignView(Guid Id, string PublicId, Guid BusinessId, string Business, string Title,
     string Type, int CreatorCount, DateTime StartUtc, DateTime EndUtc, string Status, long Version,
-    int PromotionLiveDurationDays, string? Slogan = null, string? Location = null, bool LowFunds = false);
+    int PromotionLiveDurationDays, string? Slogan = null, string? Location = null, bool LowFunds = false,
+    DateTime? GoLiveAtUtc = null, string? LiveStatus = null);
 public sealed record AdminCreatorRow(CreatorCard Creator, decimal CreatorBudget, decimal Used, decimal BudgetRemaining, long BaselineViews,
     long LatestVerifiedViews, long VerifiedViews, long RewardedViews, decimal ViewEarnings, int VerifiedSales, decimal SaleCommission,
     decimal CustomerCashback, decimal PlatformRevenue, string Status);
@@ -162,7 +165,8 @@ public sealed record OperationsPayoutWorkspace(IReadOnlyList<PayoutQueueRow> Cre
     IReadOnlyList<PayoutQueueRow> Customers, IReadOnlyList<PayoutItem> History);
 public sealed record OperationsUgcView(Guid Id, Guid BusinessId, string Business, string Title, string Status,
     int CreatorsNeeded, int ApprovedCreators, DateTime DueDateUtc, string? Location, int CurrentRevision,
-    string? CustomerOfferStatus = null, bool LowFunds = false);
+    string? CustomerOfferStatus = null, bool LowFunds = false, DateTime? GoLiveAtUtc = null,
+    string? LiveStatus = null, decimal? CreatorPayment = null, string? PaymentStatus = null);
 public sealed record CustomerOfferBusiness(string DisplayName, string? DirectionsUrl,
     decimal? Latitude = null, decimal? Longitude = null, string? Category = null, string? Address = null);
 public sealed record CustomerOfferCreator(string DisplayName, long? CreatorNumber = null);

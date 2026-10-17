@@ -16,7 +16,7 @@ test("Admin More is a routed full page at phone widths with working links and Ba
       "Social Review": "/admin/social-profiles" }))
       await expect(page.getByRole("main").getByRole("link", { name })).toHaveAttribute("href", path);
     await expect(page.getByRole("link", { name: "Notifications", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Your notifications" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Your notifications" })).toHaveAttribute("href","/notifications");
     await layout(page);
     await page.getByRole("main").getByRole("link", { name: "Back" }).click();
     await expect(page).toHaveURL(/\/admin\/wallets$/);
@@ -30,7 +30,7 @@ test("Platform Admin role menu and identity deletion confirmation remain compact
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await open(page, "/admin/businesses");
-    const row = page.locator(".admin-mobile-row:has(.admin-action-menu)").first();
+    const row = page.locator("tbody tr:has(.admin-action-menu)").first();
     await expect(row).toBeVisible();
     await row.locator(".admin-action-menu summary").click();
     await expect(row.getByRole("menuitem", { name: "Delete Role" })).toBeVisible();

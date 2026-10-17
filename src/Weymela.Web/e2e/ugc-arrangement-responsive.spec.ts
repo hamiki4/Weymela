@@ -61,8 +61,7 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
     await businessCard.getByRole("link", { name: "Manage" }).click();
     await expect(page.getByText("Creator purchases", { exact: true })).toBeVisible();
     await layout(page);
-    await open(page,"/business/campaigns");
-    await page.getByRole("link",{name:"Edit details"}).click();
+    await page.getByRole("link",{name:"Edit",exact:true}).click();
     await expect(page).toHaveURL(new RegExp(`/business/ugc/${opportunity.id}/edit$`));
     await page.getByRole("button",{name:"Edit",exact:true}).click();
     const editor=page.getByRole("dialog",{name:"Edit Promotion details"});
@@ -83,8 +82,8 @@ for (const width of [320, 360, 375, 390, 393, 430]) {
         await expect(page.getByRole("button", { name: "Request to Join" })).toBeVisible();
       }
       const bell = page.getByRole("link", { name: "Your notifications" });
-      if (["admin", "operations-admin"].includes(alias)) await expect(bell).toHaveCount(0);
-      else await expect(bell.locator("svg")).toBeVisible();
+      await expect(bell.locator("svg")).toBeVisible();
+      if (["admin", "operations-admin"].includes(alias)) await expect(page.getByRole("navigation").getByRole("link",{name:"Notifications",exact:true})).toHaveCount(0);
       const gear = page.locator(".topbar-right svg:has(circle[cx='12'][cy='12'])");
       if (!["cashier", "operations-admin"].includes(alias)) await expect(gear).toBeVisible();
       expect(await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).fontSize))).toBeGreaterThanOrEqual(18);

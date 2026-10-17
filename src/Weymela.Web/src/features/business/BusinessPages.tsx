@@ -32,6 +32,7 @@ import {
   campaignType,
   count,
   date,
+  dateTime,
   isViewOnly,
   promotionStatusLabel,
   promotionTypeLabel,
@@ -419,11 +420,12 @@ export function CampaignTable({
       numeric: true,
     },
     ...(admin ? [
+      { label: "Go Live Date", cell: (r: CampaignRow) => r.goLiveAtUtc ? dateTime(r.goLiveAtUtc) : "—" },
       { label: "Live Duration", cell: (r: CampaignRow) => `${r.promotionLiveDurationDays} days` },
       { label: "Start", cell: (r: CampaignRow) => date(r.startUtc) },
       { label: "End", cell: (r: CampaignRow) => date(r.endUtc) },
     ] : []),
-    { label: "Status", cell: (r: CampaignRow) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
+    { label: "Status", cell: (r: CampaignRow) => <span><Badge status={admin ? r.liveStatus ?? r.status : r.status} label={admin ? r.liveStatus ?? undefined : undefined} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
   ];
   return (
     <DataTable compact={admin}

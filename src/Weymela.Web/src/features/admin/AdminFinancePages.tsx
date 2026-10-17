@@ -1,9 +1,10 @@
 import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { notifyAdminActionCountsChanged, post, privateAsset, useAction, useResource } from "../../api/client";
 import type { AdminReport, AdminUgcFinance, AdminWallets } from "../../api/types";
 import { Badge, Button, DataTable, Dialog, Empty, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
-import { amount, count, date } from "../../ui/format";
+import { amount, count, date, dateTime } from "../../ui/format";
 
 type Deposit = { id: string; businessId: string; business: string; amount: number; status: string; hasReceipt: boolean; submittedAtUtc: string; version: number; destinationNameSnapshot: string | null; destinationAccountSnapshot: string | null };
 const br = (value: number) => `${amount(value)} Br`;
@@ -105,20 +106,24 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
 }
 
 export function AdminUgcPage() {
+  const [params] = useSearchParams();
+  const record = params.get("record");
   const search = useAdminSearch("/admin/ugc/finance");
-  const resource = useResource<AdminUgcFinance[]>(search.path);
+  const resource = useResource<AdminUgcFinance[]>(record ? `/admin/ugc/finance?search=${encodeURIComponent(record)}` : search.path);
   return <div className="admin-page"><PageHeader title="UGC" compact />
-    <AdminSearch value={search} label="Search UGC, Business or Creator" statuses={["Draft","Open","InProgress","Completed","Cancelled"]} />
+    {record ? <Link to="/admin/ugc">All</Link> : <AdminSearch value={search} label="Search UGC, Business or Creator" statuses={["Draft","Open","InProgress","Completed","Cancelled"]} />}
     <Section title="UGC"><Resource resource={resource}>{rows => <DataTable compact rows={rows} rowKey={row=>row.id} label="UGC funding" columns={[
       {label:"Promotion",cell:row=><><strong data-no-translate>{row.title}</strong><small data-no-translate>{row.business}</small><small>{row.type}</small></>},
       {label:"Budget",cell:row=>br(row.budget),numeric:true},
       {label:"Fixed Creator pay",cell:row=>br(row.creatorPayment),numeric:true},
+      {label:"Payment",cell:row=><Badge status={row.paymentStatus ?? "Pending"} label={row.paymentStatus ?? "Pending"}/>},
+      {label:"Go Live Date",cell:row=>row.goLiveAtUtc ? dateTime(row.goLiveAtUtc) : "—"},
       {label:"Used",cell:row=>br(row.creatorUsed+row.offerUsed),numeric:true},
       {label:"Available",cell:row=>br(row.remaining),numeric:true},
       {label:"Cashback",cell:row=>row.customerDiscountPercent==null?"—":<details><summary>{amount(row.customerDiscountPercent)}%</summary><dl><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></dl></details>},
-      {label:"Status",cell:row=><span><Badge status={row.status}/>{row.lowFunds&&<small className="low-funds">Low funds</small>}</span>},
+      {label:"Status",cell:row=><span><Badge status={row.liveStatus ?? row.status} label={row.liveStatus ?? undefined}/>{row.lowFunds&&<small className="low-funds">Low funds</small>}</span>},
     ]} empty={<Empty title="No matching UGC promotions"/>}/>}</Resource></Section>
-    <AdminPager value={search} count={resource.data?.length??0} loading={resource.loading}/>
+    {!record && <AdminPager value={search} count={resource.data?.length??0} loading={resource.loading}/>}
   </div>;
 }
 

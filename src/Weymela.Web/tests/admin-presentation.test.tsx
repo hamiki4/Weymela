@@ -10,10 +10,19 @@ beforeEach(() => { vi.restoreAllMocks(); invalidateResourceCache(false); });
 function mount(element: React.ReactNode) { render(<MemoryRouter>{element}</MemoryRouter>); }
 
 describe("Platform Admin financial presentation", () => {
+  it("opens the exact UGC record from its notification without showing internal IDs", async () => {
+    mockApi({"/admin/ugc/finance?search=ugc-1":[{id:"ugc-1",business:"Abc Coffee",title:"Live delivery",type:"UGC Only",budget:220,creatorPayment:200,creatorUsed:220,offerUsed:0,discountUsed:0,remaining:0,qualifyingSales:0,status:"Completed",liveStatus:"Live",paymentStatus:"Eligible",goLiveAtUtc:"2026-10-17T10:00:00Z"}]});
+    render(<MemoryRouter initialEntries={["/admin/ugc?record=ugc-1"]}><AdminUgcPage/></MemoryRouter>);
+    expect(await screen.findByText("Live delivery")).toBeVisible();
+    expect(screen.getByText("Eligible",{exact:true})).toBeVisible();
+    expect(screen.queryByText("ugc-1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("link",{name:/^All$/})).toHaveAttribute("href","/admin/ugc");
+  });
   it("shows fixed UGC Creator pay separately from the Business customer cashback", async () => {
     mockApi({ "/admin/ugc/finance": [
       { id: "one", business: "Abc Coffee", title: "UGC only", type: "UGC Only", budget: 220, creatorPayment: 200, customerDiscountPercent: null, creatorUsed: 0, offerUsed: 0, discountUsed: 0, remaining: 220, qualifyingSales: 0, status: "Open" },
-      { id: "two", business: "Abc Coffee", title: "UGC sale", type: "UGC + Sale", budget: 720, creatorPayment: 200, customerDiscountPercent: 2, creatorUsed: 220, offerUsed: 25, discountUsed: 20, remaining: 475, qualifyingSales: 1, status: "InProgress" },
+      { id: "two", business: "Abc Coffee", title: "UGC sale", type: "UGC + Sale", budget: 720, creatorPayment: 200, customerDiscountPercent: 2, creatorUsed: 220, offerUsed: 25, discountUsed: 20, remaining: 475, qualifyingSales: 1, status: "InProgress",liveStatus:"Live",paymentStatus:"Eligible",goLiveAtUtc:"2026-10-17T10:00:00Z" },
     ] });
     mount(<AdminUgcPage />);
     const table = await screen.findByRole("table",{name:"UGC funding"});
@@ -22,6 +31,9 @@ describe("Platform Admin financial presentation", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].querySelectorAll("td")[2]).toHaveTextContent("200 Br");
     expect(rows[1].querySelectorAll("td")[2]).toHaveTextContent("200 Br");
+    expect(screen.getByRole("columnheader",{name:"Go Live Date"})).toBeVisible();
+    expect(within(rows[1] as HTMLElement).getByText("Eligible")).toBeVisible();
+    expect(within(rows[1] as HTMLElement).getByText("Live",{exact:true})).toBeVisible();
     expect(within(rows[0] as HTMLElement).queryByText("2%")).not.toBeInTheDocument();
     await userEvent.click(within(rows[1] as HTMLElement).getByText("2%"));
     expect(within(rows[1] as HTMLElement).getByText("20 Br")).toBeVisible();

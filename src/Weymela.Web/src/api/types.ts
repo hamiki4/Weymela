@@ -233,6 +233,8 @@ export interface CreatorPricing {
   effectiveFromUtc: string | null;
 }
 export interface CampaignRow {
+  goLiveAtUtc?: string | null;
+  liveStatus?: string | null;
   lowFunds?: boolean;
   id: string;
   publicId: string;
@@ -467,7 +469,7 @@ export interface AdminWallets {
   businesses: { businessId: string; business: string; totalBalance: number; available: number; reserved: number; pendingDeposit: number; viewOnlyCount: number; viewSaleCount: number; status: string; lastDepositVia: string | null }[];
   promotions: { id: string; business: string; title: string; type: string; budget: number; used: number; remaining: number; verifiedViews: number; verifiedSales: number; status: string }[];
 }
-export interface AdminUgcFinance { lowFunds?: boolean; id: string; business: string; title: string; type: string; budget: number; creatorPayment: number; customerDiscountPercent: number | null; creatorUsed: number; offerUsed: number; discountUsed: number; remaining: number; qualifyingSales: number; status: string; }
+export interface AdminUgcFinance { goLiveAtUtc?: string | null; liveStatus?: string | null; paymentStatus?: string | null; lowFunds?: boolean; id: string; business: string; title: string; type: string; budget: number; creatorPayment: number; customerDiscountPercent: number | null; creatorUsed: number; offerUsed: number; discountUsed: number; remaining: number; qualifyingSales: number; status: string; }
 export interface AdminReport {
   fromUtc: string; toExclusiveUtc: string;
   activity: { businessDeposits: number; promotionalFunding: number; promotionSpend: number; ugcCreatorSpend: number; ugcOfferSpend: number; ugcCreatorPayments: number; creatorEarnings: number; customerCashback: number; customerDiscounts: number; platformRevenue: number; creatorPayouts: number; customerPayouts: number; verifiedViews: number; verifiedSales: number; ugcQualifyingSales: number };
@@ -533,6 +535,8 @@ export interface OperationsCustomerView {
   ownerName?: string | null;
 }
 export interface OperationsCampaignView {
+  goLiveAtUtc?: string | null;
+  liveStatus?: string | null;
   lowFunds?: boolean;
   id: string;
   publicId: string;
@@ -780,6 +784,10 @@ export interface OperationsPayoutWorkspace {
   history: Payout[];
 }
 export interface OperationsUgcView {
+  goLiveAtUtc?: string | null;
+  liveStatus?: string | null;
+  creatorPayment?: number | null;
+  paymentStatus?: string | null;
   lowFunds?: boolean;
   id: string;
   businessId: string;

@@ -261,14 +261,14 @@ export function Shell({ children }: { children?: ReactNode }) {
           </span>
           {user.role === "PlatformAdmin" && <strong className="topbar-identity" data-no-translate>{user.displayName}</strong>}
           <div className="topbar-right">
-            {!isAdmin && <Link
+            <Link
               className="button button-quiet"
               to="/notifications"
               aria-label="Your notifications"
             >
               <Icon name="bell" />
               {unreadCount > 0 && <span className="notification-count" aria-label={`${unreadCount} unread notifications`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}
-            </Link>}
+            </Link>
             {user.developmentMode && (
               <span className="dev-badge">Local development</span>
             )}

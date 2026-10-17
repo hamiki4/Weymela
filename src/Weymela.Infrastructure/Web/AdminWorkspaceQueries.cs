@@ -110,11 +110,14 @@ public sealed partial class WorkspaceQueries
             .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var result = new List<OperationsCampaignView>();
         foreach (var campaign in campaigns)
+        {
+            var row = await Row(campaign,ct);
             result.Add(new(campaign.Id, campaign.PublicPromotionId, campaign.BusinessId,
                 (await directory.BusinessCardAsync(campaign.BusinessId, ct)).DisplayName, campaign.Title,
-                PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, campaign.StartDateUtc,
-                campaign.EndDateUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
-                campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location,(await Row(campaign,ct)).LowFunds));
+                PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, row.StartUtc,
+                row.EndUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
+                campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location,row.LowFunds,row.GoLiveAtUtc,row.LiveStatus));
+        }
         return result;
     }
 
@@ -122,11 +125,12 @@ public sealed partial class WorkspaceQueries
     {
         DemandCapability(actor, AdministrativeCapability.CampaignOperationalVisibility);
         var campaign = await Campaign(id, ct);
+        var row = await Row(campaign,ct);
         return new(campaign.Id, campaign.PublicPromotionId, campaign.BusinessId,
             (await directory.BusinessCardAsync(campaign.BusinessId, ct)).DisplayName, campaign.Title,
-            PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, campaign.StartDateUtc,
-            campaign.EndDateUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
-            campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location,(await Row(campaign,ct)).LowFunds);
+            PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, row.StartUtc,
+            row.EndUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
+            campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location,row.LowFunds,row.GoLiveAtUtc,row.LiveStatus);
     }
 
     public async Task<AdminHome> AdminHomeAsync(Actor actor,CancellationToken ct)

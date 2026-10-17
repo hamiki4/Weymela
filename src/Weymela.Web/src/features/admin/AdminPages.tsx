@@ -1,6 +1,6 @@
 import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { notifyAdminActionCountsChanged, post, useAction, useResource } from "../../api/client";
 import type {
   Activity,
@@ -38,6 +38,7 @@ import {
   campaignType,
   count,
   date,
+  dateTime,
   promotionTypeCode,
   safeExternal,
 } from "../../ui/format";
@@ -122,16 +123,18 @@ export function OperationsCustomers() {
 }
 
 export function OperationsCampaigns() {
+  const { id } = useParams();
   const search = useAdminSearch("/admin/campaigns");
-  const resource = useResource<OperationsCampaignView[]>(search.path);
+  const resource = useResource<OperationsCampaignView[]>(id ? `/admin/campaigns?search=${encodeURIComponent(id)}` : search.path);
   return <><PageHeader title="Campaigns" compact />
-    <AdminSearch value={search} statuses={["Draft", "Published", "Funded", "Active", "Completed", "Cancelled"]} types={["View Only", "View + Sale"]} dates />
+    {id ? <Link to="/admin/campaigns">All</Link> : <AdminSearch value={search} statuses={["Draft", "Published", "Funded", "Active", "Completed", "Cancelled"]} types={["View Only", "View + Sale"]} dates />}
     <Resource resource={resource}>{(rows) => <Section title="Campaign activity"><DataTable compact rows={rows} rowKey={(r) => r.id} label="Operational campaigns" columns={[
       { label: "Campaign", cell: (r) => <><strong>{r.title}</strong><small>{r.publicId}</small></> },
       { label: "Business", cell: (r) => r.business },
       { label: "Type", cell: (r) => r.type },
       { label: "Creators", cell: (r) => count(r.creatorCount), numeric: true },
-      { label: "Status", cell: (r) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
+      { label: "Status", cell: (r) => <span><Badge status={r.liveStatus ?? r.status} label={r.liveStatus ?? undefined} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
+      { label: "Go Live Date", cell: (r) => r.goLiveAtUtc ? dateTime(r.goLiveAtUtc) : "—" },
       { label: "Window", cell: (r) => `${date(r.startUtc)} – ${date(r.endUtc)}` },
     ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span></div><p>{r.business} · {r.type}</p><p className="fine-print">{count(r.creatorCount)} creators · {date(r.startUtc)} – {date(r.endUtc)}</p></>} empty={<Empty title="No campaigns yet" message="Campaigns appear here as Businesses create them." icon="campaign" />} /></Section>}</Resource>
     <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
@@ -139,18 +142,23 @@ export function OperationsCampaigns() {
 }
 
 export function OperationsUgc() {
+  const [params] = useSearchParams();
+  const record = params.get("record");
   const search = useAdminSearch("/admin/ugc");
-  const resource = useResource<OperationsUgcView[]>(search.path);
+  const resource = useResource<OperationsUgcView[]>(record ? `/admin/ugc?search=${encodeURIComponent(record)}` : search.path);
   return <><PageHeader title="UGC" compact />
-    <AdminSearch value={search} statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} />
+    {record ? <Link to="/admin/ugc">All</Link> : <AdminSearch value={search} statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} />}
     <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable compact rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
       { label: "Opportunity", cell: (r) => <><strong>{r.title}</strong><small>{r.business}</small></> },
-      { label: "Status", cell: (r) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
+      { label: "Status", cell: (r) => <span><Badge status={r.liveStatus ?? r.status} label={r.liveStatus ?? undefined} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
+      { label: "Go Live Date", cell: (r) => r.goLiveAtUtc ? dateTime(r.goLiveAtUtc) : "—" },
+      { label: "Fixed Creator pay", cell: (r) => r.creatorPayment == null ? "—" : `${amount(r.creatorPayment)} ETB`, numeric: true },
+      { label: "Payment", cell: (r) => <Badge status={r.paymentStatus ?? "Pending"} label={r.paymentStatus ?? "Pending"} /> },
       { label: "Creators", cell: (r) => `${r.approvedCreators}/${r.creatorsNeeded}` },
       { label: "Due", cell: (r) => date(r.dueDateUtc) },
       { label: "Offer", cell: (r) => r.customerOfferStatus ?? "None" },
     ]} card={(r) => <><div className="card-head"><strong>{r.title}</strong><span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span></div><p>{r.business} · {r.approvedCreators}/{r.creatorsNeeded} creators</p><p className="fine-print">Due {date(r.dueDateUtc)} · Customer offer {r.customerOfferStatus ?? "None"}</p></>} empty={<Empty title="No UGC opportunities yet" message="UGC opportunities appear here for operational support." icon="sparkle" />} /></Section>}</Resource>
-    <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />
+    {!record && <AdminPager value={search} count={resource.data?.length ?? 0} loading={resource.loading} />}
   </>;
 }
 

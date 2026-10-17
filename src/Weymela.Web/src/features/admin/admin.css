@@ -84,6 +84,7 @@
 .admin-action-menu .destructive-action, .admin-page .destructive-action { color: #a52727; }
 .admin-page .button.destructive-action { border-color: #a52727; }
 .admin-action-menu[open] > div { max-width: calc(100vw - 24px); }
+.compact-table .admin-action-menu[open] > div { position: static; width: 180px; min-width: 0; }
 .admin-page:has(.admin-action-menu) .desktop-data { overflow: visible; }
 .admin-dashboard-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--admin-line-soft); }
 .admin-dashboard-links > a { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 53px; padding: 11px 3px; color: var(--admin-ink); border-bottom: 1px solid var(--admin-line-soft); font-size: .84rem; font-weight: 600; }

@@ -18,6 +18,8 @@ public sealed class ConsolidatedFundingTests(PostgresFixture fixture)
         await ConsolidatedConfiguration.AddAsync(db,Scenario.Now,1,Scenario.Now.AddMonths(1));
         var queries=new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),s.Clock);
         var low=Assert.Single(await queries.BusinessPromotionTrackingAsync(s.Seed.Business,default));
+        var adminCampaign=Assert.Single(await queries.AdminCampaignsAsync(Phase4Scenario.Admin,default));
+        Assert.Equal(Scenario.Now,adminCampaign.GoLiveAtUtc); Assert.Equal("Live",adminCampaign.LiveStatus);
         Assert.True(low.LowFunds);Assert.Equal("Active",low.Group);Assert.Equal(0,low.Remaining);
         var sale=await db.VerifiedSales.AsNoTracking().SingleAsync();Assert.Equal(s.Cashier.UserId,sale.CashierId);
         Assert.Empty(await db.ViewRewardReceipts.ToListAsync());

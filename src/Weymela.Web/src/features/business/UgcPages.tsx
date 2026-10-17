@@ -237,7 +237,7 @@ export function BusinessUgcDetail() {
       <Link className="back-link" to="/business/campaigns">Promotions</Link>
       <PageHeader eyebrow={item.customerOfferEnabled ? "UGC + Sale" : "UGC"} title={item.title}
         description={`Content due ${date(item.dueDateUtc)}`}
-        action={<Badge status={item.status} label={promotionStatusLabel(item.status)} />} />
+        action={<div className="actions"><Badge status={item.status} label={promotionStatusLabel(item.status)} /><ActionLink to={`/business/ugc/${item.id}/edit`}>Edit</ActionLink></div>} />
       {item.status === "Draft" && <div className="callout">
         <div><h2>Saved</h2></div>
         <Button disabled={action.busy || !wallet.data || shortfall > 0} onClick={() => void action.run(async key => {

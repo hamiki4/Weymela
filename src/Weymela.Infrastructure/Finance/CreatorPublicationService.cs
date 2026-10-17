@@ -274,7 +274,9 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             operation.Remember(actor, "GoLiveVerifiedPublication", key, fingerprint, participation.Id.ToString(), now);
             operation.Audit(actor, "CreatorParticipationActivated", Guid.NewGuid(), now, promotion.Id, allocation.CreatorId);
             operation.Event("CreatorParticipationActivated", new { ParticipationId = participation.Id,
-                PublicationId = publication.Id }, now);
+                PublicationId = publication.Id, CreatorId = allocation.CreatorId, BusinessId = promotion.BusinessId,
+                CampaignId = promotion.Id, WentLiveAtUtc = publication.WentLiveAtUtc,
+                PublicationReference = publication.CanonicalUrl, publication.Provider, publication.ExternalContentId }, now);
             return participation.Id;
     }
 
@@ -317,7 +319,8 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             await access.EnsureBusinessAsync(opportunity.BusinessId, token);
             if (opportunity.DeliverableType != UgcDeliverableType.PublicSocialVideo)
                 throw new ApplicationFailure(FailureKind.Validation, "This campaign uses direct video delivery.");
-            if (publication.WentLiveAtUtc is null)
+            var firstGoLive = publication.WentLiveAtUtc is null;
+            if (firstGoLive)
             {
                 if (assignment.CompletedAtUtc is not null) throw new ApplicationFailure(FailureKind.Validation, "This deliverable is already completed.");
                 if (opportunity.PromotionLiveDurationDays is null)
@@ -327,10 +330,13 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             await UgcPublicationPayment.ReleaseAsync(db, actor, assignment, opportunity, publication, key, clock.GetUtcNow().UtcDateTime, token);
             operation.Remember(actor, "GoLiveUgcPublication", key, fingerprint, publication.Id.ToString(),
                 clock.GetUtcNow().UtcDateTime);
+            if (!firstGoLive) return publication.Id;
             operation.Audit(actor, "UgcPublicationActivated", Guid.NewGuid(), clock.GetUtcNow().UtcDateTime,
                 null, assignment.CreatorId);
             operation.Event("UgcPublicationActivated", new { PublicationId = publication.Id,
-                AssignmentId = assignment.Id, CreatorId = assignment.CreatorId }, clock.GetUtcNow().UtcDateTime);
+                AssignmentId = assignment.Id, CreatorId = assignment.CreatorId, BusinessId = opportunity.BusinessId,
+                CampaignId = opportunity.Id, WentLiveAtUtc = publication.WentLiveAtUtc,
+                PublicationReference = publication.CanonicalUrl, publication.Provider, publication.ExternalContentId }, clock.GetUtcNow().UtcDateTime);
             return publication.Id;
     }
 

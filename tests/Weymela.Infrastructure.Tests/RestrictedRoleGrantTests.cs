@@ -410,6 +410,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         });
         db.OutboxMessages.Add(new OutboxMessage
         {
+            EventType = "CreatorParticipationActivated",
+            Payload = JsonSerializer.Serialize(new { ParticipationId = participation.Id, CreatorId = creatorId }),
+            OccurredAtUtc = now.AddMinutes(-3)
+        });
+        db.OutboxMessages.Add(new OutboxMessage
+        {
             EventType = "CreatorPayoutEligible",
             Payload = JsonSerializer.Serialize(new { BeneficiaryId = creatorId }),
             OccurredAtUtc = now.AddMinutes(-2)
@@ -419,6 +425,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             EventType = "UgcPublicationActivated",
             Payload = JsonSerializer.Serialize(new { CreatorId = creatorId,
                 AssignmentId = assignmentId, PublicationId = ugcPublication.Id }),
+            OccurredAtUtc = now.AddMinutes(-2)
+        });
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            EventType = "UgcPublicationActivated",
+            Payload = JsonSerializer.Serialize(new { PublicationId = ugcPublication.Id }),
             OccurredAtUtc = now.AddMinutes(-2)
         });
         db.OutboxMessages.Add(new OutboxMessage
@@ -483,7 +495,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .Select(x => x.UserId).SingleAsync();
         Assert.Equal($"/admin/campaigns/{seed.PromotionId}", (await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "CreatorParticipationActivated" && x.UserId == platformAdmin)).Route);
-        Assert.Equal("/admin/ugc", (await db.InAppNotifications.SingleAsync(x =>
+        Assert.Equal($"/admin/ugc?record={seed.UgcOpportunityId}", (await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "UgcPublicationActivated" && x.UserId == platformAdmin)).Route);
     }
 

@@ -28,9 +28,12 @@ test("Wallets, UGC and Reports use authoritative projections and keep period tot
   await expect(page.locator(".compact-table").first().getByRole("columnheader", { name: "Pending Deposit" })).toBeVisible();
   await screenshot(page, "admin-redesign-desktop-wallets");
   await open(page, "/admin/ugc");
-  await expect(page.getByRole("heading", { name: "UGC funding and activity" })).toBeVisible();
-  if (await page.locator(".admin-ugc-row").count())
-    await expect(page.locator(".admin-ugc-row").first().getByText("Fixed Creator pay")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "UGC",exact:true }).first()).toBeVisible();
+  if (await page.getByRole("table",{name:"UGC funding"}).count()) {
+    await expect(page.getByRole("columnheader",{name:"Fixed Creator pay"})).toBeVisible();
+    await expect(page.getByRole("columnheader",{name:"Go Live Date"})).toBeVisible();
+    await expect(page.getByRole("columnheader",{name:"Payment",exact:true})).toBeVisible();
+  }
   else await expect(page.getByRole("heading", { name: "No matching UGC promotions" })).toBeVisible();
   await screenshot(page, "admin-redesign-desktop-ugc");
   await open(page, "/admin/reports");

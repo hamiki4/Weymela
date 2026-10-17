@@ -38,17 +38,31 @@ public sealed partial class WorkspaceQueries(WeymelaDbContext db, IWorkspaceDire
     private async Task<CampaignRow> Row(Promotion p,CancellationToken ct)
     {
         var publications = await db.CreatorPublicationVerifications.AsNoTracking().Where(x => x.CreatorAllocationId != null && db.CreatorAllocations.Any(a => a.Id == x.CreatorAllocationId && a.PromotionId == p.Id)
-            && x.WentLiveAtUtc != null && x.EndedAtUtc == null).ToListAsync(ct);
-        var start = publications.Count == 0 ? p.StartDateUtc : publications.Min(x => x.WentLiveAtUtc!.Value);
-        var end = publications.Count == 0 ? p.EndDateUtc : publications.Max(x => x.ExpiresAtUtc) ?? p.EndDateUtc;
+            && x.WentLiveAtUtc != null).ToListAsync(ct);
+        var participations = await db.CreatorPromotionParticipations.AsNoTracking().Where(x => x.PromotionId == p.Id).ToListAsync(ct);
+        var windows = publications.Select(x => (Start: x.WentLiveAtUtc!.Value,
+            End: x.ExpiresAtUtc ?? x.WentLiveAtUtc.Value.AddDays(p.PromotionLiveDurationDays),
+            Live: x.Status == PublicationVerificationStatus.Verified && x.EndedAtUtc == null && x.ExpiresAtUtc > Now))
+            .Concat(participations.Where(x => !publications.Any(v => v.CreatorAllocationId == x.CreatorAllocationId))
+                .Select(x => (Start: x.WentLiveAtUtc, End: x.ExpiresAtUtc(p.PromotionLiveDurationDays),
+                    Live: x.Status != ParticipationStatus.Completed && x.IsLive(Now,p.PromotionLiveDurationDays)))).ToArray();
+        var start = windows.Length == 0 ? p.StartDateUtc : windows.Min(x => x.Start);
+        var end = windows.Length == 0 ? p.EndDateUtc : windows.Max(x => x.End);
         var settings = await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
         var low = p.Status is PromotionStatus.Active or PromotionStatus.Published or PromotionStatus.BudgetExhausted
             && end > Now && settings?.LowPromotionBalanceAlert is { } alert && p.RemainingBudget.Amount < alert;
+        var allocationIds = p.Allocations.Select(x => x.Id).ToArray();
+        var liveStatus = p.Status is PromotionStatus.Completed or PromotionStatus.Cancelled ? p.Status.ToString()
+            : windows.Any(x => x.Live) ? "Live"
+            : windows.Length > 0 && windows.All(x => x.End <= Now) ? "Completed"
+            : await db.CreatorPromotionContentSubmissions.AnyAsync(x => allocationIds.Contains(x.CreatorAllocationId)
+                && x.ReviewStatus == PromotionContentReviewStatus.Approved,ct) ? "Approved" : "Pending";
         return new(p.Id,p.PublicPromotionId,p.BusinessId,
             (await directory.BusinessCardAsync(p.BusinessId,ct)).DisplayName,p.Title,PromotionTypeLabel(p.PromotionType),p.TotalBudget.Amount,p.AllocatedBudget.Amount,
             p.UnallocatedBudget.Amount,p.UsedBudget.Amount,p.RemainingBudget.Amount,p.Allocations.Count,start,end,PromotionStatusLabel(p.Status),p.Version,p.PromotionLiveDurationDays,
             p.Slogan,p.Location,p.Platforms.Select(x=>new PromotionPlatformView(x.Platform.ToString(),x.ApprovedCount,x.Capacity,x.Available,x.MinimumAudience)).ToArray(),
-            p.ApplicationClosesAtUtc,p.ContentDueAtUtc,low);
+            p.ApplicationClosesAtUtc,p.ContentDueAtUtc,low,
+            windows.Length == 0 ? null : start,liveStatus);
     }
     private async Task<IReadOnlyList<ActivityItem>> History(Guid? campaign,CancellationToken ct)
     {

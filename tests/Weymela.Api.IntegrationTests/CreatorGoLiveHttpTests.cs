@@ -62,7 +62,11 @@ public sealed class CreatorGoLiveHttpTests(PostgresFixture postgres)
         {
             var work = await db.UgcAssignments.SingleAsync(x => x.Id == assignment);
             var campaign = await db.UgcOpportunities.SingleAsync(x => x.Id == work.UgcOpportunityId);
-            Assert.Equal(start,payload.RootElement.GetProperty("WentLiveAtUtc").GetDateTime());
+            // PostgreSQL persists timestamps to microseconds; the outbox keeps
+            // the original UTC event's finer .NET tick precision.
+            var recordedStart = payload.RootElement.GetProperty("WentLiveAtUtc").GetDateTime();
+            Assert.Equal(DateTimeKind.Utc,recordedStart.Kind);
+            Assert.Equal(start.Ticks / 10,recordedStart.Ticks / 10);
             Assert.Equal(work.CreatorId,payload.RootElement.GetProperty("CreatorId").GetGuid());
             Assert.Equal(campaign.BusinessId,payload.RootElement.GetProperty("BusinessId").GetGuid());
             Assert.Equal(campaign.Id,payload.RootElement.GetProperty("CampaignId").GetGuid());

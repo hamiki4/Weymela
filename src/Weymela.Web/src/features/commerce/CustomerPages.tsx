@@ -553,7 +553,7 @@ export function CustomerTransactions() {
   return (
     <div className="customer-ledger-page">
       <PageHeader title="Transactions" compact />
-      <Field label="Search Business"><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field>
+      <div className="contained-form"><Field label="Search Business"><input type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field></div>
       <Resource resource={resource}>
         {(rows) => rows.length ? (<>
           <div className="metric-grid customer-transaction-summary" aria-label="Transaction summary">

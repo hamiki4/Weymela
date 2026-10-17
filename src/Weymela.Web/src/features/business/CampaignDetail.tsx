@@ -351,7 +351,7 @@ export function BusinessCampaignDetail() {
             {tab === "funds" && (
               <Section title="Funding" action={<Currency />}>
                 <FundsGrid values={funds} />
-                {["Funded","Published","Active","BudgetExhausted"].includes(c.status) && new Date(c.endUtc).getTime() > Date.now() && <form onSubmit={event => { event.preventDefault(); void action.run(async key => {
+                {["Funded","Published","Active","BudgetExhausted"].includes(c.status) && new Date(c.endUtc).getTime() > Date.now() && <form className="contained-form" onSubmit={event => { event.preventDefault(); void action.run(async key => {
                   if (!wallet.data) return;
                   await post(`/business/campaigns/${id}/add-funds`, { amount: Number(addAmount), campaignVersion: c.version, walletVersion: wallet.data.version }, key);
                   setAddAmount(""); wallet.reload(); changed("Funds added");

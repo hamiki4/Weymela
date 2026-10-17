@@ -277,7 +277,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(33, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(34, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -395,6 +395,13 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
                 PublicationId = promotionPublication.Id }),
             OccurredAtUtc = now.AddMinutes(-4)
         });
+        foreach (var eventType in new[] { "UgcPublicationVerificationRequested", "PublicationGoLiveRequested" })
+            db.OutboxMessages.Add(new OutboxMessage
+            {
+                EventType = eventType,
+                Payload = JsonSerializer.Serialize(new { PublicationId = ugcPublication.Id }),
+                OccurredAtUtc = now.AddMinutes(-4)
+            });
         db.OutboxMessages.Add(new OutboxMessage
         {
             EventType = "CreatorParticipationActivated",
@@ -469,6 +476,9 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         var ugcLiveNotice = await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "UgcPublicationActivated" && x.UserId == seed.BusinessUserId);
         Assert.Equal($"/business/ugc/{seed.UgcOpportunityId}", ugcLiveNotice.Route);
+        var reviewNotice = Assert.Single(await db.InAppNotifications.Where(x =>
+            x.SourceKey.StartsWith("PublicationReview:") && x.UserId == seed.BusinessUserId).ToListAsync());
+        Assert.Equal($"/business/ugc/{seed.UgcOpportunityId}", reviewNotice.Route);
         var platformAdmin = await db.CommercePermissions.Where(x => x.Role == ActorRole.PlatformAdmin && x.IsActive)
             .Select(x => x.UserId).SingleAsync();
         Assert.Equal($"/admin/campaigns/{seed.PromotionId}", (await db.InAppNotifications.SingleAsync(x =>
@@ -821,7 +831,8 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20261007041919_AlignFinancialUatFlows",
             "20261012042110_SeparateProductFinancialConfiguration",
             "20261014203304_StabilizePublicationPaymentsAndNotificationReads",
-            "20261016161806_AllowFundedCashbackReplenishment"
+            "20261016161806_AllowFundedCashbackReplenishment",
+            "20261017002127_CreatorGoLiveAndDirectDelivery"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='v3' AND c.relkind='S' AND c.relname='creator_number_seq'";
@@ -918,7 +929,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(33L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(34L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

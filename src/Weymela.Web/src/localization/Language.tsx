@@ -16,6 +16,7 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "The Creator account is not active.": "የፈጣሪው መለያ ንቁ አይደለም።",
   "Fixed UGC payment": "ቋሚ የUGC ክፍያ",
   "Ask Platform Admin to set campaign duration.": "የማስተዋወቂያ ቆይታን እንዲያዘጋጅ የመድረኩን አስተዳዳሪ ይጠይቁ።",
   "Ends": "ያበቃል",

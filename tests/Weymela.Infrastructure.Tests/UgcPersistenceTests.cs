@@ -1221,6 +1221,20 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var stranger = state.Business with { UserId = Guid.NewGuid(), BusinessId = Guid.NewGuid() };
         await Assert.ThrowsAsync<ApplicationFailure>(() => publications.AdminReviewAsync(stranger, pending.Id,
             new("verify", "foreign", null, true), "foreign", default));
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE v3.\"CommercePermissions\" SET \"IsActive\"=false WHERE \"Role\"='Creator' AND \"SubjectId\"={state.Creator.CreatorId}");
+        var inactive = await Assert.ThrowsAsync<ApplicationFailure>(() => publications.AdminReviewAsync(state.Business, pending.Id,
+            new("verify", "isolated-review-evidence", null, true), "inactive-creator", default));
+        Assert.Equal(FailureKind.Forbidden, inactive.Kind);
+        Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE v3.\"CommercePermissions\" SET \"IsActive\"=true WHERE \"Role\"='Creator' AND \"SubjectId\"={state.Creator.CreatorId}");
+        var lifecycle = new AccountLifecycleRecord { UserId = state.Creator.UserId, Status = AccountLifecycleStatus.Suspended,
+            ChangedByUserId = Phase4Scenario.Admin.UserId, CreatedAtUtc = Now, UpdatedAtUtc = Now };
+        db.AccountLifecycles.Add(lifecycle); await db.SaveChangesAsync();
+        var suspended = await Assert.ThrowsAsync<ApplicationFailure>(() => publications.AdminReviewAsync(state.Business, pending.Id,
+            new("verify", "isolated-review-evidence", null, true), "suspended-creator", default));
+        Assert.Equal(FailureKind.Forbidden, suspended.Kind);
+        lifecycle = await db.AccountLifecycles.SingleAsync(x => x.UserId == state.Creator.UserId);
+        lifecycle.Status = AccountLifecycleStatus.Active; await db.SaveChangesAsync();
         clock.Now = Now.AddHours(1);
         await publications.AdminReviewAsync(state.Business, pending.Id, new("verify", "isolated-review-evidence", null, true), "accept-evidence", default);
         db.ChangeTracker.Clear();

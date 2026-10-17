@@ -245,8 +245,11 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             case "PublicationVerificationRequested": case "UgcPublicationVerificationRequested": case "PublicationGoLiveRequested":
             {
                 var reviewPublicationId = Id("PublicationId");
-                var publication = await db.CreatorPublicationVerifications.AsNoTracking().SingleAsync(x => x.Id == reviewPublicationId, ct);
-                if (publication.Status != PublicationVerificationStatus.VerificationPending) return null;
+                // Route the persisted review request using immutable work keys.
+                // Worker has no access to provider evidence or review state.
+                var publication = await db.CreatorPublicationVerifications.AsNoTracking()
+                    .Where(x => x.Id == reviewPublicationId)
+                    .Select(x => new { x.Id, x.CreatorAllocationId, x.UgcAssignmentId }).SingleAsync(ct);
                 Guid? campaign = publication.CreatorAllocationId is { } allocation
                     ? await db.CreatorAllocations.Where(x => x.Id == allocation).Select(x => (Guid?)x.PromotionId).SingleAsync(ct) : null;
                 Guid? opportunity = publication.UgcAssignmentId is { } assignment
@@ -263,7 +266,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 var publicationId=Id("PublicationId");
                 var publication=await db.CreatorPublicationVerifications.AsNoTracking()
                     .Where(x=>x.Id==publicationId)
-                    .Select(x=>new{x.CreatorId,x.CreatorAllocationId,x.UgcAssignmentId,x.WentLiveAtUtc})
+                    .Select(x=>new{x.CreatorId,x.CreatorAllocationId,x.UgcAssignmentId})
                     .SingleAsync(ct);
                 Guid? promotionId=null;Guid? budgetId=publication.CreatorAllocationId;Guid? ugcId=null;
                 if(publication.CreatorAllocationId is {} allocationId)
@@ -271,7 +274,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 else if(publication.UgcAssignmentId is {} assignmentId)
                     ugcId=await db.UgcAssignments.AsNoTracking().Where(x=>x.Id==assignmentId).Select(x=>x.UgcOpportunityId).SingleAsync(ct);
                 return Plan(row.EventType=="PublicationVerified"?"Publication verified":"Publication verification failed",
-                    row.EventType=="PublicationVerified" ? publication.WentLiveAtUtc is not null ? "Live" : "Approved" : "Check the public post and submit it again.",
+                    row.EventType=="PublicationVerified" ? "Approved" : "Check the public post and submit it again.",
                     promotionId,budgetId,new NotificationAudience(ActorRole.Creator,publication.CreatorId)) with { UgcId=ugcId, RelatedItemId=publication.UgcAssignmentId };
             }
             case "CreatorParticipationActivated":

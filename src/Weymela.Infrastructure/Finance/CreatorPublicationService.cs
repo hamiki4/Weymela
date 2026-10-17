@@ -223,6 +223,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
     {
             var allocation = await db.CreatorAllocations.SingleOrDefaultAsync(x => x.Id == allocationId, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Creator work not found.");
+            await EnsureCreatorStillActiveAsync(allocation.CreatorId, token);
             var promotion = await new PromotionRepository(db).GetAsync(allocation.PromotionId, token)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
             await access.EnsureBusinessAsync(promotion.BusinessId, token);
@@ -292,6 +293,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC work not found.");
             if (assignment.Status != UgcAssignmentStatus.Approved)
                 throw new ApplicationFailure(FailureKind.Validation, "Business approval is required before Go Live.");
+            await EnsureCreatorStillActiveAsync(assignment.CreatorId, token);
             var submission = await CurrentApprovedUgcSubmission(assignment.Id, token);
             var publication = db.CreatorPublicationVerifications.Local.SingleOrDefault(x => x.UgcAssignmentId == assignment.Id && x.UgcSubmissionId == submission.Id && x.Status == PublicationVerificationStatus.Verified)
                 ?? await db.CreatorPublicationVerifications.SingleOrDefaultAsync(x =>
@@ -573,6 +575,17 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             { /* The original URL passed the strict allowlist. Keep it for review when resolution fails; never follow an unsafe redirect or claim ownership/access. */ }
         }
         return (input with { ExternalContentId = link.ContentId }, link.Url);
+    }
+
+    private async Task EnsureCreatorStillActiveAsync(Guid creatorId, CancellationToken ct)
+    {
+        // Reviewers retain their own audit identity; a prior Creator request cannot
+        // activate work after that Creator's authorization has been withdrawn.
+        if (!await db.CommercePermissions.AsNoTracking().AnyAsync(x => x.Role == ActorRole.Creator
+                && x.SubjectId == creatorId && x.IsActive && !db.AccountLifecycles.Any(l => l.UserId == x.UserId
+                    && (l.Status == AccountLifecycleStatus.Suspended || l.Status == AccountLifecycleStatus.Disabled
+                        || l.Status == AccountLifecycleStatus.Revoked || l.Status == AccountLifecycleStatus.Closed)), ct))
+            throw new ApplicationFailure(FailureKind.Forbidden, "The Creator account is not active.");
     }
 
     private static void EnsureCurrentLinkProfile(CreatorPublicationVerification publication, CreatorSocialProfileRecord profile)

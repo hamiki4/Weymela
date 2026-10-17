@@ -1,13 +1,13 @@
 {
   "applicationId": "com.weymela.app",
-  "versionCode": 13,
-  "versionName": "3.0.3",
-  "highestPlayVersionCodeAtPreparation": 12,
+  "versionCode": 14,
+  "versionName": "3.0.4",
+  "highestPlayVersionCodeAtPreparation": 13,
   "track": "production",
   "firebaseProjectId": "weymela-production",
   "apiOrigin": "https://api.weymela.com",
-  "webSourceCommit": "1988382779ae068444b2e0d4a3ef582bb522ab8a",
-  "webImage": "ghcr.io/hamiki4/weymela-v3-web@sha256:8c20a564b406bac155a7a16016a4eeefebb94a478a5107b0984ac3fb538962e4",
+  "webSourceCommit": "0aba0878638897b1c85e84b0a1f4bceb4d585c6f",
+  "webImage": "ghcr.io/hamiki4/weymela-v3-web@sha256:4fdd9525c0c6f968e9e767179feef0f98181086d3c3de31116b6e96a84c30fa4",
   "recoveredNativeSourceCommit": "c3de86d9fd0748df5e630d86f494c5386f8846dc",
   "uploadAlias": "weymela-upload",
   "registeredUploadCertificateVerification": "Original upload certificate confirmed by owner 2026-10-11; exact fingerprint must match before signing",
@@ -15,5 +15,7 @@
   "submissionAuthorizedAfterBackendCompatibility": false,
   "publicProductionPromotionAuthorized": false,
   "registeredUploadCertificateSha256": "AD:9A:B2:02:CD:00:76:0A:78:DE:1D:CA:61:2F:F2:4C:2C:92:99:86:D6:64:FA:55:72:0C:23:56:4E:C7:60:C9",
-  "manualGooglePlayUploadOnly": true
+  "manualGooglePlayUploadOnly": true,
+  "nativePrivateMediaStreaming": true,
+  "userSelectedApprovedVideoDownloads": true
 }

@@ -8,6 +8,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PrivateCookieBridge.class);
         registerPlugin(RestrictedHttpBridge.class);
         registerPlugin(WeymelaApi.class);
+        registerPlugin(WeymelaMedia.class);
         super.onCreate(state);
+        if (getBridge() != null) getBridge().setWebViewClient(new PrivateMediaWebViewClient(getBridge()));
     }
 }

@@ -63,6 +63,12 @@ test("Operations Admin reaches deposit review without Platform financial authori
   }
   await open(page, "/admin/ugc");
   await expect(page.getByRole("heading", { name: "UGC", exact: true })).toBeVisible();
+  await open(page, "/admin/more");
+  const publications = page.waitForResponse(response => new URL(response.url()).pathname === "/api/admin/publication-verifications");
+  await page.getByRole("main").getByRole("link", { name: "Publication Verification", exact: true }).click();
+  expect((await publications).status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Publication Verification", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Publication status", exact: true })).toBeVisible();
 });
 
 test("Platform Admin mobile pages use purpose-built rows and compact bottom navigation", async ({ page, context }) => {

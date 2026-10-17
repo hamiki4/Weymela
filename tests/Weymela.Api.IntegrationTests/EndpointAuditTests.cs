@@ -84,6 +84,10 @@ public sealed class EndpointAuditTests(PostgresFixture fixture)
     [InlineData("/api/business/ugc/11111111-1111-1111-1111-111111111111/publish")]
     [InlineData("/api/business/ugc/11111111-1111-1111-1111-111111111111/cancel")]
     [InlineData("/api/business/ugc/assignments/11111111-1111-1111-1111-111111111111/review/approve")]
+    [InlineData("/api/creator/ugc/assignments/11111111-1111-1111-1111-111111111111/launch")]
+    [InlineData("/api/creator/ugc/assignments/11111111-1111-1111-1111-111111111111/go-live")]
+    [InlineData("/api/business/publication-verifications/11111111-1111-1111-1111-111111111111/review")]
+    [InlineData("/api/admin/publication-verifications/11111111-1111-1111-1111-111111111111/review")]
     public async Task Explicit_financial_freeze_blocks_new_and_existing_financial_write_paths(string path)
     {
         await using var host=await ApiFixture.CreateAsync(fixture,b=>b.Configuration.AddInMemoryCollection(new Dictionary<string,string?>{["V3:FinancialWritesEnabled"]="false"})); using var client=await host.Login("admin");

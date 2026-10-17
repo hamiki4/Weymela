@@ -152,7 +152,7 @@ export function AdminPayouts() {
   const { user } = useSession();
   if (user?.role === "OperationsAdmin") return <OperationsPayouts />;
   const search = useAdminSearch("/admin/payouts");
-  const resource = useResource<PayoutWorkspace>(search.path);
+  const resource = useResource<PayoutWorkspace>(search.path, true, 30000);
   const [tab, setTab] = useState("Creators");
   const [filter, setFilter] = useState("All");
   const [selected, select] = useState<{ kind: string; row: QueueRow } | null>(
@@ -433,7 +433,7 @@ export function AdminPayouts() {
 
 export function OperationsPayouts() {
   const search = useAdminSearch("/admin/payouts");
-  const resource = useResource<OperationsPayoutWorkspace>(search.path);
+  const resource = useResource<OperationsPayoutWorkspace>(search.path, true, 30000);
   const [tab, setTab] = useState("Creators");
   const [selected, select] = useState<{ kind: string; row: QueueRow } | null>(null);
   const [reference, setReference] = useState("");

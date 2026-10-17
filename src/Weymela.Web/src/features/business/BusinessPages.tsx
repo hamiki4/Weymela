@@ -68,7 +68,7 @@ export function WalletMetrics({ wallet, pendingDeposits }: { wallet: Wallet; pen
   );
 }
 export function BusinessDashboard() {
-  const resource = useResource<BusinessHome>("/business/home");
+  const resource = useResource<BusinessHome>("/business/home", true, 30000);
   return (
     <Resource resource={resource}>
       {(data) => (

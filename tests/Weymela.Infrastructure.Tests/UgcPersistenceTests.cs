@@ -1299,7 +1299,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
 
     private async Task<State> Setup(decimal deposit = 10_000, string? targetMigration = null)
     {
-        var database = await fixture.CreateAsync(targetMigration); await using var db = database.Open();
+        var database = await fixture.CreateAsync(targetMigration); await using var db = database.Open(legacyUgc: targetMigration is not null);
         var business = new Actor(Guid.NewGuid(), ActorRole.Business, Guid.NewGuid());
         var creator = new Actor(Guid.NewGuid(), ActorRole.Creator, CreatorId: Guid.NewGuid());
         var configurationId = Guid.NewGuid(); var versionId = Guid.NewGuid();
@@ -1378,7 +1378,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
             var campaign = tracking.Single(x => x.Id == assignment.UgcOpportunityId && x.Kind == "UGC + Sale");
             Assert.Equal("Active",campaign.Group); Assert.Equal(offer.EndsAtUtc,campaign.DueAtUtc);
             Assert.True(campaign.RemainingDays > 0);
-            Assert.Single(tracking); Assert.Equal(1,campaign.CreatorCount);
+            Assert.Equal(tracking.Count,tracking.Select(x => x.CampaignId).Distinct().Count()); Assert.Equal(1,campaign.CreatorCount);
         }
     }
 

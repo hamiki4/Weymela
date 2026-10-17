@@ -105,8 +105,10 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
             await access.EnsureBusinessAsync(p.BusinessId, token);
             var now = clock.GetUtcNow().UtcDateTime;
             if (p.Status is not (PromotionStatus.Active or PromotionStatus.BudgetExhausted) ||
-                now < p.StartDateUtc || now >= p.EndDateUtc || !participation.IsLive(now,p.PromotionLiveDurationDays) ||
+                now < p.StartDateUtc || !participation.IsLive(now,p.PromotionLiveDurationDays) ||
                 participation.Status is ParticipationStatus.Paused or ParticipationStatus.Completed)
+                throw new ApplicationFailure(FailureKind.Validation, "Participation is not open for verified rewards.");
+            if (now >= p.EndDateUtc && !await PublicationLiveWindow.ContainsAsync(db, participation, now, token))
                 throw new ApplicationFailure(FailureKind.Validation, "Participation is not open for verified rewards.");
             var allocation = p.Allocations.Single(x => x.Id == participation.CreatorAllocationId);
             if (allocation.Status is CreatorAllocationStatus.Completed or CreatorAllocationStatus.Cancelled)

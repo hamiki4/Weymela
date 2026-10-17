@@ -359,6 +359,7 @@ export interface CreatorRequest {
   appliedAtUtc: string;
 }
 export interface PromotionContentReviewCard {
+  publication?: PublicationStatus | null;
   submissionId: string;
   creator: string;
   promotion: string;
@@ -376,6 +377,10 @@ export interface PromotionContentReviewCard {
   creatorProfileUrl?: string | null;
 }
 export interface PublicationStatus {
+  goLiveRequestedAtUtc?: string | null;
+  expiresAtUtc?: string | null;
+  remainingDays?: number | null;
+  verificationMethod?: "Provider" | "Manual" | null;
   id: string;
   provider: string;
   externalContentId: string;
@@ -388,6 +393,10 @@ export interface PublicationStatus {
   verificationCode?: string | null;
 }
 export interface AdminPublicationReview {
+  approvedMediaUrl?: string | null;
+  approvedWatchUrl?: string | null;
+  approvedMediaContentType?: string | null;
+  verificationMethod?: string | null;
   id: string;
   creator: string;
   business: string;
@@ -637,6 +646,8 @@ export interface UgcPlatformCapacity {
   available: number;
 }
 export interface UgcCard {
+  deliverableType?: "PublicSocialVideo" | "DirectVideoDelivery";
+  promotionLiveDurationDays?: number | null;
   id: string;
   businessId: string;
   business: string;
@@ -671,6 +682,9 @@ export interface UgcCard {
   creatorMustPurchase: boolean;
 }
 export interface UgcAssignment {
+  deliverableType?: "PublicSocialVideo" | "DirectVideoDelivery";
+  completedAtUtc?: string | null;
+  downloadUrl?: string | null;
   id: string;
   opportunityId: string;
   opportunity: string;

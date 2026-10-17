@@ -112,7 +112,7 @@ describe("Creator Promotions work groups", () => {
     expect(within(activeRow).getByText("Changes Requested", { exact: true })).toBeVisible();
     await userEvent.click(within(activeRow).getByText("View details", { exact: true, selector: "summary" }));
     const review = new File(["review"], "review.mp4", { type: "video/mp4" });
-    await userEvent.upload(within(activeRow).getByLabelText("Private review copy"), review);
+    await userEvent.upload(within(activeRow).getByLabelText("Review video"), review);
     fireEvent.submit(within(activeRow).getByRole("button", { name: "Submit Revised Content" }).closest("form")!);
     await waitFor(() => expect(api.writes[0]).toMatchObject({ path: "/creator/ugc/assignments/UGC active/submit-review",
       body: expect.any(FormData) }));
@@ -134,12 +134,12 @@ describe("Creator Promotions work groups", () => {
       "/creator/social-accounts":[{id:"own-tiktok",platform:"TikTok",profileUrl:"https://www.tiktok.com/@mimi"}]});
     mount();const row=(await screen.findByRole("heading",{name:"approved-ugc"})).closest("article")!;
     expect(within(row).getByText(/Pending earnings 300/)).toBeVisible();
-    await userEvent.click(within(row).getByText("View details",{selector:"summary"}));
-    await userEvent.selectOptions(within(row).getByLabelText("Publication profile"),"own-tiktok");
-    const link=within(row).getByLabelText("TikTok Video Link");expect(link).toHaveAttribute("maxlength","1000");
+    await within(row).findByRole("option", { name: /TikTok · https:\/\/www.tiktok.com\/@mimi/ });
+    await userEvent.selectOptions(within(row).getByLabelText("Social profile"),"own-tiktok");
+    const link=within(row).getByLabelText("Video Link");expect(link).toHaveAttribute("maxlength","1000");
     await userEvent.type(link,"https://www.tiktok.com/t/ZMabcdef?share=1");
-    await userEvent.click(within(row).getByRole("button",{name:"Verify Publication"}));
-    await waitFor(()=>expect(api.writes[0]).toMatchObject({path:"/creator/ugc/assignments/approved-ugc/publication",body:{provider:"TikTok",creatorSocialProfileId:"own-tiktok",externalContentId:"https://www.tiktok.com/t/ZMabcdef?share=1"}}));
+    await userEvent.click(within(row).getByRole("button",{name:"Go Live"}));
+    await waitFor(()=>expect(api.writes[0]).toMatchObject({path:"/creator/ugc/assignments/approved-ugc/launch",body:{provider:"TikTok",creatorSocialProfileId:"own-tiktok",externalContentId:"https://www.tiktok.com/t/ZMabcdef?share=1"}}));
     expect(screen.queryByText("Live for Customers.")).not.toBeInTheDocument();
   });
 

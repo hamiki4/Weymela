@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Weymela.Application;
+using Weymela.Application.Web;
 using Weymela.Infrastructure.Operations;
 
 namespace Weymela.Api.Security;
@@ -48,11 +49,15 @@ public static class EndpointSecurity
             || route == "/api/business/ugc/{id:guid}/cashback-funding"
             || route == "/api/business/ugc/{id:guid}/cancel"
             || route == "/api/business/promotions/{id:guid}/cancel"
-            || route == "/api/business/ugc/assignments/{id:guid}/review/{action}";
+            || route == "/api/business/ugc/assignments/{id:guid}/review/{action}"
+            || PublicationEarningRoute(route);
     }
     public static string FinancialOperation(HttpContext c)
     {
         var route = Operation(c);
+        // Public UGC Go Live and a review fulfilling a Creator's request can
+        // release the funded fixed fee. They use the existing campaign control.
+        if (PublicationEarningRoute(route)) return ProductionFinancialOperations.PromotionReservations;
         if (route.EndsWith("/promotional-funding")) return ProductionFinancialOperations.WalletFunding;
         if (route.StartsWith("/api/admin/deposit", StringComparison.Ordinal))
             return ProductionFinancialOperations.DepositReview;
@@ -64,6 +69,11 @@ public static class EndpointSecurity
             return ProductionFinancialOperations.PromotionReservations;
         return "Unknown"; // New money routes stay disabled until explicitly classified.
     }
+    private static bool PublicationEarningRoute(string route) => route is
+        "/api/creator/ugc/assignments/{id:guid}/launch" or
+        "/api/creator/ugc/assignments/{id:guid}/go-live" or
+        "/api/business/publication-verifications/{id:guid}/review" or
+        "/api/admin/publication-verifications/{id:guid}/review";
     public static void AddLimits(IServiceCollection services, RuntimeOptions config) => services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = 429;
@@ -109,7 +119,10 @@ public sealed class ValidatedInputFilter : IEndpointFilter
             if (input is string text)
             {
                 var max = name switch { "Title" => 120, "Description" => 3000, "Requirements" or "ContentConcept" => 2000, "Message" => 1000,
-                    "Category" or "Region" => 80, "Token" => 43, "IdToken" => 8192, "AccessKey" => 256, "ExternalContentId" => 100, _ => 200 };
+                    "Category" or "Region" => 80, "Token" => 43, "IdToken" => 8192, "AccessKey" => 256,
+                    "ExternalContentId" when value is PublicationInput => 1000,
+                    "EvidenceReference" when value is AdminPublicationReviewInput => 500,
+                    "ExternalContentId" => 100, _ => 200 };
                 InputRules.Text(text, max);
             }
             else if (input is decimal number)

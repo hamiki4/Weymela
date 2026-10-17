@@ -86,7 +86,7 @@ for (const width of [375, 1366])
       .getByLabel("TikTok Video Link", { exact: true })
       .fill("https://www.tiktok.com/@elias/video/7412345678901234567");
     await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
-    const initialReviewStatus = page.getByText(/under Business review/i);
+    const initialReviewStatus = page.getByText("Awaiting Approval", { exact: true });
     await expect(initialReviewStatus).toBeVisible({ timeout: 12000 });
     await expect(page.getByRole("button", { name: "Refresh Views" })).toHaveCount(0);
     await login(context, "business");
@@ -105,7 +105,7 @@ for (const width of [375, 1366])
       .getByLabel("TikTok Video Link", { exact: true })
       .fill("https://www.tiktok.com/@elias/video/7412345678901234568");
     await page.getByRole("button", { name: "Submit for Review", exact: true }).click();
-    await expect(page.getByText(/under Business review/i)).toBeVisible();
+    await expect(page.getByText("Awaiting Approval", { exact: true })).toBeVisible();
     await login(context, "business");
     await open(page, `/business/campaigns/${campaignId}`);
     const revisedReview = page
@@ -117,10 +117,8 @@ for (const width of [375, 1366])
     await login(context, "other-creator");
     await open(page, `/creator/promotions/${creatorBudgetId}`);
     await page
-      .getByLabel("TikTok Video Link", { exact: true })
+      .getByLabel("Video Link", { exact: true })
       .fill(`https://www.tiktok.com/@elias/video/${Date.now()}${width}`);
-    await page.getByRole("button", { name: "Verify Publication", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Go Live", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Go Live", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Refresh Views" }),

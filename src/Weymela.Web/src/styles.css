@@ -2505,6 +2505,8 @@ td .button {
     min-height: 68px;
   }
   .role-creator .mobile-role-link span {
+    min-width: 0;
+    overflow-wrap: anywhere;
     overflow: visible;
     text-overflow: clip;
     white-space: normal;

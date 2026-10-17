@@ -55,6 +55,7 @@ import {
   ugcCustomerOffer,
   wallet,
   business,
+  businessPricing,
 } from "./fixtures";
 vi.mock("../src/app/Session", () => ({
   useSession: () => ({ user: { developmentMode: true, role: "Business" } }),
@@ -254,8 +255,8 @@ describe("Business workspace", () => {
     expect(screen.getByLabelText("Customer cashback budget")).toBeVisible();
   });
 
-  it("saves a private Promotion Draft without accepting platform rates", async () => {
-    const api = mockApi();
+  it.each([7, 60])("saves a private Promotion Draft with the configured %i-day duration and no client-supplied rates", async duration => {
+    const api = mockApi({ "/business/pricing": { ...businessPricing, promotionLiveDurationDays: duration } });
     mount(<CreateCampaign />, "/business/campaigns/new?type=views");
     await screen.findByLabelText("Promotion title");
     await userEvent.type(
@@ -274,6 +275,9 @@ describe("Business workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.writes.find(write => write.path === "/business/promotions")?.body).toMatchObject({ campaignBudget: 1000, description: "", platforms: [{ platform: "TikTok", capacity: 1 }] }));
     expect(api.writes.find(write => write.path === "/business/promotions")?.body).not.toHaveProperty("creatorCommissionPercent");
+    const saved = api.writes.find(write => write.path === "/business/promotions")!.body as { endUtc: string; contentDueAtUtc: string };
+    expect(new Date(saved.endUtc).getTime() - new Date(saved.contentDueAtUtc).getTime()).toBe(duration * 86400000);
+
   });
   it("does not block Promotion creation on legacy Business agreements", async () => {
     mockApi({ "/legal/current": [
@@ -499,7 +503,7 @@ describe("Business workspace", () => {
       submittedAtUtc: "2026-09-22T12:00:00Z", reviewStatus: "UnderReview", feedback: null, reviewedAtUtc: null,
     }] });
     mount(<PromotionContentReviewQueue />);
-    expect(await screen.findByText("Review unavailable: this TikTok link is invalid or unsupported.")).toBeVisible();
+    expect(await screen.findByText("Video unavailable.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Request Changes" })).toBeDisabled();
@@ -819,7 +823,7 @@ describe("Creator workspace", () => {
       remainingDays: null,
     }] });
     mount(<CreatorActiveDetail />, "/creator/promotions/budget", "/creator/promotions/:id");
-    expect(await screen.findByText("Content is under Business review. Go Live is not available yet.")).toBeVisible();
+    expect(await screen.findByText("Awaiting Approval")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Go Live" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Submit Content for Review" })).not.toBeInTheDocument();
   });
@@ -838,7 +842,7 @@ describe("Creator workspace", () => {
     }] });
     mount(<CreatorActiveDetail />, "/creator/promotions/budget", "/creator/promotions/:id");
     await userEvent.click(await screen.findByRole("button", { name: "Go Live" }));
-    await waitFor(() => expect(api.writes[0].path).toBe("/creator/creator-budgets/budget/go-live"));
+    await waitFor(() => expect(api.writes[0].path).toBe("/creator/creator-budgets/budget/launch"));
   });
   it("has compact earning cards without other role finances", async () => {
     mount(<CreatorHowYouEarn />);
@@ -862,7 +866,7 @@ describe("Creator workspace", () => {
   it("allows an editable receiving phone and retains Bank destination fields", async () => {
     const api = mockCreatorApi();
     mount(<CreatorEarnings />);
-    expect(await screen.findByLabelText("Receiving phone number")).toHaveValue("+251911223344");
+    await waitFor(() => expect(screen.getByLabelText("Receiving phone number")).toHaveValue("+251911223344"));
     expect(screen.getByLabelText("Receiving phone number")).not.toHaveAttribute("readonly");
     expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));

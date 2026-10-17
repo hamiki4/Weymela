@@ -1,6 +1,7 @@
+import { CreatorGoLive } from "./CreatorGoLive";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { post, useAction, useResource } from "../../api/client";
+import { post, postForm, useAction, useResource } from "../../api/client";
 import type { CreatorCampaign } from "../../api/types";
 import { normalizeTikTokVideoLink } from "./tiktokVideoLink";
 import {
@@ -27,7 +28,7 @@ import {
 export function contentUrl(provider: string | null, id: string | null) {
   if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return undefined;
   return provider === "TikTok"
-    ? `https://www.tiktok.com/@creator/video/${id}`
+    ? `https://www.tiktok.com/player/v1/${id}`
     : provider === "YouTube"
       ? `https://www.youtube.com/watch?v=${id}`
       : provider === "Instagram"
@@ -91,76 +92,53 @@ function CreatorContent({
   reload: () => void;
 }) {
   const [content, setContent] = useState("");
+  const [media, setMedia] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const action = useAction();
-  const url = contentUrl(row.provider, row.externalContentId);
+  const url = row.publication?.watchUrl ?? contentUrl(row.provider, row.externalContentId);
   const maySubmit = !row.participationId &&
     (row.contentReviewStatus == null || row.contentReviewStatus === "ChangesRequested") &&
     !["Completed", "Cancelled", "Rejected"].includes(row.status);
-  const mayPublish = !row.participationId && row.contentReviewStatus === "Approved"
-    && (!row.publication || ["Failed", "Expired"].includes(row.publication.status));
-  const mayGoLive = !row.participationId && row.publication?.status === "Verified";
+  const mayPublish = !row.participationId && row.contentReviewStatus === "Approved";
   return (
-    <Section title="Your next step" description={row.contentStatus}>
+    <Section title="Your next step">
       {maySubmit ? (
         <form
           className="contained-form"
           onSubmit={(e) => {
             e.preventDefault();
-            const link = normalizeTikTokVideoLink(content);
-            if (!link) { setMessage("Enter a supported HTTPS TikTok video link."); return; }
+            const link = media ? null : normalizeTikTokVideoLink(content);
+            if (!media && !link) { setMessage("Enter a supported HTTPS TikTok video link."); return; }
             setMessage("");
             void action.run(async (key) => {
-              await post(`/creator/creator-budgets/${row.budgetId}/content/review`, {
+              if (media) {
+                const form = new FormData(); form.append("media", media);
+                await postForm(`/creator/creator-budgets/${row.budgetId}/content/review`, form, key);
+              } else await post(`/creator/creator-budgets/${row.budgetId}/content/review`, {
                 provider: "TikTok",
                 externalContentId: link,
               }, key);
-              setContent("");
+              setContent(""); setMedia(null);
               setMessage("Revision submitted for Business review.");
               reload();
             });
           }}
         >
           <fieldset disabled={action.busy}>
-            <Field label="TikTok Video Link" help="Add SAMPLE watermark until approved.">
-              <input type="url" inputMode="url" value={content} onChange={(e) => setContent(e.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required />
-            </Field>
+            <Field label="Review video"><input type="file" accept="video/mp4" onChange={event => setMedia(event.target.files?.[0] ?? null)} required={row.selectedPlatform !== "TikTok" && !media} /></Field>
+            {(!row.selectedPlatform || row.selectedPlatform === "TikTok") && !media && <Field label="TikTok Video Link" help="Add SAMPLE watermark until approved.">
+              <input type="url" inputMode="url" value={content} onChange={(e) => setContent(e.target.value)} placeholder="https://www.tiktok.com/@creator/video/…" required={!media} />
+            </Field>}
             {row.contentFeedback && <Notice>{row.contentFeedback}</Notice>}
-            <Button type="submit" disabled={action.busy || !content.trim()}>
+            <Button type="submit" disabled={action.busy || !media && !content.trim()}>
               {action.busy ? "Submitting…" : "Submit for Review"}
             </Button>
             {message === "Enter a supported HTTPS TikTok video link." && <Notice error>{message}</Notice>}
           </fieldset>
         </form>
       ) : mayPublish ? (
-        <form className="contained-form" onSubmit={(event) => {
-          event.preventDefault();
-          void action.run(async (key) => {
-            if (!row.selectedSocialProfileId || !row.selectedPlatform) return;
-            await post(`/creator/creator-budgets/${row.budgetId}/publication`, {
-              provider: row.selectedPlatform,
-              externalContentId: content.trim(),
-              creatorSocialProfileId: row.selectedSocialProfileId,
-            }, key);
-            setMessage("Publication submitted for verification."); reload();
-          });
-        }}>
-          <Notice>Video approved. Publish this approved revision on {row.selectedPlatform ?? "the selected platform"}, then confirm the final public TikTok video link.</Notice>
-          {row.selectedSocialProfileUrl && <p><a href={row.selectedSocialProfileUrl} target="_blank" rel="noopener noreferrer">Open selected social profile</a></p>}
-          {row.selectedSocialProfileId && row.selectedPlatform ? <>
-            <Field label={row.selectedPlatform === "TikTok" ? "TikTok Video Link" : `${row.selectedPlatform} post ID`}><input type={row.selectedPlatform === "TikTok" ? "url" : "text"} inputMode={row.selectedPlatform === "TikTok" ? "url" : "text"} value={content} onChange={(event) => setContent(event.target.value)} placeholder={row.selectedPlatform === "TikTok" ? "https://www.tiktok.com/@creator/video/…" : undefined} required /></Field>
-            <Button type="submit" disabled={action.busy || !content.trim()}>{action.busy ? "Checking…" : "Verify Publication"}</Button>
-          </> : <Notice error>This work has no selected social profile. Contact the Business before publishing.</Notice>}
-        </form>
-      ) : mayGoLive ? (
-        <div className="creator-review-ready">
-          <Notice>{row.publication?.verificationLabel}. Go Live when you want the Customer offer and reward window to begin.</Notice>
-          <Button disabled={action.busy} onClick={() => void action.run(async (key) => {
-            await post(`/creator/creator-budgets/${row.budgetId}/go-live`, {}, key);
-              setMessage(`Promotion is live. Your ${row.promotionLiveDurationDays}-day window has started.`);
-            reload();
-          })}>{action.busy ? "Going live…" : "Go Live"}</Button>
-        </div>
+        <CreatorGoLive path={`/creator/creator-budgets/${row.budgetId}/launch`} publication={row.publication}
+          profileId={row.selectedSocialProfileId} platform={row.selectedPlatform} reload={reload} />
       ) : (
         <div className="actions">
           {url && (
@@ -197,9 +175,8 @@ function CreatorContent({
         </div>
       )}
       {row.reviewMediaUrl && !row.participationId && <video className="private-review-media" src={row.reviewMediaUrl} controls preload="metadata">Private review video</video>}
-      {row.contentReviewStatus === "UnderReview" && <Notice>Content is under Business review. Go Live is not available yet.</Notice>}
-      {row.contentReviewStatus === "Rejected" && <Notice>This content revision was rejected and cannot go live.</Notice>}
-      {row.publication?.status === "VerificationPending" && <Notice>Publication verification is pending. Go Live remains unavailable.</Notice>}
+      {row.contentReviewStatus === "UnderReview" && <Notice>Awaiting Approval</Notice>}
+      {row.contentReviewStatus === "Rejected" && <Notice>Action Required</Notice>}
       {row.participationId && row.remainingDays != null && <p className="creator-live-days">{row.remainingDays} days left</p>}
       {row.participationId && row.remainingDays == null && <p className="creator-live-days">Ended</p>}
       {action.error && <Notice error>{action.error}</Notice>}

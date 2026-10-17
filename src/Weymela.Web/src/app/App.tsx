@@ -199,12 +199,12 @@ export function App() {
           <Route path="/admin/settings" element={<AdminFinancialSettings />} />
           <Route path="/admin/financial-settings" element={<Navigate to="/admin/settings" replace />} />
           <Route path="/admin/platform" element={<AdminPlatformRevenue />} />
-          <Route path="/admin/publications" element={<AdminPublicationReview />} />
         </Route>
         <Route element={<RoleGate roles={["OperationsAdmin"]} />}>
           <Route path="/admin/operations" element={<OperationsDashboard />} />
         </Route>
         <Route element={<RoleGate roles={["PlatformAdmin", "OperationsAdmin"]} />}>
+          <Route path="/admin/publications" element={<AdminPublicationReview />} />
           <Route path="/admin/more" element={<AdminMore />} />
           <Route path="/admin/wallets" element={<AdminWalletsWorkspace />} />
           <Route path="/admin/campaigns" element={<AdminCampaigns />} />

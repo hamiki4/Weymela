@@ -15,6 +15,24 @@ internal static class UgcPublicationPayment
         if (publication.UgcAssignmentId != assignment.Id || publication.Status != PublicationVerificationStatus.Verified
             || publication.WentLiveAtUtc is null || assignment.Status != UgcAssignmentStatus.Approved)
             throw new ApplicationFailure(FailureKind.Validation, "Verified Go Live is required before UGC payment.");
+        await EarnAsync(db, actor, assignment, opportunity, false, key, now, ct);
+    }
+
+    internal static async Task ReleaseDirectAsync(WeymelaDbContext db, Actor actor, UgcAssignment assignment,
+        UgcOpportunity opportunity, UgcSubmission submission, string key, DateTime now, CancellationToken ct)
+    {
+        if (opportunity.DeliverableType != UgcDeliverableType.DirectVideoDelivery
+            || opportunity.ContentType != UgcContentType.Video || assignment.Status != UgcAssignmentStatus.Approved || assignment.RevisionAcceptanceRequired
+            || submission.UgcAssignmentId != assignment.Id || submission.Status != UgcAssignmentStatus.Approved
+            || submission.ReviewMediaAssetId is null || submission.ReviewedByUserId != actor.UserId
+            || await db.UgcCustomerOffers.AnyAsync(x => x.UgcOpportunityId == opportunity.Id, ct))
+            throw new ApplicationFailure(FailureKind.Validation, "Approve the final direct-delivery video before payment.");
+        await EarnAsync(db, actor, assignment, opportunity, true, key, now, ct);
+    }
+
+    private static async Task EarnAsync(WeymelaDbContext db, Actor actor, UgcAssignment assignment,
+        UgcOpportunity opportunity, bool direct, string key, DateTime now, CancellationToken ct)
+    {
         if (await db.CreatorEarningEntries.AnyAsync(x => x.UgcAssignmentId == assignment.Id && x.Source == EarningSource.Ugc
                 && !db.UgcPaymentCorrections.Any(c => c.OriginalEarningEntryId == x.Id), ct)) return;
         var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == opportunity.BusinessId, ct);
@@ -23,7 +41,7 @@ internal static class UgcPublicationPayment
         opportunity.RecognizeApprovedDeliverable(wallet, now, correlation);
         assignment.CompletePublication(now);
         var journal = new FinancialJournal(Guid.NewGuid().ToString("N"), correlation, actor.UserId,
-            JournalSourceType.UgcPublication, now, key);
+            direct ? JournalSourceType.UgcApproval : JournalSourceType.UgcPublication, now, key);
         journal.AddLine(JournalLineType.Debit, total, "UgcAllocatedReserve");
         journal.AddLine(JournalLineType.Credit, assignment.CreatorPayment, "CreatorPayable");
         if (assignment.PlatformFee.Amount > 0) journal.AddLine(JournalLineType.Credit, assignment.PlatformFee, "PlatformRevenue");
@@ -33,7 +51,7 @@ internal static class UgcPublicationPayment
         db.Entry(journal).Property("UgcOpportunityId").CurrentValue = opportunity.Id;
         db.Entry(journal).Property("UgcAssignmentId").CurrentValue = assignment.Id;
         db.WalletEntries.Add(new(Guid.NewGuid(), opportunity.BusinessId, null, total, "UgcConsumed", journal.Id, now, opportunity.Id));
-        db.UgcBudgetEntries.Add(new(Guid.NewGuid(), opportunity.Id, assignment.Id, total, "VerifiedPublicationEarned", journal.Id, now));
+        db.UgcBudgetEntries.Add(new(Guid.NewGuid(), opportunity.Id, assignment.Id, total, direct ? "ApprovedDeliveryEarned" : "VerifiedPublicationEarned", journal.Id, now));
         var earnings = await db.CreatorEarningsAccounts.SingleOrDefaultAsync(x => x.CreatorId == assignment.CreatorId, ct);
         if (earnings is null) { earnings = new(assignment.CreatorId); db.CreatorEarningsAccounts.Add(earnings); }
         var before = earnings.AvailableEarnings;
@@ -51,6 +69,6 @@ internal static class UgcPublicationPayment
         operation.Audit(actor, "UgcFixedPaymentEarned", correlation, now, creator: assignment.CreatorId);
         operation.Event("UgcFixedPaymentEarned", new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id,
             CreatorId = assignment.CreatorId, BusinessId = opportunity.BusinessId,
-            Amount = assignment.CreatorPayment.Amount, JournalId = journal.Id }, now);
+            Amount = assignment.CreatorPayment.Amount, JournalId = journal.Id, DeliveryType = opportunity.DeliverableType.ToString() }, now);
     }
 }

@@ -13,7 +13,7 @@ const viewports = [
   { width: 1440, height: 900 },
   { width: 1920, height: 1080 },
 ];
-const invalidFixtureVideoAlert = "Review unavailable: this TikTok link is invalid or unsupported.";
+const invalidFixtureVideoAlert = "Video unavailable.";
 
 async function assertBusinessContentAboveMobileNavigation(page: Page, path: string) {
   const selector = path === "/business"
@@ -263,7 +263,7 @@ for (const viewport of viewports)
         const id =
           campaigns.find((r: { title: string }) => r.title.includes("coffee"))
             ?.id ?? campaigns[0].id;
-        await open(page, `/${role}/campaigns/${id}`, role === "business" ? [invalidFixtureVideoAlert] : []);
+        await open(page, `/${role}/campaigns/${id}`, [invalidFixtureVideoAlert]);
         if (role === "business") {
           await expect(page.getByRole("alert")).toHaveText(invalidFixtureVideoAlert);
           await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();

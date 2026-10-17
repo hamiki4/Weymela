@@ -108,10 +108,9 @@ internal static class AdminEndpoints
         g.MapPost("/social-profiles/{id:guid}/review",async(Guid id,AdminSocialProfileReviewInput input,HttpContext c,AdminSocialProfileReviewService service,CancellationToken ct)=>
             EndpointSupport.Id(await service.ReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapGet("/publication-verifications",(HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
-            service.AdminQueueAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c))).RequireAuthorization("PlatformAdmin");
+            service.AdminQueueAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c)));
         g.MapPost("/publication-verifications/{id:guid}/review",async(Guid id,AdminPublicationReviewInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
-            EndpointSupport.Id(await service.AdminReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)))
-            .RequireAuthorization("PlatformAdmin");
+            EndpointSupport.Id(await service.AdminReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapGet("/ugc",async(HttpContext c,UgcService service,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);

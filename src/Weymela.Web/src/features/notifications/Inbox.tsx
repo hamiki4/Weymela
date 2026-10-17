@@ -12,7 +12,7 @@ export function Inbox() {
   return <><PageHeader title="Notifications" compact />
     {action.error && <Notice error>{action.error}</Notice>}
     <Resource resource={resource}>{page => <Section title={`${page.unreadCount} unread`} action={<Button variant="secondary" disabled={!page.unreadCount || action.busy} onClick={() => read("/notifications/read-all")}>Mark all read</Button>}>
-      {!page.items.length ? <Empty icon="bell" title="You’re all caught up" message="Your Campaign and account updates will appear here." /> : <div className="notification-list">{page.items.map(item => <article className="notification-item" key={item.id}>
+      {!page.items.length ? <Empty icon="bell" title="You’re all caught up" message="Your Campaign and account updates will appear here." /> : <div className="notification-list">{page.items.map(item => <article className="notification-item" data-unread={!item.readAtUtc} key={item.id}>
         <div><h3>{item.title}{!item.readAtUtc && <span className="notification-unread">Unread</span>}</h3><p>{item.message}</p><small>{date(item.createdAtUtc)}</small></div>
         <div className="actions"><Link className="text-link" data-notification-open to={item.route.startsWith("/") && !item.route.startsWith("//") ? item.route : "/"}
           onClick={event => {

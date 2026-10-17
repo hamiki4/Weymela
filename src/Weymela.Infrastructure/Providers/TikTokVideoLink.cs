@@ -11,6 +11,9 @@ public static class TikTokVideoLink
     private static readonly System.Text.RegularExpressions.Regex CreatorVideoPath = new(
         "^/@(?<creator>[A-Za-z0-9._-]{1,50})/video/(?<id>[0-9]{6,30})/?$",
         System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex IdVideoPath = new(
+        "^/(?:player/v1|share/video)/(?<id>[0-9]{6,30})/?$|^/v/(?<id>[0-9]{6,30})\\.html/?$",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     private static readonly System.Text.RegularExpressions.Regex SharedVideoPath = new(
         "^/(?<id>[A-Za-z0-9_-]{6,80})/?$",
         System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
@@ -43,6 +46,8 @@ public static class TikTokVideoLink
                 normalized = $"https://www.tiktok.com/@{match.Groups["creator"].Value}/video/{match.Groups["id"].Value}";
             else
             {
+                match = IdVideoPath.Match(uri.AbsolutePath);
+                if (match.Success) { normalized = $"https://www.tiktok.com/player/v1/{match.Groups["id"].Value}"; return true; }
                 match = TikTokShortPath.Match(uri.AbsolutePath);
                 if (!match.Success) return false;
                 normalized = $"https://www.tiktok.com/t/{match.Groups["id"].Value}";
@@ -69,6 +74,7 @@ public static class TikTokVideoLink
     {
         if (!TryNormalize(value, out var normalized)) return null;
         var match = CreatorVideoPath.Match(new Uri(normalized).AbsolutePath);
+        if (!match.Success) match = IdVideoPath.Match(new Uri(normalized).AbsolutePath);
         return match.Success ? match.Groups["id"].Value : null;
     }
 

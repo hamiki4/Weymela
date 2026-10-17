@@ -70,7 +70,7 @@ export function CreatorHowYouEarn() {
                   </dl>
                 </article>
               ))}
-              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Fixed fee after verified Go Live</p></article>
+              <article className="pricing-card"><div className="pricing-card-heading"><span className="pricing-card-kicker">Content creation</span><h3>UGC</h3></div><p>Fixed UGC payment</p></article>
             </div>
             <div className="threshold-note">
               <strong>
@@ -124,7 +124,7 @@ export function CreatorEarnings() {
                 <Eligibility data={data} />
             </Section>
             <div className="metric-grid"><Section title="Pending Earnings"><strong>{amount(data.pendingEarnings ?? 0)} ETB</strong>
-              <p className="fine-print">Agreed UGC payments awaiting verified Go Live.</p></Section>
+</Section>
               <Section title="Paid Out"><strong>{amount(data.paidOut ?? 0)} ETB</strong><p className="fine-print">Confirmed external payouts.</p></Section></div>
             <Section title="Payout Destination"><PayoutDestinationForm endpoint="/creator/payout-destination" /></Section>
             <Section title="Transaction History" action={<Currency />}>

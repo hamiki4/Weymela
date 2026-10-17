@@ -75,17 +75,19 @@ public sealed record BusinessPromotionContentReviewCard(Guid SubmissionId, strin
     string? Provider, string? ContentReference, int RevisionNumber, DateTime SubmittedAtUtc,
     string ReviewStatus, string? Feedback, DateTime? ReviewedAtUtc, string? ReviewMediaUrl = null,
     Guid? CreatorAllocationId = null, Guid? PromotionId = null, string? WatchUrl = null,
-    string? CreatorProfileUrl = null);
+    string? CreatorProfileUrl = null, PublicationStatusView? Publication = null);
 public sealed record PrivateReviewMediaInput(string StorageKey, string ContentType, long Length,
     string Sha256, string OriginalFileName);
 public sealed record PublicationInput(string Provider, string ExternalContentId, Guid CreatorSocialProfileId);
 public sealed record PublicationStatusView(Guid Id, string Provider, string ExternalContentId,
     string Status, string VerificationLabel, DateTime RequestedAtUtc, DateTime? VerifiedAtUtc,
-    DateTime? WentLiveAtUtc, string? WatchUrl, string? VerificationCode = null);
+    DateTime? WentLiveAtUtc, string? WatchUrl, string? VerificationCode = null, DateTime? GoLiveRequestedAtUtc = null,
+    DateTime? ExpiresAtUtc = null, int? RemainingDays = null, string? VerificationMethod = null);
 public sealed record AdminPublicationReviewCard(Guid Id, string Creator, string Business, string Work,
     string WorkType, string Provider, string ExternalContentId, string SocialProfileUrl,
-    string Status, DateTime RequestedAtUtc, string WatchUrl, DateTime? WentLiveAtUtc = null);
-public sealed record AdminPublicationReviewInput(string Action, string? EvidenceReference, long? BaselineViews);
+    string Status, DateTime RequestedAtUtc, string WatchUrl, DateTime? WentLiveAtUtc = null,
+    string? ApprovedMediaUrl = null, string? ApprovedWatchUrl = null, string? ApprovedMediaContentType = null, string? VerificationMethod = null);
+public sealed record AdminPublicationReviewInput(string Action, string? EvidenceReference, long? BaselineViews, bool EvidenceChecked = false);
 public sealed record EarningItem(Guid Id, string Campaign, string Source, decimal Amount, DateTime AtUtc,
     string? Business = null, string? SourceType = null, string Status = "Earned");
 public sealed record PayoutItem(Guid Id, string Kind, string Name, decimal Amount, decimal Threshold, string Status,
@@ -218,7 +220,7 @@ public sealed record CreateUgcInput(string Title, string? Slogan, string Content
     decimal? CustomerOfferFundedAllocation = null, string? CustomerFacingSlogan = null,
     DateTime? CustomerOfferStartsAtUtc = null, DateTime? CustomerOfferEndsAtUtc = null,
     IReadOnlyList<UgcPlatformCapacityInput>? PlatformCapacities = null,
-    DateTime? ApplicationClosesAtUtc = null);
+    DateTime? ApplicationClosesAtUtc = null, string DeliverableType = "PublicSocialVideo");
 public sealed record UgcReviewInput(string? Reason);
 public sealed record UgcSubmissionInput(string SubmissionUrl);
 public sealed record UgcRevisionInput(string? Slogan, string Instructions, IReadOnlyList<string>? Resources,
@@ -250,7 +252,7 @@ public sealed record UgcCard(Guid Id, Guid BusinessId, string Business, string T
     IReadOnlyList<UgcPlatformCapacityView>? PlatformCapacities = null,
     IReadOnlyList<UgcEligibleSocialProfile>? EligibleSocialProfiles = null,
     DateTime? ApplicationClosesAtUtc = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? CustomerOfferVersion = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? CustomerOfferVersion = null, string DeliverableType = "PublicSocialVideo", int? PromotionLiveDurationDays = null);
 public sealed record UgcRequestView(Guid Id, Guid OpportunityId, Guid CreatorId, string Creator,
     string Status, DateTime RequestedAtUtc, string? RejectionReason, long? CreatorNumber = null,
     CreatorSocialProfileView? SocialProfile = null);
@@ -261,7 +263,8 @@ public sealed record UgcAssignmentView(Guid Id, Guid OpportunityId, string Oppor
     string? Feedback, string? SubmissionUrl, bool ProductProvided = false, bool CreatorMustPurchase = false, long? CreatorNumber = null,
     int? ContentRevisionNumber = null, string? ReviewMediaUrl = null, PublicationStatusView? Publication = null,
     string? SelectedPlatform = null, string? SelectedSocialProfileUrl = null,
-    Guid? SelectedSocialProfileId = null, string? ReviewMediaContentType = null, string? WatchUrl = null);
+    Guid? SelectedSocialProfileId = null, string? ReviewMediaContentType = null, string? WatchUrl = null,
+    string DeliverableType = "PublicSocialVideo", DateTime? CompletedAtUtc = null, string? DownloadUrl = null);
 public sealed record UgcRevisionView(int RevisionNumber, bool IsMaterial, DateTime CreatedAtUtc, string SnapshotJson);
 public sealed record UgcDetail(UgcCard Opportunity, string Instructions, IReadOnlyList<string> Resources,
     bool ProductProvided, bool CreatorMustPurchase, string? UsageRights, int CurrentRevision,

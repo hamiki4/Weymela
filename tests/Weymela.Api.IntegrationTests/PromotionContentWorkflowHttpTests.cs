@@ -112,7 +112,7 @@ public sealed class PromotionContentWorkflowHttpTests(PostgresFixture postgres)
         var offers = (await customer.GetJson("/api/customer/offers")).AsArray();
         var customerOffer = offers.Single(row => row!["id"]!.GetValue<string>() == allocationId)!;
         Assert.Equal(30, customerOffer["remainingDays"]!.GetValue<int>());
-        Assert.Equal($"https://www.tiktok.com/@creator/video/{publicPost}", customerOffer["watchUrl"]!.GetValue<string>());
+        Assert.Equal($"https://www.tiktok.com/player/v1/{publicPost}", customerOffer["watchUrl"]!.GetValue<string>());
         var json = customerOffer.ToJsonString();
         Assert.DoesNotContain("creatorId", json);
         Assert.DoesNotContain("creatorAllocationId", json);

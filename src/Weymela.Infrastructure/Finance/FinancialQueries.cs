@@ -79,7 +79,10 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
         var now = clock.GetUtcNow().UtcDateTime;
         var eligibility = new CustomerOfferEligibility(db, access, clock);
         var campaigns = await db.Promotions.AsNoTracking().Include(x => x.Allocations)
-            .Where(x => x.PromotionType == PromotionType.ViewPlusCommission && x.Status == PromotionStatus.Active && x.StartDateUtc <= now && x.EndDateUtc > now).ToListAsync(ct);
+            .Where(x => x.PromotionType == PromotionType.ViewPlusCommission && x.Status == PromotionStatus.Active && x.StartDateUtc <= now && (x.EndDateUtc > now
+                || db.CreatorPublicationVerifications.Any(v => v.Status == PublicationVerificationStatus.Verified && v.WentLiveAtUtc != null
+                    && v.EndedAtUtc == null && v.ExpiresAtUtc > now && v.LiveDurationDays != null
+                    && db.CreatorAllocations.Any(a => a.Id == v.CreatorAllocationId && a.PromotionId == x.Id)))).ToListAsync(ct);
         var result = new List<CustomerOffer>();
         foreach(var p in campaigns)
         {

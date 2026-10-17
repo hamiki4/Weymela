@@ -22,7 +22,8 @@ export function AdminMore() {
     ["Accounts", [["Profile Requests", "/admin/role-enrollments"],
       ["Customers", "/admin/operations/customers"], ["Creators", "/admin/operations/creators"],
       ["Businesses", "/admin/operations/businesses"]]],
-    ["Promotions", [["Campaigns", "/admin/campaigns"], ["UGC", "/admin/ugc"]]],
+    ["Promotions", [["Campaigns", "/admin/campaigns"], ["UGC", "/admin/ugc"],
+      ["Publication Verification", "/admin/publications"]]],
     ["Management", [["Social Review", "/admin/social-profiles"]]],
   ];
   return <div className="admin-more-page">

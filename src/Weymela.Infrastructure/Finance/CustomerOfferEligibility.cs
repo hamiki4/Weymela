@@ -23,8 +23,7 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
         if (promotion.PromotionType != PromotionType.ViewPlusCommission)
             throw Unavailable();
         var now = clock.GetUtcNow().UtcDateTime;
-        try { VerifiedViewService.EnsureCampaignActive(promotion, now); }
-        catch (ApplicationFailure ex) { throw Unavailable(ex); }
+        if (promotion.Status != PromotionStatus.Active || now < promotion.StartDateUtc) throw Unavailable();
         await access.EnsureBusinessAsync(promotion.BusinessId, ct);
         if (allocation.PromotionId != promotion.Id || allocation.Status != CreatorAllocationStatus.Active
             || allocation.ActivatedAtUtc is null || allocation.RemainingAmount.Amount <= 0)
@@ -37,6 +36,8 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
                 && x.CreatorId == allocation.CreatorId && x.Status == ParticipationStatus.Active, ct);
         if (participation is null || !participation.IsLive(now, promotion.PromotionLiveDurationDays))
             throw Unavailable();
+        if (now >= promotion.EndDateUtc && !await PublicationLiveWindow.ContainsAsync(db, participation, now, ct))
+            throw Unavailable();
         var latest = await db.CreatorPromotionContentSubmissions.AsNoTracking()
             .Where(x => x.CreatorAllocationId == allocation.Id)
             .OrderByDescending(x => x.RevisionNumber).FirstOrDefaultAsync(ct);
@@ -45,8 +46,13 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
             || participation.ApprovedContentSubmissionId is null
                 && (latest.Provider != participation.Provider || latest.ContentReference != participation.ExternalContentId)
             || participation.CreatorSocialProfileId is not { } profileId
-            || allocation.CreatorSocialProfileId is not { } selected || profileId != selected
-            || PublicContentLink.Create(participation.Provider, participation.ExternalContentId) is null)
+            || allocation.CreatorSocialProfileId is not { } selected || profileId != selected)
+            throw Unavailable();
+        if (PublicContentLink.Create(participation.Provider, participation.ExternalContentId) is null
+            && !await db.CreatorPublicationVerifications.AnyAsync(x => x.CreatorAllocationId == allocation.Id
+                && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc == participation.WentLiveAtUtc
+                && x.CreatorSocialProfileId == profileId && x.Provider == participation.Provider && x.ExternalContentId == participation.ExternalContentId
+                && x.CanonicalUrl != null && x.EndedAtUtc == null && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now), ct))
             throw Unavailable();
         var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == profileId && x.CreatorId == allocation.CreatorId, ct);
@@ -103,8 +109,8 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
             && x.CreatorId == assignment.CreatorId && x.CreatorSocialProfileId == request.VerifiedSocialProfileId
             && x.Provider == request.SelectedPlatform.Value.ToString()
             && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc != null
-            && x.EndedAtUtc == null, ct);
-        if (publication is null || PublicContentLink.Create(publication.Provider, publication.ExternalContentId) is null)
+            && x.EndedAtUtc == null && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > clock.GetUtcNow().UtcDateTime), ct);
+        if (publication is null || (publication.CanonicalUrl ?? PublicContentLink.Create(publication.Provider, publication.ExternalContentId)) is null)
             throw Unavailable();
         return new(assignment, publication);
     }

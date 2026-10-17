@@ -77,6 +77,8 @@ function CreateCampaignForm({
   const set = (name: keyof typeof form, value: string) => setForm(current => ({ ...current, [name]: value }));
   return <><PageHeader title="Create Promotion" compact /><Resource resource={pricing}>{data => {
     const price = data.rows.find(row => promotionTypeCode(row.type) === type); if (!price) return <Notice error>Promotion pricing is unavailable.</Notice>;
+    if (!data.promotionLiveDurationDays) return <Notice error>Ask Platform Admin to set campaign duration.</Notice>;
+    const durationDays = data.promotionLiveDurationDays;
     const budget = Number(form.campaignBudget) || 0; const shortfall = Math.max(0, budget - wallet.available);
     const validDates = Boolean(
       form.applicationCloses &&
@@ -88,7 +90,7 @@ function CreateCampaignForm({
       return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
     };
     return <div className="content-grid form-layout"><Section title="Promotion details">
-      {wallet.available === 0 && <Notice>You can save now. <Link to="/business/wallet">Add Funds</Link> before publishing.</Notice>}
+      {wallet.available === 0 && budget === 0 && <Notice>You can save now. <Link to="/business/wallet">Add Funds</Link> before publishing.</Notice>}
       <form className="form-grid" onSubmit={event => { event.preventDefault(); if (!validDates || platforms.length === 0) return;
         const publish = ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "publish";
         if (publish && shortfall > 0) return;
@@ -97,7 +99,7 @@ function CreateCampaignForm({
           title: form.title, description: form.description.trim(), slogan: null, location: null, resources: [], type, campaignBudget: budget,
           requirements: null, category: null, region: form.region || null,
           minimumVerifiedFollowers: null,
-          startUtc: new Date().toISOString(), endUtc: new Date(new Date(dueUtc).getTime() + 30 * 86400000).toISOString(),
+          startUtc: new Date().toISOString(), endUtc: new Date(new Date(dueUtc).getTime() + durationDays * 86400000).toISOString(),
           applicationClosesAtUtc: endOfLocalDayUtc(form.applicationCloses), contentDueAtUtc: dueUtc, platforms,
         }, `${key}:save`);
         if (publish) {

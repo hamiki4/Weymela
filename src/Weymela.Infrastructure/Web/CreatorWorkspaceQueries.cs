@@ -135,10 +135,15 @@ public sealed partial class WorkspaceQueries
         var entries=await db.CreatorEarningEntries.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).OrderByDescending(x=>x.CreatedAtUtc).ToListAsync(ct);
         var corrections=await db.UgcPaymentCorrections.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId).ToListAsync(ct);
         var correctedIds=corrections.Select(x=>x.OriginalEarningEntryId).ToHashSet();
-        var publishedAssignments=await db.CreatorPublicationVerifications.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId
-            && x.UgcAssignmentId!=null && x.WentLiveAtUtc!=null).Select(x=>x.UgcAssignmentId!.Value).ToListAsync(ct);
+        var earnedUgcAssignments=await db.CreatorPublicationVerifications.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId
+            && x.UgcAssignmentId!=null && x.WentLiveAtUtc!=null).Select(x=>x.UgcAssignmentId!.Value)
+            .Concat(db.UgcAssignments.AsNoTracking().Where(a => a.CreatorId == actor.CreatorId && a.Status == UgcAssignmentStatus.Approved
+                && a.CompletedAtUtc != null && db.UgcOpportunities.Any(o => o.Id == a.UgcOpportunityId && o.DeliverableType == UgcDeliverableType.DirectVideoDelivery)
+                && db.CreatorEarningEntries.Any(e => e.UgcAssignmentId == a.Id && e.Source == EarningSource.Ugc
+                    && !db.UgcPaymentCorrections.Any(c => c.OriginalEarningEntryId == e.Id))).Select(a => a.Id))
+            .Distinct().ToListAsync(ct);
         var pending=(await db.UgcAssignments.AsNoTracking().Where(x=>x.CreatorId==actor.CreatorId && x.Status!=UgcAssignmentStatus.Rejected
-            && !publishedAssignments.Contains(x.Id)).Select(x=>x.CreatorPayment).ToListAsync(ct)).Sum(x=>x.Amount);
+            && !earnedUgcAssignments.Contains(x.Id)).Select(x=>x.CreatorPayment).ToListAsync(ct)).Sum(x=>x.Amount);
         var promotionIds=entries.Where(x=>x.PromotionId is not null).Select(x=>x.PromotionId!.Value).Distinct().ToArray();
         var promotions=await db.Promotions.AsNoTracking().Where(x=>promotionIds.Contains(x.Id))
             .ToDictionaryAsync(x=>x.Id,x=>new{x.Title,x.BusinessId,x.PromotionType},ct);
@@ -162,7 +167,7 @@ public sealed partial class WorkspaceQueries
                 e.Source switch{EarningSource.ViewReward=>"View Earnings",EarningSource.SaleCommission=>"Sale Earnings",EarningSource.Ugc=>"UGC Earnings",_=>"Authorized adjustment"},
                 e.Amount.Amount,e.CreatedAtUtc,businessId is { } id?businessNames.GetValueOrDefault(id):null,
                 e.Source==EarningSource.Ugc?"UGC":promotion?.PromotionType==PromotionType.ViewOnly?"VIEW_ONLY":"VIEW_PLUS_SALE",
-                correctedIds.Contains(e.Id)?"Reversed":e.Source==EarningSource.Ugc && !publishedAssignments.Contains(e.UgcAssignmentId!.Value)?"Pending correction":"Earned"));
+                correctedIds.Contains(e.Id)?"Reversed":e.Source==EarningSource.Ugc && !earnedUgcAssignments.Contains(e.UgcAssignmentId!.Value)?"Pending correction":"Earned"));
         }
         foreach(var correction in corrections)
             history.Add(new(correction.Id,"UGC payment correction","Returned to campaign reserve",-correction.CreatorAmount.Amount,
@@ -172,7 +177,7 @@ public sealed partial class WorkspaceQueries
             .Select(x=>new PayoutItem(x.Id,"Creator","You",x.Amount.Amount,x.ThresholdUsed.Amount,x.Status.ToString(),x.EligibleAtUtc,x.PaidAtUtc,x.Reference)).ToArray();
         return new(available.Amount,threshold?.Amount,threshold is { } minimum ? Math.Max(0,minimum.Amount-available.Amount) : null,threshold is { } configured && available.Amount>=configured.Amount ? configured.Amount : 0,history,paid,
             entries.Where(x=>x.Source==EarningSource.ViewReward).Sum(x=>x.Amount.Amount),entries.Where(x=>x.Source==EarningSource.SaleCommission).Sum(x=>x.Amount.Amount),
-            entries.Where(x=>x.Source==EarningSource.Ugc && !correctedIds.Contains(x.Id) && publishedAssignments.Contains(x.UgcAssignmentId!.Value)).Sum(x=>x.Amount.Amount),
+            entries.Where(x=>x.Source==EarningSource.Ugc && !correctedIds.Contains(x.Id) && earnedUgcAssignments.Contains(x.UgcAssignmentId!.Value)).Sum(x=>x.Amount.Amount),
             pending,paid.Where(x=>x.Status=="Paid").Sum(x=>x.Amount));
     }
 }

@@ -15,10 +15,10 @@ export function CreatorGoLive({ path, publication, profileId, platform, reload }
   const profiles = useResource<{ id: string; platform: string; profileUrl: string }[]>("/creator/social-accounts", !profileId);
   const selected = profiles.data?.find(row => row.id === choice);
   const current = publication && !["Failed", "Expired"].includes(publication.status) ? publication : null;
-  if (current?.wentLiveAtUtc) return <div className="creator-live-days">
-    <strong>{current.remainingDays === 0 ? "Completed" : "Live"}</strong>
-    {current.remainingDays != null && <p>{current.remainingDays} days left</p>}
-    {current.expiresAtUtc && <p><span>Ends</span> <span data-no-translate>{dateTime(current.expiresAtUtc)}</span></p>}
+  if (publication?.wentLiveAtUtc) return <div className="creator-live-days">
+    <strong>{publication.status !== "Verified" ? "Action Required" : publication.remainingDays === 0 ? "Completed" : "Live"}</strong>
+    {publication.remainingDays != null && <p>{publication.remainingDays} days left</p>}
+    {publication.expiresAtUtc && <p><span>Ends</span> <span data-no-translate>{dateTime(publication.expiresAtUtc)}</span></p>}
   </div>;
   if (current?.status === "VerificationPending" && current.goLiveRequestedAtUtc)
     return <Notice>Awaiting Review</Notice>;

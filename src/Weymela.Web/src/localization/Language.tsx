@@ -16,6 +16,8 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Fixed UGC payment": "ቋሚ የUGC ክፍያ",
+  "Ask Platform Admin to set campaign duration.": "የማስተዋወቂያ ቆይታን እንዲያዘጋጅ የመድረኩን አስተዳዳሪ ይጠይቁ።",
   "Ends": "ያበቃል",
   "Observed public views": "በይፋ የታዩ እይታዎች",
   "Awaiting Approval": "ማጽደቅን በመጠባበቅ ላይ",

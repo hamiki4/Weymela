@@ -45,3 +45,15 @@ it("distinguishes unread and read notification cards for title and message styli
   expect(screen.getByText("Review this video").closest("article")).toHaveAttribute("data-unread", "true");
   expect(screen.getByText("Earlier work").closest("article")).toHaveAttribute("data-unread", "false");
 });
+
+it("never offers a second launch for a previously live publication requiring attention", () => {
+  mockApi({});
+  render(<MemoryRouter><CreatorGoLive path="/creator/work/launch" profileId="owned" reload={() => {}} publication={{
+    id: "already-live", provider: "TikTok", externalContentId: "7412345678901234567", status: "Failed",
+    verificationLabel: "Action Required", requestedAtUtc: "2026-10-17T00:00:00Z", verifiedAtUtc: "2026-10-17T00:00:01Z",
+    wentLiveAtUtc: "2026-10-17T00:00:02Z", watchUrl: null, expiresAtUtc: "2026-11-16T00:00:02Z", remainingDays: 20,
+  }} /></MemoryRouter>);
+  expect(screen.getByText("Action Required")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Go Live" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Video Link")).not.toBeInTheDocument();
+});

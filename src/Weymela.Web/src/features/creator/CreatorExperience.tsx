@@ -597,16 +597,17 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
   const [linkError, setLinkError] = useState("");
   const status = item.row.status;
   const opportunity = detail.data?.opportunity;
+  const earned = assignment?.deliverableType === "DirectVideoDelivery" ? Boolean(assignment.completedAtUtc) : Boolean(assignment?.publication?.wentLiveAtUtc);
   return <article className="creator-promotion-row creator-work-row" data-notification-resource={item.row.id}>
     <div className="creator-work-main">
       <div className="creator-work-top">
         <div className="creator-work-copy"><small>{assignment?.business ?? opportunity?.business ?? "UGC"}</small>
           <h3>{assignment?.opportunity ?? opportunity?.title ?? "Promotion"}</h3>
         </div>
-        <CreatorStatus status={status} label={status === "Approved" ? assignment?.completedAtUtc ? assignment.deliverableType === "DirectVideoDelivery" ? "Completed" : "Live" : "Approved" : undefined} />
+        <CreatorStatus status={status} label={status === "Approved" ? earned ? assignment?.deliverableType === "DirectVideoDelivery" ? "Completed" : assignment?.publication?.verificationLabel ?? "Completed" : "Approved" : undefined} />
       </div>
       <p className="creator-work-type">{opportunity?.customerOfferEnabled ? "UGC + Sale" : "UGC"}</p>
-      {assignment && <p className="creator-work-summary">{assignment.completedAtUtc ? "Earned" : "Pending earnings"} {amount(assignment.creatorPayment)} ETB · Due {date(assignment.dueDateUtc)}</p>}
+      {assignment && <p className="creator-work-summary">{earned ? "Earned" : "Pending earnings"} {amount(assignment.creatorPayment)} ETB · Due {date(assignment.dueDateUtc)}</p>}
       {request && <p className="creator-work-summary">Request {status.toLowerCase()}</p>}
       {detail.error && <div className="creator-work-detail-error"><span>Promotion details unavailable.</span><Button variant="secondary" onClick={detail.reload}>Retry</Button></div>}
       {assignment ? <details className="creator-work-disclosure" open={assignment.status === "Approved" && !assignment.completedAtUtc}>
@@ -664,8 +665,6 @@ function UgcWorkCard({ item, onSubmitted }: { item: Extract<CreatorWorkItem, { k
       {assignment?.revisionAcceptanceRequired && <span>Review updated requirements with the Business before submitting</span>}
       {assignment?.status === "ChangesRequested" && <span>Submit the requested revision</span>}
       {assignment?.status === "Approved" && !assignment.completedAtUtc && !assignment.publication && <span>Add Video Link</span>}
-      {assignment?.publication?.status === "VerificationPending" && <span>Awaiting Review</span>}
-      {assignment?.publication?.status === "Verified" && !assignment.publication.wentLiveAtUtc && <span>Approved</span>}
     </div>
   </article>;
 }

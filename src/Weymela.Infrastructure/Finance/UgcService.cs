@@ -889,7 +889,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         x.ApprovedCreatorCount, includeBusinessFinancials ? x.RequiredFunding.Amount : null,
         includeBusinessFinancials ? x.ReservedFunding.Amount : null, includeBusinessFinancials ? x.UsedFunding.Amount : null, x.DueDateUtc,
         x.Location, PostingRequirements(x).Select(p => new UgcPlatformRequirementView(p.Platform.ToString(), p.Format, p.MinimumAudience)).ToArray(), requestStatus, x.Version,
-        offer is { Status: UgcCustomerOfferStatus.Active or UgcCustomerOfferStatus.Exhausted },
+        offer is not null,
         offer?.CustomerDiscountPercent,
         includeBusinessFinancials ? offer?.FundedLimit.Amount : null,
         includeBusinessFinancials ? offer?.RemainingFunding.Amount : null,

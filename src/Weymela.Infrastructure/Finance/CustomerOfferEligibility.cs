@@ -23,8 +23,7 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
         if (promotion.PromotionType != PromotionType.ViewPlusCommission)
             throw Unavailable();
         var now = clock.GetUtcNow().UtcDateTime;
-        try { VerifiedViewService.EnsureCampaignActive(promotion, now); }
-        catch (ApplicationFailure ex) { throw Unavailable(ex); }
+        if (promotion.Status != PromotionStatus.Active || now < promotion.StartDateUtc) throw Unavailable();
         await access.EnsureBusinessAsync(promotion.BusinessId, ct);
         if (allocation.PromotionId != promotion.Id || allocation.Status != CreatorAllocationStatus.Active
             || allocation.ActivatedAtUtc is null || allocation.RemainingAmount.Amount <= 0)
@@ -36,6 +35,8 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
             .SingleOrDefaultAsync(x => x.CreatorAllocationId == allocation.Id
                 && x.CreatorId == allocation.CreatorId && x.Status == ParticipationStatus.Active, ct);
         if (participation is null || !participation.IsLive(now, promotion.PromotionLiveDurationDays))
+            throw Unavailable();
+        if (now >= promotion.EndDateUtc && !await PublicationLiveWindow.ContainsAsync(db, participation, now, ct))
             throw Unavailable();
         var latest = await db.CreatorPromotionContentSubmissions.AsNoTracking()
             .Where(x => x.CreatorAllocationId == allocation.Id)

@@ -1201,6 +1201,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var terms = sale ? SalesInput(1) with { CustomerOfferEnabled = true, CustomerDiscountPercent = 4,
             CustomerOfferFundedAllocation = 1000, CustomerOfferStartsAtUtc = Now, CustomerOfferEndsAtUtc = Now.AddDays(60) } : Input(1);
         var id = await service.CreateAsync(state.Business, terms, "launch-create", default);
+        if (sale) Assert.True((await service.DetailAsync(state.Business, id, default)).Opportunity.CustomerOfferEnabled);
         await service.PublishAsync(state.Business, id, 0, "launch-publish", default);
         var request = sale ? await RequestForTikTok(service, db, state, id, "launch-request") : await service.RequestAsync(state.Creator, id, "launch-request", default);
         var assignment = await service.ReviewRequestAsync(state.Business, request, true, null, "launch-approve", default);
@@ -1257,12 +1258,19 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         await service.SubmitPrivateAsync(state.Creator, assignment,
             new("m_" + new string('a',64), "video/mp4", 100, new string('a',64), "final.mp4"), "direct-file", default);
         Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+        var workspace = new WorkspaceQueries(db, new TestDirectory(), new FixedTime(Now));
+        var pending = await workspace.EarningsAsync(state.Creator, default);
+        Assert.Equal(0m, pending.AvailableEarnings); Assert.Equal(450m, pending.PendingEarnings);
         await service.ReviewSubmissionAsync(state.Business, assignment, "approve", null, "direct-accept", default);
         await service.ReviewSubmissionAsync(state.Business, assignment, "approve", null, "direct-accept", default);
         db.ChangeTracker.Clear();
         Assert.Empty(await db.CreatorPublicationVerifications.ToListAsync());
         Assert.Single(await db.CreatorEarningEntries.ToListAsync());
         Assert.Equal(450m, (await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
+        var earned = await workspace.EarningsAsync(state.Creator, default);
+        Assert.Equal(450m, earned.AvailableEarnings); Assert.Equal(450m, earned.UgcEarnings); Assert.Equal(0m, earned.PendingEarnings);
+        Assert.Equal("Earned", Assert.Single(earned.History).Status);
+        Assert.Equal(450m, (await CreatorEarnedBalance.AvailableAsync(db, state.Creator.CreatorId!.Value, default)).Amount);
         Assert.Equal(UgcOpportunityStatus.Completed, (await db.UgcOpportunities.SingleAsync()).Status);
         var row = Assert.Single((await service.DetailAsync(state.Business, id, default)).Assignments);
         Assert.NotNull(row.DownloadUrl); Assert.Equal("DirectVideoDelivery", row.DeliverableType);

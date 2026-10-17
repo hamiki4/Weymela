@@ -23,13 +23,18 @@ public sealed partial class WorkspaceQueries
             && allocationIds.Contains(x.CreatorAllocationId.Value)).OrderByDescending(x => x.RequestedAtUtc).ToListAsync(ct);
         foreach (var campaign in campaigns)
         {
-            var closed = campaign.EndUtc <= Now || campaign.Status is "Completed" or "Ended" or "Cancelled";
+            var campaignAllocations = allocations.Where(x => x.PromotionId == campaign.Id).Select(x => x.Id).ToHashSet();
+            var liveEnd = publications.Where(x => x.CreatorAllocationId is { } id && campaignAllocations.Contains(id)
+                && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc is not null && x.EndedAtUtc is null && x.ExpiresAtUtc > Now)
+                .Select(x => x.ExpiresAtUtc).DefaultIfEmpty().Max();
+            var effectiveEnd = liveEnd > campaign.EndUtc ? liveEnd.Value : campaign.EndUtc;
+            var closed = effectiveEnd <= Now || campaign.Status is "Completed" or "Ended" or "Cancelled";
             var funding = !closed && (campaign.Status == "BudgetExhausted" || campaign.Remaining <= 0 && campaign.Status is not ("Draft" or "Funded"));
             var group = closed ? "Completed" : funding || campaign.Status is "Draft" or "Funded" ? "Pending" : "Active";
             items.Add(new("campaign-" + campaign.Id, campaign.Id, campaign.Id, campaign.Type, campaign.Title, group,
-                campaign.EndUtc <= Now ? "Expired" : funding ? "FundingRequired" : campaign.Status, campaign.CampaignBudget, campaign.Remaining, campaign.ContentDueAtUtc,
+                effectiveEnd <= Now ? "Expired" : funding ? "FundingRequired" : campaign.Status, campaign.CampaignBudget, campaign.Remaining, campaign.ContentDueAtUtc,
                 funding ? "Add Funds" : group == "Pending" ? "Complete setup" : "Manage campaign", $"/business/campaigns/{campaign.Id}",
-                RemainingDays: group == "Active" ? Math.Max(0, (int)Math.Ceiling((campaign.EndUtc - Now).TotalDays)) : null));
+                RemainingDays: group == "Active" ? Math.Max(0, (int)Math.Ceiling((effectiveEnd - Now).TotalDays)) : null));
             foreach (var application in applications.Where(x => x.PromotionId == campaign.Id))
                 items.Add(new("application-" + application.Id, application.Id, campaign.Id, "Creator application", campaign.Title,
                     "Pending", "Awaiting Business decision", 0, 0, campaign.ApplicationClosesAtUtc,

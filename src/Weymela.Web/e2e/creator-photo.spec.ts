@@ -71,9 +71,9 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   }
   expect(creatorCampaign).not.toBeNull();
   await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`, [
-    "Review unavailable: this TikTok link is invalid or unsupported.",
+    "Video unavailable.",
   ]);
-  await expect(page.getByRole("alert")).toHaveText("Review unavailable: this TikTok link is invalid or unsupported.");
+  await expect(page.getByRole("alert")).toHaveText("Video unavailable.");
   await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "Creator Applicants" })).toBeVisible();
   const applicants = page.locator("section.panel")
@@ -164,9 +164,9 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   await login(context, "business");
   expect((await context.request.get(businessPhoto)).status()).toBe(404);
   await open(page, `/business/campaigns/${creatorCampaign}?tab=applicants`, [
-    "Review unavailable: this TikTok link is invalid or unsupported.",
+    "Video unavailable.",
   ]);
-  await expect(page.getByRole("alert")).toHaveText("Review unavailable: this TikTok link is invalid or unsupported.");
+  await expect(page.getByRole("alert")).toHaveText("Video unavailable.");
   await expect(page.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
   const fallback = applicants.locator(".person:visible").filter({ hasText: "Bella" }).locator(".creator-photo-avatar");
   await expect(fallback).toHaveText("B");

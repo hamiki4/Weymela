@@ -160,15 +160,15 @@ export function BusinessUgcCard({ item, onChanged, initiallyEditing = false }: {
           }); }}>
             {editDetail && editDetail.opportunity.approvedCreators === 0 && <>
               <Field label="Promotion title" wide><input value={editTitle} onChange={event => setEditTitle(event.target.value)} maxLength={120} required /></Field>
-              <Field label="Content type"><select value={editContentType} onChange={event => setEditContentType(event.target.value as "Video" | "Photos")}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
+              <Field label="Content type"><select disabled={item.deliverableType === "DirectVideoDelivery"} value={editContentType} onChange={event => setEditContentType(event.target.value as "Video" | "Photos")}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
               <Field label="Creator payment"><input type="number" min="0.01" step="0.01" value={editPayment} onChange={event => setEditPayment(event.target.value)} required /></Field>
               <Field label="Creators needed"><input type="number" min="1" max="100" step="1" value={editCreators} onChange={event => setEditCreators(event.target.value)} required /></Field>
               <Field label="Application closes"><input type="datetime-local" value={editCloses} onChange={event => setEditCloses(event.target.value)} required /></Field>
               <Field label="Content due"><input type="datetime-local" value={editDue} onChange={event => setEditDue(event.target.value)} required /></Field>
               <ProductArrangementChoice value={editArrangement} onChange={setEditArrangement} name="edit-product-arrangement" />
-              <fieldset className="field wide ugc-posting-choice"><legend>Publication platforms</legend><label><input type="radio" name="edit-ugc-posting" checked={!editMustPost} onChange={() => setEditMustPost(false)} /> Choose publication platform later</label><label><input type="radio" name="edit-ugc-posting" checked={editMustPost} onChange={() => setEditMustPost(true)} /> Set publication platforms now</label></fieldset>
+              {item.deliverableType !== "DirectVideoDelivery" && <fieldset className="field wide ugc-posting-choice"><legend>Publication platforms</legend><label><input type="radio" name="edit-ugc-posting" checked={!editMustPost} onChange={() => setEditMustPost(false)} /> Choose publication platform later</label><label><input type="radio" name="edit-ugc-posting" checked={editMustPost} onChange={() => setEditMustPost(true)} /> Set publication platforms now</label></fieldset>}
               {editMustPost && <PlatformCapacityPicker value={editPlatforms} onChange={setEditPlatforms} />}
-              <label className="field wide"><span><input type="checkbox" checked={editOffer} onChange={event => setEditOffer(event.target.checked)} /> Customer cashback sale</span></label>
+              {item.deliverableType !== "DirectVideoDelivery" && <label className="field wide"><span><input type="checkbox" checked={editOffer} onChange={event => setEditOffer(event.target.checked)} /> Customer cashback sale</span></label>}
               {editOffer && <><Field label="Customer Cashback %"><input type="number" min="0.01" max="100" step="0.0001" value={editDiscount} onChange={event => setEditDiscount(event.target.value)} required /></Field><Field label="Cashback funding"><input type="number" min="0.01" step="0.01" value={editOfferBudget} onChange={event => setEditOfferBudget(event.target.value)} required /></Field></>}
             </>}
             <Field label="Slogan"><input value={editSlogan} onChange={event => setEditSlogan(event.target.value)} maxLength={160} /></Field>
@@ -205,9 +205,10 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
     </div>}
     {row.status === "Approved" && !row.completedAtUtc && <Notice>Approved · payment pending</Notice>}
     {row.downloadUrl && <a className="button secondary" href={row.downloadUrl} download>Download approved video</a>}
+    {row.deliverableType !== "DirectVideoDelivery" && row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
     {row.completedAtUtc && row.deliverableType === "DirectVideoDelivery" && <Badge status="Completed" />}
     {row.publication?.status === "VerificationPending" && <PublicationEvidenceReview id={row.publication.id} watchUrl={row.publication.watchUrl} profileUrl={row.selectedSocialProfileUrl} needsViews={false} reload={reload} />}
-    {row.publication && <p className="fine-print">Publication: {row.publication.wentLiveAtUtc ? "Live" : row.publication.verificationLabel}</p>}
+    {row.publication && <p className="fine-print">Publication: {row.publication.verificationLabel}</p>}
     {action.error && <Notice error>{action.error}</Notice>}
     <ol className="collaboration-timeline" aria-label="Activity">
       <li>Business approved Creator</li>

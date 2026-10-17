@@ -43,7 +43,6 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
             await access.EnsureCreatorAsync(actor, allocation.CreatorId, token);
             var promotion = await db.Promotions.SingleAsync(x => x.Id == allocation.PromotionId, token);
             await access.EnsureBusinessAsync(promotion.BusinessId, token);
-            VerifiedViewService.EnsureCampaignActive(promotion, clock.GetUtcNow().UtcDateTime);
             var submission = await CurrentApprovedPromotionSubmission(allocation.Id, token);
             var profile = await EligibleSocialProfile(allocation.CreatorId, allocation.CreatorSocialProfileId,
                 input, token);
@@ -74,6 +73,7 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
                 operation.Remember(actor, "RequestPromotionPublication", key, fingerprint, activePublication.Id.ToString(), clock.GetUtcNow().UtcDateTime);
                 return activePublication.Id;
             }
+            VerifiedViewService.EnsureCampaignActive(promotion, clock.GetUtcNow().UtcDateTime);
             var publication = new CreatorPublicationVerification(allocation.CreatorId, profile.Id,
                 allocation.Id, null, submission.Id, null, input.Provider, input.ExternalContentId,
                 clock.GetUtcNow().UtcDateTime);
@@ -227,7 +227,6 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "Promotion not found.");
             await access.EnsureBusinessAsync(promotion.BusinessId, token);
             var now = clock.GetUtcNow().UtcDateTime;
-            VerifiedViewService.EnsureCampaignActive(promotion, now);
             var submission = await CurrentApprovedPromotionSubmission(allocation.Id, token);
             var publication = db.CreatorPublicationVerifications.Local.SingleOrDefault(x => x.CreatorAllocationId == allocation.Id && x.PromotionContentSubmissionId == submission.Id && x.Status == PublicationVerificationStatus.Verified)
                 ?? await db.CreatorPublicationVerifications.SingleOrDefaultAsync(x =>
@@ -256,6 +255,8 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
                 operation.Remember(actor, "GoLiveVerifiedPublication", key, fingerprint, existing.Id.ToString(), now);
                 return existing.Id;
             }
+            if (promotion.Status != PromotionStatus.Active || now < promotion.StartDateUtc || publication.RequestedAtUtc >= promotion.EndDateUtc)
+                throw new ApplicationFailure(FailureKind.Validation, "Promotion is not active.");
             if (allocation.Status != CreatorAllocationStatus.Active || allocation.RemainingAmount.Amount <= 0)
                 throw new ApplicationFailure(FailureKind.InsufficientFunds, "Creator Budget is not active and funded.");
             publication.GoLive(now, promotion.PromotionLiveDurationDays);
@@ -568,8 +569,8 @@ public sealed class CreatorPublicationService(WeymelaDbContext db, IVerifiedView
         if (platform == CreatorPlatform.TikTok && link.IsShareLink && linkResolver is not null)
         {
             try { link = SocialVideoLink.Parse(input.Provider, await linkResolver.ResolveAsync(link.Url, ct)); }
-            catch (ApplicationFailure error) when (error.Code is "ProviderUnavailable" or "PostInaccessible")
-            { /* Keep the safe share URL for an authorized reviewer. No ownership/access claim. */ }
+            catch (ApplicationFailure)
+            { /* The original URL passed the strict allowlist. Keep it for review when resolution fails; never follow an unsafe redirect or claim ownership/access. */ }
         }
         return (input with { ExternalContentId = link.ContentId }, link.Url);
     }

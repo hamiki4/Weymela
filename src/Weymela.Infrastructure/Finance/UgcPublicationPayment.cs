@@ -22,7 +22,7 @@ internal static class UgcPublicationPayment
         UgcOpportunity opportunity, UgcSubmission submission, string key, DateTime now, CancellationToken ct)
     {
         if (opportunity.DeliverableType != UgcDeliverableType.DirectVideoDelivery
-            || opportunity.ContentType != UgcContentType.Video || assignment.Status != UgcAssignmentStatus.Approved
+            || opportunity.ContentType != UgcContentType.Video || assignment.Status != UgcAssignmentStatus.Approved || assignment.RevisionAcceptanceRequired
             || submission.UgcAssignmentId != assignment.Id || submission.Status != UgcAssignmentStatus.Approved
             || submission.ReviewMediaAssetId is null || submission.ReviewedByUserId != actor.UserId
             || await db.UgcCustomerOffers.AnyAsync(x => x.UgcOpportunityId == opportunity.Id, ct))

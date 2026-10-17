@@ -27,6 +27,10 @@ with zipfile.ZipFile(bundle) as archive:
     packaged = json.loads(archive.read('base/assets/public/android-release.json'))
     assert packaged['firebaseProjectId'] == 'weymela-production' and packaged['webImage'] == plan['webImage']
     assert archive.read('base/assets/public/v3-transport.js') == (root / 'v3-transport.js').read_bytes()
+    assert archive.read('base/assets/public/v3-media.js') == (root / 'v3-media.js').read_bytes()
+    dex = b''.join(archive.read(name) for name in names if name.startswith('base/dex/') and name.endswith('.dex'))
+    for adapter in ['ProductionMediaPolicy', 'PrivateMediaTransport', 'PrivateMediaWebViewClient', 'WeymelaMedia']:
+        assert ('Lcom/weymela/app/' + adapter + ';').encode() in dex, adapter + ' must be compiled into the client'
     cap = json.loads(archive.read('base/assets/capacitor.config.json'))
     assert cap['appId'] == plan['applicationId'] and 'url' not in cap.get('server', {})
     assert cap.get('loggingBehavior') == 'none' and cap['plugins']['CapacitorHttp']['enabled'] is False

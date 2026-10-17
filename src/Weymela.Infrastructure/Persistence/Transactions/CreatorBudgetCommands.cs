@@ -30,6 +30,10 @@ public sealed partial class FinancialCommands
             var fp = RequestFingerprint.Create(c.Actor.BusinessId.ToString()!, c.AllocationId.ToString(), RequestFingerprint.Amount(c.Amount));
             var prior = await Replay(c.Actor, "IncreaseAllocation", key, fp, token);
             if (prior is not null) return prior.Value;
+            var allocation = await db.CreatorAllocations.AsNoTracking().SingleAsync(x => x.Id == c.AllocationId,token);
+            var promotion = await db.Promotions.AsNoTracking().SingleAsync(x => x.Id == allocation.PromotionId,token);
+            var liveEnd = await db.CreatorPublicationVerifications.AsNoTracking().Where(x => x.CreatorAllocationId != null && db.CreatorAllocations.Any(a => a.Id == x.CreatorAllocationId && a.PromotionId == promotion.Id) && x.WentLiveAtUtc != null && x.EndedAtUtc == null).MaxAsync(x => x.ExpiresAtUtc,token);
+            if (c.Now >= (liveEnd ?? promotion.EndDateUtc)) throw new ApplicationFailure(FailureKind.Validation,"Renew this ended Promotion before adding funds.");
             await Participation.IncreaseAsync(c, token);
             var a = (await new CreatorAllocationRepository(db).GetAsync(c.AllocationId, token))!;
             var journal = Journal(c.Actor, "Allocation", c.Amount, "CampaignUnallocatedReserve", "CreatorAllocatedReserve", c.Now, key, a.PromotionId, a.CreatorId);

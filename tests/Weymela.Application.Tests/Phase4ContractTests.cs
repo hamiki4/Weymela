@@ -25,7 +25,7 @@ public sealed class Phase4ContractTests
     [Fact] public void Customer_history_projection_contains_only_customer_relevant_purchase_and_cashback()
     {
         Assert.Equal(new[]{"Source","Offer","Business","Creator","PurchaseAmount","CustomerPaidAmount","CashbackEarned","DiscountReceived","PurchasedAtUtc"},typeof(CustomerTransaction).GetProperties().Select(x=>x.Name));
-        Assert.Equal(new[]{"AvailableCashback","MinimumCashOut","RemainingToCashOut","Eligible","Status","PayoutHistory"},typeof(CustomerCashbackSummary).GetProperties().Select(x=>x.Name));
+        Assert.Equal(new[]{"AvailableCashback","MinimumCashOut","RemainingToCashOut","Eligible","Status","PayoutHistory","MonthlyPayoutEnabled"},typeof(CustomerCashbackSummary).GetProperties().Select(x=>x.Name));
     }
     [Fact] public void Creator_projection_contains_only_own_budget_views_and_earnings()
     { Assert.Equal(new[]{"PromotionId","Campaign","Type","YourBudget","BudgetRemaining","VerifiedViews","ViewEarnings","SaleCommissionEarnings","Status"},typeof(CreatorCampaignFinance).GetProperties().Select(x=>x.Name)); }

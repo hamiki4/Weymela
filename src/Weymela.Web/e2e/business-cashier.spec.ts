@@ -220,7 +220,7 @@ test("Checkout shows stable QR outcomes without exposing technical errors", asyn
   await expect(page.getByLabel("Total Purchase Amount", { exact: true })).toBeVisible();
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("25");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Payment recorded", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Completed", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Scan Another QR", exact: true }).click();
   await scanQr(page);
   await expect(page.getByRole("alert")).toHaveText("QR code already used");
@@ -244,7 +244,7 @@ test("Manual View + Sale rejects empty matches and records an eligible checkout 
   await viewAndSale.getByRole("radio").check();
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("25");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Payment recorded", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Completed", exact: true })).toBeVisible();
   await expect(page.locator("p").filter({ hasText: "Purchase total:" })).toHaveText("Purchase total: 25");
 });
 
@@ -284,7 +284,7 @@ test("Manual UGC requires the intended offer when multiple eligible offers exist
   expect(selectedOfferId).toBeTruthy();
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("100");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Payment recorded", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Completed", exact: true })).toBeVisible();
   const afterFirst = await apiJson<{ opportunity: { customerOfferRemaining?: number } }>(context, `/business/ugc/${first}`);
   const afterSecond = await apiJson<{ opportunity: { customerOfferRemaining?: number } }>(context, `/business/ugc/${second}`);
   expect(afterFirst.opportunity.customerOfferRemaining).toBe(beforeFirst.opportunity.customerOfferRemaining);
@@ -303,7 +303,8 @@ test("Cashier and Business recent checkout views stay scoped and safe", async ({
   await expect(page.locator("main")).not.toContainText("A little coffee. A great story.");
   await login(context, "business");
   await open(page, "/checkout");
-  await expect(page.locator("main")).toContainText("A little coffee. A great story.");
+  await expect(page.getByRole("columnheader",{name:"Creator",exact:true})).toBeVisible();
+  await expect(page.getByRole("columnheader",{name:"Cashier",exact:true})).toBeVisible();
   await expect(page.locator("main")).toContainText("Abc Checkout");
 });
 

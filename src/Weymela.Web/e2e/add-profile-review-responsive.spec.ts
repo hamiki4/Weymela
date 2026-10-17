@@ -87,7 +87,7 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
     const refreshed = await (await adminContext.request.get("/api/notifications")).json() as { items: { id: string; readAtUtc: string | null }[] };
     expect(refreshed.items.find(item => item.id === relatedNotice.id)?.readAtUtc).not.toBeNull();
     await open(admin, "/admin/operations");
-    await expect(admin.getByRole("link", { name: "Your notifications" })).toHaveCount(0);
+    await expect(admin.getByRole("link", { name: "Your notifications" })).toHaveAttribute("href","/notifications");
     await open(admin, "/admin/role-enrollments");
     await expect(admin).toHaveURL(/\/admin\/role-enrollments/);
     await expect(admin.getByText("https://www.instagram.com/hana/", { exact: true })).toHaveCount(0);
@@ -126,8 +126,8 @@ test("Add Profile forms, review, bell routes and switching remain usable on phon
   await open(page, "/customer/offers");
   await page.getByRole("link", { name: "Your notifications" }).click();
   await expect(page).toHaveURL(/\/notifications/);
-  await expect(page.getByRole("heading", { name: "Creator profile approved" })).toBeVisible();
-  await page.locator(".notification-item").filter({ hasText: "Creator profile approved" }).getByRole("link", { name: "Open" }).click();
+  await expect(page.getByRole("link", { name: "Creator profile approved" })).toBeVisible();
+  await page.locator(".notification-item").filter({ hasText: "Creator profile approved" }).getByRole("link", { name: "Creator profile approved" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
   await expect(page.getByRole("button", { name: /^Creator — Already added/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: /^Business — Already added/ })).toBeEnabled();

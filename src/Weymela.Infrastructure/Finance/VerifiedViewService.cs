@@ -79,7 +79,9 @@ public sealed class VerifiedViewService(WeymelaDbContext db, IVerifiedViewProvid
                 result.VerifiedAtUtc, result.EvidenceReference, Guid.NewGuid().ToString("N"), result.Count, false, participation.Id, true));
             op.Remember(actor, "GoLive", idempotencyKey, fp, participation.Id.ToString(), now);
             op.Audit(actor, "CreatorParticipationActivated", Guid.NewGuid(), now, p.Id, a.CreatorId);
-            op.Event("CreatorParticipationActivated", new { ParticipationId = participation.Id }, now);
+            op.Event("CreatorParticipationActivated", new { ParticipationId = participation.Id, CreatorId = a.CreatorId,
+                BusinessId = p.BusinessId, CampaignId = p.Id, WentLiveAtUtc = participation.WentLiveAtUtc,
+                PublicationReference = latest.ContentReference, latest.Provider }, now);
             return participation.Id;
         }, ct);
     }

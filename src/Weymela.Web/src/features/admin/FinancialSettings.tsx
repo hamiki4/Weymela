@@ -103,6 +103,13 @@ function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () =>
     <Section title="Payout Thresholds" description="Minimum to cash out"><div className="form-grid">{([["creatorThreshold", "Creator"], ["customerThreshold", "Customer"]] as const).map(([key, label]) => <Field key={key} label={label}>
       <input type="number" min="0.01" step="0.01" value={settings[key] ?? ""} onChange={event => update(key, event.target.value)} placeholder="Not configured" />
     </Field>)}</div></Section>
+    <Section title="Payout schedule">
+      <label className="check-line"><input type="checkbox" checked={settings.monthlyPayoutEnabled ?? false} onChange={event => set({ ...settings, monthlyPayoutEnabled: event.target.checked, monthlyPayoutDay: settings.monthlyPayoutDay ?? 1, monthlyPayoutEffectiveFromUtc: settings.monthlyPayoutEffectiveFromUtc ?? "2026-10-31T21:00:00Z" })} />Monthly payouts</label>
+      <Field label="Monthly Payout Day"><select value={settings.monthlyPayoutDay ?? 1} onChange={event => set({ ...settings, monthlyPayoutDay: Number(event.target.value), monthlyPayoutEffectiveFromUtc: settings.monthlyPayoutEffectiveFromUtc ?? "2026-10-31T21:00:00Z" })}>{Array.from({length:28},(_,i) => i+1).map(day => <option key={day} value={day}>{day}</option>)}</select></Field>
+      <Field label="Monthly effective date"><input type="date" value={settings.monthlyPayoutEffectiveFromUtc ? new Date(new Date(settings.monthlyPayoutEffectiveFromUtc).getTime()+10800000).toISOString().slice(0,10) : "2026-11-01"} onChange={event => set({ ...settings, monthlyPayoutDay: settings.monthlyPayoutDay ?? 1, monthlyPayoutEffectiveFromUtc: event.target.value ? new Date(`${event.target.value}T00:00:00+03:00`).toISOString() : null })} required={settings.monthlyPayoutEnabled === true} /></Field>
+      <label className="check-line"><input type="checkbox" checked={settings.ugcPayoutMinimumExempt ?? false} onChange={event => set({ ...settings, ugcPayoutMinimumExempt: event.target.checked })} />UGC: Cash out anytime</label>
+    </Section>
+    <Section title="Promotion alerts"><Field label="Low Promotion Balance Alert (ETB)"><input type="number" min="0" step="0.01" value={settings.lowPromotionBalanceAlert ?? ""} onChange={event => set({ ...settings, lowPromotionBalanceAlert: numeric(event.target.value) })} /></Field></Section>
     <Section title="Promotion live duration">
       <Field label="Promotion live duration"><input type="number" min="1" max="365" step="1" value={settings.promotionLiveDurationDays ?? ""} onChange={event => update("promotionLiveDurationDays", event.target.value)} placeholder="Not configured" /></Field>
       <p className="fine-print">Set by Weymela. Existing Promotions keep their saved duration.</p>
@@ -124,7 +131,7 @@ function SettingsForm({ data, reload }: { data: SettingsWorkspace; reload: () =>
       </div>
       {!valid && <Notice error>Check the configured pricing, percentages and positive payout minimums before saving.</Notice>}
       {action.error && <Notice error>{action.error}</Notice>}
-      <Button type="submit" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save Financial Settings"}</Button>
+      <Button type="submit" aria-label="Save Financial Settings" disabled={action.busy || !valid}>{action.busy ? "Saving…" : "Save"}</Button>
     </Section>
   </fieldset></form>;
 }
@@ -206,6 +213,8 @@ export function AdminFinancialSettings() {
                       Thresholds: Creator {amount(v.settings.creatorThreshold)}{" "}
                       / Customer {amount(v.settings.customerThreshold)}
                     </p>
+                    <p>Monthly: {v.settings.monthlyPayoutEnabled ? `Day ${v.settings.monthlyPayoutDay}` : "Off"} · {v.settings.monthlyPayoutEffectiveFromUtc ? dateTime(v.settings.monthlyPayoutEffectiveFromUtc) : "—"}</p>
+                    <p>UGC exemption: {v.settings.ugcPayoutMinimumExempt ? "On" : "Off"} · Low funds: {amount(v.settings.lowPromotionBalanceAlert)} ETB</p>
                     <p>Promotion live duration: {v.settings.promotionLiveDurationDays ?? "Not configured"} days</p>
                     <p>
                       Minimum Campaign Budgets: View Only{" "}

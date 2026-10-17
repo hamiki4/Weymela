@@ -45,12 +45,12 @@ RUN wget -O /tmp/weymela-libuuid-2.42.3-r1.apk \
     && apk add --no-cache --no-network /tmp/weymela-libuuid-2.42.3-r1.apk \
     && apk info --installed 'libuuid=2.42.3-r1' \
     && rm /tmp/weymela-libuuid-2.42.3-r1.apk \
-    && wget -O /tmp/weymela-libexpat-2.8.5-r0.apk \
-      https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk \
-    && printf '%s  %s\n' 2e56946bc495cbed9eb1ad70859a79cba9db6420016453e065a0628848b32c7e /tmp/weymela-libexpat-2.8.5-r0.apk | sha256sum -c - \
-    && apk add --no-cache --no-network /tmp/weymela-libexpat-2.8.5-r0.apk \
-    && apk info --installed 'libexpat=2.8.5-r0' \
-    && rm /tmp/weymela-libexpat-2.8.5-r0.apk \
+    && wget -O /tmp/weymela-libexpat-2.9.0-r0.apk \
+      https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/libexpat-2.9.0-r0.apk \
+    && printf '%s  %s\n' 32b127f31e0a919110a18a7f0bb3780d8fb66ba4d8d61b2d301d633f0e319d0e /tmp/weymela-libexpat-2.9.0-r0.apk | sha256sum -c - \
+    && apk add --no-cache --no-network /tmp/weymela-libexpat-2.9.0-r0.apk \
+    && apk info --installed 'libexpat=2.9.0-r0' \
+    && rm /tmp/weymela-libexpat-2.9.0-r0.apk \
     && wget -O /tmp/weymela-pcre2-10.49-r0.apk \
       https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/pcre2-10.49-r0.apk \
     && printf '%s  %s\n' 2919897914820f42a17a8d7d37df310d2dfad1c82ebe5f539cc5c765f916752a /tmp/weymela-pcre2-10.49-r0.apk | sha256sum -c - \

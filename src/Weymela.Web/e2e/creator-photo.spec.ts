@@ -116,9 +116,9 @@ test("Creator photo changes on Profile and is visible only through Business Crea
   await opportunity.getByRole("button", { name: "Request to Join" }).click();
   expect((await joined).ok()).toBeTruthy();
   await login(context, "business");
-  await open(page, "/business/campaigns");
+  await open(page, "/business/campaigns?tab=Active");
   const ugcCard = page.locator(".business-promotion-card").filter({ hasText: title });
-  await ugcCard.getByRole("link", { name: "Review application" }).click();
+  await ugcCard.getByRole("link", { name: "Manage" }).click();
   const creatorRequests = page.locator("section.panel")
     .filter({ has: page.getByRole("heading", { name: "Creator requests", exact: true }) });
   await rendered(creatorRequests.locator(".business-ugc-creator-row .creator-photo-avatar img"), 3);

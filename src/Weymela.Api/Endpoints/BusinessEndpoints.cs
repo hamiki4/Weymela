@@ -43,6 +43,8 @@ internal static class BusinessEndpoints
             EndpointSupport.Id(await commands.CreateAsync(EndpointSupport.Actor(c),input,EndpointSupport.Key(c),ct)));
         g.MapPost("/campaigns/{id:guid}/fund",async(Guid id,FundingInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.FundAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
+        g.MapPost("/campaigns/{id:guid}/add-funds",async(Guid id,AddPromotionFundsInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
+            EndpointSupport.Id(await commands.AddPromotionFundsAsync(EndpointSupport.Actor(c),id,input.Amount,input.CampaignVersion,input.WalletVersion,EndpointSupport.Key(c),ct)));
         g.MapPost("/campaigns/{id:guid}/publish",async(Guid id,VersionInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.PublishAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),false,ct)));
         g.MapPost("/promotions/{id:guid}/fund",async(Guid id,FundingInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>

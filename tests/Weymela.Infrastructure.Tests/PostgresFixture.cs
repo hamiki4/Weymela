@@ -71,12 +71,15 @@ public sealed record TestDatabase(string ConnectionString)
     }
 }
 
-// Only historical migration fixtures use this explicit pre-34 mapping.
+// Historical migration fixtures explicitly omit columns that their old schema lacks.
 public sealed class BeforeCreatorDeliveryModel(ModelCustomizerDependencies dependencies) : ModelCustomizer(dependencies)
 {
     public override void Customize(ModelBuilder model, DbContext context)
     {
         base.Customize(model, context);
+        model.Entity<Weymela.Infrastructure.Persistence.Records.FinancialConfigurationVersion>()
+            .Ignore(x => x.LowPromotionBalanceAlert).Ignore(x => x.MonthlyPayoutDay).Ignore(x => x.MonthlyPayoutEnabled)
+            .Ignore(x => x.MonthlyPayoutEffectiveFromUtc).Ignore(x => x.UgcPayoutMinimumExempt);
         model.Entity<Weymela.Domain.UgcOpportunity>().Ignore(x => x.DeliverableType).Ignore(x => x.PromotionLiveDurationDays);
         model.Entity<Weymela.Domain.CreatorPublicationVerification>().Ignore(x => x.ExpiresAtUtc).Ignore(x => x.LiveDurationDays).Ignore(x => x.GoLiveRequestedAtUtc);
     }

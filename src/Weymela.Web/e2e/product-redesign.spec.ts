@@ -341,14 +341,14 @@ test("Business visual review captures operational surfaces at approved widths", 
   await open(page, "/business/campaigns?tab=Active");
   const promotionsHeading = page.locator("main h1").filter({ hasText: /^Promotions$/ });
   await expect(promotionsHeading).toHaveCount(1);
-  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC campaign" }) })).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC Only" }) })).toHaveCount(1);
   await layout(page);
   await screenshot(page, "business-promotions-320");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "/business/campaigns?tab=Active");
   await expect(promotionsHeading).toHaveCount(1);
-  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC campaign" }) })).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC Only" }) })).toHaveCount(1);
   await layout(page);
   await screenshot(page, "business-promotions-390");
 
@@ -399,7 +399,7 @@ test("Business visual review captures operational surfaces at approved widths", 
   await screenshot(page, "business-home-1366");
 
   await open(page, "/business/campaigns?tab=Active");
-  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC campaign" }) })).toHaveCount(1);
+  await expect(page.locator(".business-promotion-card").filter({ hasText: visualUgc.title }).filter({ has: page.locator(".card-eyebrow", { hasText: "UGC Only" }) })).toHaveCount(1);
   await layout(page);
   await screenshot(page, "business-promotions-1366");
 

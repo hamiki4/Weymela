@@ -1,9 +1,10 @@
 import { AdminSearch, AdminPager, useAdminSearch } from "./AdminSearch";
 import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { notifyAdminActionCountsChanged, post, privateAsset, useAction, useResource } from "../../api/client";
 import type { AdminReport, AdminUgcFinance, AdminWallets } from "../../api/types";
 import { Badge, Button, DataTable, Dialog, Empty, Field, MoneyInput, Notice, PageHeader, Resource, Section } from "../../ui/components";
-import { amount, count, date } from "../../ui/format";
+import { amount, count, date, dateTime } from "../../ui/format";
 
 type Deposit = { id: string; businessId: string; business: string; amount: number; status: string; hasReceipt: boolean; submittedAtUtc: string; version: number; destinationNameSnapshot: string | null; destinationAccountSnapshot: string | null };
 const br = (value: number) => `${amount(value)} Br`;
@@ -18,7 +19,7 @@ export function AdminWalletsPage() {
   const [message, setMessage] = useState("");
   return <div className="admin-page"><PageHeader title="Wallets" compact /><AdminSearch value={walletSearch} label="Search wallets or account owners" />{message && <Notice>{message}</Notice>}
     <DepositReviewSection onReviewed={wallets.reload} />
-    <Section title="Business wallets"><Resource resource={wallets}>{data => <DataTable rows={data.businesses} rowKey={row => row.businessId} label="Business wallets" columns={[
+    <Section title="Business wallets"><Resource resource={wallets}>{data => <DataTable compact rows={data.businesses} rowKey={row => row.businessId} label="Business wallets" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> },
       { label: "Total", cell: row => br(row.totalBalance), numeric: true },
       { label: "Available", cell: row => br(row.available), numeric: true },
@@ -30,7 +31,7 @@ export function AdminWalletsPage() {
       { label: "Status", cell: row => <Badge status={row.status} /> },
       { label: "Actions", cell: row => <Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Promotional Credit</Button> },
     ]} card={row => <div className="admin-mobile-row"><div className="admin-mobile-row-meta"><strong>{row.business}</strong><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Total</dt><dd>{br(row.totalBalance)}</dd></div><div><dt>Available</dt><dd>{br(row.available)}</dd></div><div><dt>Reserved</dt><dd>{br(row.reserved)}</dd></div><div><dt>Pending deposit</dt><dd>{br(row.pendingDeposit)}</dd></div><div><dt>View Only</dt><dd>{count(row.viewOnlyCount)}</dd></div><div><dt>View + Sale</dt><dd>{count(row.viewSaleCount)}</dd></div><div><dt>Last Deposit Via</dt><dd>{row.lastDepositVia ?? "—"}</dd></div></dl><div className="actions"><Button variant="secondary" onClick={() => setFund({ id: row.businessId, name: row.business })}>Promotional Credit</Button></div></div>} empty={<Empty title="No Business wallets" message="Business wallets appear after account activation." />} />}</Resource></Section>
-    <Section title="Active View / Sale promotions"><Resource resource={wallets}>{data => <DataTable rows={data.promotions} rowKey={row => row.id} label="Active View and Sale promotions" columns={[
+    <Section title="Active View / Sale promotions"><Resource resource={wallets}>{data => <DataTable compact rows={data.promotions} rowKey={row => row.id} label="Active View and Sale promotions" columns={[
       { label: "Business", cell: row => row.business }, { label: "Promotion", cell: row => <strong>{row.title}</strong> }, { label: "Type", cell: row => row.type },
       { label: "Budget", cell: row => br(row.budget), numeric: true }, { label: "Used", cell: row => br(row.used), numeric: true }, { label: "Remaining", cell: row => br(row.remaining), numeric: true },
       { label: "Views / Sales", cell: row => row.type === "View Only" ? `${count(row.verifiedViews)} views` : `${count(row.verifiedViews)} views · ${count(row.verifiedSales)} sales` }, { label: "Status", cell: row => <Badge status={row.status} /> },
@@ -85,7 +86,7 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
   return <Section title={`Deposit review · ${pending.length} pending`}>
     {message && <Notice>{message}</Notice>}
     <AdminSearch value={depositSearch} label="Search business or deposit..." statuses={["Pending", "Approved", "Rejected"]} types={["Telebirr", "CBE", "Bank of Abyssinia"]} dates />
-    <Resource resource={deposits}>{() => rows.length ? <DataTable rows={rows} rowKey={row => row.id} label="Deposits" columns={[
+    <Resource resource={deposits}>{() => rows.length ? <DataTable compact rows={rows} rowKey={row => row.id} label="Deposits" columns={[
       { label: "Business", cell: row => <strong>{row.business}</strong> }, { label: "Amount", cell: row => br(row.amount), numeric: true },
       { label: "Deposited To", cell: row => row.destinationNameSnapshot ?? "Legacy" }, { label: "Weymela Destination", cell: row => row.destinationAccountSnapshot ?? "—" },
       { label: "Receipt", cell: row => row.hasReceipt ? <Button variant="secondary" onClick={() => setSelected(row.id)}>View Receipt</Button> : "—" },
@@ -105,9 +106,25 @@ function DepositReviewSection({ onReviewed }: { onReviewed?: () => void }) {
 }
 
 export function AdminUgcPage() {
-  const ugcSearch = useAdminSearch("/admin/ugc/finance");
-  const resource = useResource<AdminUgcFinance[]>(ugcSearch.path);
-  return <div className="admin-page"><PageHeader title="UGC" compact /><Section title="UGC funding and activity"><AdminSearch value={ugcSearch} label="Search UGC, Business or Creator" statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} /><Resource resource={resource}>{rows => { const visible = rows; return visible.length ? <div className="admin-ugc-list" role="list" aria-label="UGC funding">{visible.map(row => <article key={row.id} role="listitem" className="admin-ugc-row"><div className="admin-ugc-heading"><div><strong>{row.title}</strong><small>{row.business} · {row.type}</small></div><Badge status={row.status} /></div><dl className="admin-mobile-facts"><div><dt>Budget</dt><dd>{br(row.budget)}</dd></div><div><dt>Fixed Creator pay</dt><dd>{br(row.creatorPayment)}</dd></div><div><dt>Used</dt><dd>{br(row.creatorUsed + row.offerUsed)}</dd></div><div><dt>Remaining funded</dt><dd>{br(row.remaining)}</dd></div>{row.customerDiscountPercent !== null && <><div><dt>Customer cashback</dt><dd>{amount(row.customerDiscountPercent)}%</dd></div><div><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></div></>}</dl></article>)}</div> : <Empty title="No matching UGC promotions" message="Business UGC promotions appear here." />; }}</Resource><AdminPager value={ugcSearch} count={resource.data?.length ?? 0} loading={resource.loading} /></Section></div>;
+  const [params] = useSearchParams();
+  const record = params.get("record");
+  const search = useAdminSearch("/admin/ugc/finance");
+  const resource = useResource<AdminUgcFinance[]>(record ? `/admin/ugc/finance?search=${encodeURIComponent(record)}` : search.path);
+  return <div className="admin-page"><PageHeader title="UGC" compact />
+    {record ? <Link to="/admin/ugc">All</Link> : <AdminSearch value={search} label="Search UGC, Business or Creator" statuses={["Draft","Open","InProgress","Completed","Cancelled"]} />}
+    <Section title="UGC"><Resource resource={resource}>{rows => <DataTable compact rows={rows} rowKey={row=>row.id} label="UGC funding" columns={[
+      {label:"Promotion",cell:row=><><strong data-no-translate>{row.title}</strong><small data-no-translate>{row.business}</small><small>{row.type}</small></>},
+      {label:"Budget",cell:row=>br(row.budget),numeric:true},
+      {label:"Fixed Creator pay",cell:row=>br(row.creatorPayment),numeric:true},
+      {label:"Payment",cell:row=><Badge status={row.paymentStatus ?? "Pending"} label={row.paymentStatus ?? "Pending"}/>},
+      {label:"Go Live Date",cell:row=>row.goLiveAtUtc ? dateTime(row.goLiveAtUtc) : "—"},
+      {label:"Used",cell:row=>br(row.creatorUsed+row.offerUsed),numeric:true},
+      {label:"Available",cell:row=>br(row.remaining),numeric:true},
+      {label:"Cashback",cell:row=>row.customerDiscountPercent==null?"—":<details><summary>{amount(row.customerDiscountPercent)}%</summary><dl><dt>Cashback funded</dt><dd>{br(row.discountUsed)}</dd><dt>Qualifying sales</dt><dd>{count(row.qualifyingSales)}</dd></dl></details>},
+      {label:"Status",cell:row=><span><Badge status={row.liveStatus ?? row.status} label={row.liveStatus ?? undefined}/>{row.lowFunds&&<small className="low-funds">Low funds</small>}</span>},
+    ]} empty={<Empty title="No matching UGC promotions"/>}/>}</Resource></Section>
+    {!record && <AdminPager value={search} count={resource.data?.length??0} loading={resource.loading}/>}
+  </div>;
 }
 
 type Range = "Today" | "Week" | "Month" | "Year" | "Custom";
@@ -135,9 +152,9 @@ export function AdminReportsPage() {
         ["Customer discounts", report.activity.customerDiscounts], ["Platform revenue", report.activity.platformRevenue],
         ["Creator payouts", report.activity.creatorPayouts], ["Customer payouts", report.activity.customerPayouts],
       ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{br(value as number)}</strong></div>)}</div></Section>
-      <Section title="Promotion summary"><DataTable rows={report.promotions} rowKey={row => row.type} label="Promotion summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Verified views", cell: row => count(row.verifiedViews) }, { label: "Verified sales", cell: row => count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Views</dt><dd>{count(row.verifiedViews)}</dd></div><div><dt>Sales</dt><dd>{count(row.verifiedSales)}</dd></div></dl></div>} empty={<Empty title="No promotion activity" message="No promotion activity in this period." />} /></Section>
-      <Section title="UGC summary"><DataTable rows={report.ugc} rowKey={row => row.type} label="UGC summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Creator payments", cell: row => br(row.creatorPayments), numeric: true }, { label: "Customer benefit", cell: row => row.type === "UGC Only" ? "—" : br(row.customerDiscounts), numeric: true }, { label: "Qualifying sales", cell: row => row.type === "UGC Only" ? "—" : count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Creator payments</dt><dd>{br(row.creatorPayments)}</dd></div>{row.type !== "UGC Only" && <><div><dt>Customer benefit</dt><dd>{br(row.customerDiscounts)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.verifiedSales)}</dd></div></>}</dl></div>} empty={<Empty title="No UGC activity" message="No UGC activity in this period." />} /><p className="admin-period-label">UGC spend is funded consumption across Creator deliveries and Customer offers. Creator payments and Customer benefits are shown separately.</p></Section>
-      <Section title="Purchase transactions"><DataTable rows={report.purchases ?? []} rowKey={row => row.id} label="Purchase transactions" columns={[
+      <Section title="Promotion summary"><DataTable compact rows={report.promotions} rowKey={row => row.type} label="Promotion summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Verified views", cell: row => count(row.verifiedViews) }, { label: "Verified sales", cell: row => count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Views</dt><dd>{count(row.verifiedViews)}</dd></div><div><dt>Sales</dt><dd>{count(row.verifiedSales)}</dd></div></dl></div>} empty={<Empty title="No promotion activity" message="No promotion activity in this period." />} /></Section>
+      <Section title="UGC summary"><DataTable compact rows={report.ugc} rowKey={row => row.type} label="UGC summary" columns={[{ label: "Type", cell: row => <strong>{row.type}</strong> }, { label: "Allocated during period", cell: row => br(row.allocated), numeric: true }, { label: "Used during period", cell: row => br(row.used), numeric: true }, { label: "Current remaining", cell: row => br(row.currentRemaining), numeric: true }, { label: "Creator payments", cell: row => br(row.creatorPayments), numeric: true }, { label: "Customer benefit", cell: row => row.type === "UGC Only" ? "—" : br(row.customerDiscounts), numeric: true }, { label: "Qualifying sales", cell: row => row.type === "UGC Only" ? "—" : count(row.verifiedSales) }]} card={row => <div className="admin-mobile-row"><strong>{row.type}</strong><dl className="admin-mobile-facts"><div><dt>Allocated</dt><dd>{br(row.allocated)}</dd></div><div><dt>Used</dt><dd>{br(row.used)}</dd></div><div><dt>Current remaining</dt><dd>{br(row.currentRemaining)}</dd></div><div><dt>Creator payments</dt><dd>{br(row.creatorPayments)}</dd></div>{row.type !== "UGC Only" && <><div><dt>Customer benefit</dt><dd>{br(row.customerDiscounts)}</dd></div><div><dt>Qualifying sales</dt><dd>{count(row.verifiedSales)}</dd></div></>}</dl></div>} empty={<Empty title="No UGC activity" message="No UGC activity in this period." />} /><p className="admin-period-label">UGC spend is funded consumption across Creator deliveries and Customer offers. Creator payments and Customer benefits are shown separately.</p></Section>
+      <Section title="Purchase transactions"><DataTable compact rows={report.purchases ?? []} rowKey={row => row.id} label="Purchase transactions" columns={[
         { label: "Date", cell: row => date(row.occurredAtUtc) },
         { label: "Business", cell: row => row.business },
         { label: "Source", cell: row => `${row.source} · ${row.sourceType === "UGC_PLUS_SALE" ? "UGC + Sale" : "View + Sale"}` },

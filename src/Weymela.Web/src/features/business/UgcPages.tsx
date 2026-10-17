@@ -1,3 +1,4 @@
+import { CampaignTime } from "../CampaignTime";
 import { PublicationEvidenceReview } from "./PublicationEvidenceReview";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -208,7 +209,7 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
     {row.deliverableType !== "DirectVideoDelivery" && row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
     {row.completedAtUtc && row.deliverableType === "DirectVideoDelivery" && <Badge status="Completed" />}
     {row.publication?.status === "VerificationPending" && <PublicationEvidenceReview id={row.publication.id} watchUrl={row.publication.watchUrl} profileUrl={row.selectedSocialProfileUrl} needsViews={false} reload={reload} />}
-    {row.publication && <p className="fine-print">Publication: {row.publication.verificationLabel}</p>}
+    <CampaignTime publication={row.publication} />
     {action.error && <Notice error>{action.error}</Notice>}
     <ol className="collaboration-timeline" aria-label="Activity">
       <li>Business approved Creator</li>
@@ -236,7 +237,7 @@ export function BusinessUgcDetail() {
       <Link className="back-link" to="/business/campaigns">Promotions</Link>
       <PageHeader eyebrow={item.customerOfferEnabled ? "UGC + Sale" : "UGC"} title={item.title}
         description={`Content due ${date(item.dueDateUtc)}`}
-        action={<Badge status={item.status} label={promotionStatusLabel(item.status)} />} />
+        action={<div className="actions"><Badge status={item.status} label={promotionStatusLabel(item.status)} /><ActionLink to={`/business/ugc/${item.id}/edit`}>Edit</ActionLink></div>} />
       {item.status === "Draft" && <div className="callout">
         <div><h2>Saved</h2></div>
         <Button disabled={action.busy || !wallet.data || shortfall > 0} onClick={() => void action.run(async key => {
@@ -245,7 +246,7 @@ export function BusinessUgcDetail() {
         {wallet.data && shortfall > 0 && <Notice><Link to="/business/wallet">Add Funds</Link> before publishing. You need {amount(shortfall)} ETB more.</Notice>}
       </div>}
       {action.error && <Notice error>{action.error}</Notice>}
-      {item.customerOfferEnabled && <Section title="Cashback budget">
+      {item.customerOfferEnabled && <Section id="cashback-funding" title="Cashback budget" className="cashback-funding">
         <dl className="detail-list"><div><dt>Available</dt><dd>{amount(item.customerOfferRemaining ?? 0)} ETB</dd></div>
           <div><dt>Customer cashback</dt><dd>{item.customerDiscountPercent == null ? "—" : `${amount(item.customerDiscountPercent)}%`}</dd></div></dl>
         {item.status !== "Cancelled" && ["Active", "Exhausted"].includes(item.customerOfferStatus ?? "") && <form className="form-grid" onSubmit={event => {

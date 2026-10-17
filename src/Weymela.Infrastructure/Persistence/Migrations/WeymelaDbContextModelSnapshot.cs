@@ -1006,7 +1006,7 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.ToTable("PayoutRecords", "v3", t =>
                         {
-                            t.HasCheckConstraint("CK_Payout_Amounts", "\"Amount\" >= \"ThresholdUsed\" AND \"ThresholdUsed\" > 0 AND ((\"Beneficiary\"='Creator' AND \"CreatorId\" IS NOT NULL AND \"CustomerId\" IS NULL) OR (\"Beneficiary\"='Customer' AND \"CustomerId\" IS NOT NULL AND \"CreatorId\" IS NULL))");
+                            t.HasCheckConstraint("CK_Payout_Amounts", "\"Amount\" > 0 AND \"ThresholdUsed\" > 0 AND ((\"Beneficiary\"='Creator' AND \"CreatorId\" IS NOT NULL AND \"CustomerId\" IS NULL) OR (\"Beneficiary\"='Customer' AND \"CustomerId\" IS NOT NULL AND \"CreatorId\" IS NULL))");
                         });
                 });
 
@@ -3092,8 +3092,24 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("EnforceAudienceRequirements")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("LowPromotionBalanceAlert")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("MonthlyPayoutDay")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("MonthlyPayoutEffectiveFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("MonthlyPayoutEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("PromotionLiveDurationDays")
                         .HasColumnType("integer");
+
+                    b.Property<bool?>("UgcPayoutMinimumExempt")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Version")
                         .HasColumnType("integer");

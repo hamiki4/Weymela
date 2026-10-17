@@ -305,9 +305,12 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(1500m, (await db.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
         Assert.Null((await db.UgcAssignments.SingleAsync()).CompletedAtUtc);
         var tracking = new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),new FixedTime(Now));
-        var pendingWork=(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Single(x=>x.Id==assignmentId);
-        Assert.Equal("Active",pendingWork.Group); Assert.Equal("Approved for publication",pendingWork.Status);
+        var pendingWork=Assert.Single(await tracking.BusinessPromotionTrackingAsync(state.Business,default));
+        Assert.Equal(opportunityId,pendingWork.Id); Assert.Equal("Active",pendingWork.Group); Assert.Equal(1,pendingWork.CreatorCount);
         await Assert.ThrowsAsync<ApplicationFailure>(()=>tracking.BusinessPromotionTrackingAsync(state.Creator,default));
+        var approvedAdmin = Assert.Single(await tracking.AdminUgcFinanceAsync(Phase4Scenario.Admin,default));
+        Assert.Equal("Approved",approvedAdmin.LiveStatus); Assert.Null(approvedAdmin.GoLiveAtUtc);
+        Assert.Equal("Pending",approvedAdmin.PaymentStatus);
         var profile = await db.CreatorSocialProfiles.SingleAsync();
         var clock = new TestClock { Now = Now };
         var publications = new CreatorPublicationService(db, new TestViews(clock), new CommerceAccessPolicy(db), new TestDirectory(), clock);
@@ -319,6 +322,21 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         await publications.GoLiveUgcAsync(state.Creator, assignmentId, "fixed-live", default);
         await publications.GoLiveUgcAsync(state.Creator, assignmentId, "fixed-live-retry", default);
         db.ChangeTracker.Clear();
+        var liveEvent = Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcPublicationActivated").ToListAsync());
+        using (var payload = JsonDocument.Parse(liveEvent.Payload))
+        {
+            Assert.Equal(state.Creator.CreatorId,payload.RootElement.GetProperty("CreatorId").GetGuid());
+            Assert.Equal(state.Business.BusinessId,payload.RootElement.GetProperty("BusinessId").GetGuid());
+            Assert.Equal(opportunityId,payload.RootElement.GetProperty("CampaignId").GetGuid());
+            Assert.Equal(Now,payload.RootElement.GetProperty("WentLiveAtUtc").GetDateTime());
+        }
+        var plan = (await new NotificationRouter(db).ResolveAsync(liveEvent,default))!;
+        Assert.Contains(plan.Audiences,x => x.Role == ActorRole.PlatformAdmin);
+        Assert.Contains(plan.Audiences,x => x.Role == ActorRole.OperationsAdmin);
+        Assert.Equal($"/admin/ugc?record={opportunityId}",NotificationRouter.Route(plan,ActorRole.OperationsAdmin));
+        var liveAdmin = Assert.Single(await tracking.AdminUgcFinanceAsync(Phase4Scenario.Admin,default));
+        Assert.Equal("Live",liveAdmin.LiveStatus); Assert.Equal(Now,liveAdmin.GoLiveAtUtc);
+        Assert.Equal("Eligible",liveAdmin.PaymentStatus);
         var opportunity = await db.UgcOpportunities.SingleAsync(x => x.Id == opportunityId);
         var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == state.Business.BusinessId);
         Assert.Equal(1500m, opportunity.RequiredFunding.Amount); Assert.Equal(500m, opportunity.UsedFunding.Amount);
@@ -330,7 +348,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(50m, fee.Amount.Amount);
         Assert.Equal(2, await db.FinancialJournals.CountAsync(x => EF.Property<Guid?>(x, "UgcOpportunityId") == opportunityId));
         Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == opportunityId).ToListAsync());
-        Assert.Equal("Completed",(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Single(x=>x.Id==assignmentId).Group);
+        Assert.Equal("Active",Assert.Single(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Group);
         Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin,default));
     }
 
@@ -1106,8 +1124,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(UgcCustomerOfferStatus.Exhausted, offer.Status);
         Assert.Equal(0m, offer.RemainingFunding.Amount);
         var tracking = new WorkspaceQueries(db, new TestDirectory(), new FixedTime(Now));
-        var pausedCampaign = (await tracking.BusinessPromotionTrackingAsync(state.Business, default)).Single(x => x.Id == id && x.Kind == "UGC campaign");
-        Assert.Equal("Pending", pausedCampaign.Group); Assert.Equal("Add Funds", pausedCampaign.PrimaryAction);
+        var pausedCampaign = (await tracking.BusinessPromotionTrackingAsync(state.Business, default)).Single(x => x.Id == id && x.Kind == "UGC + Sale");
+        Assert.Equal("Active", pausedCampaign.Group); Assert.Equal("Manage", pausedCampaign.PrimaryAction);
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetLow").ToListAsync());
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetExhausted").ToListAsync());
         await Assert.ThrowsAsync<ApplicationFailure>(() => checkout.IssueUgcAsync(new(customer, offer.Id, assignmentId, "empty-qr"), default));
@@ -1262,6 +1280,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
     {
         var state = await Setup(); await using var db = state.Database.Open();
         var service = new UgcService(db, new FixedTime(Now));
+        await ConsolidatedConfiguration.AddAsync(db,Now,1,Now.AddMonths(1));
         var input = Input(1) with { DeliverableType = "DirectVideoDelivery", PlatformRequirements = [], PlatformCapacities = [] };
         await Assert.ThrowsAsync<ApplicationFailure>(() => service.CreateAsync(state.Business, input with { CustomerOfferEnabled = true }, "invalid-direct-sale", default));
         var id = await service.CreateAsync(state.Business, input, "direct-create", default);
@@ -1275,6 +1294,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var workspace = new WorkspaceQueries(db, new TestDirectory(), new FixedTime(Now));
         var pending = await workspace.EarningsAsync(state.Creator, default);
         Assert.Equal(0m, pending.AvailableEarnings); Assert.Equal(450m, pending.PendingEarnings);
+        Assert.Equal("Pending",Assert.Single(await workspace.AdminUgcFinanceAsync(Phase4Scenario.Admin,default)).PaymentStatus);
         await service.ReviewSubmissionAsync(state.Business, assignment, "approve", null, "direct-accept", default);
         await service.ReviewSubmissionAsync(state.Business, assignment, "approve", null, "direct-accept", default);
         db.ChangeTracker.Clear();
@@ -1289,13 +1309,28 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         var row = Assert.Single((await service.DetailAsync(state.Business, id, default)).Assignments);
         Assert.NotNull(row.DownloadUrl); Assert.Equal("DirectVideoDelivery", row.DeliverableType);
         Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin, default));
+        var payouts = new PayoutService(db,new FixedTime(Now));
+        Assert.Equal(450m,(await payouts.EligibilityAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,state.Creator.CreatorId.Value)).EligibleAmount.Amount);
+        Assert.Equal(450m,(await workspace.EarningsAsync(state.Creator,default)).EligibleAmount);
+        var adminRow = Assert.Single(await workspace.AdminUgcFinanceAsync(Phase4Scenario.Admin,default));
+        Assert.Equal("Eligible",adminRow.PaymentStatus); Assert.Null(adminRow.GoLiveAtUtc);
+        var destinations = new PayoutDestinationService(db,TestPayoutProtector.Instance,new FixedTime(Now));
+        await destinations.UpdateAsync(state.Creator,new("Bank","CBE","123456789",RecipientName:"Test Creator"));
+        var confirmed = new PayoutService(db,new FixedTime(Now),destinations);
+        var payout = await confirmed.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,state.Creator.CreatorId.Value,new Money(225),"direct-admin-queue");
+        Assert.Equal("Eligible",Assert.Single(await workspace.AdminUgcFinanceAsync(Phase4Scenario.Admin,default)).PaymentStatus);
+        await confirmed.MarkPaidAsync(Phase4Scenario.Admin,payout,"isolated-test-confirmation","direct-admin-paid");
+        Assert.Equal("Eligible",Assert.Single(await workspace.AdminUgcFinanceAsync(Phase4Scenario.Admin,default)).PaymentStatus);
+        var remainingPayout = await confirmed.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,state.Creator.CreatorId.Value,new Money(225),"direct-admin-remaining");
+        await confirmed.MarkPaidAsync(Phase4Scenario.Admin,remainingPayout,"isolated-test-confirmation-remaining","direct-admin-remaining-paid");
+        Assert.Equal("Paid",Assert.Single(await workspace.AdminUgcFinanceAsync(Phase4Scenario.Admin,default)).PaymentStatus);
         await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync(
             "UPDATE v3.\"UgcOpportunities\" SET \"DeliverableType\"='PublicSocialVideo'"));
     }
 
     private async Task<State> Setup(decimal deposit = 10_000, string? targetMigration = null)
     {
-        var database = await fixture.CreateAsync(targetMigration); await using var db = database.Open();
+        var database = await fixture.CreateAsync(targetMigration); await using var db = database.Open(legacyUgc: targetMigration is not null);
         var business = new Actor(Guid.NewGuid(), ActorRole.Business, Guid.NewGuid());
         var creator = new Actor(Guid.NewGuid(), ActorRole.Creator, CreatorId: Guid.NewGuid());
         var configurationId = Guid.NewGuid(); var versionId = Guid.NewGuid();
@@ -1371,10 +1406,10 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         if (offer is not null && offer.Status == UgcCustomerOfferStatus.Active && offer.EndsAtUtc > Now)
         {
             var tracking = await new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),new FixedTime(Now)).BusinessPromotionTrackingAsync(state.Business,default);
-            var campaign = tracking.Single(x => x.Id == assignment.UgcOpportunityId && x.Kind == "UGC campaign");
+            var campaign = tracking.Single(x => x.Id == assignment.UgcOpportunityId && x.Kind == "UGC + Sale");
             Assert.Equal("Active",campaign.Group); Assert.Equal(offer.EndsAtUtc,campaign.DueAtUtc);
             Assert.True(campaign.RemainingDays > 0);
-            Assert.Equal("Completed",tracking.Single(x => x.Id == assignmentId).Group);
+            Assert.Equal(tracking.Count,tracking.Select(x => x.CampaignId).Distinct().Count()); Assert.Equal(1,campaign.CreatorCount);
         }
     }
 

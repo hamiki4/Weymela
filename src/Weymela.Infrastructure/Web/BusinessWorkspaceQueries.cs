@@ -28,7 +28,8 @@ public sealed partial class WorkspaceQueries
         return new(await directory.BusinessCardAsync(actor.BusinessId!.Value,ct),wallet,
             await db.Promotions.CountAsync(x=>x.BusinessId==actor.BusinessId && x.Status==PromotionStatus.Active,ct),
             await db.CreatorApplications.CountAsync(x=>ids.Contains(x.PromotionId)&&x.Status==CreatorApplicationStatus.Pending,ct),
-            sales);
+            sales,(await BusinessPromotionTrackingAsync(actor,ct)).Where(x => x.LowFunds).Select(x => new PromotionBalanceAlert(x.Title,
+                x.Kind.StartsWith("UGC") ? x.ActionPath+"#cashback-funding" : x.ActionPath+"?tab=funds")).ToArray());
     }
     public async Task<BusinessPricing> BusinessPricingAsync(Actor actor,CancellationToken ct)
     {
@@ -62,6 +63,7 @@ public sealed partial class WorkspaceQueries
                     .SingleOrDefaultAsync(ct);
             applicants.Add(new(a.Id,await directory.CreatorCardAsync(a.CreatorId,ct),a.Message,a.ContentConcept,a.Status.ToString(),a.AppliedAtUtc,a.Platform?.ToString(),social));
         }
+        var timing = await Row(p,ct);
         var creators=new List<CreatorBudgetCard>();
         foreach(var a in p.Allocations)
         {
@@ -70,7 +72,7 @@ public sealed partial class WorkspaceQueries
             creators.Add(new(a.Id,await directory.CreatorCardAsync(a.CreatorId,ct),a.OriginalAllocation.Amount,a.UsedAmount.Amount,closed?0:a.RemainingAmount.Amount,
                 live?.CampaignVerifiedViews??0,await db.VerifiedSales.CountAsync(x=>x.CreatorAllocationId==a.Id,ct),
                 closed?a.Status.ToString():live?.Status.ToString()??"AwaitingContent",a.Version,
-                !closed && p.Status is PromotionStatus.Funded or PromotionStatus.Published or PromotionStatus.Active && p.UnallocatedBudget.Amount>0));
+                !closed && Now < timing.EndUtc && p.Status is PromotionStatus.Funded or PromotionStatus.Published or PromotionStatus.Active or PromotionStatus.BudgetExhausted && p.UnallocatedBudget.Amount>0));
         }
         return new(await Row(p,ct),p.Description,p.Eligibility.Requirements,p.Eligibility.Category,p.Eligibility.Market,p.Eligibility.MinimumVerifiedFollowers,
             BusinessPrice(p.PricingSnapshot),applicants,creators,await History(p.Id,ct));

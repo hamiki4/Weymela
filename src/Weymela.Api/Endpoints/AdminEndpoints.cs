@@ -17,7 +17,7 @@ internal static class AdminEndpoints
     public static void MapAdminEndpoints(this WebApplication app)
     {
         var g=app.MapGroup("/api/admin").RequireAuthorization("AdminOperations").AddEndpointFilter<Weymela.Api.Security.ValidatedInputFilter>();
-        g.MapGet("/action-counts",async(HttpContext c,WeymelaDbContext db,TimeProvider clock,CancellationToken ct)=>
+        g.MapGet("/action-counts",async(HttpContext c,WeymelaDbContext db,TimeProvider clock,PayoutService service,CancellationToken ct)=>
         {
             var actor=EndpointSupport.Actor(c);
             var authority=AdministrativeAuthority.For(new RealActor(actor));
@@ -30,7 +30,6 @@ internal static class AdminEndpoints
             var payouts=0;
             if(authority.Allows(AdministrativeCapability.CreatorPayoutProcessing))
             {
-                var settings=await new FinancialConfigurationResolver(db).EffectiveAsync(clock.GetUtcNow().UtcDateTime,ct);
                 var preparedCreators=await db.PayoutRecords.AsNoTracking().Where(x=>x.Status==PayoutStatus.Eligible&&x.CreatorId!=null)
                     .Select(x=>x.CreatorId!.Value).ToListAsync(ct);
                 var preparedCustomers=await db.PayoutRecords.AsNoTracking().Where(x=>x.Status==PayoutStatus.Eligible&&x.CustomerId!=null)
@@ -43,12 +42,12 @@ internal static class AdminEndpoints
                     .Select(x=>x.SubjectId).ToHashSet();
                 // Money is a value object. Materialize the small account summaries before
                 // inspecting Amount so this count works consistently across supported EF providers.
-                var readyCreators=(await db.CreatorEarningsAccounts.AsNoTracking().ToListAsync(ct))
-                    .Where(x=>settings.CreatorPayoutThreshold is { } creatorThreshold && x.AvailableEarnings.Amount>=creatorThreshold.Amount&&creatorDestinations.Contains(x.CreatorId))
-                    .Select(x=>x.CreatorId);
-                var readyCustomers=(await db.CustomerCashbackAccounts.AsNoTracking().ToListAsync(ct))
-                    .Where(x=>settings.CustomerPayoutThreshold is { } customerThreshold && x.AvailableCashback.Amount>=customerThreshold.Amount&&customerDestinations.Contains(x.CustomerId))
-                    .Select(x=>x.CustomerId);
+                var readyCreators=new List<Guid>();
+                foreach(var id in creatorDestinations)
+                    if ((await service.EligibilityAsync(actor,PayoutBeneficiary.Creator,id,ct)).EligibleAmount.Amount>0) readyCreators.Add(id);
+                var readyCustomers=new List<Guid>();
+                foreach(var id in customerDestinations)
+                    if ((await service.EligibilityAsync(actor,PayoutBeneficiary.Customer,id,ct)).EligibleAmount.Amount>0) readyCustomers.Add(id);
                 payouts=preparedCreators.Concat(readyCreators).Distinct().Count()+preparedCustomers.Concat(readyCustomers).Distinct().Count();
             }
             return Results.Ok(new{creators,wallets,socialReview,payouts});
@@ -92,6 +91,11 @@ internal static class AdminEndpoints
         {
             var actor=EndpointSupport.Actor(c);
             return actor.Role==ActorRole.OperationsAdmin ? Results.Ok(await q.OperationsPayoutsAsync(actor,ct,EndpointSupport.ListFilter(c))) : Results.Ok(await q.PayoutsAsync(actor,ct,EndpointSupport.ListFilter(c)));
+        });
+        g.MapGet("/payouts/recipients/{kind}",async(string kind,HttpContext c,WorkspaceQueries q,CancellationToken ct)=>
+        {
+            if(!Enum.TryParse<PayoutBeneficiary>(kind,true,out var beneficiary)||!Enum.IsDefined(beneficiary))return Results.BadRequest();
+            return Results.Ok(await q.PayoutRecipientsAsync(EndpointSupport.Actor(c),beneficiary,EndpointSupport.ListFilter(c),ct));
         });
         g.MapPost("/payouts/{kind}/{subject:guid}/prepare",async(string kind,Guid subject,PayoutAmountInput input,HttpContext c,PayoutService service,CancellationToken ct)=>
         {

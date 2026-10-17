@@ -43,7 +43,7 @@ public static class EndpointSecurity
         if (route.EndsWith("/payout-destination")) return false;
         // Pricing configuration is audited metadata, and must remain editable while money is paused.
         return category is "checkout" or "qr" or "views" or "deposit" or "payout"
-            || route.EndsWith("/fund") || route.EndsWith("/promotional-funding")
+            || route.EndsWith("/add-funds") || route.EndsWith("/fund") || route.EndsWith("/promotional-funding")
             || route.EndsWith("/approve") || route.EndsWith("/increase")
             || route == "/api/business/ugc/{id:guid}/publish"
             || route == "/api/business/ugc/{id:guid}/cashback-funding"

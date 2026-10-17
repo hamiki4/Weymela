@@ -26,12 +26,15 @@ public static class FinancialConfigurationVersionFactory
             ugcInput.MinimumUgcBudget is { } minimumUgc ? Amount(minimumUgc) : null, effectiveFromUtc, id,
             ugcInput.CustomerOfferPlatformSalePercent);
         if (input.PromotionLiveDurationDays is { } days) PromotionLiveDurationPolicy.Validate(days);
-        return FinancialConfigurationVersion.CreatePartial(id, configurationId, version, changedBy,
+        var result = FinancialConfigurationVersion.CreatePartial(id, configurationId, version, changedBy,
             effectiveFromUtc, Price(PromotionType.ViewOnly, input.ViewOnly),
             Price(PromotionType.ViewPlusCommission, input.ViewPlusCommission),
             input.CreatorThreshold is { } creator ? Amount(creator) : null,
             input.CustomerThreshold is { } customer ? Amount(customer) : null, ugc, input.PromotionLiveDurationDays,
             input.EnforceAudienceRequirements, input.CreatorCommissionPercent, input.CustomerCashbackPercent, input.PlatformPercent);
+        result.SetPayoutAndAlertControls(input.LowPromotionBalanceAlert, input.MonthlyPayoutDay,
+            input.MonthlyPayoutEffectiveFromUtc, input.UgcPayoutMinimumExempt, input.MonthlyPayoutEnabled);
+        return result;
     }
 
     private static Money Amount(decimal value)

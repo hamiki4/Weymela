@@ -45,7 +45,7 @@ test("direct UGC Only delivery earns on approval and exposes an authorized downl
   await layout(page);
 });
 
-test("unread notification title and message are bold and read state stays normal after reload", async ({ page, context }) => {
+test("unread notification rows are bold and read state stays normal after reload", async ({ page, context }) => {
   const id = await createPublishedUgc(context, `Notification evidence ${Date.now()}`, "other-creator");
   await login(context, "business");
   await expect.poll(async () => {
@@ -59,13 +59,13 @@ test("unread notification title and message are bold and read state stays normal
     .filter({ has: page.locator(`a[data-notification-open][href="/business/ugc/${id}"]`) })
     .filter({ hasText: "New UGC request" });
   await expect(notification).toHaveAttribute("data-unread", "true");
-  await expect(notification.locator("h3")).toHaveCSS("font-weight", "700");
-  await expect(notification.locator("p")).toHaveCSS("font-weight", "700");
-  await notification.getByRole("link", { name: "Open", exact: true }).click();
+  await expect(notification.locator(".notification-row > span:first-child")).toHaveCSS("font-weight", "700");
+  await expect(notification.locator("p")).toHaveCount(0);
+  await notification.getByRole("link", { name: "New UGC request", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/business/ugc/${id}$`));
   await open(page, "/notifications");
   await expect(notification).toHaveAttribute("data-unread", "false");
   await page.reload();
-  await expect(notification.locator("h3")).toHaveCSS("font-weight", "400");
-  await expect(notification.locator("p")).toHaveCSS("font-weight", "400");
+  await expect(notification.locator(".notification-row > span:first-child")).toHaveCSS("font-weight", "400");
+  await expect(notification.locator("p")).toHaveCount(0);
 });

@@ -32,6 +32,7 @@ import {
   campaignType,
   count,
   date,
+  dateTime,
   isViewOnly,
   promotionStatusLabel,
   promotionTypeLabel,
@@ -68,7 +69,7 @@ export function WalletMetrics({ wallet, pendingDeposits }: { wallet: Wallet; pen
   );
 }
 export function BusinessDashboard() {
-  const resource = useResource<BusinessHome>("/business/home");
+  const resource = useResource<BusinessHome>("/business/home", true, 30000);
   return (
     <Resource resource={resource}>
       {(data) => (
@@ -82,6 +83,7 @@ export function BusinessDashboard() {
               </ActionLink>
             }
           />
+          {data.lowFundsAlerts?.map(row => <div className="low-funds-row" key={row.fundingPath}><span><span data-no-translate>{row.title}</span> — Low funds</span><Link to={row.fundingPath}>Add Funds</Link></div>)}
           <div className="business-home-overview">
             <Section title="Funds" className="business-home-section business-home-funds">
               <Link
@@ -418,14 +420,15 @@ export function CampaignTable({
       numeric: true,
     },
     ...(admin ? [
+      { label: "Go Live Date", cell: (r: CampaignRow) => r.goLiveAtUtc ? dateTime(r.goLiveAtUtc) : "—" },
       { label: "Live Duration", cell: (r: CampaignRow) => `${r.promotionLiveDurationDays} days` },
       { label: "Start", cell: (r: CampaignRow) => date(r.startUtc) },
       { label: "End", cell: (r: CampaignRow) => date(r.endUtc) },
     ] : []),
-    { label: "Status", cell: (r: CampaignRow) => <Badge status={r.status} /> },
+    { label: "Status", cell: (r: CampaignRow) => <span><Badge status={admin ? r.liveStatus ?? r.status : r.status} label={admin ? r.liveStatus ?? undefined : undefined} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
   ];
   return (
-    <DataTable
+    <DataTable compact={admin}
       rows={campaigns}
       columns={columns}
       rowKey={(r) => r.id}
@@ -440,7 +443,7 @@ export function CampaignTable({
               </h3>
               <small className="muted">{campaignType(r.type)}</small>
             </div>
-            <Badge status={r.status} />
+            <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span>
           </div>
           <FundsGrid
             values={[

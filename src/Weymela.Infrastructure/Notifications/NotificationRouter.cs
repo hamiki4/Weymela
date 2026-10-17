@@ -289,7 +289,8 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 var promotion=await db.Promotions.AsNoTracking().SingleAsync(x=>x.Id==allocation.PromotionId,ct);
                 return Plan("Creator work is Live","The verified Creator publication is now live.",promotion.Id,allocation.Id,
                     new NotificationAudience(ActorRole.Business,promotion.BusinessId),
-                    new NotificationAudience(ActorRole.PlatformAdmin));
+                    new NotificationAudience(ActorRole.PlatformAdmin),
+                    new NotificationAudience(ActorRole.OperationsAdmin)) with { SourceKey = "CreatorParticipationActivated:" + participationId };
             }
             case "UgcFixedPaymentEarned": case "UgcPaymentCorrected":
                 return Plan(row.EventType=="UgcFixedPaymentEarned"?"UGC payment earned":"UGC payment returned to pending",
@@ -308,7 +309,8 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan("Creator work is Live","The verified Creator publication is now live.",null,null,
                     new NotificationAudience(ActorRole.Business,opportunity.BusinessId),
                     new NotificationAudience(ActorRole.PlatformAdmin),
-                    new NotificationAudience(ActorRole.OperationsAdmin)) with { UgcId=opportunity.Id };
+                    new NotificationAudience(ActorRole.OperationsAdmin)) with { UgcId=opportunity.Id,
+                        SourceKey = "UgcPublicationActivated:" + publicationId };
             }
         }
         return null;
@@ -323,6 +325,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
         v.CreatorPayoutThreshold,v.CreatorCommissionPercent,ugc=v.Ugc is null ? null : new { v.Ugc.MinimumCreatorPayment,v.Ugc.PlatformFeePercent } });
     public static string Route(NotificationPlan plan, ActorRole role) => role switch
     {
+        ActorRole.PlatformAdmin or ActorRole.OperationsAdmin when plan.UgcId is { } ugc && plan.WorkspacePath != "publications" => $"/admin/ugc?record={ugc}",
         ActorRole.PlatformAdmin => plan.WorkspacePath=="account-closure"?"/admin/accounts":plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} p ? $"/admin/campaigns/{p}" : "/admin/" + (plan.WorkspacePath is "businesses" or "creators" or "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
         ActorRole.OperationsAdmin => plan.WorkspacePath=="account-closure"?"/admin/accounts":plan.WorkspacePath=="publications"?"/admin/publications":plan.UgcId is not null?"/admin/ugc":plan.CampaignId is {} op ? $"/admin/campaigns/{op}" : plan.WorkspacePath is "businesses" or "creators" ? "/admin/role-enrollments" : "/admin/" + (plan.WorkspacePath is "wallets" or "role-enrollments" ? plan.WorkspacePath : "notifications"),
         ActorRole.Business => plan.WorkspacePath=="account-closure"?"/settings/delete-account":plan.WorkspacePath=="profiles"?"/onboarding":plan.WorkspacePath=="transactions"?"/business/transactions":plan.UgcId is {} bu ? $"/business/ugc/{bu}" : plan.CampaignId is {} b ? $"/business/campaigns/{b}" : "/business/" + (plan.WorkspacePath == "wallet" ? "wallet" : "notifications"),

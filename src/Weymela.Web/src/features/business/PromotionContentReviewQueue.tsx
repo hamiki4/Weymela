@@ -1,3 +1,4 @@
+import { CampaignTime } from "../CampaignTime";
 import { PublicationEvidenceReview } from "./PublicationEvidenceReview";
 import { useState } from "react";
 import { post, useAction, useResource } from "../../api/client";
@@ -35,6 +36,7 @@ function ReviewRow({ row, reload }: { row: PromotionContentReviewCard; reload: (
       <Field label="Feedback (required for changes requested)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
       <div className="actions"><Button disabled={action.busy || !url && !row.reviewMediaUrl} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("requestchanges")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
     </div>}
+    <CampaignTime publication={row.publication} />
     {row.publication?.status === "VerificationPending" && <PublicationEvidenceReview id={row.publication.id} watchUrl={row.publication.watchUrl} profileUrl={row.creatorProfileUrl} needsViews reload={reload} />}
     {action.error && <Notice error>{action.error}</Notice>}
   </article>;

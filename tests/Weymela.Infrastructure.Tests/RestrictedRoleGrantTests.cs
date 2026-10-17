@@ -277,7 +277,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .OffersAsync(customerActor, default);
         Assert.Empty(offers);
 
-        Assert.Equal(34, await db.Database.SqlQueryRaw<string>(
+        Assert.Equal(35, await db.Database.SqlQueryRaw<string>(
             "SELECT \"MigrationId\" AS \"Value\" FROM public.\"__EFMigrationsHistory\"")
             .CountAsync());
         return new(userId, creatorPermission.SubjectId, recovery.AuthorizedDeviceId,
@@ -410,6 +410,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
         });
         db.OutboxMessages.Add(new OutboxMessage
         {
+            EventType = "CreatorParticipationActivated",
+            Payload = JsonSerializer.Serialize(new { ParticipationId = participation.Id, CreatorId = creatorId }),
+            OccurredAtUtc = now.AddMinutes(-3)
+        });
+        db.OutboxMessages.Add(new OutboxMessage
+        {
             EventType = "CreatorPayoutEligible",
             Payload = JsonSerializer.Serialize(new { BeneficiaryId = creatorId }),
             OccurredAtUtc = now.AddMinutes(-2)
@@ -419,6 +425,12 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             EventType = "UgcPublicationActivated",
             Payload = JsonSerializer.Serialize(new { CreatorId = creatorId,
                 AssignmentId = assignmentId, PublicationId = ugcPublication.Id }),
+            OccurredAtUtc = now.AddMinutes(-2)
+        });
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            EventType = "UgcPublicationActivated",
+            Payload = JsonSerializer.Serialize(new { PublicationId = ugcPublication.Id }),
             OccurredAtUtc = now.AddMinutes(-2)
         });
         db.OutboxMessages.Add(new OutboxMessage
@@ -483,7 +495,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             .Select(x => x.UserId).SingleAsync();
         Assert.Equal($"/admin/campaigns/{seed.PromotionId}", (await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "CreatorParticipationActivated" && x.UserId == platformAdmin)).Route);
-        Assert.Equal("/admin/ugc", (await db.InAppNotifications.SingleAsync(x =>
+        Assert.Equal($"/admin/ugc?record={seed.UgcOpportunityId}", (await db.InAppNotifications.SingleAsync(x =>
             x.EventType == "UgcPublicationActivated" && x.UserId == platformAdmin)).Route);
     }
 
@@ -832,7 +844,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             "20261012042110_SeparateProductFinancialConfiguration",
             "20261014203304_StabilizePublicationPaymentsAndNotificationReads",
             "20261016161806_AllowFundedCashbackReplenishment",
-            "20261017002127_CreatorGoLiveAndDirectDelivery"
+            "20261017002127_CreatorGoLiveAndDirectDelivery", "20261017184451_ConfigureMonthlyPayoutsAndPromotionAlerts"
         }, actual);
         await reader.CloseAsync();
         command.CommandText = "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='v3' AND c.relkind='S' AND c.relname='creator_number_seq'";
@@ -929,7 +941,7 @@ public sealed class RestrictedRoleGrantTests(PostgresFixture fixture)
             command.CommandText = $"CREATE SEQUENCE v3.{QuoteIdentifier(probeSequence)}";
             await command.ExecuteNonQueryAsync();
             command.CommandText = "SELECT count(*) FROM public.\"__EFMigrationsHistory\"";
-            Assert.Equal(34L, (long)(await command.ExecuteScalarAsync())!);
+            Assert.Equal(35L, (long)(await command.ExecuteScalarAsync())!);
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 command.Transaction = transaction;

@@ -1,3 +1,4 @@
+import { CampaignTime } from "../CampaignTime";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { post, useAction, useResource } from "../../api/client";
@@ -17,8 +18,7 @@ export function CreatorGoLive({ path, publication, profileId, platform, reload }
   const current = publication && !["Failed", "Expired"].includes(publication.status) ? publication : null;
   if (publication?.wentLiveAtUtc) return <div className="creator-live-days">
     <strong>{publication.status !== "Verified" ? "Action Required" : publication.remainingDays === 0 ? "Completed" : "Live"}</strong>
-    {publication.remainingDays != null && <p>{publication.remainingDays} days left</p>}
-    {publication.expiresAtUtc && <p><span>Ends</span> <span data-no-translate>{dateTime(publication.expiresAtUtc)}</span></p>}
+    <CampaignTime publication={publication} />
   </div>;
   if (current?.status === "VerificationPending" && current.goLiveRequestedAtUtc)
     return <Notice>Awaiting Review</Notice>;

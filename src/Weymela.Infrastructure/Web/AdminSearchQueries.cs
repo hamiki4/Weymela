@@ -30,8 +30,9 @@ public sealed class AdminSearchQueries(WeymelaDbContext db, AdminListFilter filt
     {
         filter.Validate();
         var term = filter.Term;
+        Guid.TryParse(term,out var exactId);
         var rows = db.Promotions.AsNoTracking();
-        if (term != "") rows = rows.Where(x => x.Title.ToLower().Contains(term) || x.PublicPromotionId.ToLower().Contains(term)
+        if (term != "") rows = rows.Where(x => x.Id == exactId || x.Title.ToLower().Contains(term) || x.PublicPromotionId.ToLower().Contains(term)
             || db.PublicWorkspaceProfiles.Any(p => p.SubjectId == x.BusinessId && p.Role == ActorRole.Business && p.DisplayName.ToLower().Contains(term))
             || x.Allocations.Any(a => db.PublicWorkspaceProfiles.Any(p => p.SubjectId == a.CreatorId && p.Role == ActorRole.Creator && p.DisplayName.ToLower().Contains(term)))
             || db.CreatorApplications.Any(a => a.PromotionId == x.Id && db.PublicWorkspaceProfiles.Any(p => p.SubjectId == a.CreatorId && p.Role == ActorRole.Creator && p.DisplayName.ToLower().Contains(term))));
@@ -58,8 +59,9 @@ public sealed class AdminSearchQueries(WeymelaDbContext db, AdminListFilter filt
     {
         filter.Validate();
         var term = filter.Term;
+        Guid.TryParse(term,out var exactId);
         var rows = db.UgcOpportunities.AsNoTracking();
-        if (term != "") rows = rows.Where(x => x.Title.ToLower().Contains(term)
+        if (term != "") rows = rows.Where(x => x.Id == exactId || x.Title.ToLower().Contains(term)
             || db.PublicWorkspaceProfiles.Any(p => p.SubjectId == x.BusinessId && p.Role == ActorRole.Business && p.DisplayName.ToLower().Contains(term))
             || db.UgcAssignments.Any(a => a.UgcOpportunityId == x.Id && db.PublicWorkspaceProfiles.Any(p => p.SubjectId == a.CreatorId && p.Role == ActorRole.Creator && p.DisplayName.ToLower().Contains(term)))
             || db.UgcCreatorRequests.Any(a => a.UgcOpportunityId == x.Id && db.PublicWorkspaceProfiles.Any(p => p.SubjectId == a.CreatorId && p.Role == ActorRole.Creator && p.DisplayName.ToLower().Contains(term))));

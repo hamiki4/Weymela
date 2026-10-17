@@ -85,7 +85,7 @@ const helpByRole: Partial<Record<Role, HelpItem[]>> = {
   Business: [
     ["Promotion models", "UGC Only funds one fixed content fee. UGC + Sale adds a separate cashback budget. View Only funds verified views. View + Sale also funds attributed Creator commission, Customer cashback and the saved Platform fee."],
     ["Replenish cashback", "Open the UGC + Sale Promotion and use Add Funds under Cashback budget. This reserves wallet funds without changing the fixed content payment or historical rates."],
-    ["Low funds", "Business alerts appear at 20% of funded budget or when cashback cannot cover another purchase of the same size. Exhausted funds stop new rewards; add funds to continue."],
+    ["Low funds", "Business Home shows Low funds below the Platform Admin alert amount. Open Add Funds to replenish the separate reward budget. Monthly payout eligibility uses the configured day and effective date in Ethiopia time; it never sends money."],
     ["Add your Business location", "Open Settings, choose Business Location, and save an address, Google Maps link, or coordinates."],
     ["Add funds", "Open Wallet, choose a receiving bank, enter the amount, and upload the receipt."],
     ["Deposit receipt", "A receipt does not credit your wallet. Admin must verify settlement in the receiving account before approval."],

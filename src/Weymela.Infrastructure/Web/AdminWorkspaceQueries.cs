@@ -110,11 +110,14 @@ public sealed partial class WorkspaceQueries
             .OrderByDescending(x => x.CreatedAtUtc).ThenBy(x => x.Id).Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         var result = new List<OperationsCampaignView>();
         foreach (var campaign in campaigns)
+        {
+            var row = await Row(campaign,ct);
             result.Add(new(campaign.Id, campaign.PublicPromotionId, campaign.BusinessId,
                 (await directory.BusinessCardAsync(campaign.BusinessId, ct)).DisplayName, campaign.Title,
-                PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, campaign.StartDateUtc,
-                campaign.EndDateUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
-                campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location));
+                PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, row.StartUtc,
+                row.EndUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
+                campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location,row.LowFunds,row.GoLiveAtUtc,row.LiveStatus));
+        }
         return result;
     }
 
@@ -122,11 +125,12 @@ public sealed partial class WorkspaceQueries
     {
         DemandCapability(actor, AdministrativeCapability.CampaignOperationalVisibility);
         var campaign = await Campaign(id, ct);
+        var row = await Row(campaign,ct);
         return new(campaign.Id, campaign.PublicPromotionId, campaign.BusinessId,
             (await directory.BusinessCardAsync(campaign.BusinessId, ct)).DisplayName, campaign.Title,
-            PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, campaign.StartDateUtc,
-            campaign.EndDateUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
-            campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location);
+            PromotionTypeLabel(campaign.PromotionType), campaign.Allocations.Count, row.StartUtc,
+            row.EndUtc, PromotionStatusLabel(campaign.Status), campaign.Version,
+            campaign.PromotionLiveDurationDays, campaign.Slogan, campaign.Location,row.LowFunds,row.GoLiveAtUtc,row.LiveStatus);
     }
 
     public async Task<AdminHome> AdminHomeAsync(Actor actor,CancellationToken ct)
@@ -181,7 +185,7 @@ public sealed partial class WorkspaceQueries
         var saved=await db.FinancialConfigurationVersions.AsNoTracking().OrderByDescending(x=>x.Version).ToListAsync(ct);
         FinancialSettingsInput Settings(FinancialConfigurationVersion x)=>new(Input(x.ViewOnly),Input(x.ViewPlusCommission),x.CreatorCommissionPercent,x.CustomerCashbackPercent,x.PlatformPercent,x.CreatorPayoutThreshold?.Amount,x.CustomerPayoutThreshold?.Amount,x.EffectiveFromUtc,
             x.Ugc is { } ugc ? new(ugc.MinimumCreatorPayment.Amount,ugc.PlatformFeePercent,ugc.MinimumUgcBudget?.Amount,ugc.CustomerOfferPlatformSalePercent) : null,
-            x.PromotionLiveDurationDays,x.EnforceAudienceRequirements);
+            x.PromotionLiveDurationDays,x.EnforceAudienceRequirements,x.LowPromotionBalanceAlert,x.MonthlyPayoutDay,x.MonthlyPayoutEffectiveFromUtc,x.UgcPayoutMinimumExempt,x.MonthlyPayoutEnabled);
         var versions=saved.Select(x=>new FinancialVersionInfo(x.Id,x.Version,x.EffectiveFromUtc,x.ChangedBy,Settings(x))).ToArray();
         var v = saved.Where(x => x.EffectiveFromUtc <= Now).OrderByDescending(x => x.EffectiveFromUtc)
             .ThenByDescending(x => x.Version).ThenByDescending(x => x.Id).FirstOrDefault();
@@ -222,13 +226,11 @@ public sealed partial class WorkspaceQueries
         var term = query.Term;
         var statusFilter = query.Status ?? "";
         var methodFilter = query.Type ?? "";
-        var creatorMinimum = version?.CreatorPayoutThreshold?.Amount ?? decimal.MaxValue;
-        var customerMinimum = version?.CustomerPayoutThreshold?.Amount ?? decimal.MaxValue;
         // Numeric balances are filtered by PostgreSQL before paging. Creator earned
         // balance is still checked again below, and at the payout command boundary.
-        var eligibleCreators = await db.Database.SqlQuery<Guid>($"""
+        var creatorCandidates = db.Database.SqlQuery<Guid>($"""
             SELECT a."CreatorId" AS "Value" FROM v3."CreatorEarningsAccounts" a
-            WHERE a."AvailableEarnings">={creatorMinimum}
+            WHERE a."AvailableEarnings">0
               AND ({term}='' OR EXISTS (SELECT 1 FROM v3."PublicWorkspaceProfiles" p WHERE p."Role"='Creator' AND p."SubjectId"=a."CreatorId" AND strpos(lower(p."DisplayName"),{term})>0))
               AND ({methodFilter}='' OR EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."SubjectId"=a."CreatorId" AND d."Beneficiary"='Creator' AND (d."Method"={methodFilter} OR d."Provider"={methodFilter})))
               AND ({statusFilter}=''
@@ -236,11 +238,11 @@ public sealed partial class WorkspaceQueries
                 OR {statusFilter}='Ready' AND EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CreatorId"=a."CreatorId" AND p."Status"='Eligible')
                 OR {statusFilter}='Eligible' AND EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."Beneficiary"='Creator' AND d."SubjectId"=a."CreatorId")
                   AND NOT EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CreatorId"=a."CreatorId" AND p."Status"='Eligible'))
-            ORDER BY a."CreatorId" LIMIT {query.PageSize} OFFSET {query.Offset}
-            """).ToListAsync(ct);
-        var eligibleCustomers = await db.Database.SqlQuery<Guid>($"""
+            ORDER BY a."CreatorId"
+            """);
+        var customerCandidates = db.Database.SqlQuery<Guid>($"""
             SELECT a."CustomerId" AS "Value" FROM v3."CustomerCashbackAccounts" a
-            WHERE a."AvailableCashback">={customerMinimum}
+            WHERE a."AvailableCashback">0
               AND ({term}='' OR EXISTS (SELECT 1 FROM v3."PublicWorkspaceProfiles" p WHERE p."Role"='Customer' AND p."SubjectId"=a."CustomerId" AND strpos(lower(p."DisplayName"),{term})>0))
               AND ({methodFilter}='' OR EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."SubjectId"=a."CustomerId" AND d."Beneficiary"='Customer' AND (d."Method"={methodFilter} OR d."Provider"={methodFilter})))
               AND ({statusFilter}=''
@@ -248,8 +250,31 @@ public sealed partial class WorkspaceQueries
                 OR {statusFilter}='Ready' AND EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CustomerId"=a."CustomerId" AND p."Status"='Eligible')
                 OR {statusFilter}='Eligible' AND EXISTS (SELECT 1 FROM v3."PayoutDestinations" d WHERE d."Beneficiary"='Customer' AND d."SubjectId"=a."CustomerId")
                   AND NOT EXISTS (SELECT 1 FROM v3."PayoutRecords" p WHERE p."CustomerId"=a."CustomerId" AND p."Status"='Eligible'))
-            ORDER BY a."CustomerId" LIMIT {query.PageSize} OFFSET {query.Offset}
-            """).ToListAsync(ct);
+            ORDER BY a."CustomerId"
+            """);
+        async Task<List<Guid>> EligibleSubjects(IQueryable<Guid> source, PayoutBeneficiary kind)
+        {
+            var result = new List<Guid>();
+            if (version is null) return result;
+            var matched = 0;
+            for (var offset = 0; ; offset += 100)
+            {
+                var batch = await source.Skip(offset).Take(100).ToListAsync(ct);
+                foreach (var id in batch)
+                {
+                    var available = kind == PayoutBeneficiary.Creator
+                        ? (await CreatorEarnedBalance.AvailableAsync(db,id,ct)).Amount
+                        : (await db.CustomerCashbackAccounts.AsNoTracking().SingleAsync(x => x.CustomerId == id,ct)).AvailableCashback.Amount;
+                    if (await PayoutEligibleBalance.AmountAsync(db,version,kind,id,available,Now,ct) <= 0) continue;
+                    if (matched++ < query.Offset) continue;
+                    result.Add(id);
+                    if (result.Count == query.PageSize) return result;
+                }
+                if (batch.Count < 100) return result;
+            }
+        }
+        var eligibleCreators = await EligibleSubjects(creatorCandidates, PayoutBeneficiary.Creator);
+        var eligibleCustomers = await EligibleSubjects(customerCandidates, PayoutBeneficiary.Customer);
         var records=await db.PayoutRecords.AsNoTracking().Where(x => x.Status == PayoutStatus.Eligible
             && (x.CreatorId != null && eligibleCreators.Contains(x.CreatorId.Value)
                 || x.CustomerId != null && eligibleCustomers.Contains(x.CustomerId.Value))).ToListAsync(ct);
@@ -290,7 +315,8 @@ public sealed partial class WorkspaceQueries
             if (version.CreatorPayoutThreshold is not { } creatorThreshold) break;
             var pending=records.SingleOrDefault(x=>x.CreatorId==a.CreatorId&&x.Status==PayoutStatus.Eligible);
             var available = (await CreatorEarnedBalance.AvailableAsync(db, a.CreatorId, ct)).Amount;
-            if(available<creatorThreshold.Amount)continue;
+            var eligible = await PayoutEligibleBalance.AmountAsync(db,version,PayoutBeneficiary.Creator,a.CreatorId,available,Now,ct);
+            if(eligible<=0)continue;
             var name=(await directory.CreatorCardAsync(a.CreatorId,ct)).DisplayName;
             var since=await EligibleSince(PayoutBeneficiary.Creator,a.CreatorId,creatorThreshold.Amount,version.EffectiveFromUtc,ct);
             destinations.TryGetValue((PayoutBeneficiary.Creator,a.CreatorId),out var destination);
@@ -299,24 +325,51 @@ public sealed partial class WorkspaceQueries
             var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
             var account=protectedAccount is null||payoutProtector is null?null:PayoutDestinationService.DisplayUnprotected(payoutProtector.Unprotect(protectedAccount));
             creators.Add(new(a.CreatorId,pending?.Id,name,available,pending?.ThresholdUsed.Amount??creatorThreshold.Amount,
-                pending?.Amount.Amount??creatorThreshold.Amount,pending?.EligibleAtUtc??since,
-                method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
+                pending?.Amount.Amount??eligible,pending?.EligibleAtUtc??since,
+                method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account,eligible));
         }
         foreach(var a in await db.CustomerCashbackAccounts.AsNoTracking().Where(x => eligibleCustomers.Contains(x.CustomerId)).ToListAsync(ct))
         {
             if (version.CustomerPayoutThreshold is not { } customerThreshold) break;
             var pending=records.SingleOrDefault(x=>x.CustomerId==a.CustomerId&&x.Status==PayoutStatus.Eligible);
-            if(a.AvailableCashback.Amount<customerThreshold.Amount&&pending is null)continue;
+            var eligible = await PayoutEligibleBalance.AmountAsync(db,version,PayoutBeneficiary.Customer,a.CustomerId,a.AvailableCashback.Amount,Now,ct);
+            if(eligible<=0 && pending is null)continue;
             destinations.TryGetValue((PayoutBeneficiary.Customer,a.CustomerId),out var destination);
             var method=pending?.DestinationMethod?.ToString()??destination?.Method.ToString();
             var provider=pending?.DestinationProvider??destination?.Provider;
             var protectedAccount=pending?.ProtectedDestinationAccount??destination?.ProtectedAccount;
             var account=protectedAccount is null||payoutProtector is null?null:PayoutDestinationService.DisplayUnprotected(payoutProtector.Unprotect(protectedAccount));
             customers.Add(new(a.CustomerId,pending?.Id,await CustomerLabel(a.CustomerId,ct),a.AvailableCashback.Amount,pending?.ThresholdUsed.Amount??customerThreshold.Amount,
-                pending?.Amount.Amount??customerThreshold.Amount,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,customerThreshold.Amount,version.EffectiveFromUtc,ct),
-                method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account));
+                pending?.Amount.Amount??eligible,pending?.EligibleAtUtc??await EligibleSince(PayoutBeneficiary.Customer,a.CustomerId,customerThreshold.Amount,version.EffectiveFromUtc,ct),
+                method is null?"NeedsDestination":pending is null?"Eligible":"Ready",method,provider,account,eligible));
         }
         return (creators.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), customers.Where(x => statusFilter == "" || x.Status == statusFilter).ToArray(), history.OrderByDescending(x=>x.PaidAtUtc??x.EligibleAtUtc).ThenBy(x=>x.Id).ToArray());
+    }
+    public async Task<IReadOnlyList<PayoutQueueRow>> PayoutRecipientsAsync(Actor actor, PayoutBeneficiary kind, AdminListFilter filter, CancellationToken ct)
+    {
+        DemandCapability(actor, kind == PayoutBeneficiary.Creator ? AdministrativeCapability.CreatorPayoutProcessing : AdministrativeCapability.CustomerPayoutProcessing);
+        filter.Validate();
+        var role = kind == PayoutBeneficiary.Creator ? ActorRole.Creator : ActorRole.Customer;
+        var term = filter.Term;
+        var ids = await db.PublicWorkspaceProfiles.AsNoTracking().Where(x => x.Role == role
+            && (term == "" || x.DisplayName.ToLower().Contains(term) || x.PublicId.ToLower().Contains(term)))
+            .OrderBy(x => x.DisplayName).ThenBy(x => x.SubjectId).Skip(filter.Offset).Take(filter.PageSize).Select(x => x.SubjectId).ToListAsync(ct);
+        var result = new List<PayoutQueueRow>();
+        var version = await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
+        foreach (var id in ids)
+        {
+            var available = kind == PayoutBeneficiary.Creator ? (await CreatorEarnedBalance.AvailableAsync(db,id,ct)).Amount
+                : (await db.CustomerCashbackAccounts.AsNoTracking().SingleOrDefaultAsync(x => x.CustomerId == id,ct))?.AvailableCashback.Amount ?? 0;
+            var eligible = version is null ? 0 : await PayoutEligibleBalance.AmountAsync(db,version,kind,id,available,Now,ct);
+            var pending = await db.PayoutRecords.AsNoTracking().SingleOrDefaultAsync(x => x.Beneficiary == kind && (x.CreatorId == id || x.CustomerId == id) && x.Status == PayoutStatus.Eligible,ct);
+            var destination = await db.PayoutDestinations.AsNoTracking().SingleOrDefaultAsync(x => x.Beneficiary == kind && x.SubjectId == id,ct);
+            var account = destination is null || payoutProtector is null ? null : PayoutDestinationService.DisplayUnprotected(payoutProtector.Unprotect(destination.ProtectedAccount));
+            result.Add(new(id,pending?.Id,kind == PayoutBeneficiary.Creator ? (await directory.CreatorCardAsync(id,ct)).DisplayName : await CustomerLabel(id,ct),
+                available,kind == PayoutBeneficiary.Creator ? version?.CreatorPayoutThreshold?.Amount ?? 0 : version?.CustomerPayoutThreshold?.Amount ?? 0,
+                pending?.Amount.Amount ?? eligible,pending?.EligibleAtUtc,pending is not null ? "Ready" : eligible<=0 ? "BelowThreshold" : destination is null ? "NeedsDestination" : "Eligible",
+                destination?.Method.ToString(),destination?.Provider,account,eligible));
+        }
+        return result;
     }
     private sealed record PlatformPayoutTotals(decimal Accrued, decimal Settled);
 

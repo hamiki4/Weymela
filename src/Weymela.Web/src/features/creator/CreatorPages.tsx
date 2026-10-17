@@ -74,9 +74,10 @@ export function CreatorHowYouEarn() {
             </div>
             <div className="threshold-note">
               <strong>
-                Minimum to cash out: {p.minimumToCashOut === null ? "Not configured" : amount(p.minimumToCashOut)}
+                {p.minimumToCashOut === null ? "Not configured" : `Cash out at ${amount(p.minimumToCashOut)} ETB${p.monthlyPayoutEnabled ? " or monthly" : ""}`}
               </strong>
 
+              {p.ugcPayoutMinimumExempt && <p>UGC: Cash out anytime</p>}
             </div>
           </Section>
         )}
@@ -94,11 +95,9 @@ export function Eligibility({ data }: { data: Earnings }) {
         </div>
         <Icon name="wallet" />
       </div>
-      <p>
-        Minimum to cash out:{" "}
-        <strong>{data.minimumToCashOut === null ? "Not configured" : amount(data.minimumToCashOut)}</strong>
-      </p>
-      {data.amountNeeded === null ? <Notice>Payout minimum not configured</Notice> : data.amountNeeded > 0 ? (
+      <p>{data.minimumToCashOut === null ? "Not configured" : `Cash out at ${amount(data.minimumToCashOut)} ETB${data.monthlyPayoutEnabled ? " or monthly" : ""}`}</p>
+      {data.ugcPayoutMinimumExempt && <small>UGC: Cash out anytime</small>}
+      {data.amountNeeded === null ? <Notice>Payout minimum not configured</Notice> : data.eligibleAmount > 0 ? <Notice>Ready to cash out</Notice> : data.amountNeeded > 0 ? (
         <p className="muted">Amount remaining: {amount(data.amountNeeded)}</p>
       ) : (
         <Notice>Eligible for payout · {amount(data.eligibleAmount)}</Notice>
@@ -125,35 +124,15 @@ export function CreatorEarnings() {
             </Section>
             <div className="metric-grid"><Section title="Pending Earnings"><strong>{amount(data.pendingEarnings ?? 0)} ETB</strong>
 </Section>
-              <Section title="Paid Out"><strong>{amount(data.paidOut ?? 0)} ETB</strong><p className="fine-print">Confirmed external payouts.</p></Section></div>
+              <Section title="Paid Out"><strong>{amount(data.paidOut ?? 0)} ETB</strong></Section></div>
             <Section title="Payout Destination"><PayoutDestinationForm endpoint="/creator/payout-destination" /></Section>
             <Section title="Transaction History" action={<Currency />}>
-                <DataTable
-                  rows={data.history}
-                  rowKey={(r) => r.id}
-                  label="Transaction History"
-                  columns={[
-                    { label: "Business", cell: (r) => r.business ?? r.campaign },
-                    { label: "Earning Type", cell: (r) => r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source },
-                    {
-                      label: "Amount",
-                      cell: (r) => `${r.amount >= 0 ? "+" : ""}${amount(r.amount)} ETB`,
-                      numeric: true,
-                    },
-                    { label: "Date/Time", cell: (r) => dateTime(r.atUtc) },
-                    { label: "Status", cell: (r) => r.status ?? "Earned" },
-                  ]}
-                  card={(r) => (
-                    <>
-                      <div className="card-head">
-                        <strong>{r.business ?? r.campaign}</strong>
-                        <strong>{r.amount >= 0 ? "+" : ""}{amount(r.amount)} ETB</strong>
-                      </div>
-                      <p className="fine-print">
-                        {r.sourceType === "UGC" ? "UGC" : r.source === "Sale Earnings" ? "Sale Commission" : r.source === "View Earnings" ? "Verified Views" : r.source} · {dateTime(r.atUtc)} · {r.status ?? "Earned"} · {r.campaign}
-                      </p>
-                    </>
-                  )}
+                <DataTable compact rows={data.history} rowKey={row => row.id} label="Transaction History" columns={[
+                  { label: "Business", cell: row => <span data-no-translate>{row.business ?? row.campaign}</span> },
+                  { label: "Date/time", cell: row => dateTime(row.atUtc) },
+                  { label: "Promotion type", cell: row => <details><summary>{row.promotionType ?? (row.sourceType === "UGC" ? "UGC" : row.sourceType === "VIEW_ONLY" ? "View Only" : "View + Sale")}</summary>{row.source} · {row.status} · {row.campaign}</details> },
+                  { label: "Amount", cell: row => `${row.amount >= 0 ? "+" : ""}${amount(row.amount)}`, numeric: true },
+                ]}
                   empty={
                     <Empty
                       title="No earnings yet."

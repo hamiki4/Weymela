@@ -34,9 +34,10 @@ describe("authorized Admin account email presentation", () => {
     expect(screen.getAllByText(account.fullPhone).length).toBeGreaterThan(0);
     expect(screen.getByRole("columnheader", { name: "Phone" })).toBeInTheDocument();
     expect(screen.queryByText(account.safeIdentifier)).not.toBeInTheDocument();
-    screen.getAllByRole("link", { name: account.name })[0].click();
-    expect(await screen.findByText(email)).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Account history", { selector: "summary" }));
+    await userEvent.click(screen.getAllByRole("link", { name: account.name })[0]);
+    const history = await screen.findByText("Account history", { selector: "summary" });
+    expect(screen.getByText(email)).toBeInTheDocument();
+    await userEvent.click(history);
     expect(screen.getAllByText("Account Unlocked")[0]).toBeVisible();
     expect(screen.queryByText("admin-id")).not.toBeInTheDocument();
   });
@@ -56,7 +57,7 @@ describe("authorized Admin account email presentation", () => {
     mockApi({ [path]: rows });
     render(<MemoryRouter><Component /></MemoryRouter>);
     expect((await screen.findAllByText(email)).length).toBeGreaterThan(0);
-    if (_role === "Customer") expect(document.querySelector(".mobile-data .admin-account-phone")).toHaveTextContent("+251911222333");
+    if (_role === "Customer") expect(document.querySelector(".compact-table .admin-account-phone")).toHaveTextContent("+251911222333");
   });
 
   it("shows the applicant email during Admin profile review", async () => {

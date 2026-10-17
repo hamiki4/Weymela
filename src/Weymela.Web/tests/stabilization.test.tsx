@@ -15,12 +15,12 @@ it("opening one notification acknowledges it before displaying its destination",
   {id:"first",title:"Your work",message:"Review your work",route:"/creator/promotions",createdAtUtc:"2026-10-14T00:00:00Z",readAtUtc:null},
   {id:"second",title:"Another item",message:"Another item",route:"/creator/earnings",createdAtUtc:"2026-10-14T00:00:00Z",readAtUtc:null}]}});
  render(<MemoryRouter initialEntries={["/notifications"]}><Routes><Route path="/notifications" element={<Inbox/>}/><Route path="/creator/promotions" element={<h1>Displayed work</h1>}/></Routes></MemoryRouter>);
- await screen.findByText("Your work");await userEvent.click(screen.getAllByRole("link",{name:"Open"})[0]);
+ await screen.findByText("Your work");await userEvent.click(screen.getAllByRole("link",{name:"Your work"})[0]);
  expect(await screen.findByRole("heading",{name:"Displayed work"})).toBeVisible();
  expect(api.writes.map(write=>write.path)).toEqual(["/notifications/first/read"]);
 });
 it("Business tracking separates review, active work, and completed deliverables with distinct actions",async()=>{
- const base:BusinessPromotionItem={key:"review",id:"review",campaignId:"ugc",kind:"UGC deliverable",title:"Review content",group:"Pending",status:"Pending Business review",budget:4900,remaining:4900,dueAtUtc:"2026-10-20T00:00:00Z",primaryAction:"Review video",actionPath:"/business/ugc/ugc",creator:"Creator",remainingDays:null};
+ const base:BusinessPromotionItem={key:"review",id:"review",campaignId:"ugc",kind:"UGC deliverable",title:"Review content",group:"Pending",status:"Pending Business review",budget:4900,remaining:4900,dueAtUtc:"2026-10-20T00:00:00Z",primaryAction:"Review video",actionPath:"/business/ugc/ugc",creator:"Creator",remainingDays:null,creatorCount:1,lowFunds:false};
  mockApi({"/business/promotion-management":[base,{...base,key:"active",id:"active",title:"Awaiting publication",group:"Active",status:"Approved for publication",primaryAction:"View deliverable"},{...base,key:"done",id:"done",title:"Published work",group:"Completed",status:"Published · fixed fee earned",remaining:0}]});
  render(<MemoryRouter><PromotionManagement/></MemoryRouter>);
  await screen.findByRole("heading",{name:"Review content"});expect(screen.queryByText("Remaining")).not.toBeInTheDocument();expect(screen.getByRole("link",{name:"Review video"})).toHaveAttribute("href","/business/ugc/ugc");

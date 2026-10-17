@@ -58,6 +58,7 @@ export function BusinessCampaignDetail() {
   const [editRegion, setEditRegion] = useState("");
   const [editBudget, setEditBudget] = useState("");
   const [editPlatforms, setEditPlatforms] = useState<PlatformCapacity[]>([]);
+  const [addAmount, setAddAmount] = useState("");
   const [success, setSuccess] = useState("");
   const changed = (message: string) => {
     setSuccess(message);
@@ -147,6 +148,7 @@ export function BusinessCampaignDetail() {
             {tab === "overview" && (
               <div className="two-column">
                 <Section title="Promotion details">
+                  <dl className="detail-list"><div><dt>Starts</dt><dd>{date(c.startUtc)}</dd></div><div><dt>Ends</dt><dd>{date(c.endUtc)}</dd></div><div><dt>Days left</dt><dd>{Math.max(0,Math.ceil((new Date(c.endUtc).getTime()-Date.now())/86400000))}</dd></div></dl>
                   {c.slogan?.trim() && <p className="business-promotion-slogan">{c.slogan}</p>}
                   <p className="preserve-lines">{data.description}</p>
                   <dl className="detail-list">
@@ -349,6 +351,12 @@ export function BusinessCampaignDetail() {
             {tab === "funds" && (
               <Section title="Funding" action={<Currency />}>
                 <FundsGrid values={funds} />
+                {["Funded","Published","Active","BudgetExhausted"].includes(c.status) && new Date(c.endUtc).getTime() > Date.now() && <form className="contained-form" onSubmit={event => { event.preventDefault(); void action.run(async key => {
+                  if (!wallet.data) return;
+                  await post(`/business/campaigns/${id}/add-funds`, { amount: Number(addAmount), campaignVersion: c.version, walletVersion: wallet.data.version }, key);
+                  setAddAmount(""); wallet.reload(); changed("Funds added");
+                }); }}><Field label="Add Funds"><MoneyInput value={addAmount} max={wallet.data?.available} onChange={event => setAddAmount(event.target.value)} /></Field><p>Available: {amount(wallet.data?.available)} ETB</p><Button type="submit" disabled={action.busy || !wallet.data || Number(addAmount)<=0 || Number(addAmount)>wallet.data.available}>Add Funds</Button></form>}
+
                 <Notice>
                   Unused Creator Budget returns to the Available Promotion
                   Budget, not your available wallet balance. Earned funds remain

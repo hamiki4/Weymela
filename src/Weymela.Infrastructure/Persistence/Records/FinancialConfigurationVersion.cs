@@ -20,6 +20,23 @@ public sealed class FinancialConfigurationVersion
     public Money? CustomerPayoutThreshold { get; private set; }
     public int? PromotionLiveDurationDays { get; private set; }
     public bool? EnforceAudienceRequirements { get; private set; }
+    public decimal? LowPromotionBalanceAlert { get; private set; }
+    public bool? MonthlyPayoutEnabled { get; private set; }
+    public int? MonthlyPayoutDay { get; private set; }
+    public DateTime? MonthlyPayoutEffectiveFromUtc { get; private set; }
+    public bool? UgcPayoutMinimumExempt { get; private set; }
+
+    public void SetPayoutAndAlertControls(decimal? alert, int? day, DateTime? effective, bool? ugcExempt, bool? monthlyEnabled)
+    {
+        if (alert is < 0 or > 9999999999999999.99m || monthlyEnabled == true && day is null || alert is { } value && decimal.Round(value, 2) != value || day is < 1 or > 28
+            || day.HasValue != effective.HasValue || effective is { Kind: not DateTimeKind.Utc })
+            throw new Weymela.Application.ApplicationFailure(Weymela.Application.FailureKind.Validation, "Check the alert amount and monthly payout date.");
+        LowPromotionBalanceAlert = alert;
+        MonthlyPayoutEnabled = monthlyEnabled;
+        MonthlyPayoutDay = day;
+        MonthlyPayoutEffectiveFromUtc = effective;
+        UgcPayoutMinimumExempt = ugcExempt;
+    }
     // Existing immutable versions retain their original sale snapshot rates without a backfill.
     public decimal? ApprovedCreatorCommissionPercent { get; private set; }
     public decimal? ApprovedCustomerCashbackPercent { get; private set; }

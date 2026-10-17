@@ -57,6 +57,22 @@ public sealed class CreatorGoLiveHttpTests(PostgresFixture postgres)
         Assert.Equal(start, retry["wentLiveAtUtc"]!.GetValue<DateTime>());
         await using var db = host.Database.Open();
         Assert.Single(db.CreatorEarningEntries.Where(x => x.UgcAssignmentId == assignment));
+        var liveEvent = await db.OutboxMessages.SingleAsync(x => x.EventType == "UgcPublicationActivated");
+        using (var payload = System.Text.Json.JsonDocument.Parse(liveEvent.Payload))
+        {
+            var work = await db.UgcAssignments.SingleAsync(x => x.Id == assignment);
+            var campaign = await db.UgcOpportunities.SingleAsync(x => x.Id == work.UgcOpportunityId);
+            // PostgreSQL persists timestamps to microseconds; the outbox keeps
+            // the original UTC event's finer .NET tick precision.
+            var recordedStart = payload.RootElement.GetProperty("WentLiveAtUtc").GetDateTime();
+            Assert.Equal(DateTimeKind.Utc,recordedStart.Kind);
+            Assert.Equal(start.Ticks / 10,recordedStart.Ticks / 10);
+            Assert.Equal(work.CreatorId,payload.RootElement.GetProperty("CreatorId").GetGuid());
+            Assert.Equal(campaign.BusinessId,payload.RootElement.GetProperty("BusinessId").GetGuid());
+            Assert.Equal(campaign.Id,payload.RootElement.GetProperty("CampaignId").GetGuid());
+            Assert.Equal(id,payload.RootElement.GetProperty("PublicationId").GetGuid());
+            Assert.NotNull(payload.RootElement.GetProperty("PublicationReference").GetString());
+        }
         Assert.Equal(evidenceReference, (await db.CreatorPublicationVerifications.SingleAsync(x => x.Id == id)).EvidenceReference);
     }
 

@@ -15,8 +15,8 @@ export class ApiError extends Error {
 const resourceContextChangedEvent = "weymela-resource-context-changed";
 export const notificationsChangedEvent = "weymela-notifications-changed";
 export const adminActionCountsChangedEvent = "weymela-admin-action-counts-changed";
-export function notifyNotificationsChanged() {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(notificationsChangedEvent));
+export function notifyNotificationsChanged(unreadDelta = 0) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(notificationsChangedEvent, { detail: { unreadDelta } }));
 }
 export function notifyAdminActionCountsChanged() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(adminActionCountsChangedEvent));
@@ -146,7 +146,7 @@ export async function privateAsset(path: string, signal: AbortSignal): Promise<{
   const blob = await response.blob();
   return { url: URL.createObjectURL(blob), contentType: blob.type };
 }
-export function useResource<T>(path: string, enabled = true) {
+export function useResource<T>(path: string, enabled = true, refreshMs = 0) {
   const [saved, setData] = useState<{ path: string; value: T; generation: number } | null>(() => cachedResource<T>(path));
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,6 +190,14 @@ export function useResource<T>(path: string, enabled = true) {
       window.removeEventListener(resourceContextChangedEvent, refreshForContext);
     };
   }, []);
+  useEffect(() => {
+    if (!enabled || refreshMs <= 0) return;
+    const refresh = () => { if (document.visibilityState === "visible" && navigator.onLine) reload(); };
+    const timer = window.setInterval(refresh, refreshMs);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [path, enabled, refreshMs, reload]);
   const data = enabled && saved?.path === path && saved.generation === resourceContextGeneration ? saved.value : null;
   return { data, error, loading: enabled && (loading || (data === null && !error)), reload, path };
 }

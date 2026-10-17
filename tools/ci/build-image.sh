@@ -95,7 +95,7 @@ if test "$component" = web; then
     --security-opt no-new-privileges --entrypoint /sbin/apk "$image" info -v \
     > .artifacts/release/web-runtime-packages.txt
   grep -Fx 'libuuid-2.42.3-r1' .artifacts/release/web-runtime-packages.txt
-  grep -Fx 'libexpat-2.8.5-r0' .artifacts/release/web-runtime-packages.txt
+  grep -Fx 'libexpat-2.9.0-r0' .artifacts/release/web-runtime-packages.txt
   grep -Fx 'tiff-4.7.2-r0' .artifacts/release/web-runtime-packages.txt
 fi
 printf 'image=%s\nrelease=%s\n' "$image" "$release" >> "$GITHUB_OUTPUT"

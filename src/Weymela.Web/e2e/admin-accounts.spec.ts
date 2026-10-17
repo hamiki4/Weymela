@@ -27,7 +27,7 @@ test("Platform Admin has role-specific account areas and can preauthorize an Adm
   await page.getByRole("button", { name: "Create invitation" }).click();
   await expect(page).toHaveURL(/\/admin\/admins\?created=/);
   await expect(page.getByRole("status")).toContainText("Preauthorization created");
-  await expect(page.locator("main .desktop-data")).toContainText("Browser Platform Admin");
+  await expect(page.locator("main .compact-table")).toContainText("Browser Platform Admin");
   await expect(page.locator("main")).not.toContainText(/password hash|pin verifier|firebase token|activation code/i);
   await layout(page);
 });
@@ -40,7 +40,7 @@ test("authorized account list and detail show a long full email without phone ov
   await page.getByLabel("Display name").fill("Responsive Customer");
   await page.getByRole("button", { name: "Create invitation" }).click();
   await expect(page).toHaveURL(/\/admin\/customers\?created=/);
-  const card = page.locator(".data-card").filter({ hasText: email });
+  const card = page.locator(".compact-table tbody tr").filter({ hasText: email });
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(card.locator(".admin-account-email")).toHaveText(email);
@@ -71,7 +71,7 @@ test("recipient activates a Platform Admin-created Customer with own credentials
   await page.getByRole("button", { name: "Create invitation" }).click();
   await expect(page).toHaveURL(/\/admin\/customers\?created=/);
   await expect(page.getByRole("status")).toContainText("Preauthorization created");
-  await expect(page.locator("main .desktop-data")).toContainText("Invited Customer");
+  await expect(page.locator("main .compact-table")).toContainText("Invited Customer");
   const invitation = await context.request.get(`/__test/email-code?identifier=${encodeURIComponent(email)}`);
   expect(invitation.status()).toBe(200);
   const { code: activationSecret } = await invitation.json() as { code: string };
@@ -163,7 +163,7 @@ test("Platform Admin manages Customer lock and deactivation from the Customers l
   const customer = rows.find(row => row.userId === target || row.id === target);
   expect(customer).toBeTruthy();
   const choose = async (command: string, reason: string) => {
-    const row = page.locator(".desktop-data tbody tr").filter({ hasText: customer!.name }).first();
+    const row = page.locator(".compact-table tbody tr").filter({ hasText: customer!.name }).first();
     await row.locator("summary").click();
     await row.getByRole("menuitem", { name: command, exact: true }).click();
     await page.getByRole("dialog", { name: new RegExp(command) }).getByLabel("Reason").fill(reason);

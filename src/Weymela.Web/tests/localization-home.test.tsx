@@ -6,13 +6,22 @@ import { invalidateResourceCache } from "../src/api/client";
 import { LanguageChoice, LanguageProvider } from "../src/localization/Language";
 import { BusinessDashboard } from "../src/features/business/BusinessPages";
 import { CreatorDashboard } from "../src/features/creator/CreatorExperience";
-import { mockApi, wallet, business } from "./fixtures";
+import { CustomerOffers } from "../src/features/commerce/CustomerPages";
+import { mockApi, wallet, business, offer } from "./fixtures";
 
 vi.mock("../src/app/Session", () => ({ useSession: () => ({ user: { role: "Business" } }) }));
 beforeEach(() => { vi.restoreAllMocks(); invalidateResourceCache(false); localStorage.setItem("weymela.language", "am"); mockApi(); });
 afterEach(() => { localStorage.removeItem("weymela.language"); document.documentElement.lang = "en"; });
 
 describe("localized role homes", () => {
+  it.each([0, 1])("translates the Customer offer counter with %s offers", async total => {
+    mockApi({ "/customer/offers": total ? [offer] : [] });
+    const view = render(<MemoryRouter><LanguageProvider><LanguageChoice /><CustomerOffers /></LanguageProvider></MemoryRouter>);
+    await screen.findByRole("heading", { name: "የተመረጡ ማስታወቂያዎች" });
+    await waitFor(() => expect(view.container.querySelector(".customer-offer-count")).toHaveTextContent(total ? "1 ቅናሽ" : "0 ቅናሾች"));
+    await userEvent.click(screen.getByRole("button", { name: "English" }));
+    await waitFor(() => expect(view.container.querySelector(".customer-offer-count")).toHaveTextContent(total ? "1 offer" : "0 offers"));
+  });
   it("translates Business controls and preserves funding routes, names and amounts through language changes", async () => {
     mockApi({ "/business/home": { business, wallet, activeCampaigns: 1, creatorRequests: 1,
       lowFundsAlerts: [{ title: "Weekend", fundingPath: "/business/campaigns/fixture?tab=funds" }] } });

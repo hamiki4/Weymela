@@ -13,7 +13,7 @@ public sealed partial class FinancialCommands
         new EfUnitOfWork(db, IsolationLevel.Serializable).ExecuteAsync(async token =>
         {
             DemandBusiness(actor);
-            var fp = RequestFingerprint.Create(id.ToString(), RequestFingerprint.Amount(amount));
+            var fp = RequestFingerprint.Create(actor.BusinessId!.Value.ToString(), id.ToString(), RequestFingerprint.Amount(amount));
             var replay = await Replay(actor, "AddPromotionFunds", key, fp, token);
             if (replay is not null) return replay.Value;
             var promotion = await new PromotionRepository(db).GetAsync(id,token)

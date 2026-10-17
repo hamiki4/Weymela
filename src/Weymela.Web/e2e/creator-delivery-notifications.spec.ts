@@ -46,14 +46,26 @@ test("direct UGC Only delivery earns on approval and exposes an authorized downl
 });
 
 test("unread notification title and message are bold and read state stays normal after reload", async ({ page, context }) => {
-  await createPublishedUgc(context, `Notification evidence ${Date.now()}`, "other-creator");
-  await login(context, "business"); await open(page, "/notifications");
-  const unread = page.locator('.notification-item[data-unread="true"]').first(); await expect(unread).toBeVisible();
-  await expect(unread.locator("h3")).toHaveCSS("font-weight", "700");
-  await expect(unread.locator("p")).toHaveCSS("font-weight", "700");
-  await page.getByRole("button", { name: "Mark all read" }).click();
-  await expect(page.getByRole("heading", { name: "0 unread", exact: true })).toBeVisible();
+  const id = await createPublishedUgc(context, `Notification evidence ${Date.now()}`, "other-creator");
+  await login(context, "business");
+  await expect.poll(async () => {
+    const inbox = await (await context.request.get("/api/notifications")).json() as {
+      items: { route: string; title: string; readAtUtc: string | null }[];
+    };
+    return inbox.items.some(row => row.route === `/business/ugc/${id}` && row.title === "New UGC request" && !row.readAtUtc);
+  }, { timeout: 15000 }).toBe(true);
+  await open(page, "/notifications");
+  const notification = page.locator(".notification-item")
+    .filter({ has: page.locator(`a[data-notification-open][href="/business/ugc/${id}"]`) })
+    .filter({ hasText: "New UGC request" });
+  await expect(notification).toHaveAttribute("data-unread", "true");
+  await expect(notification.locator("h3")).toHaveCSS("font-weight", "700");
+  await expect(notification.locator("p")).toHaveCSS("font-weight", "700");
+  await notification.getByRole("link", { name: "Open", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/business/ugc/${id}$`));
+  await open(page, "/notifications");
+  await expect(notification).toHaveAttribute("data-unread", "false");
   await page.reload();
-  await expect(page.locator(".notification-item").first().locator("h3")).toHaveCSS("font-weight", "400");
-  await expect(page.locator(".notification-item").first().locator("p")).toHaveCSS("font-weight", "400");
+  await expect(notification.locator("h3")).toHaveCSS("font-weight", "400");
+  await expect(notification.locator("p")).toHaveCSS("font-weight", "400");
 });

@@ -305,8 +305,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(1500m, (await db.BusinessWallets.SingleAsync()).ReservedBalance.Amount);
         Assert.Null((await db.UgcAssignments.SingleAsync()).CompletedAtUtc);
         var tracking = new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),new FixedTime(Now));
-        var pendingWork=(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Single(x=>x.Id==assignmentId);
-        Assert.Equal("Active",pendingWork.Group); Assert.Equal("Approved for publication",pendingWork.Status);
+        var pendingWork=Assert.Single(await tracking.BusinessPromotionTrackingAsync(state.Business,default));
+        Assert.Equal(opportunityId,pendingWork.Id); Assert.Equal("Active",pendingWork.Group); Assert.Equal(1,pendingWork.CreatorCount);
         await Assert.ThrowsAsync<ApplicationFailure>(()=>tracking.BusinessPromotionTrackingAsync(state.Creator,default));
         var profile = await db.CreatorSocialProfiles.SingleAsync();
         var clock = new TestClock { Now = Now };
@@ -330,7 +330,7 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(50m, fee.Amount.Amount);
         Assert.Equal(2, await db.FinancialJournals.CountAsync(x => EF.Property<Guid?>(x, "UgcOpportunityId") == opportunityId));
         Assert.Single(await db.UgcReservations.Where(x => x.UgcOpportunityId == opportunityId).ToListAsync());
-        Assert.Equal("Completed",(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Single(x=>x.Id==assignmentId).Group);
+        Assert.Equal("Active",Assert.Single(await tracking.BusinessPromotionTrackingAsync(state.Business,default)).Group);
         Assert.Empty(await new ReconciliationService(db).CheckAsync(Phase4Scenario.Admin,default));
     }
 
@@ -1106,8 +1106,8 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         Assert.Equal(UgcCustomerOfferStatus.Exhausted, offer.Status);
         Assert.Equal(0m, offer.RemainingFunding.Amount);
         var tracking = new WorkspaceQueries(db, new TestDirectory(), new FixedTime(Now));
-        var pausedCampaign = (await tracking.BusinessPromotionTrackingAsync(state.Business, default)).Single(x => x.Id == id && x.Kind == "UGC campaign");
-        Assert.Equal("Pending", pausedCampaign.Group); Assert.Equal("Add Funds", pausedCampaign.PrimaryAction);
+        var pausedCampaign = (await tracking.BusinessPromotionTrackingAsync(state.Business, default)).Single(x => x.Id == id && x.Kind == "UGC + Sale");
+        Assert.Equal("Active", pausedCampaign.Group); Assert.Equal("Manage", pausedCampaign.PrimaryAction);
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetLow").ToListAsync());
         Assert.Single(await db.OutboxMessages.Where(x => x.EventType == "UgcCashbackBudgetExhausted").ToListAsync());
         await Assert.ThrowsAsync<ApplicationFailure>(() => checkout.IssueUgcAsync(new(customer, offer.Id, assignmentId, "empty-qr"), default));
@@ -1375,10 +1375,10 @@ public sealed class UgcPersistenceTests(PostgresFixture fixture)
         if (offer is not null && offer.Status == UgcCustomerOfferStatus.Active && offer.EndsAtUtc > Now)
         {
             var tracking = await new Weymela.Infrastructure.Web.WorkspaceQueries(db,new TestDirectory(),new FixedTime(Now)).BusinessPromotionTrackingAsync(state.Business,default);
-            var campaign = tracking.Single(x => x.Id == assignment.UgcOpportunityId && x.Kind == "UGC campaign");
+            var campaign = tracking.Single(x => x.Id == assignment.UgcOpportunityId && x.Kind == "UGC + Sale");
             Assert.Equal("Active",campaign.Group); Assert.Equal(offer.EndsAtUtc,campaign.DueAtUtc);
             Assert.True(campaign.RemainingDays > 0);
-            Assert.Equal("Completed",tracking.Single(x => x.Id == assignmentId).Group);
+            Assert.Single(tracking); Assert.Equal(1,campaign.CreatorCount);
         }
     }
 

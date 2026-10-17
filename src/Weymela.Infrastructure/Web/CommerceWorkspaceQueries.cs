@@ -127,7 +127,7 @@ public sealed partial class WorkspaceQueries
                     new(offer.Creator.DisplayName,(await directory.CreatorCardAsync(offer.Creator.Id,ct)).CreatorNumber),offer.BenefitPercent,
                     publicationUrl ?? (offer.Provider is null || offer.ExternalContentId is null ? null
                         : PublicContentLink.Create(offer.Provider,offer.ExternalContentId)),
-                    offer.Slogan,offer.Location,UgcAssignmentId:offer.UgcAssignmentId,BenefitMode:offer.BenefitMode));
+                    offer.Slogan,offer.Location,offer.RemainingDays,UgcAssignmentId:offer.UgcAssignmentId,BenefitMode:offer.BenefitMode));
             }
         }
         return result;

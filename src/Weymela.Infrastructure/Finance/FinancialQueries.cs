@@ -107,10 +107,13 @@ public sealed class FinancialQueries(WeymelaDbContext db, ICommerceAccessPolicy 
         {
             if (!opportunities.TryGetValue(offer.UgcOpportunityId, out var ugc)) continue;
             foreach (var live in await eligibility.EligibleUgcAsync(offer, ct))
+            {
+                var end = live.Publication.ExpiresAtUtc is { } expires && expires < offer.EndsAtUtc ? expires : offer.EndsAtUtc;
                 result.Add(new(offer.Id,"UGC_CUSTOMER_OFFER",offer.CustomerFacingSlogan ?? $"{offer.CustomerDiscountPercent:0.####}% {(offer.BenefitMode == CustomerBenefitMode.Cashback ? "cashback" : "off")}",
                     await directory.BusinessAsync(offer.BusinessId,ct),await directory.CreatorAsync(live.Assignment.CreatorId,ct),offer.CustomerDiscountPercent,
-                    offer.CustomerFacingSlogan,ugc.Location,UgcAssignmentId:live.Assignment.Id,
+                    offer.CustomerFacingSlogan,ugc.Location,live.Publication.WentLiveAtUtc,end,Math.Max(0,(int)Math.Ceiling((end-now).TotalDays)),UgcAssignmentId:live.Assignment.Id,
                     Provider:live.Publication.Provider,ExternalContentId:live.Publication.ExternalContentId,BenefitMode:offer.BenefitMode.ToString()));
+            }
         }
         return result;
     }

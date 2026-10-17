@@ -42,11 +42,12 @@ internal sealed class CreatorPublicationVerificationConfiguration
         b.ToTable("CreatorPublicationVerifications", t =>
         {
             t.HasCheckConstraint("CK_Publication_Work", "(\"CreatorAllocationId\" IS NOT NULL AND \"UgcAssignmentId\" IS NULL AND \"PromotionContentSubmissionId\" IS NOT NULL AND \"UgcSubmissionId\" IS NULL) OR (\"CreatorAllocationId\" IS NULL AND \"UgcAssignmentId\" IS NOT NULL AND \"PromotionContentSubmissionId\" IS NULL AND \"UgcSubmissionId\" IS NOT NULL)");
-            t.HasCheckConstraint("CK_Publication_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram')");
+            t.HasCheckConstraint("CK_Publication_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram','Facebook')");
             t.HasCheckConstraint("CK_Publication_Content", "length(trim(\"ExternalContentId\")) > 0 AND length(\"ExternalContentId\") <= 100");
             t.HasCheckConstraint("CK_Publication_Status", "\"Status\" IN ('VerificationPending','Verified','Failed','Expired')");
             t.HasCheckConstraint("CK_Publication_Verification", "(\"Status\" = 'Verified' AND \"VerifiedAtUtc\" IS NOT NULL AND \"EvidenceReference\" IS NOT NULL AND \"VerificationMethod\" IS NOT NULL) OR \"Status\" <> 'Verified'");
             t.HasCheckConstraint("CK_Publication_GoLive", "\"WentLiveAtUtc\" IS NULL OR \"VerifiedAtUtc\" IS NOT NULL");
+            t.HasCheckConstraint("CK_Publication_Duration", "\"LiveDurationDays\" IS NULL OR (\"LiveDurationDays\" BETWEEN 1 AND 365 AND \"ExpiresAtUtc\" = \"WentLiveAtUtc\" + \"LiveDurationDays\" * interval '1 day')");
             t.HasCheckConstraint("CK_Publication_Baseline", "\"BaselineViews\" IS NULL OR \"BaselineViews\" >= 0");
         });
         Mapping.Scalars(b);

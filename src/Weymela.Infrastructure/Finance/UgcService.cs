@@ -43,6 +43,11 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 input.Instructions, JsonSerializer.Serialize(resources), input.Location, input.DueDateUtc,
                 input.ProductProvided, input.CreatorMustPurchase, input.UsageRights, Amount(input.CreatorPayment),
                 input.CreatorsNeeded, pricing, Now, requirements, capacities, input.ApplicationClosesAtUtc);
+            if (!Enum.TryParse<UgcDeliverableType>(input.DeliverableType, true, out var delivery) || !Enum.IsDefined(delivery))
+                throw new ApplicationFailure(FailureKind.Validation, "Choose Public social video or Direct video delivery.");
+            if (delivery == UgcDeliverableType.DirectVideoDelivery && input.CustomerOfferEnabled)
+                throw new ApplicationFailure(FailureKind.Validation, "Direct delivery is available for UGC Only.");
+            opportunity.ConfigureDelivery(delivery, delivery == UgcDeliverableType.PublicSocialVideo ? config.PromotionLiveDurationDays : null);
             db.UgcOpportunities.Add(opportunity);
             if (input.CustomerOfferEnabled)
             {
@@ -231,6 +236,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 ?? throw new ApplicationFailure(FailureKind.NotFound, "UGC assignment not found.");
             if (assignment.CreatorId != actor.CreatorId) throw new ApplicationFailure(FailureKind.Forbidden, "This UGC assignment belongs to another Creator.");
             var opportunity = await Opportunity(assignment.UgcOpportunityId, token);
+            if (opportunity.DeliverableType == UgcDeliverableType.DirectVideoDelivery)
+                throw new ApplicationFailure(FailureKind.Validation, "Upload the final video for direct delivery.");
             var requirements = PostingRequirements(opportunity);
             if (requirements.Count > 0)
             {
@@ -327,6 +334,8 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             else
             {
                 assignment.Approve(Now); submission.Approve(actor.UserId, Now);
+                if (opportunity.DeliverableType == UgcDeliverableType.DirectVideoDelivery)
+                    await UgcPublicationPayment.ReleaseDirectAsync(db, actor, assignment, opportunity, submission, key, Now, token);
                 Record(actor, "UgcContentApproved", opportunity.Id, assignment.CreatorId, correlation,
                     new { OpportunityId = opportunity.Id, AssignmentId = assignment.Id, CreatorId = assignment.CreatorId,
                         CreatorPayment = assignment.CreatorPayment.Amount, PlatformFee = assignment.PlatformFee.Amount });
@@ -346,6 +355,10 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
             if (opportunity.Version != expectedVersion) throw Conflict();
             var resources = Resources(input.Resources);
             var isDraft = opportunity.Status == UgcOpportunityStatus.Draft;
+            if (opportunity.DeliverableType == UgcDeliverableType.DirectVideoDelivery
+                && (input.CustomerOfferEnabled == true || input.ContentType is not (null or "Video")
+                    || input.PlatformRequirements?.Count > 0 || input.PlatformCapacities?.Count > 0))
+                throw new ApplicationFailure(FailureKind.Validation, "Direct delivery requires UGC Only video without social platforms.");
             var isFullEdit = isDraft || (opportunity.Status is (UgcOpportunityStatus.Open or UgcOpportunityStatus.InProgress) && opportunity.ApprovedCreatorCount == 0);
             var isMaterial = isFullEdit && !isDraft || (!isFullEdit && input.IsMaterial)
                 || !string.Equals(opportunity.Instructions.Trim(), input.Instructions.Trim(), StringComparison.Ordinal)
@@ -730,10 +743,14 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
                 profiles.FirstOrDefault(p => p.SubjectId == x.CreatorId && p.Role == ActorRole.Creator)?.CreatorNumber,
                 submission?.ContentRevisionNumber,
                 submission?.ReviewMediaAssetId is null ? null : $"/api/review-media/ugc/{submission.Id}",
-                publication is null ? null : CreatorPublicationService.View(publication),
+                publication is null ? null : CreatorPublicationService.View(publication, Now),
                 request.SelectedPlatform?.ToString(), social?.ProfileUrl, social?.Id,
                 submission?.ReviewMediaAssetId is { } assetId ? assets.GetValueOrDefault(assetId)?.ContentType : null,
-                TikTokVideoLink.WatchUrl(request.SelectedPlatform?.ToString(), submission?.SubmissionUrl));
+                TikTokVideoLink.WatchUrl(request.SelectedPlatform?.ToString(), submission?.SubmissionUrl),
+                opportunity.DeliverableType.ToString(), x.CompletedAtUtc,
+                opportunity.DeliverableType == UgcDeliverableType.DirectVideoDelivery && x.CompletedAtUtc is not null
+                    && submission?.Status == UgcAssignmentStatus.Approved && submission.ReviewMediaAssetId is not null
+                    ? $"/api/review-media/ugc/{submission.Id}/download" : null);
         }).ToArray();
     }
 
@@ -883,7 +900,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
         x.PlatformCapacities.Where(slot => slot.Capacity > 0).Select(slot => new UgcPlatformCapacityView(slot.Platform.ToString(), slot.Capacity, slot.ApprovedCount, slot.Available)).ToArray(),
         socials?.Where(profile => profile.IsActive && x.PlatformCapacities.Any(slot => slot.Platform == profile.Platform && slot.Capacity > 0)
             && MatchesProfile(profile, x, enforceAudience)).Select(profile => new UgcEligibleSocialProfile(profile.Id, profile.Platform.ToString(), profile.ProfileUrl)).ToArray(),
-        x.ApplicationClosesAtUtc, includeBusinessFinancials ? offer?.Version : null);
+        x.ApplicationClosesAtUtc, includeBusinessFinancials ? offer?.Version : null, x.DeliverableType.ToString(), x.PromotionLiveDurationDays);
     private UgcCustomerOffer CreateCustomerOffer(UgcOpportunity opportunity, decimal? discount,
         decimal? fundedAllocation, string? slogan, DateTime? starts, DateTime? ends,
         decimal platformSalePercent, DateTime effectiveFrom, Guid configurationVersionId)
@@ -907,7 +924,7 @@ public sealed class UgcService(WeymelaDbContext db, TimeProvider clock)
     private static string[] ParseResources(string json)
     { try { return JsonSerializer.Deserialize<string[]>(json) ?? []; } catch (JsonException) { return []; } }
     private static string Snapshot(UgcOpportunity x) => JsonSerializer.Serialize(new
-    { x.Title, x.Slogan, x.ContentType, x.Instructions, x.ResourcesJson, x.Location, x.DueDateUtc, x.ProductProvided, x.CreatorMustPurchase, x.UsageRights, x.CreatorPayment, x.CreatorCapacity,
+    { x.Title, x.Slogan, x.ContentType, x.DeliverableType, x.PromotionLiveDurationDays, x.Instructions, x.ResourcesJson, x.Location, x.DueDateUtc, x.ProductProvided, x.CreatorMustPurchase, x.UsageRights, x.CreatorPayment, x.CreatorCapacity,
         PlatformCapacities = x.PlatformCapacities.Where(slot => slot.Capacity > 0).Select(slot => new { slot.Platform, slot.Capacity, slot.ApprovedCount }).ToArray(), x.CurrentRevision });
     private static string? Clean(string? value, int max)
     { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > max) throw new ApplicationFailure(FailureKind.Validation, "The supplied information is too long."); return result; }

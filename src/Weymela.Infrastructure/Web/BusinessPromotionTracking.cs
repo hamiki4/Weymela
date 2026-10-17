@@ -65,13 +65,17 @@ public sealed partial class WorkspaceQueries
             var offer = offers.FirstOrDefault(x => x.UgcOpportunityId == opportunity.Id);
             var offerRunning = offer is not null && offer.Status == UgcCustomerOfferStatus.Active && offer.RemainingFunding.Amount > 0 && offer.EndsAtUtc > Now;
             var offerNeedsFunding = opportunity.Status != UgcOpportunityStatus.Cancelled && offer is { Status: UgcCustomerOfferStatus.Exhausted } && offer.EndsAtUtc > Now;
-            var expired = !offerRunning && !offerNeedsFunding && opportunity.DueDateUtc <= Now;
-            var closed = opportunity.Status == UgcOpportunityStatus.Cancelled || !offerRunning && !offerNeedsFunding && (opportunity.Status == UgcOpportunityStatus.Completed || expired);
+            var workIds = assignments.Where(x => x.UgcOpportunityId == opportunity.Id).Select(x => x.Id).ToHashSet();
+            var liveEnd = ugcPublications.Where(x => x.UgcAssignmentId is { } id && workIds.Contains(id)
+                && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc is not null && x.EndedAtUtc is null && x.ExpiresAtUtc > Now)
+                .Select(x => x.ExpiresAtUtc).DefaultIfEmpty().Max();
+            var expired = liveEnd is null && !offerRunning && !offerNeedsFunding && opportunity.DueDateUtc <= Now;
+            var closed = opportunity.Status == UgcOpportunityStatus.Cancelled || liveEnd is null && !offerRunning && !offerNeedsFunding && (opportunity.Status == UgcOpportunityStatus.Completed || expired);
             items.Add(new("ugc-" + opportunity.Id, opportunity.Id, opportunity.Id, "UGC campaign", opportunity.Title,
                 closed ? "Completed" : offerNeedsFunding || opportunity.Status == UgcOpportunityStatus.Draft ? "Pending" : "Active",
-                offerNeedsFunding ? "Cashback funds exhausted" : offerRunning && opportunity.Status == UgcOpportunityStatus.Completed ? "Creator work completed · Customer offer active" : expired ? "Expired" : opportunity.Status.ToString(), opportunity.RequiredFunding.Amount + (offer?.FundedLimit.Amount ?? 0), opportunity.ReservedFunding.Amount + (offer?.RemainingFunding.Amount ?? 0),
-                offerRunning || offerNeedsFunding ? offer!.EndsAtUtc : opportunity.DueDateUtc, offerNeedsFunding ? "Add Funds" : opportunity.Status == UgcOpportunityStatus.Draft ? "Complete setup" : "Manage campaign", $"/business/ugc/{opportunity.Id}",
-                RemainingDays: offerRunning || offerNeedsFunding ? Math.Max(0, (int)Math.Ceiling((offer!.EndsAtUtc - Now).TotalDays)) : null));
+                offerNeedsFunding ? "Cashback funds exhausted" : liveEnd is not null && !offerRunning ? "Live" : offerRunning && opportunity.Status == UgcOpportunityStatus.Completed ? "Creator work completed · Customer offer active" : expired ? "Expired" : opportunity.Status.ToString(), opportunity.RequiredFunding.Amount + (offer?.FundedLimit.Amount ?? 0), opportunity.ReservedFunding.Amount + (offer?.RemainingFunding.Amount ?? 0),
+                offerRunning || offerNeedsFunding ? offer!.EndsAtUtc : liveEnd ?? opportunity.DueDateUtc, offerNeedsFunding ? "Add Funds" : opportunity.Status == UgcOpportunityStatus.Draft ? "Complete setup" : "Manage campaign", $"/business/ugc/{opportunity.Id}",
+                RemainingDays: offerRunning || offerNeedsFunding ? Math.Max(0, (int)Math.Ceiling((offer!.EndsAtUtc - Now).TotalDays)) : liveEnd is { } ends ? Math.Max(0, (int)Math.Ceiling((ends - Now).TotalDays)) : null));
             foreach (var request in ugcRequests.Where(x => x.UgcOpportunityId == opportunity.Id))
                 items.Add(new("ugc-request-" + request.Id, request.Id, opportunity.Id, "Creator application", opportunity.Title,
                     "Pending", "Awaiting Business decision", opportunity.CreatorPayment.Amount, opportunity.CreatorPayment.Amount,
@@ -79,15 +83,16 @@ public sealed partial class WorkspaceQueries
             foreach (var assignment in assignments.Where(x => x.UgcOpportunityId == opportunity.Id))
             {
                 var publication = ugcPublications.FirstOrDefault(x => x.UgcAssignmentId == assignment.Id);
-                var complete = publication?.WentLiveAtUtc != null || assignment.Status == UgcAssignmentStatus.Rejected;
+                var live = publication?.WentLiveAtUtc != null && publication.EndedAtUtc is null && publication.ExpiresAtUtc > Now;
+                var complete = assignment.CompletedAtUtc != null || publication?.WentLiveAtUtc != null || assignment.Status == UgcAssignmentStatus.Rejected;
                 var review = assignment.Status == UgcAssignmentStatus.Submitted;
-                var status = complete ? publication?.WentLiveAtUtc != null ? "Published · fixed fee earned" : "Rejected"
+                var status = live ? "Live" : complete ? assignment.Status == UgcAssignmentStatus.Rejected ? "Rejected" : "Completed"
                     : review ? "Pending Business review" : publication?.Status == PublicationVerificationStatus.Verified ? "Ready for Go Live"
                     : publication?.Status == PublicationVerificationStatus.VerificationPending ? "Publication verification pending"
                     : assignment.Status == UgcAssignmentStatus.Approved ? "Approved for publication" : "Creator work in progress";
                 items.Add(new("ugc-work-" + assignment.Id, assignment.Id, opportunity.Id, "UGC deliverable", opportunity.Title,
                     complete ? "Completed" : review ? "Pending" : "Active", status, assignment.CreatorPayment.Amount,
-                    complete ? 0 : assignment.CreatorPayment.Amount, assignment.ContentDueAtUtc ?? opportunity.DueDateUtc,
+                    complete ? 0 : assignment.CreatorPayment.Amount, publication?.ExpiresAtUtc ?? assignment.ContentDueAtUtc ?? opportunity.DueDateUtc,
                     review ? "Review video" : "View deliverable", $"/business/ugc/{opportunity.Id}", (await directory.CreatorCardAsync(assignment.CreatorId, ct)).DisplayName));
             }
         }

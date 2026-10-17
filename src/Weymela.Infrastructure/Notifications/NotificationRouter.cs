@@ -40,7 +40,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             "RoleEnrollmentSubmitted", "RoleEnrollmentApproved", "RoleEnrollmentRejected",
             "AccountRoleClosureRequested", "AccountRoleClosed",
             "PromotionContentSubmitted", "PromotionContentApproved", "PromotionContentChangesRequested", "PromotionContentRejected",
-            "PublicationVerificationRequested", "UgcPublicationVerificationRequested", "PublicationVerified", "PublicationVerificationFailed",
+            "PublicationVerificationRequested", "UgcPublicationVerificationRequested", "PublicationGoLiveRequested", "PublicationVerified", "PublicationVerificationFailed",
             "CreatorParticipationActivated", "UgcPublicationActivated",
             "UgcRequestReceived", "UgcRequestApproved", "UgcRequestRejected", "UgcContentSubmitted",
             "UgcChangesRequested", "UgcContentApproved", "UgcContentRejected", "UgcMaterialRevision", "UgcFixedPaymentEarned", "UgcPaymentCorrected" };
@@ -242,17 +242,28 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 return Plan(row.EventType switch{"PromotionContentApproved"=>"Video approved","PromotionContentChangesRequested"=>"Video changes requested",_=>"Video reviewed"},
                     row.EventType switch{"PromotionContentApproved"=>"Your approved revision is ready to publish.","PromotionContentChangesRequested"=>"Review the Business feedback and submit a new revision.",_=>"The Business did not approve this revision."},
                     Id("PromotionId"),Id("CreatorAllocationId"),new NotificationAudience(ActorRole.Creator,Id("CreatorId")));
-            case "PublicationVerificationRequested": case "UgcPublicationVerificationRequested":
-                return Plan("Publication awaiting verification","Confirm the public post and selected Creator profile.",
-                    data.TryGetProperty("PromotionId",out var requestedPromotion)?requestedPromotion.GetGuid():null,null,
-                    new NotificationAudience(ActorRole.PlatformAdmin)) with
-                    { UgcId=data.TryGetProperty("OpportunityId",out var requestedUgc)?requestedUgc.GetGuid():null, WorkspacePath="publications" };
+            case "PublicationVerificationRequested": case "UgcPublicationVerificationRequested": case "PublicationGoLiveRequested":
+            {
+                var reviewPublicationId = Id("PublicationId");
+                var publication = await db.CreatorPublicationVerifications.AsNoTracking().SingleAsync(x => x.Id == reviewPublicationId, ct);
+                if (publication.Status != PublicationVerificationStatus.VerificationPending) return null;
+                Guid? campaign = publication.CreatorAllocationId is { } allocation
+                    ? await db.CreatorAllocations.Where(x => x.Id == allocation).Select(x => (Guid?)x.PromotionId).SingleAsync(ct) : null;
+                Guid? opportunity = publication.UgcAssignmentId is { } assignment
+                    ? await db.UgcAssignments.Where(x => x.Id == assignment).Select(x => (Guid?)x.UgcOpportunityId).SingleAsync(ct) : null;
+                var business = campaign is { } promotionId
+                    ? await db.Promotions.Where(x => x.Id == promotionId).Select(x => x.BusinessId).SingleAsync(ct)
+                    : await db.UgcOpportunities.Where(x => x.Id == opportunity).Select(x => x.BusinessId).SingleAsync(ct);
+                return Plan("Publication review", "Review the public video and Creator profile.", campaign, null,
+                    new NotificationAudience(ActorRole.Business, business), new NotificationAudience(ActorRole.PlatformAdmin),
+                    new NotificationAudience(ActorRole.OperationsAdmin)) with { UgcId = opportunity, WorkspacePath = "publications", SourceKey = "PublicationReview:" + publication.Id };
+            }
             case "PublicationVerified": case "PublicationVerificationFailed":
             {
                 var publicationId=Id("PublicationId");
                 var publication=await db.CreatorPublicationVerifications.AsNoTracking()
                     .Where(x=>x.Id==publicationId)
-                    .Select(x=>new{x.CreatorId,x.CreatorAllocationId,x.UgcAssignmentId})
+                    .Select(x=>new{x.CreatorId,x.CreatorAllocationId,x.UgcAssignmentId,x.WentLiveAtUtc})
                     .SingleAsync(ct);
                 Guid? promotionId=null;Guid? budgetId=publication.CreatorAllocationId;Guid? ugcId=null;
                 if(publication.CreatorAllocationId is {} allocationId)
@@ -260,7 +271,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
                 else if(publication.UgcAssignmentId is {} assignmentId)
                     ugcId=await db.UgcAssignments.AsNoTracking().Where(x=>x.Id==assignmentId).Select(x=>x.UgcOpportunityId).SingleAsync(ct);
                 return Plan(row.EventType=="PublicationVerified"?"Publication verified":"Publication verification failed",
-                    row.EventType=="PublicationVerified"?"Your verified publication is ready to Go Live.":"Check the public post and submit it again.",
+                    row.EventType=="PublicationVerified" ? publication.WentLiveAtUtc is not null ? "Live" : "Approved" : "Check the public post and submit it again.",
                     promotionId,budgetId,new NotificationAudience(ActorRole.Creator,publication.CreatorId)) with { UgcId=ugcId, RelatedItemId=publication.UgcAssignmentId };
             }
             case "CreatorParticipationActivated":
@@ -279,7 +290,7 @@ public sealed class NotificationRouter(WeymelaDbContext db)
             }
             case "UgcFixedPaymentEarned": case "UgcPaymentCorrected":
                 return Plan(row.EventType=="UgcFixedPaymentEarned"?"UGC payment earned":"UGC payment returned to pending",
-                    row.EventType=="UgcFixedPaymentEarned"?"Verified Go Live succeeded. The agreed fixed fee is now available earnings.":"The premature approval credit was reversed to campaign reserve. The agreed fee remains pending verified Go Live.",
+                    row.EventType=="UgcFixedPaymentEarned"?"The agreed fixed fee is available.":"The premature approval credit was reversed to campaign reserve. The agreed fee remains pending verified Go Live.",
                     null,null,new NotificationAudience(ActorRole.Creator,Id("CreatorId")),
                     new NotificationAudience(ActorRole.Business,Id("BusinessId"))) with { UgcId=Id("OpportunityId") };
             case "UgcPublicationActivated":

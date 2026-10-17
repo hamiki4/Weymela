@@ -108,7 +108,9 @@ public sealed partial class WorkspaceQueries
                 var live=await db.CreatorPromotionParticipations.AsNoTracking().SingleAsync(x=>x.CreatorAllocationId==a.Id,ct);
                 var profile=await directory.CreatorCardAsync(a.CreatorId,ct);
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
-                var content=PublicContentLink.Create(live.Provider,live.ExternalContentId);
+                var content=await db.CreatorPublicationVerifications.AsNoTracking().Where(x => x.CreatorAllocationId == a.Id
+                    && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc != null).Select(x => x.CanonicalUrl).SingleOrDefaultAsync(ct)
+                    ?? PublicContentLink.Create(live.Provider,live.ExternalContentId);
                 result.Add(new(a.Id,offer.Source,offer.Offer,new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude,business.Category,
                         OfferAddress(business.Address, offer.Location)),
                     new(profile.DisplayName),offer.BenefitPercent,content,offer.Slogan,offer.Location,offer.RemainingDays));
@@ -117,12 +119,14 @@ public sealed partial class WorkspaceQueries
             {
                 var business=await directory.CustomerOfferBusinessAsync(offer.Business.Id,ct);
                 if (offer.Creator is null || offer.UgcAssignmentId is null) continue;
+                var publicationUrl = await db.CreatorPublicationVerifications.AsNoTracking().Where(x => x.UgcAssignmentId == offer.UgcAssignmentId
+                    && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc != null).Select(x => x.CanonicalUrl).SingleOrDefaultAsync(ct);
                 result.Add(new(offer.OfferId,offer.Source,offer.Offer,
                     new(business.DisplayName,business.DirectionsUrl,business.Latitude,business.Longitude,business.Category,
                         OfferAddress(business.Address, offer.Location)),
                     new(offer.Creator.DisplayName),offer.BenefitPercent,
-                    offer.Provider is null || offer.ExternalContentId is null ? null
-                        : PublicContentLink.Create(offer.Provider,offer.ExternalContentId),
+                    publicationUrl ?? (offer.Provider is null || offer.ExternalContentId is null ? null
+                        : PublicContentLink.Create(offer.Provider,offer.ExternalContentId)),
                     offer.Slogan,offer.Location,UgcAssignmentId:offer.UgcAssignmentId,BenefitMode:offer.BenefitMode));
             }
         }

@@ -65,6 +65,10 @@ internal static class BusinessEndpoints
             EndpointSupport.Id(await commands.RejectAsync(EndpointSupport.Actor(c),id,EndpointSupport.Key(c),ct)));
         g.MapPost("/creator-budgets/{id:guid}/increase",async(Guid id,BudgetInput input,HttpContext c,WorkspaceCommands commands,CancellationToken ct)=>
             EndpointSupport.Id(await commands.TopUpAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
+        g.MapGet("/publication-verifications",(HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            service.AdminQueueAsync(EndpointSupport.Actor(c),ct,EndpointSupport.ListFilter(c)));
+        g.MapPost("/publication-verifications/{id:guid}/review",async(Guid id,AdminPublicationReviewInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            EndpointSupport.Id(await service.AdminReviewAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapGet("/ugc",(HttpContext c,UgcService service,CancellationToken ct)=>service.BusinessAsync(EndpointSupport.Actor(c),ct));
         g.MapGet("/ugc/{id:guid}",(Guid id,HttpContext c,UgcService service,CancellationToken ct)=>service.DetailAsync(EndpointSupport.Actor(c),id,ct));
         g.MapPost("/ugc",async(CreateUgcInput input,HttpContext c,UgcService service,CancellationToken ct)=>

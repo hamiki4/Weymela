@@ -122,7 +122,7 @@ public sealed partial class WorkspaceQueries
                 p.Description,p.Eligibility.Requirements,p.Location,a.ContentDueAtUtc??p.ContentDueAtUtc,
                 a.Platform?.ToString(),socialProfile?.ProfileUrl,
                 submission?.ReviewMediaAssetId is null?null:$"/api/review-media/promotions/{submission.Id}",
-                publication is null?null:CreatorPublicationService.View(publication),a.CreatorSocialProfileId));
+                publication is null?null:CreatorPublicationService.View(publication, Now),a.CreatorSocialProfileId));
         }
         return result;
     }

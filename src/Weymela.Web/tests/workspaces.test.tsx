@@ -499,7 +499,7 @@ describe("Business workspace", () => {
       submittedAtUtc: "2026-09-22T12:00:00Z", reviewStatus: "UnderReview", feedback: null, reviewedAtUtc: null,
     }] });
     mount(<PromotionContentReviewQueue />);
-    expect(await screen.findByText("Review unavailable: this TikTok link is invalid or unsupported.")).toBeVisible();
+    expect(await screen.findByText("Video unavailable.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Play Sample Video" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Request Changes" })).toBeDisabled();
@@ -819,7 +819,7 @@ describe("Creator workspace", () => {
       remainingDays: null,
     }] });
     mount(<CreatorActiveDetail />, "/creator/promotions/budget", "/creator/promotions/:id");
-    expect(await screen.findByText("Content is under Business review. Go Live is not available yet.")).toBeVisible();
+    expect(await screen.findByText("Awaiting Approval")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Go Live" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Submit Content for Review" })).not.toBeInTheDocument();
   });
@@ -838,7 +838,7 @@ describe("Creator workspace", () => {
     }] });
     mount(<CreatorActiveDetail />, "/creator/promotions/budget", "/creator/promotions/:id");
     await userEvent.click(await screen.findByRole("button", { name: "Go Live" }));
-    await waitFor(() => expect(api.writes[0].path).toBe("/creator/creator-budgets/budget/go-live"));
+    await waitFor(() => expect(api.writes[0].path).toBe("/creator/creator-budgets/budget/launch"));
   });
   it("has compact earning cards without other role finances", async () => {
     mount(<CreatorHowYouEarn />);
@@ -862,7 +862,7 @@ describe("Creator workspace", () => {
   it("allows an editable receiving phone and retains Bank destination fields", async () => {
     const api = mockCreatorApi();
     mount(<CreatorEarnings />);
-    expect(await screen.findByLabelText("Receiving phone number")).toHaveValue("+251911223344");
+    await waitFor(() => expect(screen.getByLabelText("Receiving phone number")).toHaveValue("+251911223344"));
     expect(screen.getByLabelText("Receiving phone number")).not.toHaveAttribute("readonly");
     expect(screen.queryByLabelText("Account Number")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: "Bank account" }));

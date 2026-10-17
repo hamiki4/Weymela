@@ -451,10 +451,19 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ExternalContentId")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("GoLiveRequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("LiveDurationDays")
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("PromotionContentSubmissionId")
                         .HasColumnType("uuid");
@@ -528,9 +537,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Publication_Content", "length(trim(\"ExternalContentId\")) > 0 AND length(\"ExternalContentId\") <= 100");
 
+                            t.HasCheckConstraint("CK_Publication_Duration", "\"LiveDurationDays\" IS NULL OR (\"LiveDurationDays\" BETWEEN 1 AND 365 AND \"ExpiresAtUtc\" = \"WentLiveAtUtc\" + \"LiveDurationDays\" * interval '1 day')");
+
                             t.HasCheckConstraint("CK_Publication_GoLive", "\"WentLiveAtUtc\" IS NULL OR \"VerifiedAtUtc\" IS NOT NULL");
 
-                            t.HasCheckConstraint("CK_Publication_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram')");
+                            t.HasCheckConstraint("CK_Publication_Provider", "\"Provider\" IN ('TikTok','YouTube','Instagram','Facebook')");
 
                             t.HasCheckConstraint("CK_Publication_Status", "\"Status\" IN ('VerificationPending','Verified','Failed','Expired')");
 
@@ -1727,6 +1738,11 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                     b.Property<int>("CurrentRevision")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DeliverableType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTime>("DueDateUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1739,6 +1755,9 @@ namespace Weymela.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("ProductProvided")
                         .HasColumnType("boolean");
+
+                    b.Property<int?>("PromotionLiveDurationDays")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1793,6 +1812,8 @@ namespace Weymela.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_UgcOpportunity_Application_Content_Deadlines", "\"ApplicationClosesAtUtc\" IS NULL OR \"ApplicationClosesAtUtc\" < \"DueDateUtc\"");
 
                             t.HasCheckConstraint("CK_UgcOpportunity_Capacity", "\"CreatorCapacity\" > 0 AND \"ApprovedCreatorCount\" >= 0 AND \"ApprovedCreatorCount\" <= \"CreatorCapacity\"");
+
+                            t.HasCheckConstraint("CK_UgcOpportunity_Delivery", "\"DeliverableType\" IN ('PublicSocialVideo','DirectVideoDelivery') AND (\"DeliverableType\" <> 'DirectVideoDelivery' OR \"ContentType\" = 'Video')");
 
                             t.HasCheckConstraint("CK_UgcOpportunity_Funding", "\"RequiredFunding\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"RequiredFunding\"");
                         });

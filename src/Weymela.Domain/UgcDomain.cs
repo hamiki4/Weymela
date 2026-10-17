@@ -1,5 +1,6 @@
 namespace Weymela.Domain;
 
+public enum UgcDeliverableType { PublicSocialVideo, DirectVideoDelivery }
 public enum UgcContentType { Video, Photos }
 public enum UgcOpportunityStatus { Draft, Open, InProgress, Completed, Cancelled }
 public enum UgcRequestStatus { Pending, Approved, Rejected, Withdrawn }
@@ -24,6 +25,8 @@ public sealed class UgcOpportunity
     public string Title { get; private set; }
     public string? Slogan { get; private set; }
     public UgcContentType ContentType { get; private set; }
+    public UgcDeliverableType DeliverableType { get; private set; }
+    public int? PromotionLiveDurationDays { get; private set; }
     public string Instructions { get; private set; }
     public string ResourcesJson { get; private set; } = "[]";
     public string? Location { get; private set; }
@@ -93,6 +96,22 @@ public sealed class UgcOpportunity
             platformRequirements.Add(new(Id, item.Platform, item.Format.Trim(), item.MinimumAudience));
         }
         SetCapacities(capacities, creatorCapacity);
+    }
+
+    public void ConfigureDelivery(UgcDeliverableType type, int? durationDays)
+    {
+        if (!Enum.IsDefined(type) || Status != UgcOpportunityStatus.Draft || ApprovedCreatorCount > 0)
+            throw new InvalidOperationException("Delivery terms are fixed before publishing.");
+        if (type == UgcDeliverableType.DirectVideoDelivery && (ContentType != UgcContentType.Video || platformRequirements.Count > 0 || platformCapacities.Count > 0))
+            throw new ArgumentException("Direct delivery requires a video without social posting requirements.");
+        if (durationDays is { } days) PromotionLiveDurationPolicy.Validate(days);
+        DeliverableType = type; PromotionLiveDurationDays = durationDays;
+    }
+
+    public void SetLegacyLiveDuration(int days)
+    {
+        PromotionLiveDurationPolicy.Validate(days);
+        if (PromotionLiveDurationDays is null) { PromotionLiveDurationDays = days; Version++; }
     }
 
     public void Publish(BusinessWallet wallet, DateTime now, Guid correlation)

@@ -62,6 +62,8 @@ internal static class CreatorEndpoints
             }
             catch { media.Delete(saved.StorageKey); throw; }
         });
+        g.MapPost("/creator-budgets/{id:guid}/launch",async(Guid id,PublicationInput? input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            Results.Ok(await service.LaunchAsync(EndpointSupport.Actor(c),id,false,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/creator-budgets/{id:guid}/publication",async(Guid id,PublicationInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
             Results.Ok(await service.RequestPromotionAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/creator-budgets/{id:guid}/go-live",async(Guid id,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
@@ -99,6 +101,8 @@ internal static class CreatorEndpoints
             }
             catch { media.Delete(saved.StorageKey); throw; }
         });
+        g.MapPost("/ugc/assignments/{id:guid}/launch",async(Guid id,PublicationInput? input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
+            Results.Ok(await service.LaunchAsync(EndpointSupport.Actor(c),id,true,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/assignments/{id:guid}/publication",async(Guid id,PublicationInput input,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>
             Results.Ok(await service.RequestUgcAsync(EndpointSupport.Actor(c),id,input,EndpointSupport.Key(c),ct)));
         g.MapPost("/ugc/assignments/{id:guid}/go-live",async(Guid id,HttpContext c,CreatorPublicationService service,CancellationToken ct)=>

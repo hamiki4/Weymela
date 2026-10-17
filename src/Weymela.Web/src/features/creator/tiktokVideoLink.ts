@@ -9,6 +9,8 @@ export function normalizeTikTokVideoLink(value: string): string | null {
   if (["www.tiktok.com", "tiktok.com", "m.tiktok.com"].includes(host)) {
     const canonical = url.pathname.match(/^\/@([A-Za-z0-9._-]{1,50})\/video\/([0-9]{6,30})\/?$/);
     if (canonical) return `https://www.tiktok.com/@${canonical[1]}/video/${canonical[2]}`;
+    const player = url.pathname.match(/^\/(?:player\/v1|share\/video)\/([0-9]{6,30})\/?$/) ?? url.pathname.match(/^\/v\/([0-9]{6,30})\.html\/?$/);
+    if (player) return `https://www.tiktok.com/player/v1/${player[1]}`;
     const short = url.pathname.match(/^\/t\/([A-Za-z0-9_-]{6,80})\/?$/);
     return short ? `https://www.tiktok.com/t/${short[1]}` : null;
   }

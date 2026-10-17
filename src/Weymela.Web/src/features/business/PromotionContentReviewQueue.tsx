@@ -1,3 +1,4 @@
+import { PublicationEvidenceReview } from "./PublicationEvidenceReview";
 import { useState } from "react";
 import { post, useAction, useResource } from "../../api/client";
 import type { PromotionContentReviewCard } from "../../api/types";
@@ -26,13 +27,15 @@ function ReviewRow({ row, reload }: { row: PromotionContentReviewCard; reload: (
         ? <a className="business-review-link" href={url} target="_blank" rel="noopener noreferrer">Play Sample Video</a>
         : <button className="business-review-link" type="button" disabled>Play Sample Video</button>}
     </nav>
-    {!url && <Notice error>Review unavailable: this TikTok link is invalid or unsupported.</Notice>}
+    {row.reviewMediaUrl && <video className="private-review-media" src={row.reviewMediaUrl} controls preload="metadata" />}
+    {!url && !row.reviewMediaUrl && <Notice error>Video unavailable.</Notice>}
     {!row.creatorProfileUrl && <Notice>Creator profile unavailable.</Notice>}
     {row.feedback && <Notice>{row.feedback}</Notice>}
     {row.reviewStatus === "UnderReview" && <div className="business-review-actions">
       <Field label="Feedback (required for changes requested)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
-      <div className="actions"><Button disabled={action.busy || !url} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("requestchanges")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
+      <div className="actions"><Button disabled={action.busy || !url && !row.reviewMediaUrl} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("requestchanges")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
     </div>}
+    {row.publication?.status === "VerificationPending" && <PublicationEvidenceReview id={row.publication.id} watchUrl={row.publication.watchUrl} profileUrl={row.creatorProfileUrl} needsViews reload={reload} />}
     {action.error && <Notice error>{action.error}</Notice>}
   </article>;
 }

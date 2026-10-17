@@ -35,6 +35,9 @@ public sealed class CreatorPublicationVerification
     public Guid? VerifiedByUserId { get; private set; }
     public DateTime? WentLiveAtUtc { get; private set; }
     public DateTime? EndedAtUtc { get; private set; }
+    public DateTime? GoLiveRequestedAtUtc { get; private set; }
+    public int? LiveDurationDays { get; private set; }
+    public DateTime? ExpiresAtUtc { get; private set; }
     public long Version { get; private set; }
 
     public void RecordPublicLink(string url) { CanonicalUrl = url; Version++; }
@@ -51,7 +54,7 @@ public sealed class CreatorPublicationVerification
             || (promotionContentSubmissionId is null) == (ugcSubmissionId is null)
             || (creatorAllocationId is null) != (promotionContentSubmissionId is null))
             throw new ArgumentException("Publication must bind exactly one work item and its approved revision.");
-        if (provider is not ("TikTok" or "YouTube" or "Instagram"))
+        if (provider is not ("TikTok" or "YouTube" or "Instagram" or "Facebook"))
             throw new ArgumentException("Unsupported publication provider.");
         if (!ValidContentId(externalContentId))
             throw new ArgumentException("Publication content ID is invalid.");
@@ -80,7 +83,7 @@ public sealed class CreatorPublicationVerification
         if (CreatorAllocationId is not null && baselineViews is null)
             throw new ArgumentException("A verified view baseline is required for this Promotion.");
         if (method == PublicationVerificationMethod.Manual && verifiedByUserId is null)
-            throw new ArgumentException("Manual verification requires an Admin reviewer.");
+            throw new ArgumentException("Manual verification requires an authorized reviewer.");
         if (verifiedAtUtc.Kind != DateTimeKind.Utc || verifiedAtUtc < RequestedAtUtc)
             throw new ArgumentException("Publication verification time is invalid.");
         Status = PublicationVerificationStatus.Verified;
@@ -104,14 +107,25 @@ public sealed class CreatorPublicationVerification
         Version++;
     }
 
-    public void GoLive(DateTime atUtc)
+    public void RequestGoLive(DateTime atUtc)
+    {
+        if (atUtc.Kind != DateTimeKind.Utc || atUtc < RequestedAtUtc) throw new ArgumentException("Go Live request time is invalid.");
+        if (Status is PublicationVerificationStatus.Failed or PublicationVerificationStatus.Expired) throw new InvalidOperationException("Submit a new public link.");
+        if (GoLiveRequestedAtUtc is not null) return;
+        GoLiveRequestedAtUtc = atUtc; Version++;
+    }
+
+    public void GoLive(DateTime atUtc, int? durationDays = null)
     {
         if (Status != PublicationVerificationStatus.Verified || VerifiedAtUtc is null)
             throw new InvalidOperationException("Publication must be verified before Go Live.");
         if (WentLiveAtUtc is not null) return;
         if (atUtc.Kind != DateTimeKind.Utc || atUtc < VerifiedAtUtc)
             throw new ArgumentException("Go Live time is invalid.");
+        if (durationDays is { } days) PromotionLiveDurationPolicy.Validate(days);
         WentLiveAtUtc = atUtc;
+        LiveDurationDays = durationDays;
+        ExpiresAtUtc = durationDays is { } duration ? atUtc.AddDays(duration) : null;
         Version++;
     }
 

@@ -1,3 +1,4 @@
+import { PublicationEvidenceReview } from "./PublicationEvidenceReview";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { post, request, useAction, useResource } from "../../api/client";
@@ -24,6 +25,7 @@ const roundMoney = (value: number) => Math.round(value * 100) / 100;
 type BusinessUgcForm = {
   title: string;
   contentType: "Video" | "Photos";
+  deliverableType: "PublicSocialVideo" | "DirectVideoDelivery";
   instructions: string;
   location: string;
   dueDate: string;
@@ -41,6 +43,7 @@ type BusinessUgcForm = {
 const emptyForm: BusinessUgcForm = {
   title: "",
   contentType: "Video",
+  deliverableType: "PublicSocialVideo",
   instructions: "",
   location: "",
   dueDate: "",
@@ -200,8 +203,10 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
       <Field label="Feedback (required for changes)"><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} maxLength={2000} rows={3} /></Field>
       <div className="actions"><Button disabled={action.busy || !row.watchUrl && !row.reviewMediaUrl} onClick={() => review("approve")}>Approve</Button><Button variant="secondary" disabled={action.busy || !feedback.trim()} onClick={() => review("changes")}>Request Changes</Button><Button variant="quiet" disabled={action.busy} onClick={() => review("reject")}>Reject</Button></div>
     </div>}
-    {row.status === "Approved" && !row.publication?.wentLiveAtUtc && <Notice>Approved · payment pending</Notice>}
-    {row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
+    {row.status === "Approved" && !row.completedAtUtc && <Notice>Approved · payment pending</Notice>}
+    {row.downloadUrl && <a className="button secondary" href={row.downloadUrl} download>Download approved video</a>}
+    {row.completedAtUtc && row.deliverableType === "DirectVideoDelivery" && <Badge status="Completed" />}
+    {row.publication?.status === "VerificationPending" && <PublicationEvidenceReview id={row.publication.id} watchUrl={row.publication.watchUrl} profileUrl={row.selectedSocialProfileUrl} needsViews={false} reload={reload} />}
     {row.publication && <p className="fine-print">Publication: {row.publication.wentLiveAtUtc ? "Live" : row.publication.verificationLabel}</p>}
     {action.error && <Notice error>{action.error}</Notice>}
     <ol className="collaboration-timeline" aria-label="Activity">
@@ -345,7 +350,7 @@ export function CreateBusinessUgcPage() {
                   if (publish && shortfall > 0) return;
                   void action.run(async (key) => {
                     const created = await post<{ id: string }>("/business/ugc", {
-                      title: form.title, slogan: null, contentType: form.contentType, instructions: form.instructions,
+                      title: form.title, slogan: null, contentType: form.contentType, deliverableType: form.customerOffer ? "PublicSocialVideo" : form.deliverableType, instructions: form.instructions,
                       resources: [], location: form.location || null, dueDateUtc: new Date(form.dueDate).toISOString(),
                       productProvided: form.productArrangement === "Provided", creatorMustPurchase: form.productArrangement === "Purchase", usageRights: null, creatorPayment: payment, creatorsNeeded: creators,
                       platformRequirements: form.mustPost ? form.platforms.map(({ platform, minimumAudience }) => ({ platform, format: "Social post", minimumAudience: minimumAudience ?? null })) : [],
@@ -364,17 +369,21 @@ export function CreateBusinessUgcPage() {
                   });
                 }}>
                   <Field label="Promotion title" wide><input value={form.title} onChange={(e) => set("title", e.target.value)} required /></Field>
-                  <Field label="Content type"><select value={form.contentType} onChange={(e) => set("contentType", e.target.value as BusinessUgcForm["contentType"])}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
+                  {!form.customerOffer && <Field label="Deliverable"><select value={form.deliverableType} onChange={event => {
+                    const delivery = event.target.value as BusinessUgcForm["deliverableType"];
+                    setForm(current => ({ ...current, deliverableType: delivery, ...(delivery === "DirectVideoDelivery" ? { contentType: "Video", mustPost: false, platforms: [] } : {}) }));
+                  }}><option value="PublicSocialVideo">Public social video</option><option value="DirectVideoDelivery">Direct video delivery</option></select></Field>}
+                  <Field label="Content type"><select disabled={form.deliverableType === "DirectVideoDelivery"} value={form.contentType} onChange={(e) => set("contentType", e.target.value as BusinessUgcForm["contentType"])}><option value="Video">Video</option><option value="Photos">Photos</option></select></Field>
                   <Field label="Application closes"><input type="datetime-local" value={form.applicationCloses} onChange={(e) => set("applicationCloses", e.target.value)} required /></Field>
                   <Field label="Content due"><input type="datetime-local" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} required /></Field>
                   <Field label="Creator payment (ETB)"><input type="number" min="0.01" step="0.01" value={form.creatorPayment} onChange={(e) => set("creatorPayment", e.target.value)} required /></Field>
                   <Field label="Location"><input value={form.location} onChange={(e) => set("location", e.target.value)} /></Field>
                   <Field label="Instructions" wide><textarea value={form.instructions} onChange={(e) => set("instructions", e.target.value)} required /></Field>
                   <ProductArrangementChoice value={form.productArrangement} onChange={(value) => set("productArrangement", value)} />
-                  <fieldset className="field wide ugc-posting-choice"><legend>Publication platforms</legend>
+                  {form.deliverableType !== "DirectVideoDelivery" && <fieldset className="field wide ugc-posting-choice"><legend>Publication platforms</legend>
                     <label><input type="radio" name="ugc-posting" checked={!form.mustPost} onChange={() => set("mustPost", false)} /> Choose publication platform later</label>
                     <label><input type="radio" name="ugc-posting" checked={form.mustPost} onChange={() => set("mustPost", true)} /> Set publication platforms now</label>
-                  </fieldset>
+                  </fieldset>}
                   {form.mustPost ? <PlatformCapacityPicker value={form.platforms} onChange={(value) => set("platforms", value)} />
                     : <Field label="Creators needed"><input type="number" min="1" max="100" step="1" value={form.creatorsNeeded} onChange={(e) => set("creatorsNeeded", e.target.value)} required /></Field>}
                   {selectedType ? (

@@ -729,3 +729,6 @@
   font-size: 0.75rem;
   color: #164d38;
 }
+
+.notification-item h3, .notification-item p { font-weight: 400; }
+.notification-item[data-unread="true"] h3, .notification-item[data-unread="true"] p { font-weight: 700; }

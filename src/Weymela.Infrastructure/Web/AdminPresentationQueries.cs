@@ -112,7 +112,7 @@ public sealed partial class WorkspaceQueries
         var platform = await new PlatformRevenueRepository(db).SummaryAsync(ct);
         decimal SumEntries(string movement) => entries.Where(x => x.Movement == movement).Sum(x => x.Amount.Amount);
         var period = new AdminReportPeriod(SumEntries("Deposit"), funding.Sum(x => x.Amount.Amount), SumEntries("Consumed"),
-            ugcEntries.Where(x => x.Movement is "Approved" or "VerifiedPublicationEarned").Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount + x.PlatformFee.Amount),
+            ugcEntries.Where(x => x.Movement is "Approved" or "VerifiedPublicationEarned" or "ApprovedDeliveryEarned").Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount + x.PlatformFee.Amount),
             offerEntries.Where(x => x.Movement == "Sale").Sum(x => x.Amount.Amount),
             earnings.Where(x => x.Source == EarningSource.Ugc).Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount), earnings.Sum(x => x.Amount.Amount) - corrections.Sum(x => x.CreatorAmount.Amount),
             cashback.Sum(x => x.Amount.Amount), ugcSales.Where(x => x.BenefitMode == CustomerBenefitMode.LegacyDiscount).Sum(x => x.CustomerDiscountAmount.Amount), revenue.Sum(x => x.Amount.Amount) - corrections.Sum(x => x.PlatformFee.Amount),
@@ -136,7 +136,7 @@ public sealed partial class WorkspaceQueries
             return new AdminReportType(hasOffer ? "UGC + Sale" : "UGC Only",
                 ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement == "Reserved").Sum(x => x.Amount.Amount)
                   + offerEntries.Where(x => matchingOffers.Contains(x.UgcCustomerOfferId) && x.Movement == "Reserved").Sum(x => x.Amount.Amount),
-                ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement is "Approved" or "VerifiedPublicationEarned").Sum(x => x.Amount.Amount)
+                ugcEntries.Where(x => ids.Contains(x.UgcOpportunityId) && x.Movement is "Approved" or "VerifiedPublicationEarned" or "ApprovedDeliveryEarned").Sum(x => x.Amount.Amount)
                   - corrections.Where(x => assignmentUgc.TryGetValue(x.UgcAssignmentId, out var correctionUgc) && ids.Contains(correctionUgc)).Sum(x => x.CreatorAmount.Amount + x.PlatformFee.Amount)
                   + offerEntries.Where(x => matchingOffers.Contains(x.UgcCustomerOfferId) && x.Movement == "Sale").Sum(x => x.Amount.Amount),
                 0, ugcSales.Count(x => ids.Contains(x.UgcOpportunityId)),

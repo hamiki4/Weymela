@@ -44,6 +44,8 @@ public sealed class UgcPaymentCorrectionService(WeymelaDbContext db, TimeProvide
                     && x.PaidAtUtc >= earning.CreatedAtUtc, token))
                 throw new ApplicationFailure(FailureKind.Validation, "A confirmed payout requires a separately reviewed recovery; no funds were changed.");
             var opportunity = await db.UgcOpportunities.SingleAsync(x => x.Id == assignment.UgcOpportunityId, token);
+            if (opportunity.DeliverableType == UgcDeliverableType.DirectVideoDelivery)
+                throw new ApplicationFailure(FailureKind.Validation, "Approved direct delivery is earned work and cannot use a premature-publication correction.");
             var wallet = await db.BusinessWallets.SingleAsync(x => x.BusinessId == opportunity.BusinessId, token);
             var earnings = await db.CreatorEarningsAccounts.SingleAsync(x => x.CreatorId == assignment.CreatorId, token);
             if (earnings.AvailableEarnings.Amount < assignment.CreatorPayment.Amount)

@@ -10,6 +10,29 @@ namespace Weymela.Infrastructure.Tests;
 [Collection("V3 PostgreSQL")]
 public sealed class CreatorPromotionContentReviewTests(PostgresFixture fixture)
 {
+    [Theory]
+    [InlineData(PromotionType.ViewOnly)]
+    [InlineData(PromotionType.ViewPlusCommission)]
+    public async Task Single_creator_action_starts_saved_view_campaign_window_without_unverified_rewards(PromotionType type)
+    {
+        var state = await Phase4Scenario.Create(fixture, type, goLive: false);
+        await using var db = state.Database.Open();
+        var profile = await db.CreatorSocialProfiles.SingleAsync(x => x.CreatorId == state.Creator.CreatorId);
+        var review = new CreatorPromotionContentService(db, new CommerceAccessPolicy(db), new TestDirectory(), state.Clock);
+        var sample = await review.SubmitAsync(state.Creator, state.AllocationId, new("TikTok", "7412345678901234567"), "launch-sample", default);
+        await review.ReviewAsync(state.Seed.Business, (await db.CreatorPromotionContentSubmissions.SingleAsync()).Id, new("approve", null), "launch-content-approval", default);
+        var publications = new CreatorPublicationService(db, state.Provider, new CommerceAccessPolicy(db), new TestDirectory(), state.Clock);
+        var live = await publications.LaunchAsync(state.Creator, state.AllocationId, false,
+            new("TikTok", profile.ProfileUrl + "/video/7412345678901234567", profile.Id), "launch-one", default);
+        Assert.Equal("Provider", live.VerificationMethod); Assert.Equal(state.Clock.Now, live.WentLiveAtUtc);
+        var days = (await db.Promotions.SingleAsync()).PromotionLiveDurationDays;
+        Assert.Equal(state.Clock.Now.AddDays(days), live.ExpiresAtUtc);
+        state.Clock.Now = state.Clock.Now.AddDays(1);
+        var retry = await publications.LaunchAsync(state.Creator, state.AllocationId, false, null, "launch-retry", default);
+        Assert.Equal(live.WentLiveAtUtc, retry.WentLiveAtUtc); Assert.Equal(live.ExpiresAtUtc, retry.ExpiresAtUtc);
+        Assert.Single(await db.CreatorPromotionParticipations.ToListAsync()); Assert.Empty(await db.CreatorEarningEntries.ToListAsync());
+    }
+
     [Fact]
     public async Task Content_submission_and_business_approval_do_not_go_live_until_creator_clicks_go_live()
     {

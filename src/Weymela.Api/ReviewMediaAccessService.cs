@@ -28,7 +28,7 @@ public sealed class ReviewMediaAccessService(WeymelaDbContext db, PrivateReviewM
     }
 
     public async Task<(FileStream Stream, string ContentType)> OpenUgcAsync(
-        Actor actor, Guid submissionId, CancellationToken ct)
+        Actor actor, Guid submissionId, CancellationToken ct, bool download = false)
     {
         var row = await (from submission in db.UgcSubmissions.AsNoTracking()
                          join asset in db.PrivateReviewMediaAssets.AsNoTracking()
@@ -38,10 +38,14 @@ public sealed class ReviewMediaAccessService(WeymelaDbContext db, PrivateReviewM
                          join opportunity in db.UgcOpportunities.AsNoTracking()
                              on assignment.UgcOpportunityId equals opportunity.Id
                          where submission.Id == submissionId
-                         select new { Asset = asset, Assignment = assignment, Opportunity = opportunity })
+                         select new { Asset = asset, Submission = submission, Assignment = assignment, Opportunity = opportunity })
             .SingleOrDefaultAsync(ct)
             ?? throw new ApplicationFailure(FailureKind.NotFound, "Review media not found.");
         await DemandReadAsync(actor, row.Asset.CreatorId, row.Opportunity.BusinessId, ct);
+        if (download && (row.Opportunity.DeliverableType != UgcDeliverableType.DirectVideoDelivery
+            || row.Assignment.CompletedAtUtc is null || row.Submission.Status != UgcAssignmentStatus.Approved
+            || row.Asset.ContentType != "video/mp4"))
+            throw new ApplicationFailure(FailureKind.Forbidden, "The approved direct-delivery video is not available.");
         return (store.Open(row.Asset), row.Asset.ContentType);
     }
 
@@ -61,7 +65,7 @@ public sealed class ReviewMediaAccessService(WeymelaDbContext db, PrivateReviewM
                 return;
             }
         }
-        if (actor.Role == ActorRole.PlatformAdmin) return;
+        if (actor.Role is ActorRole.PlatformAdmin or ActorRole.OperationsAdmin) return;
         throw new ApplicationFailure(FailureKind.Forbidden,
             "This private review file is not available to this workspace.");
     }

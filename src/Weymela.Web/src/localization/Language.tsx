@@ -16,6 +16,30 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Ends": "ያበቃል",
+  "Observed public views": "በይፋ የታዩ እይታዎች",
+  "Awaiting Approval": "ማጽደቅን በመጠባበቅ ላይ",
+  "Approved sample": "የጸደቀ ናሙና",
+  "Evidence approved": "ማስረጃው ጸድቋል",
+  "Review video evidence": "የቪዲዮ ማስረጃን ይገምግሙ",
+  "The agreed fixed fee is available.": "የተስማሙት ቋሚ ክፍያ ዝግጁ ነው።",
+  "After Business approval, add the public video link and choose Go Live. If provider evidence is unavailable, the Business or Admin reviews public access, ownership and approved content. The live window starts when evidence is accepted; a URL alone earns no payment.": "ንግዱ ካጸደቀ በኋላ ይፋዊውን የቪዲዮ ማገናኛ ያክሉና ቀጥታ አድርግን ይምረጡ። ከመድረኩ ማስረጃ ከሌለ፣ ንግዱ ወይም አስተዳዳሪው ይፋዊ መዳረሻን፣ ባለቤትነትንና የጸደቀውን ይዘት ይገመግማል። ጊዜው ማስረጃው ሲጸድቅ ይጀምራል፤ ማገናኛ ብቻ ክፍያ አያስገኝም።",
+  "For UGC Only with direct delivery terms, upload the final video. Business approval completes delivery and earns the agreed one-time fee without a social link.": "በቀጥታ ማስረከብ ውል ላለው UGC Only የመጨረሻውን ቪዲዮ ይላኩ። የንግዱ ማጽደቅ ርክክቡን ያጠናቅቃል፤ ያለ ማኅበራዊ ማገናኛም የተስማሙትን የአንድ ጊዜ ክፍያ ያስገኛል።",
+  "Review the sample before approving content. For public videos, check the final post, Creator ownership and public access, then record evidence. Direct-delivery approval earns the agreed UGC Only fee and enables secure download.": "ይዘቱን ከማጽደቅ በፊት ናሙናውን ይገምግሙ። ለይፋዊ ቪዲዮ የመጨረሻውን ልጥፍ፣ የፈጣሪውን ባለቤትነትና ይፋዊ መዳረሻን ፈትሸው ማስረጃውን ይመዝግቡ። ቀጥታ ማስረከብን ማጽደቅ የተስማሙትን የUGC Only ክፍያ ያስገኛል፣ በደህንነት ማውረድንም ያስችላል።",
+
+  "Video Link": "የቪዲዮ ማገናኛ",
+  "Awaiting Review": "ግምገማን በመጠባበቅ ላይ",
+  "Add Video Link": "የቪዲዮ ማገናኛ ያክሉ",
+  "Deliverable": "የሚቀርብ ሥራ",
+  "Public social video": "ይፋዊ የማኅበራዊ ሚዲያ ቪዲዮ",
+  "Direct video delivery": "ቪዲዮን በቀጥታ ማስረከብ",
+  "Final video": "የመጨረሻ ቪዲዮ",
+  "Evidence reference": "የማስረጃ ማጣቀሻ",
+  "Accept Evidence": "ማስረጃን ተቀበል",
+  "Social profile": "የማኅበራዊ ሚዲያ መገለጫ",
+  "I checked public access, Creator ownership and the approved video.": "ይፋዊ መዳረሻን፣ የፈጣሪውን ባለቤትነት እና የጸደቀውን ቪዲዮ ፈትሻለሁ።",
+  "Enter a supported public video link for the selected platform.": "ለተመረጠው መድረክ የሚደገፍ ይፋዊ የቪዲዮ ማገናኛ ያስገቡ።",
+
   "Insufficient wallet funds.": "በቦርሳው ያለው ገንዘብ በቂ አይደለም።",  "Promotion funds low": "የማስተዋወቂያ ገንዘብ ዝቅተኛ ነው",
   "Cashback funds low": "የገንዘብ ተመላሽ በጀት ዝቅተኛ ነው",
   "Cashback funds exhausted": "የገንዘብ ተመላሽ በጀት አልቋል",

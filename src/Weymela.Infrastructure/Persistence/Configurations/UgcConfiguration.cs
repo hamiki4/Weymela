@@ -11,11 +11,13 @@ internal sealed class UgcOpportunityConfiguration : IEntityTypeConfiguration<Ugc
     {
         b.ToTable("UgcOpportunities", t =>
         {
+            t.HasCheckConstraint("CK_UgcOpportunity_Delivery", "\"DeliverableType\" IN ('PublicSocialVideo','DirectVideoDelivery') AND (\"DeliverableType\" <> 'DirectVideoDelivery' OR \"ContentType\" = 'Video')");
             t.HasCheckConstraint("CK_UgcOpportunity_Capacity", "\"CreatorCapacity\" > 0 AND \"ApprovedCreatorCount\" >= 0 AND \"ApprovedCreatorCount\" <= \"CreatorCapacity\"");
             t.HasCheckConstraint("CK_UgcOpportunity_Funding", "\"RequiredFunding\" > 0 AND \"ReservedFunding\" >= 0 AND \"UsedFunding\" >= 0 AND \"ReservedFunding\" + \"UsedFunding\" <= \"RequiredFunding\"");
             t.HasCheckConstraint("CK_UgcOpportunity_Application_Content_Deadlines", "\"ApplicationClosesAtUtc\" IS NULL OR \"ApplicationClosesAtUtc\" < \"DueDateUtc\"");
         });
         Mapping.Scalars(b, "PlatformFee", "PerAssignmentFee", "RemainingFunding", "PlatformRequirements", "PlatformCapacities");
+        b.Property(x => x.DeliverableType).HasConversion<string>().HasMaxLength(32);
         b.HasKey(x => x.Id); b.HasIndex(x => new { x.BusinessId, x.Status });
         b.HasOne<BusinessWallet>().WithMany().HasForeignKey(x => x.BusinessId).HasPrincipalKey(x => x.BusinessId).OnDelete(DeleteBehavior.Restrict);
         b.OwnsOne(x => x.PricingSnapshot, p =>

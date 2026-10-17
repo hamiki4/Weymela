@@ -63,5 +63,21 @@ public sealed class PostgresFixture : IAsyncLifetime
 
 public sealed record TestDatabase(string ConnectionString)
 {
-    public WeymelaDbContext Open() => new(new DbContextOptionsBuilder<WeymelaDbContext>().UseNpgsql(ConnectionString).Options);
+    public WeymelaDbContext Open(bool legacyUgc = false)
+    {
+        var options = new DbContextOptionsBuilder<WeymelaDbContext>().UseNpgsql(ConnectionString);
+        if (legacyUgc) options.ReplaceService<IModelCustomizer, BeforeCreatorDeliveryModel>();
+        return new(options.Options);
+    }
+}
+
+// Only historical migration fixtures use this explicit pre-34 mapping.
+public sealed class BeforeCreatorDeliveryModel(ModelCustomizerDependencies dependencies) : ModelCustomizer(dependencies)
+{
+    public override void Customize(ModelBuilder model, DbContext context)
+    {
+        base.Customize(model, context);
+        model.Entity<Weymela.Domain.UgcOpportunity>().Ignore(x => x.DeliverableType).Ignore(x => x.PromotionLiveDurationDays);
+        model.Entity<Weymela.Domain.CreatorPublicationVerification>().Ignore(x => x.ExpiresAtUtc).Ignore(x => x.LiveDurationDays).Ignore(x => x.GoLiveRequestedAtUtc);
+    }
 }

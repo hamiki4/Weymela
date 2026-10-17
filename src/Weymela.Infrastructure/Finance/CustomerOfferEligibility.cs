@@ -45,8 +45,13 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
             || participation.ApprovedContentSubmissionId is null
                 && (latest.Provider != participation.Provider || latest.ContentReference != participation.ExternalContentId)
             || participation.CreatorSocialProfileId is not { } profileId
-            || allocation.CreatorSocialProfileId is not { } selected || profileId != selected
-            || PublicContentLink.Create(participation.Provider, participation.ExternalContentId) is null)
+            || allocation.CreatorSocialProfileId is not { } selected || profileId != selected)
+            throw Unavailable();
+        if (PublicContentLink.Create(participation.Provider, participation.ExternalContentId) is null
+            && !await db.CreatorPublicationVerifications.AnyAsync(x => x.CreatorAllocationId == allocation.Id
+                && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc == participation.WentLiveAtUtc
+                && x.CreatorSocialProfileId == profileId && x.Provider == participation.Provider && x.ExternalContentId == participation.ExternalContentId
+                && x.CanonicalUrl != null && x.EndedAtUtc == null && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now), ct))
             throw Unavailable();
         var profile = await db.CreatorSocialProfiles.AsNoTracking().SingleOrDefaultAsync(x =>
             x.Id == profileId && x.CreatorId == allocation.CreatorId, ct);
@@ -103,8 +108,8 @@ public sealed class CustomerOfferEligibility(WeymelaDbContext db, ICommerceAcces
             && x.CreatorId == assignment.CreatorId && x.CreatorSocialProfileId == request.VerifiedSocialProfileId
             && x.Provider == request.SelectedPlatform.Value.ToString()
             && x.Status == PublicationVerificationStatus.Verified && x.WentLiveAtUtc != null
-            && x.EndedAtUtc == null, ct);
-        if (publication is null || PublicContentLink.Create(publication.Provider, publication.ExternalContentId) is null)
+            && x.EndedAtUtc == null && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > clock.GetUtcNow().UtcDateTime), ct);
+        if (publication is null || (publication.CanonicalUrl ?? PublicContentLink.Create(publication.Provider, publication.ExternalContentId)) is null)
             throw Unavailable();
         return new(assignment, publication);
     }

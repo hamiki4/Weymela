@@ -214,7 +214,7 @@ public sealed class CreatorPromotionContentService(
                 row.Submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{row.Submission.Id}",
                 row.Allocation.Id, row.Promotion.Id,
                 TikTokVideoLink.WatchUrl(row.Submission.Provider, row.Submission.ContentReference),
-                await CreatorProfileUrl(row.Allocation, ct)));
+                await CreatorProfileUrl(row.Allocation, ct), await PublicationFor(row.Allocation.Id, ct)));
         }
         return result;
     }
@@ -228,7 +228,14 @@ public sealed class CreatorPromotionContentService(
             submission.Feedback, submission.ReviewedAtUtc,
             submission.ReviewMediaAssetId is null ? null : $"/api/review-media/promotions/{submission.Id}", allocation.Id,
             promotion.Id, TikTokVideoLink.WatchUrl(submission.Provider, submission.ContentReference),
-            await CreatorProfileUrl(allocation, ct));
+            await CreatorProfileUrl(allocation, ct), await PublicationFor(allocation.Id, ct));
+    }
+
+    private async Task<PublicationStatusView?> PublicationFor(Guid allocationId, CancellationToken ct)
+    {
+        var row = await db.CreatorPublicationVerifications.AsNoTracking().Where(x => x.CreatorAllocationId == allocationId)
+            .OrderByDescending(x => x.RequestedAtUtc).FirstOrDefaultAsync(ct);
+        return row is null ? null : CreatorPublicationService.View(row, clock.GetUtcNow().UtcDateTime);
     }
 
     private async Task<string?> CreatorProfileUrl(CreatorAllocation allocation, CancellationToken ct)

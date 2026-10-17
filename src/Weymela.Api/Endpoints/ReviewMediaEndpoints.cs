@@ -14,6 +14,13 @@ internal static class ReviewMediaEndpoints
         group.MapGet("/ugc/{submissionId:guid}", async (Guid submissionId, HttpContext c,
             ReviewMediaAccessService service, CancellationToken ct) =>
             Media(c, await service.OpenUgcAsync(EndpointSupport.Actor(c), submissionId, ct)));
+        group.MapGet("/ugc/{submissionId:guid}/download", async (Guid submissionId, HttpContext c,
+            ReviewMediaAccessService service, CancellationToken ct) =>
+        {
+            var media = await service.OpenUgcAsync(EndpointSupport.Actor(c), submissionId, ct, download: true);
+            c.Response.Headers.CacheControl = "private, no-store";
+            return Results.Stream(media.Stream, media.ContentType, fileDownloadName: "approved-video.mp4", enableRangeProcessing: true);
+        });
     }
 
     private static IResult Media(HttpContext context, (FileStream Stream, string ContentType) media)

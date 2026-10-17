@@ -561,7 +561,7 @@ const amharic: Record<string, string> = {
   "Locked": "ተቆልፏል",
   "Manage Creator Budgets": "የፈጣሪ በጀት አስተዳድር",
   "Map view isn’t configured yet": "ካርታ ገና አልተዘጋጀም",
-  "Mark all read": "ሁሉንም እንደተነበቡ ምልክት አድርግ",
+  "Mark all read": "ሁሉንም አንብብ",
   "Mark review video SAMPLE • WEYMELA REVIEW ONLY.": "በግምገማ ቪዲዮው ላይ SAMPLE • WEYMELA REVIEW ONLY ብለው ይጻፉ።",
   "Minimum UGC Budget": "ዝቅተኛ የUGC በጀት",
   "Minimum to cash out": "ዝቅተኛ የሚወሰድ መጠን",

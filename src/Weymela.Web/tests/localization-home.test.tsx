@@ -7,6 +7,7 @@ import { LanguageChoice, LanguageProvider } from "../src/localization/Language";
 import { BusinessDashboard } from "../src/features/business/BusinessPages";
 import { CreatorDashboard } from "../src/features/creator/CreatorExperience";
 import { CustomerOffers } from "../src/features/commerce/CustomerPages";
+import { Inbox } from "../src/features/notifications/Inbox";
 import { mockApi, wallet, business, offer } from "./fixtures";
 
 vi.mock("../src/app/Session", () => ({ useSession: () => ({ user: { role: "Business" } }) }));
@@ -14,6 +15,14 @@ beforeEach(() => { vi.restoreAllMocks(); invalidateResourceCache(false); localSt
 afterEach(() => { localStorage.removeItem("weymela.language"); document.documentElement.lang = "en"; });
 
 describe("localized role homes", () => {
+  it("keeps the Amharic notification action short and preserves the read-all request", async () => {
+    const api = mockApi({ "/notifications": { unreadCount: 1, items: [] } });
+    render(<MemoryRouter><LanguageProvider><LanguageChoice /><Inbox /></LanguageProvider></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "ሁሉንም አንብብ" }));
+    expect(api.writes.map(write => write.path)).toEqual(["/notifications/read-all"]);
+    await userEvent.click(screen.getByRole("button", { name: "English" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Mark all read" })).toBeVisible());
+  });
   it.each([0, 1])("translates the Customer offer counter with %s offers", async total => {
     mockApi({ "/customer/offers": total ? [offer] : [] });
     const view = render(<MemoryRouter><LanguageProvider><LanguageChoice /><CustomerOffers /></LanguageProvider></MemoryRouter>);

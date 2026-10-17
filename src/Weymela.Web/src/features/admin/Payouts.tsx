@@ -193,7 +193,7 @@ export function AdminPayouts() {
           <>
             {["Creators", "Customers"].includes(tab) && (
               <Section title={`${tab} payout queue`} action={<Currency />}>
-                <DataTable
+                <DataTable compact
                   rows={tab === "Creators" ? data.creators : data.customers}
                   rowKey={(r) => r.subjectId}
                   label={`${tab} payout queue`}
@@ -291,7 +291,7 @@ export function AdminPayouts() {
                     ))}
                   </select>
                 </Field>
-                <DataTable
+                <DataTable compact
                   rows={data.history.filter(
                     (r) => filter === "All" || r.kind === filter,
                   )}
@@ -453,7 +453,7 @@ export function OperationsPayouts() {
     {message && <Notice>{message}</Notice>}
     <Resource resource={resource}>{(data) => <>
       {["Creators", "Customers"].includes(tab) && <Section title={`${tab} payout queue`} action={<Currency />}>
-        <DataTable rows={tab === "Creators" ? data.creators : data.customers} rowKey={(r) => r.subjectId} label={`${tab} payout queue`} columns={[
+        <DataTable compact rows={tab === "Creators" ? data.creators : data.customers} rowKey={(r) => r.subjectId} label={`${tab} payout queue`} columns={[
           { label: "Name", cell: (r) => r.name },
           { label: "Available", cell: (r) => amount(r.available), numeric: true },
           { label: "Method", cell: (r) => r.method === "Mpesa" ? "M-PESA" : r.method ?? "Not configured" },
@@ -463,7 +463,7 @@ export function OperationsPayouts() {
           { label: "Action", cell: (r) => <Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>Pay</Button> },
         ]} card={(r) => <><div className="card-head"><h3>{r.name}</h3><Badge status={r.status} /></div><FundsGrid values={[["Available", r.available], ["Threshold", r.threshold]]} /><p>{r.method ?? "No payout destination"} · {r.provider ?? "—"} · {r.account ?? "—"}</p><Button variant="secondary" disabled={!r.account || r.status === "NeedsDestination"} onClick={() => choose(r)}>Pay</Button></>} empty={<Empty title="No eligible payouts right now" message="Eligible balances appear here." icon="wallet" />} />
       </Section>}
-      {tab === "History" && <Section title="Payout history" action={<Currency />}><DataTable rows={data.history} rowKey={(r) => r.id} label="Operations payout history" columns={[
+      {tab === "History" && <Section title="Payout history" action={<Currency />}><DataTable compact rows={data.history} rowKey={(r) => r.id} label="Operations payout history" columns={[
         { label: "Type", cell: (r) => r.kind }, { label: "Name", cell: (r) => r.name }, { label: "Amount", cell: (r) => amount(r.amount), numeric: true },
         { label: "Status", cell: (r) => <Badge status={r.status} /> }, { label: "Date", cell: (r) => date(r.paidAtUtc ?? r.eligibleAtUtc) },
         { label: "Reference", cell: (r) => r.reference ?? "Awaiting confirmation" },

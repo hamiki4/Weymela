@@ -25,7 +25,7 @@ test("Wallets, UGC and Reports use authoritative projections and keep period tot
   await open(page, "/admin/wallets");
   await expect(page.getByRole("heading", { name: "Business wallets" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Active View / Sale promotions" })).toBeVisible();
-  await expect(page.locator(".desktop-data").first().getByRole("columnheader", { name: "Pending Deposit" })).toBeVisible();
+  await expect(page.locator(".compact-table").first().getByRole("columnheader", { name: "Pending Deposit" })).toBeVisible();
   await screenshot(page, "admin-redesign-desktop-wallets");
   await open(page, "/admin/ugc");
   await expect(page.getByRole("heading", { name: "UGC funding and activity" })).toBeVisible();
@@ -79,10 +79,9 @@ test("Platform Admin mobile pages use purpose-built rows and compact bottom navi
     await layout(page);
     await screenshot(page, `admin-redesign-mobile-${path.slice(1).replaceAll("/", "-")}`);
     if (["/admin/customers", "/admin/wallets", "/admin/reports"].includes(path)) {
-      await expect(page.locator(".desktop-data").first()).not.toBeVisible();
-      await expect(page.locator(".mobile-data").first()).toBeVisible();
+      await expect(page.locator(".compact-table").first()).toBeVisible();
     }
-    if (path === "/admin/ugc") await expect(page.locator(".admin-ugc-row, .empty-state").first()).toBeVisible();
+    if (path === "/admin/ugc") await expect(page.locator(".compact-table, .empty-state").first()).toBeVisible();
   }
   const bottom = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(bottom.getByRole("link", { name: "Dashboard" })).toBeVisible();
@@ -125,7 +124,7 @@ test("Operations account cards contain long identifiers and show phones at mobil
     for (const width of [360, 390, 430]) {
       await page.setViewportSize({ width, height: 844 });
       await open(page, `/admin/operations/${path}`);
-      await expect(page.locator(".mobile-data .admin-account-phone")).toHaveText(phone);
+      await expect(page.locator(".compact-table .admin-account-phone")).toHaveText(phone);
       await layout(page);
     }
   }

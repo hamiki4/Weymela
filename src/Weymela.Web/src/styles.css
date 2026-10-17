@@ -3001,7 +3001,7 @@ td .button {
 .low-funds-row a { flex-shrink:0; color:inherit; font-weight:600; }
 .brand-mark,.brand-wordmark { filter:drop-shadow(0 2px 2px #17255422); }
 .topbar .brand-mark { width:42px; height:42px; }
-.topbar .brand-wordmark { width:158px; max-width:34vw; }
+.topbar .brand-wordmark { width:158px; max-width:34vw; height:auto; object-fit:contain; }
 .role-home-profile { display:flex; align-items:center; gap:.7rem; margin-bottom:.75rem; }
 .role-home-profile>div { display:grid; gap:.1rem; min-width:0; }
 .role-home-profile strong { font-size:1.05rem; overflow-wrap:anywhere; }
@@ -3010,3 +3010,13 @@ td .button {
 .business-promotion-tabs .tabs { flex-wrap:nowrap; overflow-x:auto; }
 .customer-promotion-creator small { font-size:.7rem; }
 @media(max-width:480px) { .compact-table table { font-size:.72rem; } .compact-table th,.compact-table td { padding:.45rem .25rem; } .notification-row time { max-width:6.5rem; } }
+
+.notification-list.compact-notification-list { gap:0; }
+.role-platformadmin .compact-table-wide table,.role-operationsadmin .compact-table-wide table { min-width:640px; table-layout:auto; }
+.campaign-live-window { display:flex; flex-wrap:wrap; gap:.35rem 1rem; margin:.5rem 0; font-size:.78rem; color:#4b5563; }
+.campaign-live-window span { display:inline-flex; gap:.3rem; align-items:baseline; }
+
+html[lang="am"] .compact-table table { font-size:.8rem; line-height:1.5; }
+
+.manual-location-picker { width:100%; max-width:24rem; }
+.compact-table td>small { display:block; }

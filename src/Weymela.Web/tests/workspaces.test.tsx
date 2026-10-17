@@ -852,7 +852,7 @@ describe("Creator workspace", () => {
       await screen.findByRole("region", { name: "Creator earning options" }),
     ).toBeVisible();
     expect(screen.getAllByRole("article")).toHaveLength(3);
-    expect(screen.getByText("Minimum to cash out: 5,000")).toBeVisible();
+    expect(screen.getByText("Cash out at 5,000 ETB")).toBeVisible();
     expect(
       screen.queryByText(/Business Pays|Platform Keeps|Customer Cashback/),
     ).not.toBeInTheDocument();

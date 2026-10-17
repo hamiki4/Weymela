@@ -70,7 +70,7 @@ export function AdminAccounts({ area }: { area: AccountArea }) {
       {area === "Admin" && <label>Role <select aria-label="Admin role" value={role} onChange={event => updateFilters({ search, status, adminRole: event.target.value })}><option value="">All roles</option><option value="PlatformAdmin">Platform Admin</option><option value="OperationsAdmin">Operations Admin</option></select></label>}
     </div>
     <Resource resource={resource}>{rows => {
-      return <><DataTable rows={rows} rowKey={row => `${row.id}-${row.role}`} label={areaTitle[area]} columns={[
+      return <><DataTable compact rows={rows} rowKey={row => `${row.id}-${row.role}`} label={areaTitle[area]} columns={[
         { label: area, cell: row => <Link to={`/admin/accounts/${detailId(row)}?role=${row.role}`}><strong>{row.name}</strong></Link> },
         { label: "Contact", cell: row => <div className="admin-account-contact">{area === "Admin" && <span>{roleName(row.role)}</span>}<span className="admin-account-email">{row.fullEmail ?? row.safeIdentifier}</span></div> },
         ...(area === "Business" ? [{ label: "Owner", cell: (row: AdminAccountSummary) => row.ownerName || "—" }] : []),
@@ -127,7 +127,7 @@ function PendingEnrollmentReview({ area, onReviewed }: { area: "Business" | "Cre
     return <Section title={`Pending Review (${pending.length})`} action={<CompactLanguageChoice />} className="admin-pending-review">
       <AdminSearch value={search} label="Search pending applications" />
       <AdminPager value={search} count={rows.length} loading={resource.loading} />
-      <DataTable rows={pending} rowKey={row => row.id} label={`Pending ${area} reviews`} columns={area === "Business" ? [
+      <DataTable compact rows={pending} rowKey={row => row.id} label={`Pending ${area} reviews`} columns={area === "Business" ? [
         { label: "Business Name", cell: (row: EnrollmentReviewRow) => <strong data-no-translate>{row.displayName}</strong> },
         { label: "Owner", cell: (row: EnrollmentReviewRow) => <span data-no-translate>{row.legalName || "—"}</span> },
         { label: "Submitted", cell: (row: EnrollmentReviewRow) => date(row.submittedAtUtc) },
@@ -247,7 +247,7 @@ function AccountDetailContent({ detail, manage, reason, setReason, confirmClose,
     </div>
     {(detail.audit?.length ?? 0) > 0 && <details className="settings-card">
       <summary>Account history</summary>
-      <DataTable rows={detail.audit} rowKey={row => row.id} label="Account history" empty={null} columns={[
+      <DataTable compact rows={detail.audit} rowKey={row => row.id} label="Account history" empty={null} columns={[
         { label: "Date", cell: row => dateTime(row.occurredAtUtc) },
         { label: "Action", cell: row => label(row.action) },
         { label: "Operation", cell: row => label(row.operation) },

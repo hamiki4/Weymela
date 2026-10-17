@@ -47,7 +47,7 @@ public sealed partial class WorkspaceQueries
     {
         await DemandCreator(actor,ct);var v=await new FinancialConfigurationResolver(db).FindEffectiveAsync(Now,ct);
         var rows=new[] { v?.ViewOnly, v?.ViewPlusCommission }.OfType<PricingSnapshot>().Select(CreatorPrice).ToArray();
-        return new(rows,v?.CreatorPayoutThreshold?.Amount,v?.EffectiveFromUtc);
+        return new(rows,v?.CreatorPayoutThreshold?.Amount,v?.EffectiveFromUtc,v?.MonthlyPayoutEnabled==true,v?.UgcPayoutMinimumExempt==true);
     }
     public async Task<IReadOnlyList<CampaignOpportunity>> DiscoverAsync(Actor actor,CancellationToken ct)
     {

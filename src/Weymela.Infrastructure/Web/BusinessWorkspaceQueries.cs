@@ -28,7 +28,8 @@ public sealed partial class WorkspaceQueries
         return new(await directory.BusinessCardAsync(actor.BusinessId!.Value,ct),wallet,
             await db.Promotions.CountAsync(x=>x.BusinessId==actor.BusinessId && x.Status==PromotionStatus.Active,ct),
             await db.CreatorApplications.CountAsync(x=>ids.Contains(x.PromotionId)&&x.Status==CreatorApplicationStatus.Pending,ct),
-            sales);
+            sales,(await BusinessPromotionTrackingAsync(actor,ct)).Where(x => x.LowFunds).Select(x => new PromotionBalanceAlert(x.Title,
+                x.Kind.StartsWith("UGC") ? x.ActionPath+"#cashback-funding" : x.ActionPath+"?tab=funds")).ToArray());
     }
     public async Task<BusinessPricing> BusinessPricingAsync(Actor actor,CancellationToken ct)
     {

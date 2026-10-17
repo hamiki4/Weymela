@@ -1,3 +1,4 @@
+import { CampaignTime } from "../CampaignTime";
 import { PublicationEvidenceReview } from "./PublicationEvidenceReview";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -208,7 +209,7 @@ function UgcAssignmentReview({ row, reload }: { row: UgcAssignment; reload: () =
     {row.deliverableType !== "DirectVideoDelivery" && row.status === "Approved" && row.reviewMediaUrl && row.reviewMediaContentType?.startsWith("video/") && <a className="button secondary" href={row.reviewMediaUrl} download>Download approved video</a>}
     {row.completedAtUtc && row.deliverableType === "DirectVideoDelivery" && <Badge status="Completed" />}
     {row.publication?.status === "VerificationPending" && <PublicationEvidenceReview id={row.publication.id} watchUrl={row.publication.watchUrl} profileUrl={row.selectedSocialProfileUrl} needsViews={false} reload={reload} />}
-    {row.publication && <p className="fine-print">Publication: {row.publication.verificationLabel}</p>}
+    <CampaignTime publication={row.publication} />
     {action.error && <Notice error>{action.error}</Notice>}
     <ol className="collaboration-timeline" aria-label="Activity">
       <li>Business approved Creator</li>

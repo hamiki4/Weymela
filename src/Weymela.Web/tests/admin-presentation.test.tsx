@@ -16,15 +16,15 @@ describe("Platform Admin financial presentation", () => {
       { id: "two", business: "Abc Coffee", title: "UGC sale", type: "UGC + Sale", budget: 720, creatorPayment: 200, customerDiscountPercent: 2, creatorUsed: 220, offerUsed: 25, discountUsed: 20, remaining: 475, qualifyingSales: 1, status: "InProgress" },
     ] });
     mount(<AdminUgcPage />);
-    const rows = await screen.findAllByRole("listitem");
-    expect(within(rows[0]).getByText("Fixed Creator pay")).toBeInTheDocument();
-    expect(within(rows[0]).queryByText("Customer cashback")).not.toBeInTheDocument();
-    expect(within(rows[1]).getByText("Fixed Creator pay")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("Customer cashback")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("Cashback funded")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("Qualifying sales")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("2%")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("20 Br")).toBeInTheDocument();
+    const table = await screen.findByRole("table",{name:"UGC funding"});
+    const rows = table.querySelectorAll("tbody tr");
+    expect(screen.getByRole("columnheader",{name:"Fixed Creator pay"})).toBeVisible();
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelectorAll("td")[2]).toHaveTextContent("200 Br");
+    expect(rows[1].querySelectorAll("td")[2]).toHaveTextContent("200 Br");
+    expect(within(rows[0] as HTMLElement).queryByText("2%")).not.toBeInTheDocument();
+    await userEvent.click(within(rows[1] as HTMLElement).getByText("2%"));
+    expect(within(rows[1] as HTMLElement).getByText("20 Br")).toBeVisible();
   });
 
   it("uses the existing Business promotional funding endpoint from Wallets", async () => {

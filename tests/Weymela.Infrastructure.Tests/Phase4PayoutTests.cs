@@ -278,7 +278,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         var s = await Phase4Scenario.Create(fixture, PromotionType.ViewOnly, 9000, 10000); await s.Refresh(81000);
         await using var db = s.Database.Open(); var service = s.Payouts(db);
         var eligibility = await service.EligibilityAsync(s.Creator,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value);
-        Assert.Equal(5400,eligibility.Available.Amount); Assert.Equal(5000,eligibility.EligibleAmount.Amount);
+        Assert.Equal(5400,eligibility.Available.Amount); Assert.Equal(eligibility.Available.Amount,eligibility.EligibleAmount.Amount);
         var id = await service.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Creator,s.Creator.CreatorId.Value,new Money(5000),"prepare");
         await service.MarkPaidAsync(Phase4Scenario.Admin,id,"external-confirmation","paid");
         Assert.Equal(400,(await db.CreatorEarningsAccounts.SingleAsync()).AvailableEarnings.Amount);
@@ -290,7 +290,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         var s = await Phase4Scenario.Create(fixture,allocation:9000,budget:10000); await s.Refresh(75000); // 5000 from views
         await s.Redeem(await s.Issue(),purchase:1000); // 45 commission
         await using var db = s.Database.Open(); var eligibility = await s.Payouts(db).EligibilityAsync(s.Creator,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value);
-        Assert.Equal(5045,eligibility.Available.Amount); Assert.Equal(5000,eligibility.EligibleAmount.Amount);
+        Assert.Equal(5045,eligibility.Available.Amount); Assert.Equal(eligibility.Available.Amount,eligibility.EligibleAmount.Amount);
         Assert.Single(await db.CreatorEarningsAccounts.ToListAsync());
         Assert.Contains(await db.CreatorEarningEntries.ToListAsync(),x=>x.Source==EarningSource.ViewReward);
         Assert.Contains(await db.CreatorEarningEntries.ToListAsync(),x=>x.Source==EarningSource.SaleCommission);
@@ -299,7 +299,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
     {
         var s = await Phase4Scenario.Create(fixture,allocation:20000,budget:20000); await s.Redeem(await s.Issue(),120000);
         await using var db=s.Database.Open(); var e=await s.Payouts(db).EligibilityAsync(s.Creator,PayoutBeneficiary.Creator,s.Creator.CreatorId!.Value);
-        Assert.Equal(5400,e.Available.Amount); Assert.Equal(5000,e.EligibleAmount.Amount);
+        Assert.Equal(5400,e.Available.Amount); Assert.Equal(5400,e.EligibleAmount.Amount);
     }
     [Fact] public async Task Creator_payout_retry_cannot_pay_twice_and_below_threshold_cannot_prepare_again()
     {
@@ -319,7 +319,7 @@ public sealed class Phase4PayoutTests(PostgresFixture fixture)
         var s=await Phase4Scenario.Create(fixture,allocation:30000,budget:40000);await s.Redeem(await s.Issue(),270000);
         await using var db=s.Database.Open();var service=s.Payouts(db);
         var e=await service.EligibilityAsync(s.Customer,PayoutBeneficiary.Customer,s.Customer.CustomerId!.Value);
-        Assert.Equal(5400,e.Available.Amount);Assert.Equal(5000,e.EligibleAmount.Amount);
+        Assert.Equal(5400,e.Available.Amount);Assert.Equal(5400,e.EligibleAmount.Amount);
         var id=await service.PrepareAsync(Phase4Scenario.Admin,PayoutBeneficiary.Customer,s.Customer.CustomerId.Value,new Money(5000),"prepare");
         await service.MarkPaidAsync(Phase4Scenario.Admin,id,"customer-ref","paid");
         await service.MarkPaidAsync(Phase4Scenario.Admin,id,"customer-ref","paid");

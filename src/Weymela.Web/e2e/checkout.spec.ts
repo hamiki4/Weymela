@@ -44,7 +44,7 @@ test("real QR rejects wrong Business then confirms the same offer at its Busines
   await screenshot(page, "checkout-confirmation");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Payment recorded", exact: true }),
+    page.getByRole("heading", { name: "Completed", exact: true }),
   ).toBeVisible();
   await screenshot(page, "checkout-confirmed");
   await login(context, "customer");
@@ -380,7 +380,7 @@ test("camera scanner decodes the real issued QR and owner uses the same checkout
   await page.getByLabel("Total Purchase Amount", { exact: true }).fill("50");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Payment recorded", exact: true }),
+    page.getByRole("heading", { name: "Completed", exact: true }),
   ).toBeVisible();
 });
 

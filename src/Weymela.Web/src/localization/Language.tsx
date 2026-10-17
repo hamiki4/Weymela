@@ -16,6 +16,11 @@ const LanguageContext = createContext<{
 }>({ language: "en", setLanguage: () => {} });
 
 const amharic: Record<string, string> = {
+  "Check the alert amount and monthly payout date.": "የማሳወቂያ መጠኑንና የክፍያ ቀኑን ይፈትሹ።",
+  "Payout exceeds eligible funds.": "ክፍያው ለመውሰድ ዝግጁ ከሆነው ገንዘብ በልጧል።",
+  "Renew this ended Promotion before adding funds.": "ገንዘብ ከመጨመርዎ በፊት ያበቃውን ማስተዋወቂያ ያድሱ።",
+  "Check available funds.": "ያለውን ገንዘብ ይፈትሹ።",
+  "Business Home shows Low funds below the Platform Admin alert amount. Open Add Funds to replenish the separate reward budget. Monthly payout eligibility uses the configured day and effective date in Ethiopia time; it never sends money.": "ቀሪው ገንዘብ አስተዳዳሪው ካዘጋጀው መጠን ሲያንስ፣ የንግዱ መነሻ ገጽ ማሳወቂያ ያሳያል። የሽልማት በጀቱን ለመሙላት ገንዘብ ጨምርን ይክፈቱ። ወርሃዊ የክፍያ ብቁነት በኢትዮጵያ ሰዓት በተዘጋጀው ቀን ይጀምራል፤ በራሱ ገንዘብ አይልክም።",
   "Monthly payouts": "ወርሃዊ ክፍያ",
   "Monthly Payout Day": "ወርሃዊ የክፍያ ቀን",
   "Monthly effective date": "የሚጀምርበት ቀን",

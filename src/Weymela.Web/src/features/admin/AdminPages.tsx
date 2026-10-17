@@ -80,7 +80,7 @@ export function OperationsBusinesses() {
   const resource = useResource<OperationsBusinessView[]>(search.path);
   return <><PageHeader title="Businesses" compact />
     <AdminSearch value={search} statuses={["Active", "Inactive"]} />
-    <Resource resource={resource}>{(rows) => <Section title="Business accounts"><DataTable rows={rows} rowKey={(r) => r.business.id} label="Operational Business accounts" columns={[
+    <Resource resource={resource}>{(rows) => <Section title="Business accounts"><DataTable compact rows={rows} rowKey={(r) => r.business.id} label="Operational Business accounts" columns={[
       { label: "Business", cell: (r) => <><strong>{r.business.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.business.region}</small></> },
       { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -96,7 +96,7 @@ export function OperationsCreators() {
   const resource = useResource<OperationsCreatorView[]>(search.path);
   return <><PageHeader title="Creators" compact />
     <AdminSearch value={search} statuses={["Active", "Inactive"]} />
-    <Resource resource={resource}>{(rows) => <Section title="Creator accounts"><DataTable rows={rows} rowKey={(r) => r.creator.id} label="Operational Creator accounts" columns={[
+    <Resource resource={resource}>{(rows) => <Section title="Creator accounts"><DataTable compact rows={rows} rowKey={(r) => r.creator.id} label="Operational Creator accounts" columns={[
       { label: "Creator", cell: (r) => <><Person person={r.creator} />{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}</> },
       { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -112,7 +112,7 @@ export function OperationsCustomers() {
   const resource = useResource<OperationsCustomerView[]>(search.path);
   return <><PageHeader title="Customers" compact />
     <AdminSearch value={search} statuses={["Active", "Inactive"]} />
-    <Resource resource={resource}>{(rows) => <Section title="Customer accounts"><DataTable rows={rows} rowKey={(r) => r.customer.id} label="Operational Customer accounts" columns={[
+    <Resource resource={resource}>{(rows) => <Section title="Customer accounts"><DataTable compact rows={rows} rowKey={(r) => r.customer.id} label="Operational Customer accounts" columns={[
       { label: "Customer", cell: (r) => <><strong>{r.customer.displayName}</strong>{r.fullEmail && <small className="admin-account-email">{r.fullEmail}</small>}<small>{r.customer.publicId}</small></> },
       { label: "Phone", cell: (r) => <span className="admin-account-phone" data-no-translate>{r.fullPhone ?? "—"}</span> },
       { label: "Status", cell: (r) => <Badge status={r.status} /> },
@@ -126,7 +126,7 @@ export function OperationsCampaigns() {
   const resource = useResource<OperationsCampaignView[]>(search.path);
   return <><PageHeader title="Campaigns" compact />
     <AdminSearch value={search} statuses={["Draft", "Published", "Funded", "Active", "Completed", "Cancelled"]} types={["View Only", "View + Sale"]} dates />
-    <Resource resource={resource}>{(rows) => <Section title="Campaign activity"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational campaigns" columns={[
+    <Resource resource={resource}>{(rows) => <Section title="Campaign activity"><DataTable compact rows={rows} rowKey={(r) => r.id} label="Operational campaigns" columns={[
       { label: "Campaign", cell: (r) => <><strong>{r.title}</strong><small>{r.publicId}</small></> },
       { label: "Business", cell: (r) => r.business },
       { label: "Type", cell: (r) => r.type },
@@ -143,7 +143,7 @@ export function OperationsUgc() {
   const resource = useResource<OperationsUgcView[]>(search.path);
   return <><PageHeader title="UGC" compact />
     <AdminSearch value={search} statuses={["Draft", "Open", "InProgress", "Completed", "Cancelled"]} />
-    <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
+    <Resource resource={resource}>{(rows) => <Section title="UGC opportunities"><DataTable compact rows={rows} rowKey={(r) => r.id} label="Operational UGC opportunities" columns={[
       { label: "Opportunity", cell: (r) => <><strong>{r.title}</strong><small>{r.business}</small></> },
       { label: "Status", cell: (r) => <span><Badge status={r.status} />{r.lowFunds && <small className="low-funds">Low funds</small>}</span> },
       { label: "Creators", cell: (r) => `${r.approvedCreators}/${r.creatorsNeeded}` },
@@ -267,7 +267,7 @@ export function AdminCampaignDetail() {
               </Section>
               <Section title="Creator participation" action={<Currency />}>
                 <div className="admin-table">
-                  <DataTable
+                  <DataTable compact
                     rows={d.creators}
                     rowKey={(r) => r.creator.id}
                     label="Admin Creator participation"
@@ -403,7 +403,7 @@ export function AdminBusinesses() {
       <Resource resource={resource}>
         {(rows) => (
           <Section title="Business accounts" action={<Currency />}>
-            <DataTable
+            <DataTable compact
               rows={rows}
               rowKey={(r) => r.business.id}
               label="Business accounts"
@@ -490,7 +490,7 @@ export function AdminCreators() {
       <Resource resource={resource}>
         {(rows) => (
           <Section title="Creator accounts" action={<Currency />}>
-            <DataTable
+            <DataTable compact
               rows={rows}
               rowKey={(r) => r.creator.id}
               label="Creator accounts"

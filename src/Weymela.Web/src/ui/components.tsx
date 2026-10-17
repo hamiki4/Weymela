@@ -511,7 +511,7 @@ export function DataTable<T>({
   if (!rows.length) return <>{empty}</>;
   return (
     <>
-      <div className={compact ? "compact-table" : "desktop-data"}>
+      <div className={compact ? `compact-table${columns.length > 4 ? " compact-table-wide" : ""}` : "desktop-data"}>
         <table>
           <caption className="sr-only">{label}</caption>
           <thead>

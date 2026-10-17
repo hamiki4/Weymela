@@ -200,6 +200,7 @@ export interface Wallet {
   }[];
 }
 export interface BusinessHome {
+  lowFundsAlerts?: { title: string; fundingPath: string }[] | null;
   business: BusinessCard;
   wallet: Wallet;
   activeCampaigns: number;
@@ -225,6 +226,8 @@ export interface BusinessPricing {
   promotionLiveDurationDays: number | null;
 }
 export interface CreatorPricing {
+  monthlyPayoutEnabled?: boolean;
+  ugcPayoutMinimumExempt?: boolean;
   rows: CreatorPrice[];
   minimumToCashOut: number | null;
   effectiveFromUtc: string | null;

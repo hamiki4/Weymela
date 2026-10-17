@@ -26,14 +26,15 @@ public sealed record SessionUser(string Role, string DisplayName, string PublicI
 public sealed record ActivityItem(Guid Id, string Title, DateTime AtUtc, string Reference);
 public sealed record WalletMovement(Guid Id, string Label, decimal Amount, DateTime AtUtc, string Reference, string? Reason = null);
 public sealed record WalletWorkspace(decimal TotalBalance, decimal Available, decimal Reserved, long Version, IReadOnlyList<WalletMovement> History);
-public sealed record BusinessHome(BusinessCard Business, WalletWorkspace Wallet, int ActiveCampaigns, int CreatorRequests, int ConfirmedSales);
+public sealed record PromotionBalanceAlert(string Title, string FundingPath);
+public sealed record BusinessHome(BusinessCard Business, WalletWorkspace Wallet, int ActiveCampaigns, int CreatorRequests, int ConfirmedSales, IReadOnlyList<PromotionBalanceAlert>? LowFundsAlerts = null);
 public sealed record BusinessPrice(string Type, int Views, decimal BusinessPays, decimal SaleCostPercent, decimal? MinimumCampaignBudget);
 public sealed record CreatorPrice(string Type, int Views, decimal YouEarn, decimal SaleCommissionPercent);
 public sealed record BusinessPricing(IReadOnlyList<BusinessPrice> Rows, DateTime? EffectiveFromUtc, int? PromotionLiveDurationDays);
 public sealed record UgcPricing(decimal MinimumCreatorPayment, decimal PlatformFeePercent,
     decimal? MinimumUgcBudget, decimal? CustomerOfferPlatformSalePercent,
     int FinancialConfigurationVersion, DateTime EffectiveFromUtc);
-public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal? MinimumToCashOut, DateTime? EffectiveFromUtc);
+public sealed record CreatorPricing(IReadOnlyList<CreatorPrice> Rows, decimal? MinimumToCashOut, DateTime? EffectiveFromUtc, bool MonthlyPayoutEnabled = false, bool UgcPayoutMinimumExempt = false);
 public sealed record PromotionPlatformView(string Platform, int Approved, int Capacity, int Available, long? MinimumAudience = null);
 public sealed record CreatorSocialProfileView(Guid Id, string Platform, string ProfileUrl, long SelfReportedAudience,
     string VerificationStatus, long? VerifiedAudience, string AudienceVerificationSource = "LegacyUnknown");

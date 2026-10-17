@@ -74,9 +74,10 @@ export function CreatorHowYouEarn() {
             </div>
             <div className="threshold-note">
               <strong>
-                Minimum to cash out: {p.minimumToCashOut === null ? "Not configured" : amount(p.minimumToCashOut)}
+                {p.minimumToCashOut === null ? "Not configured" : `Cash out at ${amount(p.minimumToCashOut)} ETB${p.monthlyPayoutEnabled ? " or monthly" : ""}`}
               </strong>
 
+              {p.ugcPayoutMinimumExempt && <p>UGC: Cash out anytime</p>}
             </div>
           </Section>
         )}
